@@ -1,0 +1,66 @@
+{
+  "providers": [
+    {
+      "id": "kimi-coding",
+      "name": "Kimi",
+      "plan": "Allegretto",
+      "cost": "$372/yr",
+      "agents": [
+        "main",
+        "koda",
+        "elif"
+      ],
+      "limits": {
+        "agentQuota": "2x",
+        "k2p5Usage": "2x",
+        "kimiCode": "5x",
+        "note": "2x agent quota, 2x K2.5 usage, Kimi Code 5x, Agent Swarm"
+      },
+      "color": "#4fc3f7"
+    },
+    {
+      "id": "minimax",
+      "name": "MiniMax",
+      "plan": "Plus",
+      "cost": "$200/yr",
+      "agents": [
+        "defne",
+        "deniz"
+      ],
+      "limits": {
+        "promptsPer5h": 300,
+        "note": "300 prompts / 5 hours, image + web search MCP"
+      },
+      "color": "#ff9800"
+    },
+    {
+      "id": "zai",
+      "name": "z.ai (GLM)",
+      "plan": "Free",
+      "cost": "$0",
+      "agents": [
+        "sinan",
+        "mert",
+        "onur"
+      ],
+      "limits": {
+        "note": "Free tier"
+      },
+      "color": "#ffd740"
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic",
+      "plan": "Prepaid",
+      "cost": "$100 credit",
+      "agents": [
+        "kaan",
+        "atlas"
+      ],
+      "limits": {
+        "note": "Opus 4.6 + Sonnet 4.5, prepaid credit"
+      },
+      "color": "#ce93d8"
+    }
+  ]
+}
