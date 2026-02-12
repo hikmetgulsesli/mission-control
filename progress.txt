@@ -25,4 +25,47 @@ Started: 2026-02-12T05:12:00+03:00
 - All tests pass
 - **Learnings:** The project uses Express.js with TypeScript, server routes are in `server/routes/`, uses node:test for testing
 
+## 2026-02-12 05:17 - US-002: Add unit tests for 5-hour sliding window calculation
+- Updated `server/routes/quota.test.ts` with comprehensive test suite (51 total tests)
+- Added tests for ISO timestamp parsing (various formats):
+  - Standard ISO 8601 format with milliseconds
+  - ISO format without milliseconds
+  - ISO format with positive timezone offset (+02:00)
+  - ISO format with negative timezone offset (-05:00)
+  - entry.timestamp field handling
+  - entry.ts field handling
+  - Field preference (timestamp over ts)
+  - Fallback to 0 when both fields missing
+- Added tests for 5-hour cutoff filtering:
+  - Entries within 5 hours (recent)
+  - Entries older than 5 hours
+  - Entries exactly at 5 hour boundary (inclusive)
+  - Entries just under/over 5 hours
+  - Entries at 4 hours (within window)
+  - Entries at 5h 30m (outside window)
+- Added edge case tests:
+  - Numeric timestamps (backward compatibility)
+  - Very old timestamps (years ago)
+  - Future timestamps
+  - Invalid timestamp strings
+  - Empty string timestamps
+  - null/undefined timestamps
+- Added provider model matching logic tests:
+  - minimax models (case insensitive)
+  - kimi-coding models
+  - zai models
+  - anthropic models
+  - Unknown models return null
+  - entry.model vs message.model field handling
+- Added usage token counting tests:
+  - total_tokens extraction
+  - totalTokens (camelCase) extraction
+  - message.usage extraction
+  - Missing usage defaults to 0
+- Added assistant message detection tests
+- Added sliding window calculation tests
+- All 51 tests pass
+- Build completes successfully
+- **Learnings:** The test file uses `any` type annotations for dynamic property access to avoid TypeScript errors
+
 ---
