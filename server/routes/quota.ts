@@ -48,7 +48,9 @@ function countRecentCalls(): Record<string, { calls: number; tokens: number }> {
             if (!line.trim()) continue;
             try {
               const entry = JSON.parse(line);
-              const ts = entry.timestamp || entry.ts || 0;
+              const tsRaw = entry.timestamp || entry.ts || 0;
+              // Parse ISO string timestamps to numeric milliseconds for correct comparison
+              const ts = typeof tsRaw === 'string' ? Date.parse(tsRaw) : tsRaw;
               if (ts && ts < cutoff) continue;
 
               // Count assistant messages (= API calls)
