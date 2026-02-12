@@ -1,0 +1,28 @@
+# Progress Log
+Run: 0fb96165-899c-4b66-9619-f08ba2466957
+Task: Fix Mission Control Model Limits 5-hour window calculation
+Started: 2026-02-12T05:12:00+03:00
+
+## Codebase Patterns
+- Server routes are in `server/routes/` directory (not `src/routes/`)
+- Uses Express.js with TypeScript
+- Uses `node:fs` for file system operations
+- JSONL files store session data in `/home/setrox/.openclaw/agents/<agent>/sessions/`
+- Entry format has `timestamp` or `ts` field with ISO string format
+- Build command: `npm run build`
+
+## 2026-02-12 05:15 - US-001: Fix timestamp parsing in quota.ts for 5-hour window calculation
+- Fixed the bug in `countRecentCalls()` function in `server/routes/quota.ts`
+- Changed: `const ts = entry.timestamp || entry.ts || 0;` 
+- To: `const tsRaw = entry.timestamp || entry.ts || 0; const ts = typeof tsRaw === 'string' ? Date.parse(tsRaw) : tsRaw;`
+- This ensures ISO string timestamps are parsed to numeric milliseconds before comparison with numeric cutoff
+- Created `server/routes/quota.test.ts` with 9 test cases covering:
+  - ISO string timestamp parsing
+  - Numeric timestamp handling (backward compatibility)
+  - Filtering entries older than 5 hours
+  - Boundary conditions (exactly at 5h, just inside, just outside)
+  - Fallback behavior for missing timestamps
+- All tests pass
+- **Learnings:** The project uses Express.js with TypeScript, server routes are in `server/routes/`, uses node:test for testing
+
+---

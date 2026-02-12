@@ -3,15 +3,14 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "outDir": "./server",
+    "outDir": "./dist-server",
     "rootDir": "./server",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "declaration": false,
-    "noEmit": true
+    "declaration": false
   },
-  "include": ["server"]
+  "include": ["server/**/*"]
 }

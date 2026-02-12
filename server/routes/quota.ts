@@ -16,7 +16,7 @@ const PROVIDER_MODELS: Record<string, string[]> = {
   'anthropic': ['claude', 'anthropic'],
 };
 
-function countRecentCalls(): Record<string, { calls: number; tokens: number }> {
+export function countRecentCalls(): Record<string, { calls: number; tokens: number }> {
   const now = Date.now();
   const cutoff = now - FIVE_HOURS_MS;
   const counts: Record<string, { calls: number; tokens: number }> = {};

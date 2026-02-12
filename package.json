@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently \"tsx watch server/index.ts\" \"vite\"",
-    "build": "vite build && tsc -p tsconfig.server.json",
+    "build": "vite build && tsc -p tsconfig.server.json && cp -r server/*.json dist-server/ 2>/dev/null || true",
     "start": "node server/index.js",
     "preview": "vite preview"
   },
