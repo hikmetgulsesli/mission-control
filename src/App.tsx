@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Overview } from './pages/Overview';
-import { Agents } from './pages/Agents';
+import { AntfarmActivity } from './pages/AntfarmActivity';
 import { Workflows } from './pages/Workflows';
 import { Chat } from './pages/Chat';
 import { Ops } from './pages/Ops';
@@ -9,7 +9,6 @@ import { Costs } from './pages/Costs';
 import { Performance } from './pages/Performance';
 import { Tasks } from './pages/Tasks';
 import { Projects } from './pages/Projects';
-import { AntfarmActivity } from "./pages/AntfarmActivity";
 
 export default function App() {
   return (
@@ -17,7 +16,8 @@ export default function App() {
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<Overview />} />
-          <Route path="agents" element={<Agents />} />
+          <Route path="agents" element={<AntfarmActivity />} />
+          <Route path="antfarm" element={<AntfarmActivity />} />
           <Route path="workflows" element={<Workflows />} />
           <Route path="chat" element={<Chat />} />
           <Route path="ops" element={<Ops />} />
@@ -26,7 +26,6 @@ export default function App() {
           <Route path="perf" element={<Performance />} />
           <Route path="tasks" element={<Tasks />} />
           <Route path="projects" element={<Projects />} />
-          <Route path="antfarm" element={<AntfarmActivity />} />
         </Route>
       </Routes>
     </BrowserRouter>
