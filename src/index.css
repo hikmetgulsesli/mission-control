@@ -3309,10 +3309,46 @@ html, body, #root {
   align-items: center;
   margin-bottom: 3px;
 }
+.af-stats__agent-identity {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.af-stats__agent-emoji {
+  font-size: 14px;
+}
 .af-stats__agent-name {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
+  text-transform: capitalize;
+}
+.af-stats__agent-desc {
+  font-size: 8px;
+  color: var(--text-dim);
+  letter-spacing: 0.3px;
+  margin-top: 2px;
+  margin-bottom: 4px;
+}
+.af-stats__agent-bar {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+.af-stats__agent-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.5s ease;
+}
+.af-stats__agent-bar-fill--good { background: linear-gradient(90deg, #00ff41, #00cc33); }
+.af-stats__agent-bar-fill--mid { background: linear-gradient(90deg, #ffaa00, #ff8800); }
+.af-stats__agent-bar-fill--bad { background: linear-gradient(90deg, #ff0040, #cc0033); }
+.af-stats__agent-last {
+  font-size: 8px;
+  color: rgba(255, 255, 255, 0.25);
+  margin-top: 2px;
 }
 .af-stats__agent-rate {
   font-size: 10px;
