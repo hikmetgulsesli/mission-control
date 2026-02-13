@@ -20,6 +20,8 @@ import modelLimitsRouter from './routes/model-limits.js';
 import quotaRouter from './routes/quota.js';
 import tasksRouter from './routes/tasks.js';
 import approvalsRouter from './routes/approvals.js';
+import projectsRouter from "./routes/projects.js";
+import antfarmActivityRouter from "./routes/antfarm-activity.js";
 
 const app = express();
 app.use(express.json());
@@ -39,6 +41,8 @@ app.use('/api', modelLimitsRouter);
 app.use('/api', quotaRouter);
 app.use('/api', tasksRouter);
 app.use('/api', approvalsRouter);
+app.use("/api", projectsRouter);
+app.use("/api", antfarmActivityRouter);
 
 // Serve avatars
 if (existsSync(config.avatarsDir)) {
@@ -52,8 +56,22 @@ app.use('/uploads', express.static(uploadsDir));
 // Serve built frontend
 const distDir = resolve(import.meta.dirname || __dirname, '..', 'dist');
 if (existsSync(distDir)) {
-  app.use(express.static(distDir));
+  // Hashed assets get long cache, HTML always fresh
+  app.use('/assets', express.static(join(distDir, 'assets'), { maxAge: '1y', immutable: true }));
+  app.use(express.static(distDir, {
+    maxAge: 0,
+    etag: false,
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.html')) {
+        res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.set('Pragma', 'no-cache');
+      }
+    },
+  }));
   app.get('/{*splat}', (_req, res) => {
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
     res.sendFile(join(distDir, 'index.html'));
   });
 }

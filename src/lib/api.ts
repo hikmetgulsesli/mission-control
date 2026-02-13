@@ -40,6 +40,8 @@ export const api = {
   docker: () => fetchApi<any[]>('/api/system/docker'),
   costs: () => fetchApi<any>('/api/costs'),
   // Tasks
+  projects: () => fetchApi<any[]>("/api/projects"),
+  deleteProject: (id: string, confirmName: string) => fetchApi<any>(`/api/projects/${id}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirmName }) }),
   tasks: () => fetchApi<any[]>('/api/tasks'),
   createTask: (data: any) => fetchApi<any>('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
   updateTask: (id: string, data: any) => fetchApi<any>("/api/tasks/" + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
@@ -52,4 +54,9 @@ export const api = {
   approvals: () => fetchApi<any[]>('/api/approvals'),
   approveStep: (id: string) => fetchApi<any>('/api/approvals/' + id + '/approve', { method: 'POST' }),
   rejectStep: (id: string, reason: string) => fetchApi<any>('/api/approvals/' + id + '/reject', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) }),
+  // Antfarm Activity
+  antfarmActivity: (limit = 50) => fetchApi<any[]>('/api/antfarm/activity?limit=' + limit),
+  antfarmAgents: () => fetchApi<any[]>('/api/antfarm/agents'),
+  antfarmAlerts: () => fetchApi<any>('/api/antfarm/alerts'),
+  antfarmPipeline: () => fetchApi<any[]>('/api/antfarm/pipeline'),
 };

@@ -9,6 +9,8 @@ const tabs = [
   { to: '/costs', label: 'COSTS', key: '6' },
   { to: '/performance', label: 'PERF', key: '7' },
   { to: '/tasks', label: 'TASKS', key: '8' },
+  { to: '/projects', label: 'PROJECTS', key: '9' },
+  { to: '/antfarm', label: 'ANTFARM', key: '0' },
 ];
 
 export function TabNav() {

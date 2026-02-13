@@ -1,4 +1,5 @@
 import { config } from '../config.js';
+import { readFile } from "fs/promises";
 const BASE = config.antfarmUrl;
 async function antfarmFetch(path) {
     const res = await fetch(`${BASE}${path}`, { signal: AbortSignal.timeout(5000) });
@@ -18,4 +19,96 @@ export async function getStories() {
 export async function getEvents(runId) {
     const path = runId ? `/api/events?runId=${runId}` : '/api/events';
     return antfarmFetch(path);
+}
+const EVENTS_PATH = '/home/setrox/.openclaw/antfarm/events.jsonl';
+function parseEventsFile(content) {
+    return content.trim().split('\n').filter(Boolean).map(line => {
+        try {
+            return JSON.parse(line);
+        }
+        catch {
+            return null;
+        }
+    }).filter(Boolean);
+}
+export async function getAntfarmActivity(limit = 50) {
+    try {
+        const content = await readFile(EVENTS_PATH, 'utf-8');
+        const events = parseEventsFile(content);
+        return events.slice(-limit).reverse();
+    }
+    catch {
+        return [];
+    }
+}
+export async function getAntfarmAgentStats() {
+    try {
+        const content = await readFile(EVENTS_PATH, 'utf-8');
+        const events = parseEventsFile(content);
+        const stats = {};
+        // Track stepId -> agent mapping (step.done events lack agentId)
+        const stepAgent = {};
+        for (const e of events) {
+            if (e.event === 'step.running' && e.agentId && e.stepId) {
+                const agent = e.agentId.split('/').pop() || e.agentId;
+                stepAgent[e.stepId] = agent;
+                if (!stats[agent])
+                    stats[agent] = { runs: 0, done: 0, failed: 0, timeout: 0 };
+                stats[agent].runs++;
+            }
+            if (e.event === 'step.done' && e.stepId) {
+                const agent = e.agentId?.split('/').pop() || stepAgent[e.stepId];
+                if (agent) {
+                    if (!stats[agent])
+                        stats[agent] = { runs: 0, done: 0, failed: 0, timeout: 0 };
+                    stats[agent].done++;
+                }
+            }
+            if (e.event === 'step.failed' && e.stepId) {
+                const agent = e.agentId?.split('/').pop() || stepAgent[e.stepId];
+                if (agent) {
+                    if (!stats[agent])
+                        stats[agent] = { runs: 0, done: 0, failed: 0, timeout: 0 };
+                    stats[agent].failed++;
+                }
+            }
+            if (e.event === 'step.timeout' && e.stepId) {
+                const agent = e.agentId?.split('/').pop() || stepAgent[e.stepId];
+                if (agent) {
+                    if (!stats[agent])
+                        stats[agent] = { runs: 0, done: 0, failed: 0, timeout: 0 };
+                    stats[agent].timeout++;
+                }
+            }
+        }
+        return Object.entries(stats).map(([name, s]) => ({
+            name,
+            runs: s.runs,
+            successRate: s.runs > 0 ? Math.min(100, Math.round((s.done / s.runs) * 100)) : 0,
+            failed: s.failed,
+            timeout: s.timeout,
+        }));
+    }
+    catch {
+        return [];
+    }
+}
+export async function getAntfarmAlerts() {
+    try {
+        const content = await readFile(EVENTS_PATH, 'utf-8');
+        const events = parseEventsFile(content);
+        const counts = {
+            abandoned: events.filter(e => e.detail?.includes('abandoned')).length,
+            timeout: events.filter(e => e.event === 'step.timeout').length,
+            failed: events.filter(e => e.event === 'step.failed' || e.event === 'run.failed').length,
+        };
+        const recent = events
+            .filter(e => ['step.timeout', 'step.failed', 'run.failed'].includes(e.event))
+            .slice(-20)
+            .reverse();
+        return { counts, recent };
+    }
+    catch {
+        return { counts: { abandoned: 0, timeout: 0, failed: 0 }, recent: [] };
+    }
 }
