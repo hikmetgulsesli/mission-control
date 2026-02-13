@@ -39,6 +39,7 @@ export function WorkflowAgentStats({ agents, alerts }: { agents: WfAgent[]; aler
       )}
 
       {/* Workflow agent mini cards */}
+      <div className="af-stats__agents-title">WORKFLOW AGENTS</div>
       <div className="af-stats__agents">
         {agents.length === 0 && <div className="af-empty">No agent data</div>}
         {agents.map((a) => (

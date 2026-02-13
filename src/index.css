@@ -3265,6 +3265,13 @@ html, body, #root {
 
 /* Stats & Alerts */
 .af-stats { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+.af-stats__agents-title {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--neon-cyan);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
 .af-stats__alert {
   display: flex;
   flex-wrap: wrap;
