@@ -4,7 +4,7 @@ import { api } from '../lib/api';
 
 const AVAILABLE_MODELS = [
   { id: 'kimi-k2p5', full: 'kimi-coding/k2p5', label: 'Kimi K2.5', tier: 'budget' },
-  { id: 'minimax-m2.1', full: 'minimax/MiniMax-M2.1', label: 'MiniMax M2.1', tier: 'budget' },
+  { id: 'minimax-m2.5', full: 'minimax/MiniMax-M2.5', label: 'MiniMax M2.5', tier: 'budget' },
   { id: 'glm-4.7', full: 'zai/glm-4.7', label: 'GLM 4.7', tier: 'budget' },
   { id: 'sonnet-4.5', full: 'anthropic/claude-sonnet-4-5', label: 'Claude Sonnet 4.5', tier: 'premium' },
   { id: 'opus-4.6', full: 'anthropic/claude-opus-4-6', label: 'Claude Opus 4.6', tier: 'premium' },

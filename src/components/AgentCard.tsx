@@ -1,5 +1,19 @@
 import { AGENT_MAP } from '../lib/constants';
 
+
+function normalizeModel(raw: string): string {
+  const map: Record<string, string> = {
+    'anthropic/claude-sonnet-4-5-20250929': 'sonnet-4.5',
+    'anthropic/claude-opus-4-6': 'opus-4.6',
+    'minimax/MiniMax-M2.5': 'minimax-m2.5',
+    'minimax-coding/MiniMax-M2.5': 'minimax-m2.5',
+    'kimi-coding/k2p5': 'kimi-k2p5',
+  };
+  if (map[raw]) return map[raw];
+  // Strip provider prefix (e.g. "anthropic/claude-..." -> "claude-...")
+  const slash = raw.indexOf('/');
+  return slash >= 0 ? raw.slice(slash + 1) : raw;
+}
 interface AgentCardProps {
   agent: {
     id: string;
@@ -85,7 +99,7 @@ export function AgentCard({ agent, sessions = [], compact = false, onChat, onAct
         <div className="agent-card__details">
           <div className="agent-card__detail">
             <span className="agent-card__label">MODEL</span>
-            <span>{agent.model || meta?.model || 'unknown'}</span>
+            <span>{normalizeModel(agent.model || meta?.model || 'unknown')}</span>
           </div>
           <div className="agent-card__detail">
             <span className="agent-card__label">SESSIONS</span>
@@ -128,7 +142,7 @@ export function AgentCard({ agent, sessions = [], compact = false, onChat, onAct
       <div className="agent-card__details">
         <div className="agent-card__detail">
           <span className="agent-card__label">MODEL</span>
-          <span>{agent.model || meta?.model || 'unknown'}</span>
+          <span>{normalizeModel(agent.model || meta?.model || 'unknown')}</span>
         </div>
         <div className="agent-card__detail">
           <span className="agent-card__label">SESSIONS</span>

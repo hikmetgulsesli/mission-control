@@ -21,6 +21,9 @@ import tasksRouter from './routes/tasks.js';
 import approvalsRouter from './routes/approvals.js';
 import projectsRouter from "./routes/projects.js";
 import antfarmActivityRouter from "./routes/antfarm-activity.js";
+import officeRouter from "./routes/office.js";
+import terminalRouter from "./routes/terminal.js";
+import filesRouter from "./routes/files.js";
 const app = express();
 app.use(express.json());
 // API routes
@@ -40,6 +43,9 @@ app.use('/api', tasksRouter);
 app.use('/api', approvalsRouter);
 app.use("/api", projectsRouter);
 app.use("/api", antfarmActivityRouter);
+app.use("/api", officeRouter);
+app.use("/api", terminalRouter);
+app.use("/api", filesRouter);
 // Serve avatars
 if (existsSync(config.avatarsDir)) {
     app.use('/avatars', express.static(config.avatarsDir));

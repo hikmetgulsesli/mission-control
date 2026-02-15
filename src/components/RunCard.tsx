@@ -57,7 +57,17 @@ export function RunCard({ run, onClick, onDelete }: Props) {
 
       <div className="run-card__meta">
         {run.currentStep && <span>Step: <strong>{run.currentStep}</strong></span>}
-        {run.storyCount && run.storyCount > 0 && <span>{run.storyCount} stories</span>}
+        {run.storiesDone !== undefined && run.storyCount ? (
+          <span className="run-card__story-progress">
+            <span className="run-card__story-bar">
+              <span className="run-card__story-fill" style={{ width: `${(run.storiesDone / run.storyCount) * 100}%` }} />
+            </span>
+            {run.storiesDone}/{run.storyCount} stories
+          </span>
+        ) : run.storyCount && run.storyCount > 0 ? <span>{run.storyCount} stories</span> : null}
+        {run.currentStoryId && (
+          <span className="run-card__current-story">{run.currentStoryId}</span>
+        )}
         {run.startedAt && <span>{format(new Date(run.startedAt), 'MMM d HH:mm')}</span>}
       </div>
 

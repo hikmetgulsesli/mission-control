@@ -84,7 +84,7 @@ router.get('/quota', async (_req, res) => {
     const counts = await cached('quota-counts', 60000, async () => countRecentCalls());
     
     const limits: Record<string, { limit: number | null; used: number; tokens: number; windowHours: number }> = {
-      'minimax': { limit: 300, used: counts['minimax']?.calls || 0, tokens: counts['minimax']?.tokens || 0, windowHours: 5 },
+      'minimax': { limit: null, used: counts['minimax']?.calls || 0, tokens: counts['minimax']?.tokens || 0, windowHours: 5 },
       'kimi-coding': { limit: null, used: counts['kimi-coding']?.calls || 0, tokens: counts['kimi-coding']?.tokens || 0, windowHours: 5 },
       'zai': { limit: null, used: counts['zai']?.calls || 0, tokens: counts['zai']?.tokens || 0, windowHours: 5 },
       'anthropic': { limit: null, used: counts['anthropic']?.calls || 0, tokens: counts['anthropic']?.tokens || 0, windowHours: 5 },

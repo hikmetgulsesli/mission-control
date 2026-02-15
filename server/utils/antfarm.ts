@@ -20,6 +20,9 @@ export async function getRuns() {
 export async function getStories() {
   return antfarmFetch('/api/stories');
 }
+export async function getRunStories(runId: string) {
+  return antfarmFetch<any[]>('/api/runs/' + runId + '/stories');
+}
 
 export async function getEvents(runId?: string) {
   const path = runId ? `/api/events?runId=${runId}` : '/api/events';

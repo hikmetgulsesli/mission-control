@@ -1,3 +1,5 @@
+import { AGENTS } from '../lib/constants';
+
 const AGENT_META: Record<string, { emoji: string; desc: string }> = {
   planner:   { emoji: '\u{1F4CB}', desc: 'Task breakdown & planning' },
   setup:     { emoji: '\u{2699}\u{FE0F}',  desc: 'Project scaffolding' },
@@ -47,6 +49,23 @@ export function WorkflowAgentStats({ agents, alerts }: { agents: WfAgent[]; aler
   const counts = alerts?.counts || { abandoned: 0, timeout: 0, failed: 0 };
   const hasAlerts = counts.abandoned + counts.timeout + counts.failed > 0;
 
+  // Find idle agents (agents that exist in AGENTS but have 0 runs or no lastActive)
+  const activeWfAgentNames = new Set(agents.map(a => a.name));
+  const idleAgents = AGENTS.filter(a => {
+    const wfAgent = agents.find(wa => wa.name.toLowerCase() === a.id || wa.name.toLowerCase() === a.name.toLowerCase());
+    return !wfAgent || wfAgent.runs === 0;
+  });
+
+  // Sort active workflow agents: most idle at bottom
+  const sortedAgents = [...agents].sort((a, b) => {
+    if (!a.lastActive && b.lastActive) return 1;
+    if (a.lastActive && !b.lastActive) return -1;
+    if (a.lastActive && b.lastActive) {
+      return new Date(b.lastActive).getTime() - new Date(a.lastActive).getTime();
+    }
+    return b.runs - a.runs;
+  });
+
   return (
     <div className="af-stats">
       {/* Alert banner */}
@@ -73,8 +92,8 @@ export function WorkflowAgentStats({ agents, alerts }: { agents: WfAgent[]; aler
       {/* Workflow agent mini cards */}
       <div className="af-stats__agents-title">WORKFLOW AGENTS</div>
       <div className="af-stats__agents">
-        {agents.length === 0 && <div className="af-empty">No agent data</div>}
-        {agents.map((a) => {
+        {sortedAgents.length === 0 && <div className="af-empty">No agent data</div>}
+        {sortedAgents.map((a) => {
           const meta = AGENT_META[a.name] || { emoji: '\u{1F916}', desc: '' };
           return (
             <div key={a.name} className="af-stats__agent">
@@ -88,7 +107,6 @@ export function WorkflowAgentStats({ agents, alerts }: { agents: WfAgent[]; aler
                 </span>
               </div>
               {meta.desc && <div className="af-stats__agent-desc">{meta.desc}</div>}
-              {/* Success rate bar */}
               <div className="af-stats__agent-bar">
                 <div
                   className={`af-stats__agent-bar-fill ${a.successRate >= 80 ? 'af-stats__agent-bar-fill--good' : a.successRate >= 50 ? 'af-stats__agent-bar-fill--mid' : 'af-stats__agent-bar-fill--bad'}`}
@@ -110,6 +128,22 @@ export function WorkflowAgentStats({ agents, alerts }: { agents: WfAgent[]; aler
           );
         })}
       </div>
+
+      {/* Idle agents section */}
+      {idleAgents.length > 0 && (
+        <div className="af-stats__idle">
+          <div className="af-stats__idle-title">IDLE AGENTS ({idleAgents.length})</div>
+          <div className="af-stats__idle-list">
+            {idleAgents.map((a) => (
+              <div key={a.id} className="af-stats__idle-item">
+                <span className="af-stats__idle-emoji">{a.emoji}</span>
+                <span className="af-stats__idle-name">{a.name}</span>
+                <span className="af-stats__idle-role">{a.role}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Recent alerts */}
       {alerts?.recent && alerts.recent.length > 0 && (

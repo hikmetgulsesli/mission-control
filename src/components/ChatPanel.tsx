@@ -55,7 +55,7 @@ export function ChatPanel({ events, onSend, connected, selectedAgent }: Props) {
   const [userMessages, setUserMessages] = useState<ChatMessage[]>([]);
   const [history, setHistory] = useState<ChatMessage[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const topRef = useRef<HTMLDivElement>(null);
   const lastUserSendTs = useRef<number>(0);
 
   useEffect(() => {
@@ -123,12 +123,12 @@ export function ChatPanel({ events, onSend, connected, selectedAgent }: Props) {
       }
     }
 
-    return Array.from(byRun.values()).sort((a, b) => a.ts - b.ts);
+    return Array.from(byRun.values()).sort((a, b) => b.ts - a.ts);
   }, [events, selectedAgent]);
 
   const allMessages = useMemo(() => {
     const filteredUser = userMessages.filter(m => m.agent === selectedAgent);
-    return [...history, ...filteredUser, ...agentMessages].sort((a, b) => a.ts - b.ts);
+    return [...history, ...filteredUser, ...agentMessages].sort((a, b) => b.ts - a.ts);
   }, [history, userMessages, agentMessages, selectedAgent]);
 
   const isThinking = useMemo(() => {
@@ -136,7 +136,7 @@ export function ChatPanel({ events, onSend, connected, selectedAgent }: Props) {
   }, [agentMessages]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    topRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [allMessages]);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -186,6 +186,20 @@ export function ChatPanel({ events, onSend, connected, selectedAgent }: Props) {
       </div>
 
       <div className="chat-panel__messages">
+        <div ref={topRef} />
+        {isThinking && allMessages.every(m => m.done) && (
+          <div className="chat-msg chat-msg--assistant">
+            <div className="chat-msg__header">
+              <span className="chat-msg__from">{agentEmoji} {agentName}</span>
+            </div>
+            <div className="chat-msg__bubble chat-msg__thinking-bubble">
+              <span className="thinking-dots">
+                <span>.</span><span>.</span><span>.</span>
+              </span>
+              {' '}Agent is thinking
+            </div>
+          </div>
+        )}
         {loadingHistory && (
           <div className="chat-panel__loading">Loading history...</div>
         )}
@@ -220,20 +234,8 @@ export function ChatPanel({ events, onSend, connected, selectedAgent }: Props) {
             )}
           </div>
         ))}
-        {isThinking && allMessages.every(m => m.done) && (
-          <div className="chat-msg chat-msg--assistant">
-            <div className="chat-msg__header">
-              <span className="chat-msg__from">{agentEmoji} {agentName}</span>
-            </div>
-            <div className="chat-msg__bubble chat-msg__thinking-bubble">
-              <span className="thinking-dots">
-                <span>.</span><span>.</span><span>.</span>
-              </span>
-              {' '}Agent is thinking
-            </div>
-          </div>
-        )}
-        <div ref={bottomRef} />
+        
+        
       </div>
 
       <form className="chat-panel__input" onSubmit={handleSubmit}>

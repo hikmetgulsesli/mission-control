@@ -57,6 +57,11 @@ export interface Run {
   progress?: string;
   steps?: RunStep[];
   storyCount?: number;
+  storiesDone?: number;
+  storiesRemaining?: number;
+  currentStoryId?: string;
+  currentStoryTitle?: string;
+  updatedAt?: string;
 }
 
 export interface CostData {

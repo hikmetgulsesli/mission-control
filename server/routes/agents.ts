@@ -115,7 +115,7 @@ router.patch('/agents/:id', async (req, res) => {
           'sonnet-4.5': 'anthropic/claude-sonnet-4-5',
           'opus-4.6': 'anthropic/claude-opus-4-6',
           'glm-4.7': 'zai/glm-4.7',
-          'minimax-m2.1': 'minimax/MiniMax-M2.1',
+          'minimax-m2.5': 'minimax/MiniMax-M2.5',
           'deepseek-chat': 'deepseek/deepseek-chat',
           'deepseek-reasoner': 'deepseek/deepseek-reasoner',
           'grok-3': 'xai/grok-3',
@@ -158,7 +158,7 @@ router.get('/models', async (_req, res) => {
   try {
     const models = [
       { id: 'kimi-k2p5', name: 'Kimi K2.5', provider: 'kimi-coding', cost: 'low' },
-      { id: 'minimax-m2.1', name: 'MiniMax M2.1', provider: 'minimax', cost: 'low' },
+      { id: 'minimax-m2.5', name: 'MiniMax M2.5', provider: 'minimax', cost: 'low' },
       { id: 'glm-4.7', name: 'GLM 4.7', provider: 'zai', cost: 'low' },
       { id: 'sonnet-4.5', name: 'Claude Sonnet 4.5', provider: 'anthropic', cost: 'medium' },
       { id: 'opus-4.6', name: 'Claude Opus 4.6', provider: 'anthropic', cost: 'high' },
@@ -275,58 +275,57 @@ router.get('/agents/:id/history', async (req, res) => {
 
 export default router;
 
+
 // GET /api/agents/:id/activity — Get all runs and activities for an agent
 router.get('/agents/:id/activity', async (req, res) => {
   try {
     const { id } = req.params;
+    const isWorkflowAgent = id.includes('/');
     const agentDir = id === 'main' ? 'main' : id;
     const sessionsDir = `/home/setrox/.openclaw/agents/${agentDir}/sessions`;
 
     // Get all runs from Antfarm
     const { getRuns } = await import('../utils/antfarm.js');
-    const rawRuns: any[] = await getRuns();
+    const rawRuns: any[] = (await getRuns()) as any[];
 
     // Find runs where this agent participated
     const agentRuns: any[] = [];
     for (const run of rawRuns) {
       const steps = run.steps || [];
-      for (const step of steps) {
-        if (step.agent_id && (
-          step.agent_id === id ||
-          step.agent_id === `feature-dev/${id}` ||
-          step.agent_id === `bug-fix/${id}` ||
-          step.agent_id === `security-audit/${id}`
-        )) {
-          // Find this agent's session files
-          const sessionFiles = existsSync(sessionsDir)
-            ? readdirSync(sessionsDir).filter(f => f.endsWith('.jsonl'))
-            : [];
 
-          // Check which sessions contain this run ID
-          const relevantSessions: any[] = [];
-          for (const sf of sessionFiles) {
-            try {
-              const raw = readFileSync(join(sessionsDir, sf), 'utf-8');
-              if (raw.includes(run.id)) {
-                relevantSessions.push({
-                  id: sf.replace('.jsonl', ''),
-                  lastActivity: statSync(join(sessionsDir, sf)).mtimeMs,
-                });
-              }
-            } catch {}
+      if (isWorkflowAgent) {
+        // Workflow agent (feature-dev/developer, etc.) — match directly
+        for (const step of steps) {
+          if (step.agent_id === id) {
+            agentRuns.push({
+              runId: run.id,
+              workflow: run.workflow_id,
+              task: run.task?.split('\n')[0] || '',
+              step: step.step_id,
+              status: step.status,
+              output: step.output?.substring(0, 500) || '',
+              completedAt: step.updated_at,
+              sessions: [],
+            });
+            break;
           }
-
+        }
+      } else {
+        // Real agent (main, koda, etc.) — show all team runs
+        if (steps.length > 0) {
+          const latestStep = steps.reduce((a: any, b: any) =>
+            (a.updated_at || '') > (b.updated_at || '') ? a : b
+          );
           agentRuns.push({
             runId: run.id,
             workflow: run.workflow_id,
             task: run.task?.split('\n')[0] || '',
-            step: step.step_id,
-            status: step.status,
-            output: step.output?.substring(0, 500) || '',
-            completedAt: step.updated_at,
-            sessions: relevantSessions,
+            step: latestStep.step_id,
+            status: run.status || latestStep.status,
+            output: latestStep.output?.substring(0, 500) || '',
+            completedAt: latestStep.updated_at,
+            sessions: [],
           });
-          break; // Found this agent in this run, no need to check other steps
         }
       }
     }

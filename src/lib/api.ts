@@ -39,9 +39,15 @@ export const api = {
   system: () => fetchApi<any>('/api/system'),
   docker: () => fetchApi<any[]>('/api/system/docker'),
   costs: () => fetchApi<any>('/api/costs'),
-  // Tasks
+  // Projects
   projects: () => fetchApi<any[]>("/api/projects"),
+  project: (id: string) => fetchApi<any>(`/api/projects/${id}`),
+  createProject: (data: any) => fetchApi<any>("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }),
+  updateProject: (id: string, data: any) => fetchApi<any>(`/api/projects/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }),
   deleteProject: (id: string, confirmName: string) => fetchApi<any>(`/api/projects/${id}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirmName }) }),
+  exportProject: (id: string) => fetchApi<any>(`/api/projects/${id}/export`),
+  importProject: (data: any) => fetchApi<any>("/api/projects/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }),
+  // Tasks
   tasks: () => fetchApi<any[]>('/api/tasks'),
   createTask: (data: any) => fetchApi<any>('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
   updateTask: (id: string, data: any) => fetchApi<any>("/api/tasks/" + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
@@ -59,4 +65,20 @@ export const api = {
   antfarmAgents: () => fetchApi<any[]>('/api/antfarm/agents'),
   antfarmAlerts: () => fetchApi<any>('/api/antfarm/alerts'),
   antfarmPipeline: () => fetchApi<any[]>('/api/antfarm/pipeline'),
+  // New: Stories + Plan for runs
+  runStories: (id: string) => fetchApi<any[]>(`/api/antfarm/runs/${id}/stories`),
+  runPlan: (id: string) => fetchApi<any>(`/api/antfarm/runs/${id}/plan`),
+  // Terminal
+  terminalExec: (command: string, args: string[]) =>
+    fetchApi<{ output: string; exitCode: number; command: string }>('/api/terminal/exec', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command, args }),
+    }),
+  // Pixel Office
+  officeStatus: () => fetchApi<any>('/api/office/status'),
+  // Files
+  filesList: (path: string) => fetchApi<any>(`/api/files/list?path=${encodeURIComponent(path)}`),
+  filesRead: (path: string) => fetchApi<any>(`/api/files/read?path=${encodeURIComponent(path)}`),
 };
+

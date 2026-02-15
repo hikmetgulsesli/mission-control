@@ -3,23 +3,51 @@ import { readFileSync } from 'fs';
 import { config } from '../config.js';
 import { cached } from '../utils/cache.js';
 const router = Router();
-const AGENT_MODELS = {
-    main: 'minimax-m2.1',
-    koda: 'kimi-k2p5',
-    kaan: 'sonnet-4.5',
-    atlas: 'sonnet-4.5',
-    defne: 'minimax-m2.1',
-    sinan: 'glm-4.7',
-    elif: 'kimi-k2p5',
-    deniz: 'minimax-m2.1',
-    onur: 'minimax-m2.1',
-    mert: 'glm-4.7',
+const MODEL_NORMALIZE = {
+    'anthropic/claude-sonnet-4-5-20250929': 'sonnet-4.5',
+    'anthropic/claude-opus-4-6': 'opus-4.6',
+    'minimax/MiniMax-M2.5': 'minimax-m2.5',
+    'minimax-coding/MiniMax-M2.5': 'minimax-m2.5',
+    'kimi-coding/k2p5': 'kimi-k2p5',
 };
+function normalizeModel(raw) {
+    if (MODEL_NORMALIZE[raw])
+        return MODEL_NORMALIZE[raw];
+    const slash = raw.indexOf('/');
+    return slash >= 0 ? raw.slice(slash + 1) : raw;
+}
+function loadAgentModels() {
+    try {
+        const ocPath = '/home/setrox/.openclaw/openclaw.json';
+        const raw = readFileSync(ocPath, 'utf-8');
+        const oc = JSON.parse(raw);
+        const agents = oc.agents || {};
+        const defaultModel = agents.defaults?.model?.primary || agents.defaults?.primary || 'unknown';
+        const list = agents.list || [];
+        const models = {};
+        const knownIds = ['main', 'koda', 'kaan', 'atlas', 'defne', 'sinan', 'elif', 'deniz', 'onur', 'mert'];
+        for (const id of knownIds) {
+            const entry = list.find((a) => a.id === id);
+            const primary = entry?.model?.primary || defaultModel;
+            models[id] = normalizeModel(primary);
+        }
+        return models;
+    }
+    catch {
+        // Fallback if config is unreadable
+        return {
+            main: 'minimax-m2.5', koda: 'kimi-k2p5', kaan: 'kimi-k2p5', atlas: 'kimi-k2p5',
+            defne: 'minimax-m2.5', sinan: 'minimax-m2.5', elif: 'kimi-k2p5',
+            deniz: 'minimax-m2.5', onur: 'minimax-m2.5', mert: 'minimax-m2.5',
+        };
+    }
+}
 router.get('/performance', async (_req, res) => {
     try {
         const data = await cached('performance', 30000, async () => {
             const raw = readFileSync(config.dataJson, 'utf-8');
             const d = JSON.parse(raw);
+            const agentModels = loadAgentModels();
             const sessions = d.sessions || [];
             const tokenUsage = Array.isArray(d.tokenUsage) ? d.tokenUsage : [];
             const tokenUsageToday = Array.isArray(d.tokenUsageToday) ? d.tokenUsageToday : [];
@@ -27,7 +55,7 @@ router.get('/performance', async (_req, res) => {
             const costBreakdownToday = d.costBreakdownToday || [];
             // Per-agent session count and last activity
             const agentStats = {};
-            for (const [agentId, model] of Object.entries(AGENT_MODELS)) {
+            for (const [agentId, model] of Object.entries(agentModels)) {
                 const agentSessions = sessions.filter((s) => {
                     const sid = s.agent || s.key?.split(':')?.[1];
                     return sid === agentId;

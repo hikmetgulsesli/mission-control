@@ -104,7 +104,7 @@ function ModelLimits() {
 }
 
 export function Overview() {
-  const { data, loading } = usePolling<OverviewData & { crons?: any[]; agentLastActive?: Record<string, number> }>(api.overview, 30000);
+  const { data, loading } = usePolling<OverviewData & { crons?: any[]; agentLastActive?: Record<string, number> }>(api.overview, 15000);
 
   if (loading || !data) {
     return <div className="page-loading">Loading overview...</div>;

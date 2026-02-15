@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { readFileSync } from 'fs';
 import { config } from '../config.js';
-import { cached, registerWarmup } from '../utils/cache.js';
+import { cached } from '../utils/cache.js';
 import { runCliJson } from '../utils/cli.js';
 import { getSystemMetrics } from '../utils/prometheus.js';
 import { getRuns } from '../utils/antfarm.js';
@@ -10,94 +10,50 @@ const router = Router();
 
 const REAL_AGENTS = ['main', 'koda', 'kaan', 'atlas', 'defne', 'sinan', 'elif', 'deniz', 'onur', 'mert'];
 
-// Cache fetchers (reusable for warmup + requests)
-const fetchAgents = () => runCliJson<any>('openclaw', ['agents', 'list', '--json']);
-const fetchCrons = () => runCliJson<any>('openclaw', ['cron', 'list', '--json']);
-const fetchSystem = () => getSystemMetrics();
-const fetchRuns = () => getRuns();
-const fetchData = async () => {
-  const raw = readFileSync(config.dataJson, 'utf-8');
-  return JSON.parse(raw);
-};
-
-// TTLs: CLI commands (slow) get longer TTL, fast sources shorter
-const CLI_TTL = 60000;   // 60s for CLI (agents, crons)
-const FAST_TTL = 15000;  // 15s for prometheus, antfarm, file
-
-// Pre-warm cache on startup
-registerWarmup(async () => {
-  await Promise.allSettled([
-    cached('agents', CLI_TTL, fetchAgents),
-    cached('cronlist', CLI_TTL, fetchCrons),
-    cached('system', FAST_TTL, fetchSystem),
-    cached('runs', FAST_TTL, fetchRuns),
-    cached('datafile', FAST_TTL, fetchData),
-  ]);
-});
-
 router.get('/overview', async (_req, res) => {
   try {
-    const [agents, system, runs, dataFile, cronList] = await Promise.allSettled([
-      cached('agents', CLI_TTL, fetchAgents),
-      cached('system', FAST_TTL, fetchSystem),
-      cached('runs', FAST_TTL, fetchRuns),
-      cached('datafile', FAST_TTL, fetchData),
-      cached('cronlist', CLI_TTL, fetchCrons),
+    const [agents, system, runs, dataFile] = await Promise.allSettled([
+      cached('agents', 30000, () => runCliJson<any[]>('openclaw', ['agents', 'list', '--json'])),
+      cached('system', 15000, getSystemMetrics),
+      cached('runs', 15000, getRuns),
+      cached('datafile', 30000, async () => {
+        const raw = readFileSync(config.dataJson, 'utf-8');
+        return JSON.parse(raw);
+      }),
     ]);
 
     const agentList = agents.status === 'fulfilled'
-      ? (Array.isArray(agents.value) ? agents.value : (agents.value as any)?.agents || []).filter((a: any) => REAL_AGENTS.includes(a.id))
+      ? agents.value.filter((a: any) => REAL_AGENTS.includes(a.id))
       : [];
 
     const runList = runs.status === 'fulfilled' ? runs.value as any[] : [];
-    const activeRuns = runList
-      .filter((r: any) => r.status === 'running' || r.status === 'pending')
-      .map((r: any) => {
-        const steps = r.steps || [];
-        const pendingStep = steps.find((s: any) => s.status === 'pending');
-        const runningStep = steps.find((s: any) => s.status === 'running');
-        return {
-          id: r.id,
-          workflow: r.workflow_id,
-          status: r.status,
-          currentStep: runningStep?.step_id || pendingStep?.step_id || null,
-          task: r.task,
-          startedAt: r.created_at ? new Date(r.created_at).getTime() : undefined,
-        };
-      });
+    const activeRuns = runList.filter((r: any) => r.status === 'running' || r.status === 'pending');
 
     const data = dataFile.status === 'fulfilled' ? dataFile.value : {} as any;
 
     const cronJobs = data.crons || [];
     const activeCrons = Array.isArray(cronJobs) ? cronJobs.filter((c: any) => c.enabled !== false).length : 0;
 
-    const crons = cronList.status === 'fulfilled'
-      ? ((Array.isArray(cronList.value) ? cronList.value : (cronList.value as any)?.jobs) || []).map((c: any) => ({
-          id: c.id,
-          name: c.name,
-          status: c.state?.lastStatus || 'idle',
-          lastRunAt: c.state?.lastRunAtMs || null,
-          nextRunAt: c.state?.nextRunAtMs || null,
-          lastDuration: c.state?.lastDurationMs || null,
-          lastError: c.state?.lastError || null,
-        }))
-      : [];
+    const now = Date.now();
+    const ONE_HOUR = 60 * 60 * 1000;
+    const TWENTY_FOUR_HOURS = 24 * ONE_HOUR;
 
     const sessions = data.sessions || [];
     const activeSessions = sessions.filter((s: any) => {
       const agentId = s.agent || s.key?.split(':')?.[1];
-      return REAL_AGENTS.includes(agentId);
+      if (!REAL_AGENTS.includes(agentId)) return false;
+      // Filter stale sessions: only show sessions active in last 1 hour
+      if (s.updatedAt && (now - s.updatedAt) > ONE_HOUR) return false;
+      return true;
     });
 
-    const agentLastActive: Record<string, number> = {};
-    for (const s of sessions) {
-      const agentId = s.agent || s.key?.split(':')?.[1];
-      if (!agentId) continue;
-      const ts = s.updatedAt || s.lastActivity ? new Date(s.lastActivity || s.updatedAt).getTime() : 0;
-      if (ts > (agentLastActive[agentId] || 0)) {
-        agentLastActive[agentId] = ts;
-      }
-    }
+    // Filter alerts to last 24 hours only
+    const allAlerts = data.alerts || [];
+    const recentAlerts = allAlerts.filter((a: any) => {
+      const ts = a.timestamp || a.ts;
+      if (!ts) return false;
+      return (now - new Date(ts).getTime()) < TWENTY_FOUR_HOURS;
+    });
 
     res.json({
       agents: agentList,
@@ -105,14 +61,12 @@ router.get('/overview', async (_req, res) => {
       activeRuns,
       activeRunCount: activeRuns.length,
       cronCount: activeCrons,
-      crons,
       costToday: data.totalCostToday || 0,
       costAllTime: data.totalCostAllTime || 0,
       system: system.status === 'fulfilled' ? system.value : null,
       gateway: data.gateway || null,
       sessions: activeSessions.slice(0, 20),
-      agentLastActive,
-      alerts: data.alerts || [],
+      alerts: recentAlerts,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

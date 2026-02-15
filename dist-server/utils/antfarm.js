@@ -16,6 +16,9 @@ export async function getRuns() {
 export async function getStories() {
     return antfarmFetch('/api/stories');
 }
+export async function getRunStories(runId) {
+    return antfarmFetch('/api/runs/' + runId + '/stories');
+}
 export async function getEvents(runId) {
     const path = runId ? `/api/events?runId=${runId}` : '/api/events';
     return antfarmFetch(path);
@@ -46,38 +49,48 @@ export async function getAntfarmAgentStats() {
         const content = await readFile(EVENTS_PATH, 'utf-8');
         const events = parseEventsFile(content);
         const stats = {};
-        // Track stepId -> agent mapping (step.done events lack agentId)
         const stepAgent = {};
+        const stepStart = {};
         for (const e of events) {
             if (e.event === 'step.running' && e.agentId && e.stepId) {
                 const agent = e.agentId.split('/').pop() || e.agentId;
                 stepAgent[e.stepId] = agent;
                 if (!stats[agent])
-                    stats[agent] = { runs: 0, done: 0, failed: 0, timeout: 0 };
+                    stats[agent] = { runs: 0, done: 0, failed: 0, timeout: 0, lastActive: '', durations: [] };
                 stats[agent].runs++;
+                stats[agent].lastActive = e.ts;
+                stepStart[e.stepId] = e.ts;
             }
             if (e.event === 'step.done' && e.stepId) {
                 const agent = e.agentId?.split('/').pop() || stepAgent[e.stepId];
                 if (agent) {
                     if (!stats[agent])
-                        stats[agent] = { runs: 0, done: 0, failed: 0, timeout: 0 };
+                        stats[agent] = { runs: 0, done: 0, failed: 0, timeout: 0, lastActive: '', durations: [] };
                     stats[agent].done++;
+                    stats[agent].lastActive = e.ts;
+                    if (stepStart[e.stepId]) {
+                        const dur = (new Date(e.ts).getTime() - new Date(stepStart[e.stepId]).getTime()) / 1000;
+                        if (dur > 0)
+                            stats[agent].durations.push(dur);
+                    }
                 }
             }
             if (e.event === 'step.failed' && e.stepId) {
                 const agent = e.agentId?.split('/').pop() || stepAgent[e.stepId];
                 if (agent) {
                     if (!stats[agent])
-                        stats[agent] = { runs: 0, done: 0, failed: 0, timeout: 0 };
+                        stats[agent] = { runs: 0, done: 0, failed: 0, timeout: 0, lastActive: '', durations: [] };
                     stats[agent].failed++;
+                    stats[agent].lastActive = e.ts;
                 }
             }
             if (e.event === 'step.timeout' && e.stepId) {
                 const agent = e.agentId?.split('/').pop() || stepAgent[e.stepId];
                 if (agent) {
                     if (!stats[agent])
-                        stats[agent] = { runs: 0, done: 0, failed: 0, timeout: 0 };
+                        stats[agent] = { runs: 0, done: 0, failed: 0, timeout: 0, lastActive: '', durations: [] };
                     stats[agent].timeout++;
+                    stats[agent].lastActive = e.ts;
                 }
             }
         }
@@ -87,6 +100,8 @@ export async function getAntfarmAgentStats() {
             successRate: s.runs > 0 ? Math.min(100, Math.round((s.done / s.runs) * 100)) : 0,
             failed: s.failed,
             timeout: s.timeout,
+            avgDuration: s.durations.length > 0 ? Math.round(s.durations.reduce((a, b) => a + b, 0) / s.durations.length) : 0,
+            lastActive: s.lastActive,
         }));
     }
     catch {

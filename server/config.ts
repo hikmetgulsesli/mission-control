@@ -29,4 +29,5 @@ export const config = {
   cliPath: process.env.CLI_PATH || '/home/setrox/.local/bin',
   clawtabsConfig: process.env.CLAWTABS_CONFIG || '/home/setrox/.openclaw/clawtabs-config.json',
   gatewayToken: process.env.GATEWAY_TOKEN || '',
+  projectsJson: process.env.PROJECTS_JSON || '/home/setrox/mission-control/projects.json',
 };

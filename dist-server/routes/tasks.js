@@ -10,8 +10,98 @@ async function proxy(url, opts) {
     const res = await fetch(url, opts);
     return res.json();
 }
+// ── Auto-sync tasks with workflow story progress ──────────────────
+// Task title keywords → story IDs mapping
+const TASK_STORY_MAP = {
+    "Frontend": ["US-004", "US-005", "US-010"],
+    "Agent Kartları": ["US-006", "US-007", "US-008", "US-009"],
+    "Tool Call": ["US-007"],
+    "Systemd Service": ["US-011", "US-012", "US-013"],
+    "WebSocket API": ["US-002"],
+    "Session Log": ["US-003"],
+    "Proje Setup": ["US-001"],
+};
+let lastSyncTime = 0;
+const SYNC_INTERVAL = 60_000; // sync every 60s
+async function syncTasksWithStories() {
+    if (Date.now() - lastSyncTime < SYNC_INTERVAL)
+        return;
+    lastSyncTime = Date.now();
+    try {
+        // Get all runs
+        const runs = await proxy(`${ANTFARM}/api/runs`);
+        if (!Array.isArray(runs) || runs.length === 0)
+            return;
+        // Find the active/latest run
+        const activeRun = runs.find((r) => r.status === "running") || runs[0];
+        if (!activeRun?.id)
+            return;
+        // Get stories for this run
+        const detail = await proxy(`${ANTFARM}/api/runs/${activeRun.id}`);
+        const stories = detail?.stories || [];
+        if (stories.length === 0)
+            return;
+        const storyStatus = new Map(stories.map((s) => [s.story_id, s.status]));
+        // Get current tasks
+        const tasks = await proxy(`${ANTFARM}/api/tasks`);
+        if (!Array.isArray(tasks))
+            return;
+        for (const task of tasks) {
+            if (task.status === "done")
+                continue;
+            // Find matching story IDs for this task
+            let matchedStories = [];
+            for (const [keyword, storyIds] of Object.entries(TASK_STORY_MAP)) {
+                if (task.title?.includes(keyword)) {
+                    matchedStories = storyIds;
+                    break;
+                }
+            }
+            if (matchedStories.length === 0)
+                continue;
+            const allDone = matchedStories.every(id => storyStatus.get(id) === "done");
+            const anyActive = matchedStories.some(id => {
+                const s = storyStatus.get(id);
+                return s === "pending" || s === "in_progress";
+            });
+            let newStatus = null;
+            if (allDone && task.status !== "done") {
+                newStatus = "done";
+            }
+            else if (anyActive && task.status === "todo") {
+                newStatus = "in_progress";
+            }
+            if (newStatus) {
+                try {
+                    await proxy(`${ANTFARM}/api/tasks/${task.id}/status`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ status: newStatus }),
+                    });
+                }
+                catch { }
+            }
+        }
+        // Refresh in_progress task timestamps so pulse animation works
+        for (const task of tasks) {
+            if (task.status === "in_progress") {
+                try {
+                    await proxy(`${ANTFARM}/api/tasks/${task.id}`, {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ ...task, updated_at: new Date().toISOString() }),
+                    });
+                }
+                catch { }
+            }
+        }
+    }
+    catch { }
+}
 router.get("/tasks", async (_req, res) => {
     try {
+        // Sync tasks with story progress (throttled to every 60s)
+        syncTasksWithStories();
         const data = await proxy(`${ANTFARM}/api/tasks`);
         res.json(data);
     }

@@ -70,23 +70,33 @@ export function RunDetail({ runId, onBack }: { runId: string; onBack: () => void
   const [tab, setTab] = useState<Tab>('overview');
   const [selectedStep, setSelectedStep] = useState<string | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const [lastRefreshed, setLastRefreshed] = useState(Date.now());
+  const [refreshing, setRefreshing] = useState(false);
+  const [tick, setTick] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
+      setRefreshing(true);
       try {
         const d = await api.runDetail(runId);
-        if (!cancelled) setData(d);
+        if (!cancelled) { setData(d); setLastRefreshed(Date.now()); }
       } catch (e: any) {
         if (!cancelled) setError(e.message);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) { setLoading(false); setRefreshing(false); }
       }
     };
     load();
-    const interval = setInterval(load, 15000); // auto-refresh
+    const interval = setInterval(load, 10000); // auto-refresh 10s
     return () => { cancelled = true; clearInterval(interval); };
   }, [runId]);
+
+  // Tick every 5s to update relative times
+  useEffect(() => {
+    const t = setInterval(() => setTick(n => n + 1), 5000);
+    return () => clearInterval(t);
+  }, []);
 
   if (loading) return <div className="page-loading">Loading run details...</div>;
   if (error) return <div className="page-loading">Error: {error}</div>;
@@ -105,13 +115,31 @@ export function RunDetail({ runId, onBack }: { runId: string; onBack: () => void
         <button className="rd-back" onClick={onBack}>← Back</button>
         <div className="rd-title-row">
           <GlitchText text={data.task?.split('\n')[0].slice(0, 60) || 'Run Detail'} tag="h2" />
-          <span className={`rd-status rd-status--${data.status}`}>{data.status}</span>
+          <span className={`rd-status rd-status--${data.status}`}>
+            {data.status === 'running' && <span className="rd-status-pulse" />}
+            {data.status}
+          </span>
+          <span className={`rd-refresh-indicator ${refreshing ? 'rd-refresh-indicator--active' : ''}`} title="Auto-refreshing every 10s">
+            {(() => { const ago = Math.floor((Date.now() - lastRefreshed) / 1000); return ago < 5 ? 'just now' : `${ago}s ago`; })()}
+          </span>
         </div>
         <div className="rd-meta">
           <span>#{data.id.slice(0, 8)}</span>
           <span>{data.workflow}</span>
           {data.progress && <span>{data.progress}</span>}
-          {data.storyCount ? <span>{data.storyCount} stories</span> : null}
+          {(data as any).storiesDone !== undefined && data.storyCount ? (
+            <span className="rd-story-progress">
+              <span className="rd-story-bar">
+                <span className="rd-story-fill" style={{ width: `${((data as any).storiesDone / data.storyCount) * 100}%` }} />
+              </span>
+              {(data as any).storiesDone}/{data.storyCount} stories
+            </span>
+          ) : data.storyCount ? <span>{data.storyCount} stories</span> : null}
+          {(data as any).currentStoryId && (
+            <span className="rd-current-story">
+              {(data as any).currentStoryId}: {((data as any).currentStoryTitle || '').slice(0, 40)}
+            </span>
+          )}
           {data.startedAt && <span>{new Date(data.startedAt).toLocaleString('tr-TR')}</span>}
         </div>
       </div>
@@ -217,7 +245,7 @@ function ChatTab({ chats, selectedAgent, onSelectAgent }: {
 }) {
   const agents = [...new Set(chats.map(c => c.agent))];
   const active = selectedAgent || agents[0] || null;
-  const activeChats = chats.filter(c => c.agent === active);
+  const activeChats = chats.filter(c => c.agent === active).slice().reverse();
 
   if (chats.length === 0) {
     return <div className="rd-empty">No agent conversations found for this run</div>;
@@ -245,9 +273,16 @@ function ChatTab({ chats, selectedAgent, onSelectAgent }: {
         {activeChats.map(chat => (
           <div key={chat.sessionId} className="rd-chat-session">
             <div className="rd-chat-session-id">Session: {chat.sessionId.slice(0, 8)}</div>
-            {chat.messages.map((msg, i) => (
+            {[...chat.messages].reverse().map((msg, i) => (
               <div key={i} className={`rd-msg rd-msg--${msg.role}`}>
-                <div className="rd-msg-role">{msg.role}</div>
+                <div className="rd-msg-header">
+                  <span className="rd-msg-role">{msg.role}</span>
+                  {msg.timestamp && (
+                    <span className="rd-msg-time">
+                      {new Date(msg.timestamp).toLocaleString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit', day: '2-digit', month: '2-digit' })}
+                    </span>
+                  )}
+                </div>
                 <div className="rd-msg-text">{msg.text}</div>
               </div>
             ))}

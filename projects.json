@@ -1,0 +1,575 @@
+[
+  {
+    "id": "mission-control",
+    "name": "Mission Control",
+    "emoji": "💎",
+    "status": "active",
+    "description": "OpenClaw ekosisteminin merkezi yönetim paneli. Ajanlar, workflow'lar, cron job'lar, maliyet takibi, performans metrikleri ve görev yönetimini tek bir arayüzde sunar.",
+    "ports": {
+      "frontend": 3080
+    },
+    "domain": "ai.setrox.com.tr",
+    "repo": "/home/setrox/mission-control",
+    "stack": [
+      "React",
+      "Vite",
+      "Express",
+      "TypeScript"
+    ],
+    "service": "mission-control.service",
+    "createdBy": "Manuel Gelistirme",
+    "createdAt": "2026-02-01",
+    "features": [
+      "10 ajan yonetimi ve durum izleme",
+      "Workflow run takibi ve gorselleştirme",
+      "Cron job izleme ve durum paneli",
+      "Model maliyet analizi",
+      "Ajan performans metrikleri",
+      "Gorev Kanban board",
+      "Chat arayuzu",
+      "Sistem kaynak izleme (RAM/CPU/Disk)",
+      "Proje portfolyo yonetimi"
+    ],
+    "tasks": [
+      "Overview dashboard",
+      "Agent roster ve activity modal",
+      "Workflow kanban ve run detay",
+      "Chat paneli (markdown destekli)",
+      "OPS sistemi (Docker, cron, sistem)",
+      "Maliyet merkezi",
+      "Performans metrikleri",
+      "Task board",
+      "Proje sayfasi"
+    ],
+    "github": "https://github.com/hikmetgulsesli/mission-control",
+    "category": "own"
+  },
+  {
+    "id": "openclaw-dashboard",
+    "name": "Mudrii Dashboard",
+    "emoji": "🦞",
+    "status": "active",
+    "description": "OpenClaw gateway'unun resmi web arayuzu (mudrii). Ajan listesi, session yonetimi ve temel konfigurasyona erisim sağlar.",
+    "ports": {
+      "frontend": 8090
+    },
+    "domain": "dev.setrox.com.tr",
+    "repo": "/home/setrox/.openclaw/dashboard",
+    "stack": [
+      "HTML",
+      "CSS",
+      "JavaScript"
+    ],
+    "service": "openclaw-dashboard",
+    "createdBy": "OpenClaw (mudrii)",
+    "createdAt": "2026-01-20",
+    "features": [
+      "Ajan listesi ve durum gosterimi",
+      "Session yonetimi",
+      "Gateway konfigurasyonu",
+      "Takim toplanti arayuzu (team.html)",
+      "Pixel art ajan avatarlari"
+    ],
+    "tasks": [],
+    "category": "external"
+  },
+  {
+    "id": "antfarm-dashboard",
+    "name": "Antfarm Dashboard",
+    "emoji": "🐜",
+    "status": "active",
+    "description": "Antfarm workflow engine'inin izleme paneli. Workflow run'lari, step durumlari, story ilerlemesi ve gorev yonetimini gosterir.",
+    "ports": {
+      "frontend": 3333
+    },
+    "domain": "antfarm.setrox.com.tr",
+    "repo": "/home/setrox/.openclaw/antfarm-repo",
+    "stack": [
+      "Node.js",
+      "Express",
+      "SQLite"
+    ],
+    "service": "antfarm-dashboard.service",
+    "createdBy": "Antfarm",
+    "createdAt": "2026-02-08",
+    "features": [
+      "Workflow run listesi ve detaylari",
+      "Step durum izleme",
+      "Story ilerleme takibi",
+      "Gorev (task) yonetimi API",
+      "Run resume/retry destegi"
+    ],
+    "tasks": [],
+    "github": "https://github.com/snarktank/antfarm",
+    "category": "external"
+  },
+  {
+    "id": "uptime-kuma",
+    "name": "Uptime Kuma",
+    "emoji": "📡",
+    "status": "active",
+    "description": "Servis izleme ve uptime monitoring araci. 15 monitor ile tum servislerin calisma durumunu takip eder ve bildirim gonderir.",
+    "ports": {
+      "frontend": 3001
+    },
+    "domain": "status.setrox.com.tr",
+    "repo": "",
+    "stack": [
+      "Node.js",
+      "Docker"
+    ],
+    "service": "docker:uptime-kuma",
+    "createdBy": "Docker",
+    "createdAt": "2026-01-25",
+    "features": [
+      "15 servis monitor",
+      "HTTP/TCP/Ping kontrolleri",
+      "Bildirim entegrasyonu",
+      "Durum sayfasi",
+      "Yanit suresi grafikleri"
+    ],
+    "tasks": [],
+    "category": "external"
+  },
+  {
+    "id": "grafana",
+    "name": "Grafana",
+    "emoji": "📈",
+    "status": "active",
+    "description": "Metrik gorselleştirme ve izleme paneli. Prometheus + Node Exporter verileriyle sunucu performansini detayli olarak gosterir.",
+    "ports": {
+      "frontend": 3002
+    },
+    "domain": "grafana.setrox.com.tr",
+    "repo": "",
+    "stack": [
+      "Grafana",
+      "Prometheus",
+      "Node Exporter"
+    ],
+    "service": "grafana-server.service",
+    "createdBy": "Sistem",
+    "createdAt": "2026-02-05",
+    "features": [
+      "Sunucu metrikleri (CPU, RAM, Disk, Network)",
+      "Prometheus veri kaynagi",
+      "Ozel dashboard'lar",
+      "Alarm kurallari",
+      "Process-level izleme"
+    ],
+    "tasks": [],
+    "category": "external"
+  },
+  {
+    "id": "n8n",
+    "name": "n8n",
+    "emoji": "🔄",
+    "status": "active",
+    "description": "Workflow otomasyon platformu. API entegrasyonlari, veri islemleri ve otomasyon senaryolari icin gorsel workflow olusturma araci.",
+    "ports": {
+      "frontend": 5678
+    },
+    "domain": "n8n.setrox.com.tr",
+    "repo": "",
+    "stack": [
+      "Node.js",
+      "Docker"
+    ],
+    "service": "docker:n8n",
+    "createdBy": "Docker",
+    "createdAt": "2026-02-01",
+    "features": [
+      "Gorsel workflow tasarimcisi",
+      "400+ entegrasyon",
+      "Webhook destegi",
+      "Zamanlanmis gorevler",
+      "API endpoint olusturma"
+    ],
+    "tasks": [],
+    "category": "external"
+  },
+  {
+    "id": "restmenu",
+    "name": "RestMenu",
+    "emoji": "🍽️",
+    "status": "active",
+    "description": "Restoran dijital menü yönetim sistemi. QR kod ile müşterilerin menüye erişmesini sağlar. Çoklu dil desteği, kategori yönetimi, analitik ve özel kampanya modülleri içerir.",
+    "ports": {
+      "frontend": 3501
+    },
+    "domain": "restmenu.setrox.com.tr",
+    "repo": "/data/projects/active/restmenu",
+    "stack": [
+      "Next.js",
+      "React",
+      "TypeScript",
+      "i18n"
+    ],
+    "service": "restmenu.service",
+    "createdBy": "Manuel Geliştirme",
+    "createdAt": "2026-01-15",
+    "features": [
+      "QR kod ile dijital menü erişimi",
+      "Çoklu dil desteği (TR/EN/AR)",
+      "Kategori ve ürün yönetimi",
+      "Sayfa görüntüleme analitiği",
+      "Özel günler ve kampanya modülü"
+    ],
+    "tasks": [
+      "Proje yapısı ve Next.js kurulumu",
+      "Çoklu dil altyapısı (i18n)",
+      "Menü CRUD API endpointleri",
+      "Responsive menü görünümü",
+      "Analitik dashboard"
+    ],
+    "github": "https://github.com/hikmetgulsesli/restmenu",
+    "category": "own"
+  },
+  {
+    "id": "logpulse",
+    "name": "LogPulse (VeriSentez)",
+    "emoji": "📊",
+    "status": "active",
+    "description": "OpenClaw ajan log analiz ve görselleştirme aracı. Session loglarını tarayarak token kullanımı, hata oranları, anomali tespiti ve ajan performans metriklerini hesaplar.",
+    "ports": {
+      "frontend": 3502
+    },
+    "domain": "logpulse.setrox.com.tr",
+    "repo": "/home/setrox/logpulse",
+    "stack": [
+      "Node.js",
+      "Express",
+      "TypeScript",
+      "SQLite",
+      "Chart.js"
+    ],
+    "service": "logpulse.service",
+    "createdBy": "Antfarm Workflow",
+    "workflowRunId": "aa96d169",
+    "createdAt": "2026-02-11",
+    "features": [
+      "Session log tarama ve parsing",
+      "Token kullanım analizi (giriş/çıkış)",
+      "Anomali tespiti (yüksek hata, uzun süre)",
+      "Ajan bazlı performans metrikleri",
+      "REST API + web dashboard",
+      "CLI araçları (scan, report)"
+    ],
+    "tasks": [
+      "Log parser ve scanner modülü",
+      "SQLite veritabanı şeması",
+      "Metrik hesaplama motoru",
+      "Anomali tespit algoritmaları",
+      "Express API endpointleri",
+      "Dashboard arayüzü",
+      "CLI komutları (scan/report)"
+    ],
+    "prd": "OpenClaw ajanlarının session loglarını analiz ederek performans metrikleri, anomali tespiti ve maliyet optimizasyonu sağlayan bir araç. Her session için token kullanımı, süre, hata sayısı, araç çağrıları gibi verileri toplar ve görselleştirir.",
+    "category": "own"
+  },
+  {
+    "id": "agentviz",
+    "name": "AgentViz",
+    "emoji": "🔮",
+    "status": "active",
+    "description": "Gerçek zamanlı WebSocket tabanlı ajan aktivite görselleştirme paneli. Hangi ajanın çalıştığını, hangi araçları kullandığını, model geçişlerini ve token kullanımını canlı olarak gösterir.",
+    "ports": {
+      "frontend": 3503
+    },
+    "domain": "agentviz.setrox.com.tr",
+    "repo": "/home/setrox/.openclaw/agent-activity-viz",
+    "stack": [
+      "Node.js",
+      "React",
+      "Vite",
+      "WebSocket",
+      "TypeScript"
+    ],
+    "service": "agentviz.service",
+    "createdBy": "Antfarm Workflow",
+    "workflowRunId": "b2024647",
+    "createdAt": "2026-02-12",
+    "stories": {
+      "total": 15,
+      "done": 15
+    },
+    "pr": "https://github.com/hikmetgulsesli/agent-activity-viz/pull/1",
+    "features": [
+      "Gerçek zamanlı WebSocket veri akışı",
+      "Ajan listesi ve durum kartları",
+      "Aktivite akışı (araç kullanımı stream)",
+      "Token kullanım grafikleri",
+      "Model geçiş paneli",
+      "Entegrasyon testleri"
+    ],
+    "tasks": [
+      "US-001: Proje yapısı (Node.js + TypeScript)",
+      "US-002: WebSocket sunucu + streaming",
+      "US-003: Veri toplayıcı modülü",
+      "US-004: React dashboard shell (dark theme)",
+      "US-005: WebSocket client hook",
+      "US-006: Ajan listesi paneli",
+      "US-007: Aktivite akışı paneli",
+      "US-008: Token kullanım grafikleri",
+      "US-009: Model geçiş paneli",
+      "US-010: Ana dashboard layout",
+      "US-011: Statik dosya sunumu",
+      "US-012: Nginx reverse proxy config",
+      "US-013: Systemd service kurulumu",
+      "US-014: Entegrasyon testleri",
+      "US-015: README dokümantasyonu"
+    ],
+    "prd": "Gerçek zamanlı WebSocket tabanlı dashboard. OpenClaw ajanlarının aktivitelerini canlı olarak stream eder. Hangi ajanın çalıştığını, hangi araçları kullandığını, model geçişlerini ve token kullanımını gerçek zamanlı gösterir. Port 3503, ai.setrox.com.tr/agents-viz altında erişim.",
+    "github": "https://github.com/hikmetgulsesli/agent-activity-viz",
+    "category": "own"
+  },
+  {
+    "id": "clawdocs",
+    "name": "ClawDocs",
+    "emoji": "📚",
+    "status": "active",
+    "description": "Auto-generated Agent Documentation. Tüm OpenClaw agent'larının otomatik taranmış dokümantasyonu. Agent yetenekleri, skill'leri ve araçları görsel dashboard'da sunar.",
+    "ports": {
+      "frontend": 4504,
+      "backend": 4504
+    },
+    "domain": "clawdocs.setrox.com.tr",
+    "repo": "/home/setrox/clawdocs",
+    "stack": [
+      "Node.js",
+      "Express",
+      "Vite",
+      "JavaScript"
+    ],
+    "service": "clawdocs.service",
+    "createdBy": "Arya",
+    "createdAt": "2026-02-13",
+    "features": [
+      "Otomatik agent tarayıcı",
+      "Görsel agent kartları",
+      "Skill ve yetenek görüntüleme",
+      "Model bilgisi",
+      "Search ve filtreleme",
+      "Dark theme UI"
+    ],
+    "tasks": [
+      "Agent scanner script",
+      "Dashboard UI",
+      "API endpoints",
+      "Mission Control entegrasyonu",
+      "Systemd service",
+      "Cloudflare subdomain"
+    ],
+    "github": "https://github.com/hikmetgulsesli/clawdocs",
+    "category": "own"
+  },
+  {
+    "id": "url-shortener",
+    "name": "URL Shortener",
+    "emoji": "🔗",
+    "status": "active",
+    "description": "Minimal URL kısaltma servisi. Kısa link oluşturma, tıklama takibi ve istatistikler sunar.",
+    "ports": {
+      "frontend": 3506,
+      "backend": 3506
+    },
+    "domain": "link.setrox.com.tr",
+    "repo": "/home/setrox/url-shortener",
+    "stack": [
+      "Node.js",
+      "Express",
+      "PostgreSQL",
+      "TypeScript"
+    ],
+    "service": "url-shortener.service",
+    "createdBy": "Manuel Deploy",
+    "createdAt": "2026-02-14",
+    "features": [
+      "Kısa link oluşturma",
+      "Tıklama takibi",
+      "Otomatik yönlendirme",
+      "İstatistik paneli"
+    ],
+    "tasks": [],
+    "category": "own"
+  },
+  {
+    "emoji": "📊",
+    "name": "StatusPage",
+    "status": "active",
+    "description": "Public status page for OpenClaw services. Uptime Kuma API integration.",
+    "ports": {
+      "frontend": 4505,
+      "backend": 4505
+    },
+    "domain": "statuspage.setrox.com.tr",
+    "repo": "/home/setrox/statuspage",
+    "stack": [
+      "Node.js",
+      "Express",
+      "React",
+      "Vite",
+      "TypeScript"
+    ],
+    "createdAt": "2026-02-14",
+    "features": [
+      "Service status monitoring",
+      "Uptime Kuma integration",
+      "Systemd service",
+      "Cloudflare tunnel"
+    ],
+    "github": "https://github.com/hikmetgulsesli/statuspage",
+    "category": "own"
+  },
+  {
+    "id": "pomodoro-timer",
+    "name": "Pomodoro Timer",
+    "emoji": "🔧",
+    "status": "active",
+    "description": "Build a Pomodoro Timer web application.  REQUIREMENTS:",
+    "ports": {
+      "frontend": 3507
+    },
+    "domain": "pomodoro-timer.setrox.com.tr",
+    "repo": "/home/setrox/.openclaw/workspaces/workflows/feature-dev/pomodoro-timer",
+    "stack": [
+      "React",
+      "Vite",
+      "TypeScript",
+      "Tailwind CSS"
+    ],
+    "service": "pomodoro-timer.service",
+    "serviceStatus": "unknown",
+    "createdBy": "antfarm-workflow",
+    "createdAt": "2026-02-15",
+    "stories": {
+      "total": 0,
+      "done": 0
+    },
+    "features": [],
+    "tasks": [],
+    "github": "",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": false
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": false
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": false
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": false
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": false
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": false
+      }
+    ],
+    "antfarmRunIds": [
+      "b252bebb-e79f-4c92-93d9-b4e011bd937d"
+    ],
+    "updatedAt": "2026-02-15T01:37:26.526Z"
+  },
+  {
+    "id": "habit-tracker-web-application-with",
+    "name": "Habit Tracker",
+    "emoji": "🔧",
+    "status": "active",
+    "description": "Build a Habit Tracker web application with: - Daily habit tracking (add/complete/delete habits) - GitHub-style heatmap (365-day activity grid)",
+    "ports": {
+      "frontend": 3508
+    },
+    "domain": "habit-tracker.setrox.com.tr",
+    "repo": "/home/setrox/habit-tracker",
+    "stack": [
+      "react",
+      "vite",
+      "typescript"
+    ],
+    "service": "habit-tracker",
+    "serviceStatus": "active",
+    "createdBy": "antfarm-workflow",
+    "createdAt": "2026-02-15",
+    "stories": {
+      "total": 0,
+      "done": 0
+    },
+    "features": [],
+    "tasks": [],
+    "github": "",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": false
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": false
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": false
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": false
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": false
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": false
+      }
+    ],
+    "antfarmRunIds": [
+      "c3bff3ab-7db0-4e52-8f47-1a484d4e89ac"
+    ],
+    "updatedAt": "2026-02-15T02:39:28.927Z"
+  }
+]

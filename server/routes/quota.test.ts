@@ -247,7 +247,7 @@ describe('countRecentCalls 5-hour sliding window', () => {
     }
 
     it('should match minimax models (case insensitive)', () => {
-      assert.strictEqual(findProvider('minimax/MiniMax-M2.1'), 'minimax');
+      assert.strictEqual(findProvider('minimax/MiniMax-M2.5'), 'minimax');
       assert.strictEqual(findProvider('MiniMax-Text-01'), 'minimax');
       assert.strictEqual(findProvider('minimax-pro'), 'minimax');
       assert.strictEqual(findProvider('MINIMAX'), 'minimax');
@@ -280,7 +280,7 @@ describe('countRecentCalls 5-hour sliding window', () => {
     });
 
     it('should match models in entry.model field', () => {
-      const entry = { model: 'minimax/MiniMax-M2.1', message: { role: 'assistant' } };
+      const entry = { model: 'minimax/MiniMax-M2.5', message: { role: 'assistant' } };
       const model = (entry.model || '').toLowerCase();
       assert.strictEqual(findProvider(model), 'minimax');
     });
@@ -293,7 +293,7 @@ describe('countRecentCalls 5-hour sliding window', () => {
 
     it('should prefer entry.model over message.model', () => {
       const entry = { 
-        model: 'minimax/MiniMax-M2.1', 
+        model: 'minimax/MiniMax-M2.5', 
         message: { role: 'assistant', model: 'claude-sonnet' } 
       };
       const model = (entry.model || entry.message.model || '').toLowerCase();

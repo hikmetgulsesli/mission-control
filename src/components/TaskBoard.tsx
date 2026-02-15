@@ -17,6 +17,36 @@ const PRIORITY_COLORS: Record<string, string> = {
   low: "var(--text-dim)",
 };
 
+// SQLite datetime('now') returns UTC without 'Z' suffix - browser parses as local
+function parseUTC(dateStr: string): number {
+  if (!dateStr) return NaN;
+  // If no timezone info, treat as UTC
+  if (!dateStr.endsWith('Z') && !dateStr.includes('+') && !dateStr.includes('T')) {
+    return new Date(dateStr + 'Z').getTime();
+  }
+  return new Date(dateStr).getTime();
+}
+
+function timeAgo(dateStr: string): string {
+  if (!dateStr) return "";
+  const now = Date.now();
+  const then = parseUTC(dateStr);
+  const diffMs = now - then;
+  if (isNaN(then)) return "";
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
+function isRecentlyActive(dateStr: string, withinMs = 600000): boolean {
+  if (!dateStr) return false;
+  return (Date.now() - parseUTC(dateStr)) < withinMs;
+}
+
 interface Props {
   tasks: Task[];
   onRefresh: () => void;
@@ -53,7 +83,7 @@ export function TaskBoard({ tasks, onRefresh, onSelect }: Props) {
               {colTasks.map((task) => (
                 <div
                   key={task.id}
-                  className={`task-card ${moving === task.id ? "task-card--moving" : ""}`}
+                  className={`task-card ${moving === task.id ? "task-card--moving" : ""} ${task.status === "in_progress" && isRecentlyActive(task.updated_at) ? "task-card--active" : ""}`}
                   onClick={() => onSelect(task)}
                 >
                   <div className="task-card__header">
@@ -69,6 +99,19 @@ export function TaskBoard({ tasks, onRefresh, onSelect }: Props) {
                       {task.description.length > 80 ? "..." : ""}
                     </div>
                   )}
+                  <div className="task-card__meta">
+                    {task.updated_at && (
+                      <span className="task-card__time" title={task.updated_at}>
+                        {task.status === "in_progress" && isRecentlyActive(task.updated_at) && (
+                          <span className="task-card__pulse" />
+                        )}
+                        {timeAgo(task.updated_at)}
+                      </span>
+                    )}
+                    {task.assigned_agent && (
+                      <span className="task-card__agent-badge">{task.assigned_agent}</span>
+                    )}
+                  </div>
                   <div className="task-card__footer">
                     {task.assigned_agent && (
                       <span className="task-card__agent">{task.assigned_agent}</span>

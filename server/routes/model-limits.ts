@@ -39,7 +39,7 @@ router.get('/model-limits', async (_req, res) => {
     // Map provider to usage
     const providerModelMap: Record<string, string[]> = {
       'kimi-coding': ['kimi-coding/k2p5', 'kimi-coding/kimi-k2-thinking'],
-      'minimax': ['minimax/MiniMax-M2.1'],
+      'minimax': ['minimax/MiniMax-M2.5', 'minimax/MiniMax-M2.5-lightning'],
       'zai': ['zai/glm-4.7', 'zai/glm-4-7'],
       'deepseek': ['deepseek/deepseek-chat', 'deepseek/deepseek-reasoner'],
       'xai': ['xai/grok-3'],
