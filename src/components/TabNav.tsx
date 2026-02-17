@@ -1,4 +1,5 @@
-import { NavLink } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { NavLink, useLocation } from 'react-router-dom';
 
 const tabs: { to: string; label: string; key?: string }[] = [
   { to: '/', label: 'OVERVIEW' },
@@ -18,26 +19,55 @@ interface TabNavProps {
 }
 
 export function TabNav({ onShellToggle, shellOpen }: TabNavProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const location = useLocation();
+
+  // Close menu on route change
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [location.pathname]);
+
+  // Close menu on resize to desktop
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth > 768) setMenuOpen(false);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   return (
-    <nav className="tab-nav">
-      {tabs.map((tab) => (
-        <NavLink
-          key={tab.to}
-          to={tab.to}
-          end={tab.to === '/'}
-          className={({ isActive }) => `tab-nav__item ${isActive ? 'tab-nav__item--active' : ''}`}
+    <>
+      <nav className={`tab-nav ${menuOpen ? 'tab-nav--open' : ''}`}>
+        <button
+          className="tab-nav__hamburger"
+          onClick={() => setMenuOpen(!menuOpen)}
+          aria-label="Toggle navigation"
         >
-          {tab.key && <span className="tab-nav__key">[{tab.key}]</span>}
-          {tab.label}
-        </NavLink>
-      ))}
-      <button
-        className={`tab-nav__item tab-nav__item--shell ${shellOpen ? 'tab-nav__item--active' : ''}`}
-        onClick={onShellToggle}
-      >
-        <span className="tab-nav__key">[8]</span>
-        SHELL
-      </button>
-    </nav>
+          <span className={`tab-nav__hamburger-icon ${menuOpen ? 'tab-nav__hamburger-icon--open' : ''}`} />
+        </button>
+        <div className="tab-nav__items">
+          {tabs.map((tab) => (
+            <NavLink
+              key={tab.to}
+              to={tab.to}
+              end={tab.to === '/'}
+              className={({ isActive }) => `tab-nav__item ${isActive ? 'tab-nav__item--active' : ''}`}
+            >
+              {tab.key && <span className="tab-nav__key">[{tab.key}]</span>}
+              {tab.label}
+            </NavLink>
+          ))}
+          <button
+            className={`tab-nav__item tab-nav__item--shell ${shellOpen ? 'tab-nav__item--active' : ''}`}
+            onClick={onShellToggle}
+          >
+            <span className="tab-nav__key">[8]</span>
+            SHELL
+          </button>
+        </div>
+      </nav>
+      {menuOpen && <div className="tab-nav__overlay" onClick={() => setMenuOpen(false)} />}
+    </>
   );
 }

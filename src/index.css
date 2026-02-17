@@ -5582,3 +5582,268 @@ html, body, #root {
   padding: 2rem 1rem;
   font-size: 0.8rem;
 }
+
+/* ═══════════════════════════════════════════════════
+   RESPONSIVE v2 — Hamburger Menu + Missing Components
+   ═══════════════════════════════════════════════════ */
+
+/* --- Hamburger Button (hidden on desktop) --- */
+.tab-nav__hamburger {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  z-index: 1001;
+}
+
+.tab-nav__hamburger-icon,
+.tab-nav__hamburger-icon::before,
+.tab-nav__hamburger-icon::after {
+  display: block;
+  width: 20px;
+  height: 2px;
+  background: var(--neon-cyan, #0ff);
+  transition: all 0.3s;
+  position: relative;
+}
+
+.tab-nav__hamburger-icon::before,
+.tab-nav__hamburger-icon::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  width: 100%;
+}
+
+.tab-nav__hamburger-icon::before { top: -6px; }
+.tab-nav__hamburger-icon::after { top: 6px; }
+
+.tab-nav__hamburger-icon--open {
+  background: transparent;
+}
+.tab-nav__hamburger-icon--open::before {
+  transform: rotate(45deg);
+  top: 0;
+}
+.tab-nav__hamburger-icon--open::after {
+  transform: rotate(-45deg);
+  top: 0;
+}
+
+.tab-nav__items {
+  display: contents;
+}
+
+.tab-nav__overlay {
+  display: none;
+}
+
+/* --- Tablet: 769-1024px --- */
+@media (max-width: 1024px) {
+  /* Command Center: 2 cols on tablet */
+  .command-center__grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* Projects grid smaller min */
+  .projects-grid {
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  }
+}
+
+/* --- Mobile: <=768px --- */
+@media (max-width: 768px) {
+  /* Hamburger visible */
+  .tab-nav__hamburger {
+    display: block;
+    flex-shrink: 0;
+  }
+
+  .tab-nav {
+    position: relative;
+    flex-wrap: nowrap;
+    overflow: visible;
+  }
+
+  .tab-nav__items {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+    background: rgba(0, 0, 0, 0.95);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 60px 20px 20px;
+  }
+
+  .tab-nav--open .tab-nav__items {
+    display: flex;
+  }
+
+  .tab-nav--open .tab-nav__item {
+    font-size: 14px;
+    padding: 12px 24px;
+    width: 100%;
+    text-align: center;
+    max-width: 280px;
+  }
+
+  .tab-nav__overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    background: transparent;
+  }
+
+  /* Command Center: single column */
+  .command-center__grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Hub columns: compact */
+  .hub-col { min-height: 120px; }
+  .hub-col__list { gap: 4px; }
+  .hub-pr__top { flex-wrap: wrap; }
+  .hub-pr__branch { font-size: 9px; }
+
+  /* Model limits */
+  .model-limit-item__header { flex-wrap: wrap; gap: 4px; }
+  .model-limit-item__details { flex-wrap: wrap; }
+  .model-limit-item__models { flex-wrap: wrap; }
+
+  /* Docker cards */
+  .docker-list { gap: 6px; }
+  .docker-card { padding: 8px 10px; font-size: 10px; }
+
+  /* Projects grid: single column */
+  .projects-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .project-card__header { flex-wrap: wrap; gap: 4px; }
+  .project-card__meta { font-size: 10px; }
+
+  /* Files page */
+  .files-page { height: auto; min-height: calc(100vh - 120px); }
+  .files-breadcrumb { font-size: 10px; }
+  .files-page__top { flex-wrap: wrap; }
+
+  /* Pixel Office */
+  .pixel-office__canvas-wrap { min-height: 300px; }
+
+  /* Chat sidebar: horizontal scrollable agents */
+  .chat-sidebar__tabs { display: none; }
+  .chat-sidebar__sessions { display: none; }
+  .chat-sidebar__new-chat {
+    padding: 6px 12px;
+    font-size: 10px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Agents page: when live panel open */
+  .agents-page__layout--with-panel {
+    flex-direction: column;
+  }
+  .agents-page__layout--with-panel .agents-page__grid {
+    width: 100%;
+  }
+
+  /* Live progress panel */
+  .live-progress-panel {
+    width: 100% !important;
+    max-width: none !important;
+    position: relative;
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+
+  /* Terminal drawer */
+  .terminal-drawer {
+    height: 40vh !important;
+  }
+
+  /* Cost page charts */
+  .cost-overview { flex-wrap: wrap; }
+  .cost-overview__item { min-width: 120px; }
+}
+
+/* --- Small Mobile: <=480px --- */
+@media (max-width: 480px) {
+  /* Hamburger menu items tighter */
+  .tab-nav--open .tab-nav__item {
+    font-size: 13px;
+    padding: 10px 20px;
+  }
+
+  /* Stat cards: full width on tiny screens */
+  .stat-cards {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* Command center hub items */
+  .hub-col { padding: 8px; min-height: 100px; }
+  .hub-col__title { font-size: 9px; }
+  .hub-agent { padding: 4px 0; }
+  .hub-agent__name { font-size: 10px; }
+  .hub-pr { padding: 6px; }
+
+  /* Chat: full width, no sidebar */
+  .chat-page__layout {
+    flex-direction: column;
+    height: calc(100vh - 100px);
+  }
+  .chat-sidebar {
+    max-height: 36px;
+    padding: 0 4px;
+  }
+  .chat-sidebar__agent { padding: 4px 8px; font-size: 9px; }
+  .chat-sidebar__role { display: none; }
+  .chat-panel__input input { font-size: 14px; }
+
+  /* Modal: nearly full screen */
+  .modal {
+    width: calc(100vw - 24px);
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  /* Projects */
+  .project-card { padding: 10px; }
+  .project-card__emoji { font-size: 16px; }
+  .project-card__name { font-size: 12px; }
+
+  /* Files */
+  .files-breadcrumb { padding: 4px 8px; }
+
+  /* Cron table scroll */
+  .cron-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .cron-table { min-width: 500px; }
+
+  /* Glitch text smaller */
+  .glitch { font-size: 0.95em; }
+}
+
+/* --- Touch improvements --- */
+@media (hover: none) and (pointer: coarse) {
+  /* Larger tap targets */
+  .tab-nav__item { min-height: 44px; display: flex; align-items: center; }
+  .chat-sidebar__agent { min-height: 40px; }
+  .btn { min-height: 40px; padding: 8px 16px; }
+  .cron-table td, .cron-table th { padding: 8px; }
+
+  /* Remove hover effects that don't work on touch */
+  .agent-card:hover { transform: none; }
+  .docker-card:hover { transform: none; }
+  .hub-pr:hover { background: none; }
+}
