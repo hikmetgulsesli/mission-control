@@ -1,3 +1,5 @@
+import type { OverviewData, Agent, Session, CronJob, Workflow, Run, SystemMetrics, DockerContainer, CostData, Task, ProjectData, TaskCreateData } from './types';
+
 const BASE = '';
 
 async function fetchApi<T>(path: string, opts?: RequestInit): Promise<T> {
@@ -12,17 +14,17 @@ async function fetchApi<T>(path: string, opts?: RequestInit): Promise<T> {
 const CT_JSON = { 'Content-Type': 'application/json' };
 
 export const api = {
-  overview: () => fetchApi<any>('/api/overview'),
-  agents: () => fetchApi<any[]>('/api/agents'),
-  agent: (id: string) => fetchApi<any>(`/api/agents/${id}`),
-  agentHistory: (id: string, limit = 50) => fetchApi<any>(`/api/agents/${id}/history?limit=${limit}`),
+  overview: () => fetchApi<OverviewData>('/api/overview'),
+  agents: () => fetchApi<Agent[]>('/api/agents'),
+  agent: (id: string) => fetchApi<Agent>(`/api/agents/${id}`),
+  agentHistory: (id: string, limit = 50) => fetchApi<{ messages: any[] }>(`/api/agents/${id}/history?limit=${limit}`),
   agentLive: (id: string) => fetchApi<any>(`/api/agents/${id}/live`),
   agentActivity: (id: string) => fetchApi<any>(`/api/agents/${id}/activity`),
-  sessions: () => fetchApi<any[]>('/api/sessions'),
-  cron: () => fetchApi<any[]>('/api/cron'),
-  cronToggle: (id: string) => fetchApi<any>(`/api/cron/${id}/toggle`, { method: 'POST' }),
-  workflows: () => fetchApi<any[]>('/api/workflows'),
-  runs: () => fetchApi<any[]>('/api/runs'),
+  sessions: () => fetchApi<Session[]>('/api/sessions'),
+  cron: () => fetchApi<CronJob[]>('/api/cron'),
+  cronToggle: (id: string) => fetchApi<{ success: boolean }>(`/api/cron/${id}/toggle`, { method: 'POST' }),
+  workflows: () => fetchApi<Workflow[]>('/api/workflows'),
+  runs: () => fetchApi<Run[]>('/api/runs'),
   runDetail: (id: string) => fetchApi<any>(`/api/runs/${id}/detail`),
   runEvents: (id: string) => fetchApi<any[]>(`/api/runs/${id}/events`),
   startRun: (workflow: string, task: string) =>
@@ -39,21 +41,21 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ step_id, message }),
     }),
-  system: () => fetchApi<any>('/api/system'),
-  docker: () => fetchApi<any[]>('/api/system/docker'),
-  costs: () => fetchApi<any>('/api/costs'),
+  system: () => fetchApi<SystemMetrics>('/api/system'),
+  docker: () => fetchApi<DockerContainer[]>('/api/system/docker'),
+  costs: () => fetchApi<CostData>('/api/costs'),
   // Projects
-  projects: () => fetchApi<any[]>("/api/projects"),
-  project: (id: string) => fetchApi<any>(`/api/projects/${id}`),
+  projects: () => fetchApi<ProjectData[]>("/api/projects"),
+  project: (id: string) => fetchApi<ProjectData>(`/api/projects/${id}`),
   createProject: (data: any) => fetchApi<any>("/api/projects", { method: "POST", headers: CT_JSON, body: JSON.stringify(data) }),
   updateProject: (id: string, data: any) => fetchApi<any>(`/api/projects/${id}`, { method: "PATCH", headers: CT_JSON, body: JSON.stringify(data) }),
   deleteProject: (id: string, confirmName: string) => fetchApi<any>(`/api/projects/${id}`, { method: "DELETE", headers: CT_JSON, body: JSON.stringify({ confirmName }) }),
   exportProject: (id: string) => fetchApi<any>(`/api/projects/${id}/export`),
   importProject: (data: any) => fetchApi<any>("/api/projects/import", { method: "POST", headers: CT_JSON, body: JSON.stringify(data) }),
   // Tasks
-  tasks: () => fetchApi<any[]>('/api/tasks'),
-  createTask: (data: any) => fetchApi<any>('/api/tasks', { method: 'POST', headers: CT_JSON, body: JSON.stringify(data) }),
-  updateTask: (id: string, data: any) => fetchApi<any>("/api/tasks/" + id, { method: 'PUT', headers: CT_JSON, body: JSON.stringify(data) }),
+  tasks: () => fetchApi<Task[]>('/api/tasks'),
+  createTask: (data: TaskCreateData) => fetchApi<Task>('/api/tasks', { method: 'POST', headers: CT_JSON, body: JSON.stringify(data) }),
+  updateTask: (id: string, data: Partial<Task>) => fetchApi<Task>("/api/tasks/" + id, { method: 'PUT', headers: CT_JSON, body: JSON.stringify(data) }),
   deleteTask: (id: string) => fetchApi<any>("/api/tasks/" + id, { method: 'DELETE' }),
   updateTaskStatus: (id: string, status: string) => fetchApi<any>("/api/tasks/" + id + "/status", { method: 'PATCH', headers: CT_JSON, body: JSON.stringify({ status }) }),
   // Images

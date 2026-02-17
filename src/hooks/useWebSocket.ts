@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
+const MAX_MESSAGES = 200;
+
 interface WsMessage {
   type: string;
   [key: string]: any;
@@ -29,7 +31,7 @@ export function useWebSocket() {
       ws.onmessage = (ev) => {
         try {
           const msg = JSON.parse(ev.data);
-          setMessages(prev => [...prev.slice(-200), msg]);
+          setMessages(prev => [...prev.slice(-MAX_MESSAGES), msg]);
         } catch (e) {
           console.warn('[WS] Failed to parse message:', e);
         }

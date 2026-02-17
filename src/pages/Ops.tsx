@@ -35,7 +35,7 @@ export function Ops() {
         <div className="ops-page__section">
           <h3 className="section-title">DOCKER CONTAINERS</h3>
           <div className="docker-list">
-            {(docker || []).map((c: any) => (
+            {(docker || []).map((c) => (
               <div key={c.ID || c.Names} className={`docker-card docker-card--${c.State || 'unknown'}`}>
                 <span className="docker-card__name">{c.Names}</span>
                 <span className="docker-card__image">{c.Image}</span>

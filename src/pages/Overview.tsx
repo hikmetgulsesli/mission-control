@@ -4,16 +4,16 @@ import { AgentCard } from '../components/AgentCard';
 import { ActivityFeed } from '../components/ActivityFeed';
 import { GlitchText } from '../components/GlitchText';
 import { AGENT_MAP } from '../lib/constants';
-import type { OverviewData } from '../lib/types';
+import type { OverviewData, CronStatusItem, OpenPR, DeployInfo, AgentSummary, ModelLimitItem, ModelBadge } from '../lib/types';
 import { formatDistanceToNow } from 'date-fns';
 
-function CronStatus({ crons }: { crons: any[] }) {
+function CronStatus({ crons }: { crons: CronStatusItem[] }) {
   if (!crons || crons.length === 0) return null;
   return (
     <div className="panel">
       <h3 className="panel__title">CRON STATUS</h3>
       <div className="cron-list">
-        {crons.map((c: any) => (
+        {crons.map((c) => (
           <div key={c.id} className="cron-item">
             <span className={`cron-item__dot cron-item__dot--${c.status}`} />
             <span className="cron-item__name">{c.name}</span>
@@ -33,7 +33,7 @@ function CronStatus({ crons }: { crons: any[] }) {
 }
 
 function ModelLimits() {
-  const { data } = usePolling<any[]>(() => fetch('/api/model-limits').then(r => r.json()), 60000);
+  const { data } = usePolling<ModelLimitItem[]>(() => fetch('/api/model-limits').then(r => r.json()), 60000);
   const { data: quota } = usePolling<Record<string, { limit: number | null; used: number; tokens: number; windowHours: number }>>(() => fetch('/api/quota').then(r => r.json()), 60000);
 
   if (!data || !Array.isArray(data) || data.length === 0) return null;
@@ -42,7 +42,7 @@ function ModelLimits() {
     <div className="panel">
       <h3 className="panel__title">MODEL LIMITS</h3>
       <div className="model-limits">
-        {data.map((p: any) => {
+        {data.map((p) => {
           const q = quota?.[p.id];
           const used = q?.used || 0;
           const limit = q?.limit || p.limits?.promptsPer5h || null;
@@ -85,7 +85,7 @@ function ModelLimits() {
               )}
               {p.models?.length > 0 && (
                 <div className="model-limit-item__models">
-                  {p.models.map((m: any) => (
+                  {p.models.map((m: ModelBadge) => (
                     <span key={m.id} className={`model-limit-item__model-badge model-limit-item__model-badge--${m.status}`}>
                       {m.name}
                     </span>
@@ -102,7 +102,7 @@ function ModelLimits() {
 
 /* Command Center Hub */
 
-function OpenPRsPanel({ prs }: { prs: any[] }) {
+function OpenPRsPanel({ prs }: { prs: OpenPR[] }) {
   return (
     <div className="hub-col">
       <h4 className="hub-col__title">
@@ -113,7 +113,7 @@ function OpenPRsPanel({ prs }: { prs: any[] }) {
         <div className="hub-col__empty">No open PRs</div>
       ) : (
         <div className="hub-col__list">
-          {prs.map((pr: any) => (
+          {prs.map((pr) => (
             <a
               key={pr.number}
               className="hub-pr"
@@ -143,7 +143,7 @@ function OpenPRsPanel({ prs }: { prs: any[] }) {
   );
 }
 
-function DeploysPanel({ deploys }: { deploys: any[] }) {
+function DeploysPanel({ deploys }: { deploys: DeployInfo[] }) {
   return (
     <div className="hub-col">
       <h4 className="hub-col__title">
@@ -154,7 +154,7 @@ function DeploysPanel({ deploys }: { deploys: any[] }) {
         <div className="hub-col__empty">No projects</div>
       ) : (
         <div className="hub-col__list">
-          {deploys.map((d: any) => (
+          {deploys.map((d) => (
             <div key={d.id || d.name} className="hub-deploy">
               <div className="hub-deploy__top">
                 <span className={`hub-deploy__dot ${d.online ? 'hub-deploy__dot--online' : 'hub-deploy__dot--offline'}`} />
@@ -172,7 +172,7 @@ function DeploysPanel({ deploys }: { deploys: any[] }) {
   );
 }
 
-function AgentSummaryPanel({ agents }: { agents: any[] }) {
+function AgentSummaryPanel({ agents }: { agents: AgentSummary[] }) {
   const workingCount = agents.filter(a => a.status === 'working').length;
 
   return (
@@ -182,7 +182,7 @@ function AgentSummaryPanel({ agents }: { agents: any[] }) {
         <span className="hub-col__count">{workingCount}/{agents.length} active</span>
       </h4>
       <div className="hub-col__list">
-        {agents.map((a: any) => {
+        {agents.map((a) => {
           const meta = AGENT_MAP[a.id];
           const name = meta?.name || a.id;
           const emoji = meta?.emoji || '?';
@@ -210,11 +210,11 @@ function AgentSummaryPanel({ agents }: { agents: any[] }) {
 
 export function Overview() {
   const { data, loading } = usePolling<OverviewData & {
-    crons?: any[];
+    crons?: CronStatusItem[];
     agentLastActive?: Record<string, number>;
-    openPRs?: any[];
-    recentDeploys?: any[];
-    agentSummary?: any[];
+    openPRs?: OpenPR[];
+    recentDeploys?: DeployInfo[];
+    agentSummary?: AgentSummary[];
   }>(api.overview, 15000);
 
   if (loading || !data) {

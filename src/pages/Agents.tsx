@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { usePolling } from '../hooks/usePolling';
 import { api } from '../lib/api';
 import { AgentCard } from '../components/AgentCard';
+import type { Agent, Session } from '../lib/types';
 import { AgentEditModal } from '../components/AgentEditModal';
 import { AgentActivityModal } from '../components/AgentActivityModal';
 import { AgentLivePanel } from '../components/AgentLivePanel';
@@ -11,26 +12,26 @@ import { GlitchText } from '../components/GlitchText';
 export function Agents() {
   const { data: agents, loading, refresh } = usePolling(api.agents, 30000);
   const { data: sessions } = usePolling(api.sessions, 30000);
-  const [editAgent, setEditAgent] = useState<any>(null);
+  const [editAgent, setEditAgent] = useState<Agent | null>(null);
   const [activityAgent, setActivityAgent] = useState<{ id: string; name: string } | null>(null);
   const [liveAgent, setLiveAgent] = useState<string | null>(null);
   const navigate = useNavigate();
 
   if (loading) return <div className="page-loading">Loading agents...</div>;
 
-  const handleChat = (agent: any) => {
+  const handleChat = (agent: Agent) => {
     navigate(`/chat?agent=${agent.id}`);
   };
 
-  const handleActivity = (agent: any) => {
+  const handleActivity = (agent: Agent) => {
     setActivityAgent({ id: agent.id, name: agent.name || agent.id });
   };
 
-  const handleLive = (agent: any) => {
+  const handleLive = (agent: Agent) => {
     setLiveAgent(liveAgent === agent.id ? null : agent.id);
   };
 
-  const handleSave = async (agentId: string, changes: any) => {
+  const handleSave = async (agentId: string, changes: Partial<Agent>) => {
     const res = await fetch(`/api/agents/${agentId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -46,12 +47,12 @@ export function Agents() {
   // Determine active status for glow effect
   const agentStatuses = new Map<string, 'working' | 'idle'>();
   const now = Date.now();
-  (agents || []).forEach((agent: any) => {
-    const agentSessions = (sessions || []).filter((s: any) => {
+  (agents || []).forEach((agent) => {
+    const agentSessions = (sessions || []).filter((s) => {
       const sid = s.agent || s.key?.split(':')?.[1];
       return sid === agent.id;
     });
-    const isActive = agentSessions.some((s: any) => {
+    const isActive = agentSessions.some((s) => {
       const updated = s.updatedAt || s.lastActivity;
       if (!updated) return false;
       const ts = typeof updated === 'number' ? updated : new Date(updated).getTime();
@@ -67,7 +68,7 @@ export function Agents() {
       <div className={`agents-page__layout ${liveAgent ? 'agents-page__layout--with-panel' : ''}`}>
         <div className="agents-page__grid">
           <div className="agent-grid agent-grid--full">
-            {(agents || []).map((agent: any) => {
+            {(agents || []).map((agent) => {
               const status = agentStatuses.get(agent.id) || 'idle';
               return (
                 <div

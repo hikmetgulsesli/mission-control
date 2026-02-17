@@ -86,8 +86,8 @@ export interface OverviewData {
   costAllTime: number;
   system: SystemMetrics | null;
   gateway: { status: string; pid: number; uptime: string; memory: string } | null;
-  sessions: any[];
-  alerts: any[];
+  sessions: Session[];
+  alerts: { agent?: string; message?: string; timestamp?: number; type?: string; [key: string]: unknown }[];
 }
 
 export interface Session {
@@ -121,4 +121,72 @@ export interface Task {
   images: string[];
   created_at: string;
   updated_at: string;
+}
+
+export interface CronStatusItem {
+  id: string;
+  name: string;
+  status: string;
+  lastRunAt?: number;
+  lastDuration?: number;
+}
+
+export interface OpenPR {
+  number: number;
+  title: string;
+  url: string;
+  headRefName: string;
+  updatedAt?: string;
+  mergeable?: string;
+}
+
+export interface DeployInfo {
+  id?: string;
+  name: string;
+  port: number;
+  online: boolean;
+  subdomain?: string;
+}
+
+export interface AgentSummary {
+  id: string;
+  status: string;
+  currentTask?: string;
+  lastActivity?: number | string;
+}
+
+export interface ModelLimitItem {
+  id: string;
+  name: string;
+  plan: string;
+  cost: string;
+  color: string;
+  agents: string[];
+  limits?: { promptsPer5h?: number };
+  usage?: { today?: { cost: number } };
+  models?: ModelBadge[];
+}
+
+export interface ModelBadge {
+  id: string;
+  name: string;
+  status: string;
+}
+
+export interface ProjectData {
+  id: string;
+  name: string;
+  description?: string;
+  repo?: string;
+  stack?: string[];
+  status?: string;
+}
+
+export interface TaskCreateData {
+  title: string;
+  description: string;
+  assigned_agent: string;
+  priority: Task['priority'];
+  status: Task['status'];
+  images?: string[];
 }

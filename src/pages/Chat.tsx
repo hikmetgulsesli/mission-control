@@ -21,7 +21,7 @@ export function Chat() {
     if (agentParam) setSelectedAgent(agentParam);
   }, [searchParams]);
 
-  const selectedAgentData = (agents || []).find((a: any) => a.id === selectedAgent);
+  const selectedAgentData = (agents || []).find((a) => a.id === selectedAgent);
   const agentName = selectedAgentData?.identityName || selectedAgentData?.name || selectedAgent;
 
   return (

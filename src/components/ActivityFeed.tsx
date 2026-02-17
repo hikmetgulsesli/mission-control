@@ -1,4 +1,6 @@
-import { format } from 'date-fns';
+import { format, isValid } from 'date-fns';
+
+const MAX_FEED_ITEMS = 15;
 
 interface ActivityItem {
   agent?: string;
@@ -19,10 +21,10 @@ export function ActivityFeed({ items }: ActivityFeedProps) {
 
   return (
     <div className="activity-feed">
-      {items.slice(0, 15).map((item, i) => (
+      {items.slice(0, MAX_FEED_ITEMS).map((item, i) => (
         <div key={`${item.timestamp}-${item.agent}-${i}`} className="activity-feed__item">
           <span className="activity-feed__time">
-            {item.timestamp ? format(new Date(item.timestamp), 'HH:mm') : (item.icon || '•')}
+            {item.timestamp && isValid(new Date(item.timestamp)) ? format(new Date(item.timestamp), 'HH:mm') : (item.icon || '•')}
           </span>
           <span className="activity-feed__text">
             {item.agent && <strong>{item.agent}: </strong>}
