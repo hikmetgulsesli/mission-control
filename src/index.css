@@ -5480,3 +5480,105 @@ html, body, #root {
   opacity: 0.6;
   white-space: nowrap;
 }
+
+/* ===== Chat Sidebar Tabs ===== */
+.chat-sidebar__tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(0, 255, 255, 0.15);
+}
+
+.chat-sidebar__tab {
+  flex: 1;
+  padding: 0.5rem;
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  transition: all 0.2s;
+}
+
+.chat-sidebar__tab--active {
+  color: #0ff;
+  border-bottom: 2px solid #0ff;
+}
+
+.chat-sidebar__tab:hover {
+  color: #0ff;
+}
+
+/* ===== Chat Sessions List ===== */
+.chat-sidebar__sessions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.chat-sidebar__session {
+  padding: 0.6rem 0.75rem;
+  cursor: pointer;
+  border-radius: 6px;
+  border-left: 3px solid transparent;
+  transition: all 0.15s;
+}
+
+.chat-sidebar__session:hover {
+  background: rgba(0, 255, 255, 0.05);
+}
+
+.chat-sidebar__session--active {
+  background: rgba(0, 255, 255, 0.1);
+  border-left-color: #0ff;
+}
+
+.chat-sidebar__session-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.chat-sidebar__session-emoji {
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+.chat-sidebar__session-title {
+  flex: 1;
+  font-size: 0.8rem;
+  color: #ddd;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-sidebar__session-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.65rem;
+  color: #666;
+  margin-top: 0.2rem;
+  padding-left: 1.25rem;
+}
+
+.chat-sidebar__session-preview {
+  font-size: 0.7rem;
+  color: #555;
+  margin-top: 0.15rem;
+  padding-left: 1.25rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-sidebar__empty {
+  text-align: center;
+  color: #555;
+  padding: 2rem 1rem;
+  font-size: 0.8rem;
+}
