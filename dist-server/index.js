@@ -6,6 +6,7 @@ import { existsSync } from 'fs';
 import { config } from './config.js';
 import { warmupAll } from './utils/cache.js';
 import { setupWsProxy } from './ws-proxy.js';
+import { getStuckRuns, unstickRun, STUCK_THRESHOLD_MS, MAX_AUTO_UNSTICK } from './utils/antfarm-db.js';
 import overviewRouter from './routes/overview.js';
 import agentsRouter from './routes/agents.js';
 import sessionsRouter from './routes/sessions.js';
@@ -95,3 +96,23 @@ server.listen(config.port, '127.0.0.1', () => {
     // Pre-warm cache so first request is instant
     warmupAll().then(() => console.log('Cache pre-warmed')).catch(() => { });
 });
+// Medic cron: auto-unstick steps stuck longer than threshold
+const MEDIC_INTERVAL_MS = 5 * 60 * 1000;
+setInterval(async () => {
+    try {
+        const stuckRuns = await getStuckRuns(STUCK_THRESHOLD_MS);
+        for (const run of stuckRuns) {
+            for (const step of run.stuckSteps) {
+                if (step.abandonResets >= MAX_AUTO_UNSTICK) {
+                    console.warn(`[MEDIC] Skip auto-unstick: ${run.id} step=${step.name} (resets=${step.abandonResets}/${MAX_AUTO_UNSTICK})`);
+                    continue;
+                }
+                console.warn(`[MEDIC] Auto-unstick: run=${run.id} step=${step.name} stuck=${step.stuckMinutes}min`);
+                await unstickRun(run.id, step.id);
+            }
+        }
+    }
+    catch (err) {
+        console.error('[MEDIC] Stuck check failed:', err.message);
+    }
+}, MEDIC_INTERVAL_MS);

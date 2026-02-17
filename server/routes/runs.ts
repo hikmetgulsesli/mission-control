@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getRuns, getEvents } from '../utils/antfarm.js';
 import { cached } from '../utils/cache.js';
 import { runCli } from '../utils/cli.js';
+import { getStuckRuns, unstickRun, getRunDetail } from '../utils/antfarm-db.js';
 
 const router = Router();
 
@@ -73,4 +74,33 @@ router.post('/runs/:id/retry', async (req, res) => {
   }
 });
 
+router.get('/runs/stuck', async (_req, res) => {
+  try {
+    const runs = await getStuckRuns();
+    res.json({ runs });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/runs/:id/detail', async (req, res) => {
+  try {
+    const detail = await getRunDetail(req.params.id);
+    if (!detail) { res.status(404).json({ error: 'Run not found' }); return; }
+    res.json(detail);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/runs/:id/unstick', async (req, res) => {
+  try {
+    const result = await unstickRun(req.params.id, req.body?.stepId);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
+

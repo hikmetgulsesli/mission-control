@@ -5847,3 +5847,47 @@ html, body, #root {
   .docker-card:hover { transform: none; }
   .hub-pr:hover { background: none; }
 }
+
+/* ── Stuck Banner ── */
+.stuck-banner {
+  background: rgba(255, 102, 0, 0.1);
+  border: 1px solid var(--neon-orange);
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.stuck-banner__title {
+  color: var(--neon-orange);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.stuck-banner__item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 10px;
+  background: var(--bg-primary);
+  border-radius: 4px;
+  border-left: 3px solid var(--neon-orange);
+  font-size: 11px;
+}
+.stuck-banner__info { display: flex; gap: 12px; align-items: center; }
+.stuck-banner__run-id { font-weight: 600; color: var(--neon-cyan); }
+.stuck-banner__step { color: var(--text-dim); }
+.stuck-banner__time { color: var(--neon-orange); }
+.stuck-banner__btn {
+  background: var(--neon-orange);
+  color: var(--bg-primary);
+  border: none; border-radius: 3px;
+  padding: 4px 10px;
+  font-family: var(--font);
+  font-size: 10px; font-weight: 700;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.stuck-banner__btn:hover { filter: brightness(1.2); }
+.stuck-banner__btn:disabled { opacity: 0.5; cursor: default; }
+.stuck-banner__msg { font-size: 10px; padding: 4px 0; }
+.stuck-banner__msg--ok { color: var(--neon-green); }
+.stuck-banner__msg--err { color: var(--neon-red); }

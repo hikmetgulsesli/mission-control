@@ -95,4 +95,12 @@ export const api = {
     fetchApi<any>('/api/files/rename', { method: 'POST', headers: CT_JSON, body: JSON.stringify({ oldPath, newPath }) }),
   filesUpload: (directory: string, filename: string, content: string) =>
     fetchApi<any>('/api/files/upload', { method: 'POST', headers: CT_JSON, body: JSON.stringify({ directory, filename, content }) }),
+  // Stuck Recovery
+  stuckRuns: () => fetchApi<any>("/api/runs/stuck"),
+  unstickRun: (id: string, stepId?: string) =>
+    fetchApi<any>(`/api/runs/${id}/unstick`, {
+      method: "POST",
+      headers: CT_JSON,
+      body: JSON.stringify({ stepId }),
+    }),
 };
