@@ -24,8 +24,9 @@ import antfarmActivityRouter from "./routes/antfarm-activity.js";
 import officeRouter from "./routes/office.js";
 import terminalRouter from "./routes/terminal.js";
 import filesRouter from "./routes/files.js";
+import discordNotifyRouter from "./routes/discord-notify.js";
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "2mb" }));
 // API routes
 app.use('/api', overviewRouter);
 app.use('/api', agentsRouter);
@@ -46,6 +47,7 @@ app.use("/api", antfarmActivityRouter);
 app.use("/api", officeRouter);
 app.use("/api", terminalRouter);
 app.use("/api", filesRouter);
+app.use("/api", discordNotifyRouter);
 // Serve avatars
 if (existsSync(config.avatarsDir)) {
     app.use('/avatars', express.static(config.avatarsDir));

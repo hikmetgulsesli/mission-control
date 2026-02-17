@@ -11,6 +11,12 @@ const STEP_LABELS: Record<string, string> = {
   'external-review': 'EXT-REV', merge: 'MERGE',
 };
 
+const WORKFLOW_STEPS: Record<string, string[]> = {
+  'feature-dev': ['plan', 'setup', 'implement', 'verify', 'test', 'pr', 'review', 'external-review', 'merge'],
+  'bug-fix': ['triage', 'investigate', 'fix', 'verify', 'test', 'pr', 'review'],
+  'security-audit': ['collect', 'plan', 'fix', 'verify', 'test', 'report', 'review'],
+};
+
 interface PipelineRun {
   id: string;
   workflow: string;
@@ -140,6 +146,13 @@ export function PipelineView({ runs }: { runs: PipelineRun[] }) {
           return true;
         }).reverse();
 
+        // Always show all workflow steps, even if not yet in data
+        const wfSteps = WORKFLOW_STEPS[run.workflow] || STEP_ORDER;
+        const stepMap = new Map(uniqueSteps.map(s => [s.stepId, s]));
+        const allSteps = wfSteps.map(stepId => stepMap.get(stepId) || {
+          stepId, agent: '', status: 'pending', retryCount: 0, type: 'step', abandonedCount: 0
+        });
+
         const progressPct = run.storyProgress.total > 0
           ? Math.round((run.storyProgress.completed / run.storyProgress.total) * 100)
           : 0;
@@ -159,12 +172,12 @@ export function PipelineView({ runs }: { runs: PipelineRun[] }) {
             </div>
 
             <div className="af-pipeline__steps">
-              {uniqueSteps.map((step, i) => (
+              {allSteps.map((step, i) => (
                 <div key={`${step.stepId}-${i}`} className="af-step-wrapper">
                   {i > 0 && <span className="af-step-arrow">&rarr;</span>}
                   <div className={`af-step ${statusClass(step.status)}`} title={`${step.stepId} (${step.agent?.split('/').pop() || '?'})`}>
                     <div className="af-step__label">{STEP_LABELS[step.stepId] || step.stepId.toUpperCase()}</div>
-                    <div className="af-step__agent">{step.agent?.split('/').pop() || '?'}</div>
+                    {step.agent && <div className="af-step__agent">{step.agent.split('/').pop()}</div>}
                     {step.status === 'running' && <div className="af-step__pulse" />}
                     {step.retryCount > 0 && <div className="af-step__retry">R{step.retryCount}</div>}
                     {step.status === 'failed' && (

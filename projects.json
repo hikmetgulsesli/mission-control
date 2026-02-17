@@ -271,7 +271,7 @@
     "id": "agentviz",
     "name": "AgentViz",
     "emoji": "🔮",
-    "status": "active",
+    "status": "completed",
     "description": "Gerçek zamanlı WebSocket tabanlı ajan aktivite görselleştirme paneli. Hangi ajanın çalıştığını, hangi araçları kullandığını, model geçişlerini ve token kullanımını canlı olarak gösterir.",
     "ports": {
       "frontend": 3503
@@ -321,7 +321,9 @@
     ],
     "prd": "Gerçek zamanlı WebSocket tabanlı dashboard. OpenClaw ajanlarının aktivitelerini canlı olarak stream eder. Hangi ajanın çalıştığını, hangi araçları kullandığını, model geçişlerini ve token kullanımını gerçek zamanlı gösterir. Port 3503, ai.setrox.com.tr/agents-viz altında erişim.",
     "github": "https://github.com/hikmetgulsesli/agent-activity-viz",
-    "category": "own"
+    "category": "own",
+    "completedAt": "2026-02-12",
+    "duration": "5g"
   },
   {
     "id": "clawdocs",
@@ -330,8 +332,8 @@
     "status": "active",
     "description": "Auto-generated Agent Documentation. Tüm OpenClaw agent'larının otomatik taranmış dokümantasyonu. Agent yetenekleri, skill'leri ve araçları görsel dashboard'da sunar.",
     "ports": {
-      "frontend": 4504,
-      "backend": 4504
+      "frontend": 3504,
+      "backend": 3504
     },
     "domain": "clawdocs.setrox.com.tr",
     "repo": "/home/setrox/clawdocs",
@@ -394,44 +396,16 @@
     "category": "own"
   },
   {
-    "emoji": "📊",
-    "name": "StatusPage",
-    "status": "active",
-    "description": "Public status page for OpenClaw services. Uptime Kuma API integration.",
-    "ports": {
-      "frontend": 4505,
-      "backend": 4505
-    },
-    "domain": "statuspage.setrox.com.tr",
-    "repo": "/home/setrox/statuspage",
-    "stack": [
-      "Node.js",
-      "Express",
-      "React",
-      "Vite",
-      "TypeScript"
-    ],
-    "createdAt": "2026-02-14",
-    "features": [
-      "Service status monitoring",
-      "Uptime Kuma integration",
-      "Systemd service",
-      "Cloudflare tunnel"
-    ],
-    "github": "https://github.com/hikmetgulsesli/statuspage",
-    "category": "own"
-  },
-  {
     "id": "pomodoro-timer",
     "name": "Pomodoro Timer",
-    "emoji": "🔧",
-    "status": "active",
+    "emoji": "🍅",
+    "status": "completed",
     "description": "Build a Pomodoro Timer web application.  REQUIREMENTS:",
     "ports": {
       "frontend": 3507
     },
     "domain": "pomodoro-timer.setrox.com.tr",
-    "repo": "/home/setrox/.openclaw/workspaces/workflows/feature-dev/pomodoro-timer",
+    "repo": "/home/setrox/pomodoro-timer",
     "stack": [
       "React",
       "Vite",
@@ -443,8 +417,8 @@
     "createdBy": "antfarm-workflow",
     "createdAt": "2026-02-15",
     "stories": {
-      "total": 0,
-      "done": 0
+      "total": 26,
+      "done": 26
     },
     "features": [],
     "tasks": [],
@@ -495,31 +469,264 @@
     "antfarmRunIds": [
       "b252bebb-e79f-4c92-93d9-b4e011bd937d"
     ],
-    "updatedAt": "2026-02-15T01:37:26.526Z"
+    "updatedAt": "2026-02-16T22:58:43.847Z",
+    "completedAt": "2026-02-15 02:26:47",
+    "buildStartedAt": "2026-02-14T18:39:00+03:00",
+    "buildCompletedAt": "2026-02-15T05:26:47+03:00",
+    "duration": "2s 26dk"
   },
   {
-    "id": "habit-tracker-web-application-with",
+    "id": "qr-code-generator",
+    "name": "QR Code Generator",
+    "emoji": "🔧",
+    "status": "completed",
+    "description": "Build a QR Code Generator web application with: - Generate QR codes from text/URL - Customize colors (foreground/background)",
+    "ports": {
+      "frontend": 3511
+    },
+    "domain": "qr-code-generator.setrox.com.tr",
+    "repo": "/home/setrox/qr-code-generator",
+    "stack": [
+      "React",
+      "Vite",
+      "TypeScript"
+    ],
+    "service": "qr-code-generator.service",
+    "serviceStatus": "active",
+    "createdBy": "antfarm-workflow",
+    "createdAt": "2026-02-15",
+    "stories": {
+      "total": 12,
+      "done": 11
+    },
+    "features": [],
+    "tasks": [],
+    "github": "",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": false
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": false
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": false
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": false
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": false
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": false
+      }
+    ],
+    "antfarmRunIds": [
+      "4fae3350-964f-499e-b750-490b48d0fc2f"
+    ],
+    "updatedAt": "2026-02-16T22:58:43.836Z",
+    "completedAt": "2026-02-15 06:38:26",
+    "buildStartedAt": "2026-02-15T06:40:35+03:00",
+    "buildCompletedAt": "2026-02-15T09:38:26+03:00",
+    "duration": "6s 38dk"
+  },
+  {
+    "id": "color-palette-generator",
+    "name": "Color Palette Generator",
+    "emoji": "🔧",
+    "status": "completed",
+    "description": "Build a Color Palette Generator web application with: - Generate random color palettes - Lock specific colors",
+    "ports": {
+      "frontend": 3510
+    },
+    "domain": "color-palette-generator.setrox.com.tr",
+    "repo": "/home/setrox/color-palette-generator",
+    "stack": [
+      "React",
+      "Vite",
+      "TypeScript"
+    ],
+    "service": "color-palette-generator.service",
+    "serviceStatus": "active",
+    "createdBy": "antfarm-workflow",
+    "createdAt": "2026-02-15",
+    "stories": {
+      "total": 13,
+      "done": 10
+    },
+    "features": [],
+    "tasks": [],
+    "github": "",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": false
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": false
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": false
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": false
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": false
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": false
+      }
+    ],
+    "antfarmRunIds": [
+      "0b02ab6e-447b-45e2-9f58-4fd180074c2f"
+    ],
+    "updatedAt": "2026-02-16T22:58:43.839Z",
+    "completedAt": "2026-02-15 05:33:33",
+    "duration": "5s 33dk"
+  },
+  {
+    "id": "typing-speed-test",
+    "name": "Typing Speed Test",
+    "emoji": "🔧",
+    "status": "completed",
+    "description": "Build a Typing Speed Test web application with: - WPM (words per minute) calculation - Accuracy percentage tracking",
+    "ports": {
+      "frontend": 3509
+    },
+    "domain": "typing-speed-test.setrox.com.tr",
+    "repo": "/home/setrox/typing-speed-test",
+    "stack": [
+      "React",
+      "Vite",
+      "TypeScript"
+    ],
+    "service": "typing-speed-test.service",
+    "serviceStatus": "active",
+    "createdBy": "antfarm-workflow",
+    "createdAt": "2026-02-15",
+    "stories": {
+      "total": 30,
+      "done": 0
+    },
+    "features": [],
+    "tasks": [],
+    "github": "",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": false
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": false
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": false
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": false
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": false
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": false
+      }
+    ],
+    "antfarmRunIds": [
+      "00cad222-0a46-4955-a3a0-e34c09d735c9"
+    ],
+    "updatedAt": "2026-02-16T22:58:43.844Z",
+    "completedAt": "2026-02-15 03:33:59",
+    "duration": "3s 33dk"
+  },
+  {
+    "id": "habit-tracker",
     "name": "Habit Tracker",
     "emoji": "🔧",
-    "status": "active",
+    "status": "completed",
     "description": "Build a Habit Tracker web application with: - Daily habit tracking (add/complete/delete habits) - GitHub-style heatmap (365-day activity grid)",
     "ports": {
       "frontend": 3508
     },
     "domain": "habit-tracker.setrox.com.tr",
     "repo": "/home/setrox/habit-tracker",
-    "stack": [
-      "react",
-      "vite",
-      "typescript"
-    ],
-    "service": "habit-tracker",
+    "stack": [],
+    "service": "habit-tracker.service",
     "serviceStatus": "active",
     "createdBy": "antfarm-workflow",
     "createdAt": "2026-02-15",
     "stories": {
-      "total": 0,
-      "done": 0
+      "total": 19,
+      "done": 19
     },
     "features": [],
     "tasks": [],
@@ -570,6 +777,320 @@
     "antfarmRunIds": [
       "c3bff3ab-7db0-4e52-8f47-1a484d4e89ac"
     ],
-    "updatedAt": "2026-02-15T02:39:28.927Z"
+    "updatedAt": "2026-02-15T12:32:46.667Z",
+    "completedAt": "2026-02-15 18:00:00",
+    "buildStartedAt": "2026-02-15T05:13:35+03:00",
+    "buildCompletedAt": "2026-02-15T05:34:46+03:00",
+    "duration": "18s 0dk"
+  },
+  {
+    "id": "setrox-com-portfolio",
+    "name": "setrox.com portfolio",
+    "emoji": "🚀",
+    "status": "completed",
+    "description": "setrox.com portfolio site - REPO: /home/setrox/setrox-com - Multi-theme terminal-aesthetic developer portfolio with Next.js 15, Tailwind CSS 4, Framer Motion. 5 accent themes, cursor glow, ASCII terminal.",
+    "ports": {
+      "frontend": 3512
+    },
+    "domain": "setrox-com-portfolio.setrox.com.tr",
+    "repo": "/home/setrox/setrox-com",
+    "stack": [
+      "React",
+      "Next.js",
+      "TypeScript",
+      "Tailwind CSS"
+    ],
+    "service": "setrox-com-portfolio.service",
+    "serviceStatus": "active",
+    "createdBy": "antfarm-workflow",
+    "createdAt": "2026-02-15",
+    "stories": {
+      "total": 27,
+      "done": 8
+    },
+    "features": [],
+    "tasks": [],
+    "github": "https://github.com/hikmetgulsesli/setrox-com",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": false
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": false
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": false
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": false
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": false
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": false
+      }
+    ],
+    "antfarmRunIds": [
+      "0d136479-ac4a-46d5-8e38-af9636cd1048"
+    ],
+    "updatedAt": "2026-02-16T22:58:43.832Z",
+    "completedAt": "2026-02-16 00:02:30",
+    "buildStartedAt": "2026-02-16T11:07:44+03:00",
+    "buildCompletedAt": "2026-02-16T15:27:50+03:00",
+    "duration": "24s 2dk"
+  },
+  {
+    "id": "an-expense-tracker",
+    "name": "Expense Tracker",
+    "emoji": "🏗",
+    "status": "completed",
+    "description": "Build an Expense Tracker web application with: Income/expense tracking, category management (Food, Transport, Bills, Entertainment, Shopping, Health, Other), monthly summary with charts. Modern dark U",
+    "ports": {
+      "frontend": 3513
+    },
+    "domain": "expense-tracker.setrox.com.tr",
+    "repo": "/home/setrox/expense-tracker",
+    "stack": [
+      "React",
+      "Vite",
+      "TypeScript",
+      "Recharts"
+    ],
+    "service": "expense-tracker.service",
+    "serviceStatus": "unknown",
+    "createdBy": "antfarm-workflow",
+    "createdAt": "2026-02-16",
+    "stories": {
+      "total": 0,
+      "done": 0
+    },
+    "features": [],
+    "tasks": [],
+    "github": "hikmetgulsesli/expense-tracker",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": false
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": false
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": false
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": false
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": false
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": false
+      }
+    ],
+    "antfarmRunIds": [
+      "2c42101d-4567-4f09-840b-f9e9e964d159"
+    ],
+    "completedAt": "2026-02-17 00:30:00",
+    "duration": "8s 30dk"
+  },
+  {
+    "id": "unit-converter",
+    "name": "Unit Converter",
+    "emoji": "🚀",
+    "status": "active",
+    "description": "Build a Unit Converter web application with: Length (km, m, cm, mm, mile, yard, feet, inch), Weight (kg, g, mg, lb, oz), Temperature (C, F, K), Currency (USD, EUR, GBP, TRY, JPY) conversion. Modern da",
+    "ports": {
+      "frontend": 3514
+    },
+    "domain": "unit-converter.setrox.com.tr",
+    "repo": "/home/setrox/unit-converter",
+    "stack": [
+      "React",
+      "Vite",
+      "TypeScript"
+    ],
+    "service": "unit-converter.service",
+    "serviceStatus": "active",
+    "createdBy": "antfarm-workflow",
+    "createdAt": "2026-02-17",
+    "stories": {
+      "total": 10,
+      "done": 10
+    },
+    "features": [],
+    "tasks": [],
+    "github": "",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": false
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": false
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": false
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": false
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": false
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": false
+      }
+    ],
+    "antfarmRunIds": [
+      "b76f308c-c0ee-4abd-8f4c-f7f5e98bb33c"
+    ],
+    "updatedAt": "2026-02-17T14:27:16.264Z",
+    "completedAt": "2026-02-17 03:15:03"
+  },
+  {
+    "id": "agentviz-real-time-agent-activity-visualization",
+    "name": "AgentViz — Real-time Agent Activity Visualization",
+    "emoji": "🚀",
+    "status": "active",
+    "description": "Rebuild AgentViz — Real-time Agent Activity Visualization Dashboard (v2, design rules applied).  IMPORTANT: This is a REBUILD of the existing AgentViz project. The old repo is at /home/setrox/.opencla",
+    "ports": {
+      "frontend": 3503
+    },
+    "domain": "agentviz-real-time-agent-activity-visualization.setrox.com.tr",
+    "repo": "/home/setrox/.openclaw/agent-viz-v2",
+    "stack": [
+      "React",
+      "Express",
+      "Vite",
+      "TypeScript"
+    ],
+    "service": "agentviz-real-time-agent-activity-visualization.service",
+    "serviceStatus": "active",
+    "createdBy": "antfarm-workflow",
+    "createdAt": "2026-02-17",
+    "stories": {
+      "total": 16,
+      "done": 12
+    },
+    "features": [],
+    "tasks": [],
+    "github": "",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": false
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": false
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": false
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": false
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": false
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": false
+      }
+    ],
+    "antfarmRunIds": [
+      "e271378f-3db6-4e1b-8fca-f77112d74fef"
+    ],
+    "updatedAt": "2026-02-17T14:27:16.260Z",
+    "completedAt": "2026-02-17 14:26:49"
   }
 ]

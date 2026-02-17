@@ -3,12 +3,12 @@ import { api } from '../lib/api';
 import { AgentCard } from '../components/AgentCard';
 import { ActivityFeed } from '../components/ActivityFeed';
 import { GlitchText } from '../components/GlitchText';
+import { AGENT_MAP } from '../lib/constants';
 import type { OverviewData } from '../lib/types';
 import { formatDistanceToNow } from 'date-fns';
 
 function CronStatus({ crons }: { crons: any[] }) {
   if (!crons || crons.length === 0) return null;
-
   return (
     <div className="panel">
       <h3 className="panel__title">CRON STATUS</h3>
@@ -18,9 +18,7 @@ function CronStatus({ crons }: { crons: any[] }) {
             <span className={`cron-item__dot cron-item__dot--${c.status}`} />
             <span className="cron-item__name">{c.name}</span>
             <span className="cron-item__last">
-              {c.lastRunAt
-                ? formatDistanceToNow(c.lastRunAt, { addSuffix: true })
-                : 'never'}
+              {c.lastRunAt ? formatDistanceToNow(c.lastRunAt, { addSuffix: true }) : 'never'}
             </span>
             {c.lastDuration && (
               <span className="cron-item__duration">
@@ -33,7 +31,6 @@ function CronStatus({ crons }: { crons: any[] }) {
     </div>
   );
 }
-
 
 function ModelLimits() {
   const { data } = usePolling<any[]>(() => fetch('/api/model-limits').then(r => r.json()), 60000);
@@ -103,8 +100,122 @@ function ModelLimits() {
   );
 }
 
+/* Command Center Hub */
+
+function OpenPRsPanel({ prs }: { prs: any[] }) {
+  return (
+    <div className="hub-col">
+      <h4 className="hub-col__title">
+        <span className="hub-col__icon">{'\u2442'}</span> OPEN PRs
+        <span className="hub-col__count">{prs.length}</span>
+      </h4>
+      {prs.length === 0 ? (
+        <div className="hub-col__empty">No open PRs</div>
+      ) : (
+        <div className="hub-col__list">
+          {prs.map((pr: any) => (
+            <a
+              key={pr.number}
+              className="hub-pr"
+              href={pr.url}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <div className="hub-pr__top">
+                <span className="hub-pr__number">#{pr.number}</span>
+                <span className="hub-pr__title">{pr.title}</span>
+              </div>
+              <div className="hub-pr__bottom">
+                <span className="hub-pr__branch">{pr.headRefName}</span>
+                {pr.updatedAt && (
+                  <span className="hub-pr__time">
+                    {formatDistanceToNow(new Date(pr.updatedAt), { addSuffix: true })}
+                  </span>
+                )}
+                {pr.mergeable === 'MERGEABLE' && <span className="hub-pr__merge hub-pr__merge--ready">ready</span>}
+                {pr.mergeable === 'CONFLICTING' && <span className="hub-pr__merge hub-pr__merge--conflict">conflict</span>}
+              </div>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DeploysPanel({ deploys }: { deploys: any[] }) {
+  return (
+    <div className="hub-col">
+      <h4 className="hub-col__title">
+        <span className="hub-col__icon">{'\u25B2'}</span> DEPLOYS
+        <span className="hub-col__count">{deploys.length}</span>
+      </h4>
+      {deploys.length === 0 ? (
+        <div className="hub-col__empty">No projects</div>
+      ) : (
+        <div className="hub-col__list">
+          {deploys.map((d: any) => (
+            <div key={d.id || d.name} className="hub-deploy">
+              <div className="hub-deploy__top">
+                <span className={`hub-deploy__dot ${d.online ? 'hub-deploy__dot--online' : 'hub-deploy__dot--offline'}`} />
+                <span className="hub-deploy__name">{d.name}</span>
+                <span className="hub-deploy__port">:{d.port}</span>
+              </div>
+              {d.subdomain && (
+                <div className="hub-deploy__url">{d.subdomain}.setrox.com.tr</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AgentSummaryPanel({ agents }: { agents: any[] }) {
+  const workingCount = agents.filter(a => a.status === 'working').length;
+
+  return (
+    <div className="hub-col">
+      <h4 className="hub-col__title">
+        <span className="hub-col__icon">{'\u25C9'}</span> AGENTS
+        <span className="hub-col__count">{workingCount}/{agents.length} active</span>
+      </h4>
+      <div className="hub-col__list">
+        {agents.map((a: any) => {
+          const meta = AGENT_MAP[a.id];
+          const name = meta?.name || a.id;
+          const emoji = meta?.emoji || '?';
+          const isWorking = a.status === 'working';
+
+          return (
+            <div key={a.id} className={`hub-agent ${isWorking ? 'hub-agent--working' : ''}`}>
+              <span className="hub-agent__emoji">{emoji}</span>
+              <span className="hub-agent__name">{name}</span>
+              <span className={`hub-agent__dot ${isWorking ? 'hub-agent__dot--on' : ''}`} />
+              <span className="hub-agent__task">
+                {isWorking
+                  ? a.currentTask
+                  : a.lastActivity
+                    ? formatDistanceToNow(typeof a.lastActivity === 'number' ? a.lastActivity : new Date(a.lastActivity), { addSuffix: true })
+                    : 'idle'}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function Overview() {
-  const { data, loading } = usePolling<OverviewData & { crons?: any[]; agentLastActive?: Record<string, number> }>(api.overview, 15000);
+  const { data, loading } = usePolling<OverviewData & {
+    crons?: any[];
+    agentLastActive?: Record<string, number>;
+    openPRs?: any[];
+    recentDeploys?: any[];
+    agentSummary?: any[];
+  }>(api.overview, 15000);
 
   if (loading || !data) {
     return <div className="page-loading">Loading overview...</div>;
@@ -137,6 +248,16 @@ export function Overview() {
         </div>
       </div>
 
+      {/* Command Center Hub */}
+      <div className="command-center">
+        <h3 className="command-center__title">COMMAND CENTER</h3>
+        <div className="command-center__grid">
+          <OpenPRsPanel prs={data.openPRs || []} />
+          <DeploysPanel deploys={data.recentDeploys || []} />
+          <AgentSummaryPanel agents={data.agentSummary || []} />
+        </div>
+      </div>
+
       <div className="agent-grid">
         {data.agents.map(agent => (
           <AgentCard
@@ -152,20 +273,6 @@ export function Overview() {
       </div>
 
       <div className="overview__bottom">
-        <div className="panel">
-          <h3 className="panel__title">ACTIVE RUNS</h3>
-          {data.activeRuns.length === 0 ? (
-            <div className="panel__empty">No active runs</div>
-          ) : (
-            data.activeRuns.map(run => (
-              <div key={run.id} className="mini-run">
-                <span className="mini-run__name">{run.workflow}</span>
-                <span className="mini-run__id">#{run.id.slice(0, 4)}</span>
-                <span className="mini-run__step">{run.currentStep || 'starting'}</span>
-              </div>
-            ))
-          )}
-        </div>
         <CronStatus crons={data.crons || []} />
         <ModelLimits />
         <div className="panel">

@@ -47,13 +47,22 @@ router.get('/antfarm/pipeline', async (_req, res) => {
                 .filter((r) => r.status !== 'running')
                 .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
                 .slice(0, 3);
-            // Auto-sync: check for newly completed runs
-            const completedIds = new Set(allRuns.filter((r) => r.status === 'completed').map((r) => r.id));
-            const newlyCompleted = [...completedIds].filter(id => !lastSeenCompletedIds.has(id));
-            if (newlyCompleted.length > 0 && lastSeenCompletedIds.size > 0) {
+            // Auto-sync: check for newly finished runs (completed, failed, cancelled)
+            const finishedIds = new Set(allRuns.filter((r) => r.status !== 'running' && r.status !== 'pending').map((r) => r.id));
+            const newlyFinished = [...finishedIds].filter(id => !lastSeenFinishedIds.has(id));
+            if (newlyFinished.length > 0 && lastSeenFinishedIds.size > 0) {
                 syncProjectsFromRuns().catch(() => { });
             }
-            lastSeenCompletedIds = completedIds;
+            lastSeenFinishedIds = finishedIds;
+            // Auto-create: detect newly started runs and create 'building' project cards
+            const runningIds = new Set(running.map((r) => r.id));
+            const newlyStarted = running.filter((r) => !lastSeenRunningIds.has(r.id));
+            if (newlyStarted.length > 0 && lastSeenRunningIds.size > 0) {
+                for (const run of newlyStarted) {
+                    createBuildingProject(run).catch(() => { });
+                }
+            }
+            lastSeenRunningIds = runningIds;
             return Promise.all([...running, ...recent].map(async (r) => {
                 let storyProgress = { completed: 0, total: 0 };
                 try {
@@ -144,13 +153,58 @@ router.get('/antfarm/runs/:id/plan', async (req, res) => {
     }
 });
 // Track last seen completed run IDs for auto-sync
-let lastSeenCompletedIds = new Set();
+let lastSeenFinishedIds = new Set();
+let lastSeenRunningIds = new Set();
+async function createBuildingProject(run) {
+    if (!run.task)
+        return;
+    const name = extractProjectName(run.task);
+    if (!name || name.length < 2)
+        return;
+    let repo = '';
+    try {
+        const ctx = typeof run.context === 'string' ? JSON.parse(run.context) : run.context;
+        repo = ctx?.repo || '';
+    }
+    catch { }
+    // Get next available port
+    let port = null;
+    try {
+        const res = await fetch('http://127.0.0.1:3080/api/projects/next-port');
+        const data = await res.json();
+        port = data.port || null;
+    }
+    catch { }
+    const stack = repo ? detectStack(repo) : [];
+    const result = createProjectProgrammatic({
+        name,
+        repo,
+        stack,
+        emoji: '🏗',
+        createdBy: 'antfarm-workflow',
+        antfarmRunId: run.id,
+        task: run.task.split('\n').slice(0, 3).join(' ').slice(0, 200),
+        status: 'building',
+        port: port || undefined,
+    });
+    if (result.created) {
+        console.log('[lifecycle] Created building project:', name, 'port:', port);
+    }
+}
 function extractProjectName(task) {
     const firstLine = task.split('\n')[0].replace(/^#+\s*/, '').trim();
-    const buildMatch = firstLine.match(/(?:Build|Create|Implement|Add|Make|Develop)\s+(?:a\s+)?(.+?)(?:\s+(?:web\s+)?(?:app(?:lication)?|project|service|tool|system|api|dashboard|page|site|feature))?\s*\.?$/i);
+    const buildMatch = firstLine.match(/(?:Build|Create|Implement|Add|Make|Develop)\s+(?:a\s+)?(.+?)\s+(?:web\s+)?(?:app(?:lication)?|project|service|tool|system|api|dashboard|page|site|feature)/i);
     if (buildMatch)
-        return buildMatch[1].trim();
-    return firstLine.replace(/\.$/, '').slice(0, 60);
+        return buildMatch[1].replace(/[:\-\u2013]+$/, '').trim();
+    const clean = firstLine
+        .replace(/^(?:Build|Create|Implement|Add|Make|Develop)\s+(?:a\s+)?/i, '')
+        .replace(/\s+(?:web\s+)?(?:app(?:lication)?|project|service|tool|system|api|dashboard|page|site|feature).*/i, '')
+        .replace(/[:\-\u2013.]+$/, '')
+        .trim();
+    return clean.slice(0, 60) || firstLine.slice(0, 60);
+}
+function slugify(name) {
+    return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 function detectStack(repo) {
     try {
@@ -237,8 +291,9 @@ function autoDeployProject(projectId, projectName, repo, task) {
     const startCmd = detectStartCmd(repo, port);
     if (!startCmd)
         return { deployed: false, error: 'no start command' };
-    const serviceName = projectId + '.service';
-    const domain = projectId + '.setrox.com.tr';
+    const slug = slugify(projectName);
+    const serviceName = slug + '.service';
+    const domain = slug + '.setrox.com.tr';
     try {
         const unit = [
             '[Unit]',
@@ -263,9 +318,18 @@ function autoDeployProject(projectId, projectName, repo, task) {
         writeFileSync('/tmp/' + serviceName, unit);
         execSync(`sudo cp /tmp/${serviceName} /etc/systemd/system/${serviceName}`, { timeout: 5000 });
         execSync('sudo systemctl daemon-reload', { timeout: 5000 });
-        // Kill any dev server (vite, webpack, etc.) occupying the port
+        // Kill any dev server (vite, webpack, etc.) in the repo directory or occupying the port
+        try {
+            execSync(`pkill -f "vite.*${repo}" 2>/dev/null || true`, { timeout: 5000 });
+        }
+        catch { }
         try {
             execSync(`fuser -k ${port}/tcp 2>/dev/null || true`, { timeout: 5000 });
+        }
+        catch { }
+        // Wait for port to free up
+        try {
+            execSync('sleep 1');
         }
         catch { }
         execSync(`sudo systemctl enable --now ${serviceName}`, { timeout: 10000 });
@@ -293,10 +357,24 @@ function autoDeployProject(projectId, projectName, repo, task) {
 }
 async function syncProjectsFromRuns() {
     const allRuns = (await getRuns());
-    const completed = allRuns.filter((r) => r.status === 'completed');
+    // Deploy completed runs AND failed/cancelled runs that have a built dist
+    const deployable = allRuns.filter((r) => {
+        if (r.status === 'completed')
+            return true;
+        if (r.status === 'failed' || r.status === 'cancelled') {
+            try {
+                const ctx = typeof r.context === 'string' ? JSON.parse(r.context) : r.context;
+                const repo = ctx?.repo || '';
+                if (repo && existsSync(join(repo, 'dist', 'index.html')))
+                    return true;
+            }
+            catch { }
+        }
+        return false;
+    });
     const synced = [];
     const skipped = [];
-    for (const run of completed) {
+    for (const run of deployable) {
         if (!run.task) {
             skipped.push(run.id + ': no task');
             continue;
@@ -331,9 +409,23 @@ async function syncProjectsFromRuns() {
                     domain: deploy.domain,
                     service: deploy.service,
                     serviceStatus: 'active',
+                    status: 'active',
+                    emoji: '🚀',
                     repo,
                     stack,
                 });
+                // Update stories and completion date
+                try {
+                    const stories = await getRunStories(run.id);
+                    if (stories && stories.length > 0) {
+                        const done = stories.filter((s) => s.status === 'done').length;
+                        updateProjectById(result.project.id, {
+                            stories: { total: stories.length, done },
+                            completedAt: run.updated_at || new Date().toISOString(),
+                        });
+                    }
+                }
+                catch { }
                 result.project.deployed = true;
                 result.project.port = deploy.port;
                 result.project.domain = deploy.domain;
@@ -341,12 +433,49 @@ async function syncProjectsFromRuns() {
             else {
                 result.project.deployed = false;
                 result.project.deployError = deploy.error;
+                updateProjectById(result.project.id, { status: run.status === 'completed' ? 'active' : 'failed' });
             }
+        }
+        // Ensure DNS exists even for already-deployed projects
+        if (!result.created && result.project?.domain && result.project?.service) {
+            try {
+                const cfg = readFileSync('/etc/cloudflared/config.yml', 'utf-8');
+                const slug = slugify(result.project.name);
+                const domain = slug + '.setrox.com.tr';
+                if (!cfg.includes(domain)) {
+                    const port = result.project.ports?.frontend;
+                    if (port) {
+                        const entry = '  - hostname: ' + domain + '\n    service: http://127.0.0.1:' + port + '\n';
+                        const updated = cfg.replace('  - service: http_status:404', entry + '  - service: http_status:404');
+                        writeFileSync('/tmp/cloudflared-config.yml', updated);
+                        execSync('sudo cp /tmp/cloudflared-config.yml /etc/cloudflared/config.yml', { timeout: 5000 });
+                        execSync('sudo systemctl restart cloudflared', { timeout: 15000 });
+                        execSync('sudo cloudflared tunnel route dns ' + TUNNEL_ID + ' ' + domain, { timeout: 15000 });
+                    }
+                }
+            }
+            catch { }
         }
         if (result.created) {
             synced.push(result.project);
         }
         else {
+            // Update stories for any run
+            try {
+                const stories = await getRunStories(run.id);
+                if (stories && stories.length > 0) {
+                    const done = stories.filter((s) => s.status === 'done').length;
+                    updateProjectById(result.project.id, {
+                        stories: { total: stories.length, done },
+                        completedAt: (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') ? (run.updated_at || new Date().toISOString()) : undefined,
+                    });
+                }
+            }
+            catch { }
+            if (result.project?.status === 'building') {
+                const st = run.status === 'completed' ? 'active' : 'failed';
+                updateProjectById(result.project.id, { status: st, emoji: st === 'active' ? '🚀' : '❌' });
+            }
             skipped.push(run.id + ': exists' + (needsDeploy ? ' (deploy retried)' : ''));
         }
     }

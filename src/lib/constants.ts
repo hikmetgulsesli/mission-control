@@ -12,3 +12,27 @@ export const AGENTS = [
 ] as const;
 
 export const AGENT_MAP = Object.fromEntries(AGENTS.map(a => [a.id, a]));
+
+// Map Antfarm workflow agents to real MC agents
+export const WORKFLOW_AGENT_MAP: Record<string, string> = {
+  // feature-dev workflow
+  "feature-dev_planner": "kaan",
+  "feature-dev_setup": "atlas",
+  "feature-dev_developer": "koda",
+  "feature-dev_verifier": "sinan",
+  "feature-dev_tester": "sinan",
+  "feature-dev_reviewer": "defne",
+  "feature-dev_merge": "atlas",
+  // bug-fix workflow
+  "bug-fix_triager": "defne",
+  "bug-fix_setup": "atlas",
+  "bug-fix_fixer": "elif",
+  "bug-fix_verifier": "sinan",
+  "bug-fix_pr": "koda",
+  // security-audit workflow
+  "security-audit_scanner": "sinan",
+  "security-audit_tester": "sinan",
+  "security-audit_fixer": "elif",
+  "security-audit_verifier": "defne",
+  "security-audit_pr": "koda",
+};

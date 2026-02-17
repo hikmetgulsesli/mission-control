@@ -25,5 +25,10 @@ export async function runCli(cmd: string, args: string[]): Promise<string> {
 
 export async function runCliJson<T = unknown>(cmd: string, args: string[]): Promise<T> {
   const out = await runCli(cmd, args);
+  // Strip non-JSON prefix (e.g. openclaw doctor messages)
+  const jsonStart = out.search(/^[\[{]/m);
+  if (jsonStart > 0) {
+    return JSON.parse(out.slice(jsonStart));
+  }
   return JSON.parse(out);
 }

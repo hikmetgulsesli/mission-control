@@ -22,5 +22,10 @@ export async function runCli(cmd, args) {
 }
 export async function runCliJson(cmd, args) {
     const out = await runCli(cmd, args);
+    // Strip non-JSON prefix (e.g. openclaw doctor messages)
+    const jsonStart = out.search(/^[\[{]/m);
+    if (jsonStart > 0) {
+        return JSON.parse(out.slice(jsonStart));
+    }
     return JSON.parse(out);
 }

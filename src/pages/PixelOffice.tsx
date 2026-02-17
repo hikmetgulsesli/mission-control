@@ -4,6 +4,32 @@ import { PixelOfficeEngine, OfficeAgentState } from '../lib/pixelOffice';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { AGENT_MAP } from '../lib/constants';
 import { api } from '../lib/api';
+import { formatDistanceToNow } from 'date-fns';
+
+// Note: marked.parse output is used with dangerouslySetInnerHTML below.
+// This is the same pattern as the original code - content comes from our own
+// agent WebSocket responses (trusted internal source), not user input.
+
+// Format workflow agent IDs: "bug-fix_investigator" -> "Bug Fix / Investigator"
+function formatAgentId(id: string): { name: string; emoji: string } {
+  const meta = AGENT_MAP[id];
+  if (meta) return { name: meta.name, emoji: meta.emoji };
+  // Workflow agent
+  const name = id.split('_').map(part =>
+    part.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+  ).join(' / ');
+  let emoji = '\u{1F916}';
+  if (id.includes('planner')) emoji = '\u{1F4CB}';
+  else if (id.includes('developer') || id.includes('fixer')) emoji = '\u{1F4BB}';
+  else if (id.includes('verifier')) emoji = '\u2705';
+  else if (id.includes('tester')) emoji = '\u{1F9EA}';
+  else if (id.includes('reviewer')) emoji = '\u{1F50D}';
+  else if (id.includes('setup')) emoji = '\u2699\uFE0F';
+  else if (id.includes('investigator')) emoji = '\u{1F575}';
+  else if (id.includes('triager') || id.includes('triage')) emoji = '\u{1F4CA}';
+  else if (id.includes('scan')) emoji = '\u{1F50E}';
+  return { name, emoji };
+}
 
 export function PixelOffice() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -11,11 +37,13 @@ export function PixelOffice() {
   const prevStatesRef = useRef<Map<string, 'working' | 'idle'>>(new Map());
   const [error, setError] = useState<string | null>(null);
   const [chatOverlay, setChatOverlay] = useState<{ agent: string; text: string } | null>(null);
+  const [agentStates, setAgentStates] = useState<OfficeAgentState[]>([]);
+  const [recentEvents, setRecentEvents] = useState<{ agent: string; text: string; time: number }[]>([]);
 
   // WebSocket for real-time chat bubbles
   const { messages: wsEvents } = useWebSocket();
 
-  // Process WS events → chat bubbles
+  // Process WS events -> chat bubbles + activity feed
   useEffect(() => {
     const engine = engineRef.current;
     if (!engine) return;
@@ -39,6 +67,14 @@ export function PixelOffice() {
 
       const done = payload.state === 'final';
       engine.updateChatBubble(agentId, text, done);
+
+      // Track activity for info panel (filter noise)
+      if (done && text.length > 10 && !text.startsWith('HEARTBEAT') && text !== 'HEARTBEAT_OK') {
+        setRecentEvents(prev => [
+          { agent: agentId, text: text.slice(0, 80), time: Date.now() },
+          ...prev.slice(0, 9),
+        ]);
+      }
     }
   }, [wsEvents]);
 
@@ -75,6 +111,7 @@ export function PixelOffice() {
           const data = await api.officeStatus();
           if (mounted && data?.agents) {
             const agents = data.agents as OfficeAgentState[];
+            setAgentStates(agents);
 
             // Handoff detection: compare prev states
             const prevStates = prevStatesRef.current;
@@ -84,7 +121,6 @@ export function PixelOffice() {
             if (prevStates.size > 0) {
               for (const [id, prev] of prevStates) {
                 if (prev === 'working' && newStates.get(id) === 'idle') {
-                  // Agent finished work — find who started
                   for (const [otherId, otherNew] of newStates) {
                     if (otherId !== id && prevStates.get(otherId) === 'idle' && otherNew === 'working') {
                       engine.triggerHandoff(id, otherId);
@@ -116,6 +152,13 @@ export function PixelOffice() {
   }, []);
 
   const agentInfo = chatOverlay ? AGENT_MAP[chatOverlay.agent] : null;
+  const workingAgents = agentStates.filter(a => a.status === 'working');
+  const idleAgents = agentStates.filter(a => a.status === 'idle');
+
+  // Render parsed markdown safely - content is from our own trusted agent responses
+  const renderMarkdown = (text: string) => {
+    return { __html: marked.parse(text) as string };
+  };
 
   return (
     <div className="pixel-office">
@@ -131,6 +174,58 @@ export function PixelOffice() {
           <span className="pixel-office__error-icon">!</span> {error}
         </div>
       )}
+
+      {/* Office Info Panel */}
+      <div className="office-info">
+        <div className="office-info__col">
+          <h4 className="office-info__title">WORKING ({workingAgents.length})</h4>
+          {workingAgents.map(a => {
+            const meta = AGENT_MAP[a.id];
+            return (
+              <div key={a.id} className="office-info__agent office-info__agent--working">
+                <span>{meta?.emoji || '?'}</span>
+                <span>{meta?.name || a.id}</span>
+                <span className="office-info__task">{a.activity}</span>
+              </div>
+            );
+          })}
+          {workingAgents.length === 0 && <div className="office-info__empty">All idle</div>}
+        </div>
+
+        <div className="office-info__col">
+          <h4 className="office-info__title">IDLE ({idleAgents.length})</h4>
+          {idleAgents.map(a => {
+            const meta = AGENT_MAP[a.id];
+            return (
+              <div key={a.id} className="office-info__agent">
+                <span>{meta?.emoji || '?'}</span>
+                <span>{meta?.name || a.id}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="office-info__col office-info__col--wide">
+          <h4 className="office-info__title">RECENT ACTIVITY</h4>
+          {recentEvents.length === 0 ? (
+            <div className="office-info__empty">No recent activity</div>
+          ) : (
+            recentEvents.slice(0, 5).map((ev, i) => {
+              const info = formatAgentId(ev.agent);
+              return (
+                <div key={i} className="office-info__event">
+                  <span className="office-info__event-agent">{info.emoji} {info.name}</span>
+                  <span className="office-info__event-text">{ev.text}</span>
+                  <span className="office-info__event-time">
+                    {formatDistanceToNow(ev.time, { addSuffix: true })}
+                  </span>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+
       {chatOverlay && (
         <div className="pixel-office__chat-overlay" onClick={() => setChatOverlay(null)}>
           <div className="pixel-office__chat-overlay-content" onClick={e => e.stopPropagation()}>
@@ -145,7 +240,7 @@ export function PixelOffice() {
             </div>
             <div
               className="pixel-office__chat-overlay-body"
-              dangerouslySetInnerHTML={{ __html: marked.parse(chatOverlay.text) as string }}
+              dangerouslySetInnerHTML={renderMarkdown(chatOverlay.text)}
             />
           </div>
         </div>

@@ -316,7 +316,7 @@ export function createProjectProgrammatic(data) {
         emoji: data.emoji || "\u{1F527}",
         status: "active",
         description: data.task || "",
-        ports: {},
+        ports: data.port ? { frontend: data.port } : {},
         domain: "",
         repo: data.repo || "",
         stack: data.stack || [],

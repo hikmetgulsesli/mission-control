@@ -4,13 +4,36 @@ interface Props {
   agents: { id: string; identityName?: string; identityEmoji?: string }[];
   selected: string;
   onSelect: (id: string) => void;
+  loading?: boolean;
 }
 
-export function ChatSidebar({ agents, selected, onSelect }: Props) {
+export function ChatSidebar({ agents, selected, onSelect, loading }: Props) {
+  // Sort: selected agent first, then alphabetically
+  const sorted = [...agents].sort((a, b) => {
+    if (a.id === selected) return -1;
+    if (b.id === selected) return 1;
+    const nameA = a.identityName || AGENT_MAP[a.id]?.name || a.id;
+    const nameB = b.identityName || AGENT_MAP[b.id]?.name || b.id;
+    return nameA.localeCompare(nameB);
+  });
+
   return (
     <aside className="chat-sidebar">
       <h3 className="chat-sidebar__title">AGENTS</h3>
-      {agents.map(agent => {
+
+      {/* New Chat button always on top */}
+      <button
+        className="chat-sidebar__new-chat"
+        onClick={() => onSelect('main')}
+      >
+        + New Chat
+      </button>
+
+      {loading && agents.length === 0 && (
+        <div className="chat-sidebar__loading">Loading agents...</div>
+      )}
+
+      {sorted.map(agent => {
         const meta = AGENT_MAP[agent.id];
         const name = agent.identityName || meta?.name || agent.id;
         const emoji = agent.identityEmoji || meta?.emoji || '?';
@@ -25,6 +48,7 @@ export function ChatSidebar({ agents, selected, onSelect }: Props) {
           >
             <span>{emoji}</span>
             <span>{name}</span>
+            {meta?.role && <span className="chat-sidebar__role">{meta.role}</span>}
           </button>
         );
       })}

@@ -11,6 +11,10 @@ interface FileTreeProps {
   selectedFile: string | null;
   onNavigate: (path: string) => void;
   onSelectFile: (path: string) => void;
+  onContextMenu?: (x: number, y: number, target: { path: string; name: string; isDir: boolean } | null) => void;
+  onNewFile?: () => void;
+  onNewDir?: () => void;
+  onUpload?: () => void;
 }
 
 function formatSize(bytes: number): string {
@@ -28,12 +32,33 @@ function formatDate(iso: string): string {
   return `${mon}-${day} ${hr}:${min}`;
 }
 
-export function FileTree({ entries, currentPath, selectedFile, onNavigate, onSelectFile }: FileTreeProps) {
+export function FileTree({ entries, currentPath, selectedFile, onNavigate, onSelectFile, onContextMenu, onNewFile, onNewDir, onUpload }: FileTreeProps) {
   const parentPath = currentPath.replace(/\/[^/]+\/?$/, '/') || '/';
   const canGoUp = currentPath !== '/' && currentPath !== parentPath;
 
+  const handleEntryContext = (e: React.MouseEvent, entry: FileEntry) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!onContextMenu) return;
+    const fullPath = currentPath.endsWith('/')
+      ? currentPath + entry.name
+      : currentPath + '/' + entry.name;
+    onContextMenu(e.clientX, e.clientY, { path: fullPath, name: entry.name, isDir: entry.type === 'directory' });
+  };
+
+  const handleEmptyContext = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!onContextMenu) return;
+    onContextMenu(e.clientX, e.clientY, null);
+  };
+
   return (
     <div className="file-tree">
+      <div className="file-tree__toolbar">
+        {onNewFile && <button className="file-tree__toolbar-btn" onClick={onNewFile} title="Yeni Dosya">+ Dosya</button>}
+        {onNewDir && <button className="file-tree__toolbar-btn" onClick={onNewDir} title="Yeni Dizin">+ Dizin</button>}
+        {onUpload && <button className="file-tree__toolbar-btn" onClick={onUpload} title="Yukle">Yukle</button>}
+      </div>
       <div className="file-tree__header">
         {canGoUp && (
           <button className="file-tree__entry file-tree__entry--up" onClick={() => onNavigate(parentPath)}>
@@ -42,7 +67,7 @@ export function FileTree({ entries, currentPath, selectedFile, onNavigate, onSel
           </button>
         )}
       </div>
-      <div className="file-tree__list">
+      <div className="file-tree__list" onContextMenu={handleEmptyContext}>
         {entries.map((entry) => {
           const fullPath = currentPath.endsWith('/')
             ? currentPath + entry.name
@@ -55,6 +80,7 @@ export function FileTree({ entries, currentPath, selectedFile, onNavigate, onSel
               key={entry.name}
               className={`file-tree__entry ${isDir ? 'file-tree__entry--dir' : ''} ${isActive ? 'file-tree__entry--active' : ''}`}
               onClick={() => isDir ? onNavigate(fullPath + '/') : onSelectFile(fullPath)}
+              onContextMenu={(e) => handleEntryContext(e, entry)}
             >
               <span className="file-tree__icon">{isDir ? '>' : ' '}</span>
               <span className="file-tree__name">{entry.name}{isDir ? '/' : ''}</span>

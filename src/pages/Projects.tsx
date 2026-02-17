@@ -3,6 +3,27 @@ import { GlitchText } from "../components/GlitchText";
 import { ProjectChecklist } from "../components/ProjectChecklist";
 import { api } from "../lib/api";
 
+
+function formatDuration(createdAt?: string, completedAt?: string, buildStartedAt?: string, buildCompletedAt?: string): string | null {
+  const startStr = buildStartedAt || createdAt;
+  if (!startStr) return null;
+  const start = new Date(startStr);
+  if (isNaN(start.getTime())) return null;
+  const endStr = buildCompletedAt || completedAt;
+  const end = endStr ? new Date(endStr) : new Date();
+  if (isNaN(end.getTime())) return null;
+  const diffMs = end.getTime() - start.getTime();
+  if (diffMs < 0) return null;
+  const minutes = Math.floor(diffMs / 60000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  const remH = hours % 24;
+  const remM = minutes % 60;
+  if (days > 0) return remH > 0 ? `${days}g ${remH}s` : `${days}g`;
+  if (hours > 0) return remM > 0 ? `${hours}s ${remM}dk` : `${hours}s`;
+  return `${minutes}dk`;
+}
+
 interface Project {
   id: string;
   name: string;
@@ -18,6 +39,8 @@ interface Project {
   createdBy: string;
   workflowRunId?: string;
   createdAt: string;
+  completedAt?: string;
+  status?: string;
   stories?: { total: number; done: number };
   pr?: string;
   features: string[];
@@ -26,6 +49,8 @@ interface Project {
   github?: string;
   category?: string;
   checklist?: any[];
+  buildStartedAt?: string;
+  buildCompletedAt?: string;
 }
 
 const TOOL_LOGOS: Record<string, string> = {
@@ -47,6 +72,7 @@ export function Projects() {
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState({ name: "", description: "", emoji: "", category: "own" });
   const [createLoading, setCreateLoading] = useState(false);
+  const [sortBy, setSortBy] = useState<'date' | 'port' | 'name' | 'status'>('name');
   const importRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -130,7 +156,19 @@ export function Projects() {
 
   if (loading) return <div className="page-loading">Projeler yukleniyor...</div>;
 
-  const ownProjects = projects.filter((p) => p.category === "own");
+  const ownProjectsRaw = projects.filter((p) => p.category === "own");
+  const ownProjects = [...ownProjectsRaw].sort((a, b) => {
+    switch (sortBy) {
+      case 'date': return (b.createdAt || '').localeCompare(a.createdAt || '');
+      case 'port': return (a.ports?.frontend || 9999) - (b.ports?.frontend || 9999);
+      case 'name': return a.name.localeCompare(b.name);
+      case 'status': {
+        const order: Record<string, number> = { building: 0, active: 1, failed: 2 };
+        return (order[a.status || 'active'] ?? 1) - (order[b.status || 'active'] ?? 1);
+      }
+      default: return 0;
+    }
+  });
   const extProjects = projects.filter((p) => p.category === "external");
   const sel = projects.find((p) => p.id === selected);
 
@@ -170,19 +208,29 @@ export function Projects() {
         </div>
       </div>
 
+      {/* Sort controls */}
+      <div className="projects-sort">
+        <span className="projects-sort__label">SIRALA:</span>
+        {(['date', 'port', 'name', 'status'] as const).map((s) => (
+          <button key={s} className={`projects-sort__btn ${sortBy === s ? 'projects-sort__btn--active' : ''}`} onClick={() => setSortBy(s)}>
+            {s === 'date' ? 'TARIH' : s === 'port' ? 'PORT' : s === 'name' ? 'AD' : 'DURUM'}
+          </button>
+        ))}
+      </div>
+
       {/* Own projects - full cards */}
       <div className="projects-grid">
         {ownProjects.map((p) => (
           <div
             key={p.id}
-            className={`project-card ${selected === p.id ? "project-card--selected" : ""} project-card--${p.serviceStatus === "active" ? "online" : "offline"}`}
+            className={`project-card ${selected === p.id ? "project-card--selected" : ""} ${p.status === "building" ? "project-card--building" : p.status === "failed" ? "project-card--failed" : ""} project-card--${p.serviceStatus === "active" ? "online" : "offline"}`}
             onClick={() => setSelected(selected === p.id ? null : p.id)}
           >
             <div className="project-card__header">
               <span className="project-card__emoji">{p.emoji}</span>
               <span className="project-card__name">{p.name}</span>
-              <span className={`project-card__status project-card__status--${p.serviceStatus}`}>
-                {p.serviceStatus === "active" ? "ONLINE" : "OFFLINE"}
+              <span className={`project-card__status project-card__status--${p.status === "building" ? "building" : p.status === "failed" ? "failed" : p.serviceStatus}`}>
+                {p.status === "building" ? "BUILDING" : p.status === "failed" ? "FAILED" : p.serviceStatus === "active" ? "ONLINE" : "OFFLINE"}
               </span>
             </div>
 
@@ -215,10 +263,30 @@ export function Projects() {
                   </a>
                 </div>
               )}
-              {p.stories && (
+              {p.stories && p.stories.total > 0 && (
                 <div className="project-card__meta-row">
                   <span className="project-card__label">STORIES</span>
-                  <span className="project-card__value">{p.stories.done}/{p.stories.total} tamamlandi</span>
+                  <span className="project-card__value">{p.stories.done}/{p.stories.total}</span>
+                </div>
+              )}
+              {(p.createdAt || p.completedAt) && (
+                <div className="project-card__meta-row">
+                  <span className="project-card__label">TARIH</span>
+                  <span className="project-card__value project-card__dates">
+                    {p.createdAt && <span>{p.createdAt.slice(0, 10)}</span>}
+                    {p.createdAt && p.completedAt && <span> → </span>}
+                    {p.completedAt && <span>{p.completedAt.slice(0, 10)}</span>}
+                  </span>
+                </div>
+              )}
+              {p.createdAt && (
+                <div className="project-card__meta-row">
+                  <span className="project-card__label">SÜRE</span>
+                  <span className="project-card__value project-card__duration">
+                    <span className="project-card__duration-value">{formatDuration(p.createdAt, p.completedAt, p.buildStartedAt, p.buildCompletedAt) ?? "-"}</span>
+                    {!p.completedAt && !p.buildCompletedAt && <span className="project-card__duration-badge">devam ediyor</span>}
+                    {(p.completedAt || p.buildCompletedAt) && <span className="project-card__duration-badge project-card__duration-badge--done">tamamlandi</span>}
+                  </span>
                 </div>
               )}
             </div>
@@ -269,7 +337,8 @@ export function Projects() {
                   <tr><td>Repo</td><td><code>{sel.repo}</code></td></tr>
                   {sel.github && <tr><td>GitHub</td><td><a href={sel.github} target="_blank" rel="noopener noreferrer">{sel.github.replace("https://github.com/", "")}</a></td></tr>}
                   <tr><td>Olusturan</td><td>{sel.createdBy}</td></tr>
-                  <tr><td>Tarih</td><td>{sel.createdAt}</td></tr>
+                  <tr><td>Tarih</td><td>{sel.createdAt}{sel.completedAt ? ` → ${sel.completedAt.slice(0, 10)}` : ""}</td></tr>
+                  <tr><td>Süre</td><td>{formatDuration(sel.createdAt, sel.completedAt, sel.buildStartedAt, sel.buildCompletedAt) ?? "-"}{!sel.completedAt && !sel.buildCompletedAt ? " (devam ediyor)" : ""}</td></tr>
                   {sel.workflowRunId && <tr><td>Workflow Run</td><td><code>{sel.workflowRunId}</code></td></tr>}
                   {sel.pr && <tr><td>Pull Request</td><td><a href={sel.pr} target="_blank" rel="noopener noreferrer">PR #1</a></td></tr>}
                 </tbody>

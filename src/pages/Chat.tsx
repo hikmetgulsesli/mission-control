@@ -9,7 +9,7 @@ import { LiveProgressPanel } from '../components/LiveProgressPanel';
 import { GlitchText } from '../components/GlitchText';
 
 export function Chat() {
-  const { data: agents } = usePolling(api.agents, 60000);
+  const { data: agents, loading: agentsLoading } = usePolling(api.agents, 60000);
   const { messages: events, connected, send } = useWebSocket();
   const [searchParams] = useSearchParams();
   const [selectedAgent, setSelectedAgent] = useState('main');
@@ -27,15 +27,15 @@ export function Chat() {
   return (
     <div className="chat-page">
       <GlitchText text="COMMS" tag="h2" />
-      
+
       {/* Show progress toggle button */}
       {selectedAgent && (
-        <button 
+        <button
           className="btn btn--small"
           style={{ marginBottom: '16px' }}
           onClick={() => setShowProgress(!showProgress)}
         >
-          {showProgress ? '🚫 Hide Progress' : '📡 Show Progress'}
+          {showProgress ? '\u{1F6AB} Hide Progress' : '\u{1F4E1} Show Progress'}
         </button>
       )}
 
@@ -44,6 +44,7 @@ export function Chat() {
           agents={agents || []}
           selected={selectedAgent}
           onSelect={setSelectedAgent}
+          loading={agentsLoading}
         />
         <ChatPanel
           events={events}

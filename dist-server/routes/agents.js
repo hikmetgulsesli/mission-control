@@ -1,10 +1,33 @@
 import { Router } from 'express';
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'fs';
+import { join } from 'path';
 import { runCliJson, runCli } from '../utils/cli.js';
 import { cached, setCache } from '../utils/cache.js';
 import { config } from '../config.js';
 const router = Router();
 const REAL_AGENTS = ['main', 'koda', 'kaan', 'atlas', 'defne', 'sinan', 'elif', 'deniz', 'onur', 'mert'];
+function getAgentActivity(agentId) {
+    const dir = agentId === "main" ? "main" : agentId;
+    const sessionsDir = join("/home/setrox/.openclaw/agents", dir, "sessions");
+    if (!existsSync(sessionsDir))
+        return { status: "idle" };
+    try {
+        const files = readdirSync(sessionsDir)
+            .filter((f) => f.endsWith(".jsonl"))
+            .map((f) => ({ name: f, mtime: statSync(join(sessionsDir, f)).mtimeMs }))
+            .sort((a, b) => b.mtime - a.mtime);
+        if (files.length === 0)
+            return { status: "idle" };
+        const latest = files[0];
+        const lastActive = new Date(latest.mtime).toISOString();
+        const minutesAgo = (Date.now() - latest.mtime) / 60_000;
+        const status = minutesAgo < 2 ? "active" : "idle";
+        return { lastActive, status };
+    }
+    catch {
+        return { status: "idle" };
+    }
+}
 function loadProfiles() {
     try {
         const raw = readFileSync(config.clawtabsConfig, 'utf-8');
@@ -59,7 +82,11 @@ router.get('/agents', async (_req, res) => {
         ]);
         const filtered = all
             .filter((a) => REAL_AGENTS.includes(a.id))
-            .map((a) => mergeProfile(a, profiles));
+            .map((a) => {
+            const enriched = mergeProfile(a, profiles);
+            const activity = getAgentActivity(a.id);
+            return { ...enriched, ...activity };
+        });
         res.json(filtered);
     }
     catch (err) {
@@ -251,6 +278,100 @@ router.get('/agents/:id/history', async (req, res) => {
         res.json({
             messages: messages.slice(-limit),
             sessions: sessionMeta,
+        });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+// GET /api/agents/:id/live — Get live session data for an agent
+router.get('/agents/:id/live', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const agentDir = id === 'main' ? 'main' : id;
+        const sessionsDir = `/home/setrox/.openclaw/agents/${agentDir}/sessions`;
+        const { existsSync, readdirSync, readFileSync, statSync } = await import('fs');
+        const { join } = await import('path');
+        let totalSessions = 0;
+        let currentSession = null;
+        let status = 'idle';
+        if (existsSync(sessionsDir)) {
+            const files = readdirSync(sessionsDir)
+                .filter((f) => f.endsWith('.jsonl'))
+                .map((f) => ({
+                name: f,
+                path: join(sessionsDir, f),
+                mtime: statSync(join(sessionsDir, f)).mtimeMs,
+            }))
+                .sort((a, b) => b.mtime - a.mtime);
+            totalSessions = files.length;
+            if (files.length > 0) {
+                const latest = files[0];
+                const raw = readFileSync(latest.path, 'utf-8');
+                const lines = raw.trim().split('\n');
+                const lastLines = lines.slice(-60);
+                const recentOutput = [];
+                const filesModified = new Set();
+                let model = '';
+                let startedAt = '';
+                let lastEvent = '';
+                for (const line of lastLines) {
+                    try {
+                        const entry = JSON.parse(line);
+                        if (!startedAt && entry.timestamp)
+                            startedAt = entry.timestamp;
+                        if (entry.timestamp)
+                            lastEvent = entry.timestamp;
+                        if (entry.message?.role === 'assistant') {
+                            const content = entry.message.content;
+                            if (typeof content === 'string') {
+                                // Filter noise: heartbeats, empty, single-word status
+                                if (content === 'HEARTBEAT_OK' || content.length < 3 || content.startsWith('HEARTBEAT'))
+                                    continue;
+                                recentOutput.push(content.slice(0, 200));
+                            }
+                            else if (Array.isArray(content)) {
+                                for (const c of content) {
+                                    if (c.type === 'text' && c.text) {
+                                        const txt = c.text.trim();
+                                        if (txt === 'HEARTBEAT_OK' || txt.startsWith('HEARTBEAT') || txt.length < 3)
+                                            continue;
+                                        recentOutput.push(txt.slice(0, 200));
+                                    }
+                                    if (c.type === 'tool_use') {
+                                        recentOutput.push(`[Tool: ${c.name}]`);
+                                        // Track file modifications
+                                        if (c.input?.file_path || c.input?.path) {
+                                            filesModified.add(c.input.file_path || c.input.path);
+                                        }
+                                    }
+                                }
+                            }
+                            if (entry.message?.model)
+                                model = entry.message.model;
+                        }
+                    }
+                    catch { }
+                }
+                // Determine if actively working (session updated within 2 min)
+                const now = Date.now();
+                if ((now - latest.mtime) < 120_000) {
+                    status = 'working';
+                }
+                currentSession = {
+                    id: latest.name.replace('.jsonl', ''),
+                    startedAt: startedAt || new Date(latest.mtime).toISOString(),
+                    lastEvent: lastEvent || new Date(latest.mtime).toISOString(),
+                    recentOutput: recentOutput.slice(-50),
+                    filesModified: [...filesModified],
+                    model: model || '',
+                };
+            }
+        }
+        res.json({
+            status,
+            currentSession,
+            totalSessions,
         });
     }
     catch (err) {

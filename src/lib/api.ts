@@ -9,11 +9,14 @@ async function fetchApi<T>(path: string, opts?: RequestInit): Promise<T> {
   return res.json();
 }
 
+const CT_JSON = { 'Content-Type': 'application/json' };
+
 export const api = {
   overview: () => fetchApi<any>('/api/overview'),
   agents: () => fetchApi<any[]>('/api/agents'),
   agent: (id: string) => fetchApi<any>(`/api/agents/${id}`),
   agentHistory: (id: string, limit = 50) => fetchApi<any>(`/api/agents/${id}/history?limit=${limit}`),
+  agentLive: (id: string) => fetchApi<any>(`/api/agents/${id}/live`),
   agentActivity: (id: string) => fetchApi<any>(`/api/agents/${id}/activity`),
   sessions: () => fetchApi<any[]>('/api/sessions'),
   cron: () => fetchApi<any[]>('/api/cron'),
@@ -42,24 +45,24 @@ export const api = {
   // Projects
   projects: () => fetchApi<any[]>("/api/projects"),
   project: (id: string) => fetchApi<any>(`/api/projects/${id}`),
-  createProject: (data: any) => fetchApi<any>("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }),
-  updateProject: (id: string, data: any) => fetchApi<any>(`/api/projects/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }),
-  deleteProject: (id: string, confirmName: string) => fetchApi<any>(`/api/projects/${id}`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirmName }) }),
+  createProject: (data: any) => fetchApi<any>("/api/projects", { method: "POST", headers: CT_JSON, body: JSON.stringify(data) }),
+  updateProject: (id: string, data: any) => fetchApi<any>(`/api/projects/${id}`, { method: "PATCH", headers: CT_JSON, body: JSON.stringify(data) }),
+  deleteProject: (id: string, confirmName: string) => fetchApi<any>(`/api/projects/${id}`, { method: "DELETE", headers: CT_JSON, body: JSON.stringify({ confirmName }) }),
   exportProject: (id: string) => fetchApi<any>(`/api/projects/${id}/export`),
-  importProject: (data: any) => fetchApi<any>("/api/projects/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }),
+  importProject: (data: any) => fetchApi<any>("/api/projects/import", { method: "POST", headers: CT_JSON, body: JSON.stringify(data) }),
   // Tasks
   tasks: () => fetchApi<any[]>('/api/tasks'),
-  createTask: (data: any) => fetchApi<any>('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
-  updateTask: (id: string, data: any) => fetchApi<any>("/api/tasks/" + id, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
+  createTask: (data: any) => fetchApi<any>('/api/tasks', { method: 'POST', headers: CT_JSON, body: JSON.stringify(data) }),
+  updateTask: (id: string, data: any) => fetchApi<any>("/api/tasks/" + id, { method: 'PUT', headers: CT_JSON, body: JSON.stringify(data) }),
   deleteTask: (id: string) => fetchApi<any>("/api/tasks/" + id, { method: 'DELETE' }),
-  updateTaskStatus: (id: string, status: string) => fetchApi<any>("/api/tasks/" + id + "/status", { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) }),
+  updateTaskStatus: (id: string, status: string) => fetchApi<any>("/api/tasks/" + id + "/status", { method: 'PATCH', headers: CT_JSON, body: JSON.stringify({ status }) }),
   // Images
-  uploadTaskImage: (id: string, base64: string, filename: string) => fetchApi<any>("/api/tasks/" + id + "/images", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ base64, filename }) }),
+  uploadTaskImage: (id: string, base64: string, filename: string) => fetchApi<any>("/api/tasks/" + id + "/images", { method: "POST", headers: CT_JSON, body: JSON.stringify({ base64, filename }) }),
   deleteTaskImage: (id: string, filename: string) => fetchApi<any>("/api/tasks/" + id + "/images/" + filename, { method: "DELETE" }),
   // Approvals
   approvals: () => fetchApi<any[]>('/api/approvals'),
   approveStep: (id: string) => fetchApi<any>('/api/approvals/' + id + '/approve', { method: 'POST' }),
-  rejectStep: (id: string, reason: string) => fetchApi<any>('/api/approvals/' + id + '/reject', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) }),
+  rejectStep: (id: string, reason: string) => fetchApi<any>('/api/approvals/' + id + '/reject', { method: 'POST', headers: CT_JSON, body: JSON.stringify({ reason }) }),
   // Antfarm Activity
   antfarmActivity: (limit = 50) => fetchApi<any[]>('/api/antfarm/activity?limit=' + limit),
   antfarmAgents: () => fetchApi<any[]>('/api/antfarm/agents'),
@@ -72,7 +75,7 @@ export const api = {
   terminalExec: (command: string, args: string[]) =>
     fetchApi<{ output: string; exitCode: number; command: string }>('/api/terminal/exec', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: CT_JSON,
       body: JSON.stringify({ command, args }),
     }),
   // Pixel Office
@@ -80,5 +83,14 @@ export const api = {
   // Files
   filesList: (path: string) => fetchApi<any>(`/api/files/list?path=${encodeURIComponent(path)}`),
   filesRead: (path: string) => fetchApi<any>(`/api/files/read?path=${encodeURIComponent(path)}`),
+  filesWrite: (path: string, content: string) =>
+    fetchApi<any>('/api/files/write', { method: 'PUT', headers: CT_JSON, body: JSON.stringify({ path, content }) }),
+  filesDelete: (path: string) =>
+    fetchApi<any>('/api/files/delete', { method: 'DELETE', headers: CT_JSON, body: JSON.stringify({ path }) }),
+  filesMkdir: (path: string) =>
+    fetchApi<any>('/api/files/mkdir', { method: 'POST', headers: CT_JSON, body: JSON.stringify({ path }) }),
+  filesRename: (oldPath: string, newPath: string) =>
+    fetchApi<any>('/api/files/rename', { method: 'POST', headers: CT_JSON, body: JSON.stringify({ oldPath, newPath }) }),
+  filesUpload: (directory: string, filename: string, content: string) =>
+    fetchApi<any>('/api/files/upload', { method: 'POST', headers: CT_JSON, body: JSON.stringify({ directory, filename, content }) }),
 };
-

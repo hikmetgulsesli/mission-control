@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { AGENTS } from '../lib/constants';
-import { AgentActivityPanel } from './AgentActivityPanel';
+import { AGENTS, WORKFLOW_AGENT_MAP } from '../lib/constants';
+import { AgentLivePanel } from './AgentLivePanel';
 
 interface AgentMiniGridProps {
   agents: any[];
@@ -9,28 +9,32 @@ interface AgentMiniGridProps {
 }
 
 function getAgentStatus(agentId: string, agentsData: any[], pipeline: any[]): { status: 'active' | 'idle' | 'workflow'; label?: string } {
+  // Check if this agent is mapped to a running workflow step
   for (const run of pipeline) {
     if (run.status !== 'running') continue;
     for (const step of run.steps || []) {
-      if (step.status === 'running') {
-        const agentData = agentsData.find((a: any) => a.id === agentId || a.name?.toLowerCase() === agentId);
-        if (agentData?.status === 'active') {
-          return { status: 'workflow', label: `${step.stepId} (${run.workflow})` };
-        }
+      if (step.status !== 'running') continue;
+      const wfAgent = step.agent || '';
+      const mappedAgent = WORKFLOW_AGENT_MAP[wfAgent];
+      if (mappedAgent === agentId) {
+        return { status: 'workflow', label: `${step.stepId} (${run.workflow || ''})` };
       }
     }
   }
 
+  // Check session-based activity from backend
   const agentData = agentsData.find((a: any) => a.id === agentId || a.name?.toLowerCase() === agentId);
-  if (agentData?.status === 'active' || agentData?.lastActive) {
-    const lastActive = agentData.lastActive ? new Date(agentData.lastActive) : null;
-    if (lastActive) {
-      const minutesAgo = (Date.now() - lastActive.getTime()) / 60_000;
-      if (minutesAgo < 10) return { status: 'active' };
-    }
+  if (agentData?.status === 'active') {
+    return { status: 'active' };
+  }
+  if (agentData?.lastActive) {
+    const lastActive = new Date(agentData.lastActive);
+    const minutesAgo = (Date.now() - lastActive.getTime()) / 60_000;
+    if (minutesAgo < 10) return { status: 'active' };
   }
 
   return { status: 'idle' };
+
 }
 
 function timeAgo(dateStr?: string): string {
@@ -116,9 +120,9 @@ export function AgentMiniGrid({ agents, pipeline, sessions = [] }: AgentMiniGrid
         })}
       </div>
 
-      {/* Agent activity slide-out panel */}
+      {/* Agent live panel - slide-out with terminal output, files, info */}
       {selectedAgent && (
-        <AgentActivityPanel
+        <AgentLivePanel
           agentId={selectedAgent}
           onClose={() => setSelectedAgent(null)}
         />

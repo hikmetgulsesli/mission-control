@@ -303,6 +303,8 @@ export function createProjectProgrammatic(data: {
   createdBy?: string;
   antfarmRunId?: string;
   task?: string;
+  status?: string;
+  port?: number;
 }): { created: boolean; project: any; reason?: string } {
   const projects = loadProjects();
   const id = data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
@@ -317,7 +319,7 @@ export function createProjectProgrammatic(data: {
     emoji: data.emoji || "\u{1F527}",
     status: "active",
     description: data.task || "",
-    ports: {},
+    ports: data.port ? { frontend: data.port } : {},
     domain: "",
     repo: data.repo || "",
     stack: data.stack || [],
@@ -338,5 +340,6 @@ export function createProjectProgrammatic(data: {
   saveProjects(projects);
   return { created: true, project };
 }
+
 
 export default router;

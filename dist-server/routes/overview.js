@@ -2,14 +2,116 @@ import { Router } from 'express';
 import { readFileSync } from 'fs';
 import { config } from '../config.js';
 import { cached } from '../utils/cache.js';
-import { runCliJson } from '../utils/cli.js';
+import { runCliJson, runCli } from '../utils/cli.js';
 import { getSystemMetrics } from '../utils/prometheus.js';
 import { getRuns } from '../utils/antfarm.js';
 const router = Router();
 const REAL_AGENTS = ['main', 'koda', 'kaan', 'atlas', 'defne', 'sinan', 'elif', 'deniz', 'onur', 'mert'];
+// Fetch open PRs from GitHub (cached 5 min)
+async function fetchOpenPRs() {
+    try {
+        const raw = await runCli('gh', [
+            'pr', 'list', '--state', 'open', '--json',
+            'number,title,headRefName,updatedAt,author,mergeable,url,repository',
+            '--limit', '10',
+        ]);
+        return JSON.parse(raw);
+    }
+    catch {
+        return [];
+    }
+}
+// Load recent projects with port check
+async function fetchRecentDeploys() {
+    try {
+        const raw = readFileSync(config.projectsJson, 'utf-8');
+        const projects = JSON.parse(raw);
+        const sorted = projects
+            .filter((p) => p.ports?.frontend && p.status === 'active')
+            .sort((a, b) => {
+            const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return bTime - aTime;
+        })
+            .slice(0, 6);
+        const results = await Promise.allSettled(sorted.map(async (p) => {
+            const port = p.ports?.frontend || p.ports?.main;
+            let online = false;
+            try {
+                await runCli('curl', ['-s', '-o', '/dev/null', '-w', '%{http_code}', '--connect-timeout', '1', 'http://127.0.0.1:' + port + '/']);
+                online = true;
+            }
+            catch { }
+            const subdomain = p.domain ? p.domain.replace('.setrox.com.tr', '') : '';
+            return { id: p.id, name: p.name, port, subdomain, online, emoji: p.emoji || '' };
+        }));
+        return results
+            .filter((r) => r.status === 'fulfilled')
+            .map(r => r.value);
+    }
+    catch {
+        return [];
+    }
+}
+// Build agent summary from sessions + office status
+async function fetchAgentSummary(dataFile) {
+    const sessions = dataFile?.sessions || [];
+    const now = Date.now();
+    const ONE_HOUR = 60 * 60 * 1000;
+    // Get office status for working/idle
+    let officeAgents = [];
+    try {
+        const runs = (await getRuns());
+        const activeRuns = runs.filter((r) => r.status === 'running');
+        const working = new Map();
+        working.set('main', 'CEO orchestration');
+        const STEP_MAPPING = {
+            'feature-dev': { plan: ['defne'], setup: ['atlas'], implement: ['koda', 'mert'], verify: ['sinan'], test: ['onur', 'mert'], pr: ['koda', 'mert'], review: ['kaan', 'deniz'] },
+            'bug-fix': { triage: ['defne'], investigate: ['koda'], setup: ['atlas'], fix: ['elif'], verify: ['sinan'], pr: ['kaan', 'deniz'] },
+            'security-audit': { scan: ['defne'], prioritize: ['main'], setup: ['atlas'], fix: ['koda'], verify: ['sinan'], test: ['onur', 'mert'], pr: ['kaan', 'deniz'] },
+        };
+        for (const run of activeRuns) {
+            const wf = run.workflow_id || run.workflow || '';
+            const mapping = STEP_MAPPING[wf];
+            if (!mapping)
+                continue;
+            for (const step of run.steps || []) {
+                if (step.status !== 'running')
+                    continue;
+                const agents = mapping[step.step_id || step.id || ''];
+                if (agents)
+                    for (const a of agents)
+                        working.set(a, `${step.step_id} (${wf})`);
+            }
+        }
+        officeAgents = REAL_AGENTS.map(id => ({
+            id,
+            status: working.has(id) ? 'working' : 'idle',
+            currentTask: working.get(id) || '',
+        }));
+    }
+    catch {
+        officeAgents = REAL_AGENTS.map(id => ({ id, status: 'idle', currentTask: '' }));
+    }
+    // Merge with session data for lastActivity
+    return officeAgents.map(a => {
+        const agentSessions = sessions.filter((s) => {
+            const sid = s.agent || s.key?.split(':')?.[1];
+            return sid === a.id;
+        });
+        const latestSession = agentSessions
+            .filter((s) => s.updatedAt)
+            .sort((x, y) => (y.updatedAt || 0) - (x.updatedAt || 0))[0];
+        const lastActivity = latestSession?.updatedAt || null;
+        return {
+            ...a,
+            lastActivity,
+        };
+    });
+}
 router.get('/overview', async (_req, res) => {
     try {
-        const [agents, system, runs, dataFile] = await Promise.allSettled([
+        const [agents, system, runs, dataFile, openPRs, recentDeploys] = await Promise.allSettled([
             cached('agents', 30000, () => runCliJson('openclaw', ['agents', 'list', '--json'])),
             cached('system', 15000, getSystemMetrics),
             cached('runs', 15000, getRuns),
@@ -17,6 +119,8 @@ router.get('/overview', async (_req, res) => {
                 const raw = readFileSync(config.dataJson, 'utf-8');
                 return JSON.parse(raw);
             }),
+            cached('open-prs', 300000, fetchOpenPRs),
+            cached('recent-deploys', 60000, fetchRecentDeploys),
         ]);
         const agentList = agents.status === 'fulfilled'
             ? agents.value.filter((a) => REAL_AGENTS.includes(a.id))
@@ -34,12 +138,10 @@ router.get('/overview', async (_req, res) => {
             const agentId = s.agent || s.key?.split(':')?.[1];
             if (!REAL_AGENTS.includes(agentId))
                 return false;
-            // Filter stale sessions: only show sessions active in last 1 hour
             if (s.updatedAt && (now - s.updatedAt) > ONE_HOUR)
                 return false;
             return true;
         });
-        // Filter alerts to last 24 hours only
         const allAlerts = data.alerts || [];
         const recentAlerts = allAlerts.filter((a) => {
             const ts = a.timestamp || a.ts;
@@ -47,6 +149,8 @@ router.get('/overview', async (_req, res) => {
                 return false;
             return (now - new Date(ts).getTime()) < TWENTY_FOUR_HOURS;
         });
+        // Agent summary
+        const agentSummary = await cached('agent-summary', 15000, () => fetchAgentSummary(data));
         res.json({
             agents: agentList,
             agentCount: agentList.length,
@@ -59,6 +163,10 @@ router.get('/overview', async (_req, res) => {
             gateway: data.gateway || null,
             sessions: activeSessions.slice(0, 20),
             alerts: recentAlerts,
+            // Command Center data
+            openPRs: openPRs.status === 'fulfilled' ? openPRs.value : [],
+            recentDeploys: recentDeploys.status === 'fulfilled' ? recentDeploys.value : [],
+            agentSummary,
         });
     }
     catch (err) {
