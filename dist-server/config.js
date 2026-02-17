@@ -17,7 +17,9 @@ function loadEnv() {
                 process.env[key] = val;
         }
     }
-    catch { }
+    catch (e) {
+        console.info('.env file not found or unreadable, using defaults');
+    }
 }
 loadEnv();
 export const config = {
@@ -32,4 +34,5 @@ export const config = {
     clawtabsConfig: process.env.CLAWTABS_CONFIG || '/home/setrox/.openclaw/clawtabs-config.json',
     gatewayToken: process.env.GATEWAY_TOKEN || '',
     projectsJson: process.env.PROJECTS_JSON || '/home/setrox/mission-control/projects.json',
+    wsOrigin: process.env.WS_ORIGIN || '',
 };

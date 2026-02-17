@@ -20,7 +20,7 @@ export function ActivityFeed({ items }: ActivityFeedProps) {
   return (
     <div className="activity-feed">
       {items.slice(0, 15).map((item, i) => (
-        <div key={i} className="activity-feed__item">
+        <div key={`${item.timestamp}-${item.agent}-${i}`} className="activity-feed__item">
           <span className="activity-feed__time">
             {item.timestamp ? format(new Date(item.timestamp), 'HH:mm') : (item.icon || '•')}
           </span>

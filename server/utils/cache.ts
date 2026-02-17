@@ -54,6 +54,11 @@ export async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>
   return data;
 }
 
+
+export function invalidateCache(key: string): void {
+  store.delete(key);
+}
+
 // Pre-warm: call on startup to populate cache
 const warmupFns: Array<() => Promise<void>> = [];
 

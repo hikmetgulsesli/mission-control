@@ -30,7 +30,9 @@ export function useWebSocket() {
         try {
           const msg = JSON.parse(ev.data);
           setMessages(prev => [...prev.slice(-200), msg]);
-        } catch {}
+        } catch (e) {
+          console.warn('[WS] Failed to parse message:', e);
+        }
       };
 
       ws.onclose = () => {

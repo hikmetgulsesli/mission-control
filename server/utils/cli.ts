@@ -27,8 +27,11 @@ export async function runCliJson<T = unknown>(cmd: string, args: string[]): Prom
   const out = await runCli(cmd, args);
   // Strip non-JSON prefix (e.g. openclaw doctor messages)
   const jsonStart = out.search(/^[\[{]/m);
-  if (jsonStart > 0) {
-    return JSON.parse(out.slice(jsonStart));
+  const jsonStr = jsonStart > 0 ? out.slice(jsonStart) : out;
+  try {
+    return JSON.parse(jsonStr);
+  } catch (e) {
+    console.error(`JSON parse failed for: ${cmd} ${args.join(' ')}`, jsonStr.slice(0, 200));
+    throw new Error(`Invalid JSON from ${cmd} ${args.join(' ')}: ${(e as Error).message}`);
   }
-  return JSON.parse(out);
 }

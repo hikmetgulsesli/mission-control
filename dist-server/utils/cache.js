@@ -43,6 +43,9 @@ export async function cached(key, ttlMs, fn) {
     setCache(key, data, ttlMs);
     return data;
 }
+export function invalidateCache(key) {
+    store.delete(key);
+}
 // Pre-warm: call on startup to populate cache
 const warmupFns = [];
 export function registerWarmup(fn) {

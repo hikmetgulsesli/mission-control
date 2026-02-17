@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Layout } from './components/Layout';
 import { Overview } from './pages/Overview';
 import { AntfarmActivity } from './pages/AntfarmActivity';
@@ -12,6 +13,7 @@ import { PixelOffice } from './pages/PixelOffice';
 
 export default function App() {
   return (
+    <ErrorBoundary>
     <BrowserRouter>
       <Routes>
         <Route element={<Layout />}>
@@ -29,5 +31,6 @@ export default function App() {
         </Route>
       </Routes>
     </BrowserRouter>
+    </ErrorBoundary>
   );
 }

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { usePolling } from '../hooks/usePolling';
 import { api } from '../lib/api';
 import { CronTable } from '../components/CronTable';
@@ -9,13 +10,15 @@ export function Ops() {
   const { data: crons, refresh: refreshCrons } = usePolling<CronJob[]>(api.cron, 30000);
   const { data: system } = usePolling<SystemMetrics>(api.system, 15000);
   const { data: docker } = usePolling<DockerContainer[]>(api.docker, 30000);
+  const [toggleError, setToggleError] = useState<string | null>(null);
 
   const handleToggle = async (id: string) => {
     try {
       await api.cronToggle(id);
       refreshCrons();
     } catch (err: any) {
-      alert('Toggle failed: ' + err.message);
+      setToggleError(err.message);
+      setTimeout(() => setToggleError(null), 5000);
     }
   };
 
@@ -44,6 +47,7 @@ export function Ops() {
         </div>
       </div>
 
+      {toggleError && <p style={{ color: '#f44', padding: '0.5rem 1rem' }}>Toggle failed: {toggleError}</p>}
       <h3 className="section-title">CRON JOBS</h3>
       {crons ? <CronTable jobs={crons} onToggle={handleToggle} /> : <div className="panel__empty">Loading crons...</div>}
     </div>

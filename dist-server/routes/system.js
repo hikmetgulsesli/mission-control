@@ -16,7 +16,15 @@ router.get('/system/docker', async (_req, res) => {
     try {
         const data = await cached('docker', 30000, async () => {
             const out = await runCli('docker', ['ps', '--format', '{{json .}}']);
-            return out.split('\n').filter(Boolean).map((line) => JSON.parse(line));
+            return out.split('\n').filter(Boolean).reduce((acc, line) => {
+                try {
+                    acc.push(JSON.parse(line));
+                }
+                catch (e) {
+                    console.warn('Failed to parse docker line:', line);
+                }
+                return acc;
+            }, []);
         });
         res.json(data);
     }

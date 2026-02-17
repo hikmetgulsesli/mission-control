@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { readFileSync } from 'fs';
 import { config } from '../config.js';
-import { cached } from '../utils/cache.js';
+import { cached, invalidateCache } from '../utils/cache.js';
 import { runCli } from '../utils/cli.js';
 
 const router = Router();
@@ -29,6 +29,7 @@ router.post('/cron/:id/toggle', async (req, res) => {
 
     const action = job.enabled ? 'disable' : 'enable';
     await runCli('openclaw', ['cron', action, job.name]);
+    invalidateCache('cron');
     res.json({ success: true, name: job.name, enabled: !job.enabled });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

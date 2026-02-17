@@ -14,7 +14,7 @@ export function setupWsProxy(server: Server) {
 
     try {
       gatewayWs = new WebSocket(config.gatewayWs, {
-        headers: { Origin: 'https://moltclaw.tail215fa3.ts.net:3080' },
+        headers: { Origin: config.wsOrigin || `https://moltclaw.tail215fa3.ts.net:${config.port}` },
       });
     } catch (err) {
       console.error('[WS] Failed to connect to gateway:', err);
@@ -62,7 +62,8 @@ export function setupWsProxy(server: Server) {
       let msg: any;
       try {
         msg = JSON.parse(raw);
-      } catch {
+      } catch (e) {
+        console.warn('[WS] Failed to parse gateway message:', raw.slice(0, 100));
         return;
       }
 
@@ -115,7 +116,8 @@ export function setupWsProxy(server: Server) {
       let msg: any;
       try {
         msg = JSON.parse(raw);
-      } catch {
+      } catch (e) {
+        console.warn('[WS] Failed to parse client message:', raw.slice(0, 100));
         return;
       }
 
