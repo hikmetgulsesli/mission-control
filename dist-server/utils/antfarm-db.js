@@ -7,6 +7,17 @@ const STUCK_DETECTION_MS = 10 * 60 * 1000; // 10min - show in UI
 const STUCK_THRESHOLD_MS = 15 * 60 * 1000; // 15min - auto-unstick
 const MAX_AUTO_UNSTICK = 3;
 export { STUCK_DETECTION_MS, STUCK_THRESHOLD_MS, MAX_AUTO_UNSTICK };
+// Whitelist validation: IDs must be alphanumeric/dash/underscore (antfarm uses UUIDs and slugs)
+const SAFE_ID_RE = /^[a-zA-Z0-9_-]+$/;
+function validateId(value, name) {
+    if (!value || !SAFE_ID_RE.test(value)) {
+        throw new Error(`Invalid ${name}: must be alphanumeric/dash/underscore`);
+    }
+    return value;
+}
+function escapeStr(value) {
+    return value.replace(/'/g, "''");
+}
 async function sqlite3(sql, json = true) {
     const args = [DB_PATH];
     if (json)
@@ -85,6 +96,7 @@ export async function getStuckRuns(thresholdMs = STUCK_DETECTION_MS) {
  * gateway restarts or cancel+resume operations.
  */
 export async function getLimboRuns() {
+    // No user input — static query
     const rows = await queryAntfarmDb(`
     SELECT
       r.id as run_id,
@@ -106,11 +118,11 @@ export async function getLimboRuns() {
  * Auto-resume a limbo run: set run status to failed, then resume via CLI
  */
 export async function resumeLimboRun(runId) {
-    const safeRunId = runId.replace(/'/g, "''");
-    await execAntfarmDb(`UPDATE runs SET status = 'failed', updated_at = datetime('now') WHERE id = '${safeRunId}';`);
+    const safeId = validateId(runId, 'runId');
+    await execAntfarmDb(`UPDATE runs SET status = 'failed', updated_at = datetime('now') WHERE id = '${safeId}';`);
     await execAntfarmDb('PRAGMA wal_checkpoint(TRUNCATE);');
     try {
-        const result = await antfarmCli(['workflow', 'resume', runId]);
+        const result = await antfarmCli(['workflow', 'resume', safeId]);
         return { success: true, message: result || 'Resumed' };
     }
     catch (err) {
@@ -130,10 +142,10 @@ async function antfarmCli(args) {
     return stdout.trim();
 }
 export async function unstickRun(runId, stepId) {
+    const safeRunId = validateId(runId, 'runId');
     const whereStep = stepId
-        ? `AND s.id = '${stepId.replace(/'/g, "''")}'`
+        ? `AND s.id = '${validateId(stepId, 'stepId')}'`
         : '';
-    const safeRunId = runId.replace(/'/g, "''");
     const stuckSteps = await queryAntfarmDb(`
     SELECT s.id, s.step_id as step_name FROM steps s
     WHERE s.run_id = '${safeRunId}'
@@ -143,7 +155,7 @@ export async function unstickRun(runId, stepId) {
     if (stuckSteps.length === 0) {
         return { success: false, message: 'No stuck steps found', unstuckedSteps: [] };
     }
-    const stepIds = stuckSteps.map((s) => `'${s.id}'`).join(',');
+    const stepIds = stuckSteps.map((s) => `'${validateId(s.id, 'step.id')}'`).join(',');
     // Mark stuck steps as failed
     await execAntfarmDb(`
     UPDATE steps
@@ -160,7 +172,7 @@ export async function unstickRun(runId, stepId) {
     await execAntfarmDb('PRAGMA wal_checkpoint(TRUNCATE);');
     // Resume via antfarm CLI
     try {
-        await antfarmCli(['workflow', 'resume', runId]);
+        await antfarmCli(['workflow', 'resume', safeRunId]);
     }
     catch (err) {
         console.error(`antfarm resume failed for run ${runId}:`, err.message);
@@ -176,11 +188,11 @@ export async function unstickRun(runId, stepId) {
     };
 }
 export async function getRunDetail(runId) {
-    const safeRunId = runId.replace(/'/g, "''");
+    const safeId = validateId(runId, 'runId');
     const [runs, steps, stories] = await Promise.all([
-        queryAntfarmDb(`SELECT * FROM runs WHERE id = '${safeRunId}';`),
-        queryAntfarmDb(`SELECT * FROM steps WHERE run_id = '${safeRunId}' ORDER BY step_index;`),
-        queryAntfarmDb(`SELECT id, run_id, status FROM stories WHERE run_id = '${safeRunId}';`),
+        queryAntfarmDb(`SELECT * FROM runs WHERE id = '${safeId}';`),
+        queryAntfarmDb(`SELECT * FROM steps WHERE run_id = '${safeId}' ORDER BY step_index;`),
+        queryAntfarmDb(`SELECT id, run_id, status FROM stories WHERE run_id = '${safeId}';`),
     ]);
     if (runs.length === 0)
         return null;
@@ -225,8 +237,8 @@ const KNOWN_PATTERNS = [
         suggestedFix: null },
 ];
 export async function diagnoseStuckStep(runId, stepId) {
-    const safeRunId = runId.replace(/'/g, "''");
-    const stepFilter = stepId ? `AND s.id = '${stepId.replace(/'/g, "''")}'` : '';
+    const safeRunId = validateId(runId, 'runId');
+    const stepFilter = stepId ? `AND s.id = '${validateId(stepId, 'stepId')}'` : '';
     // Get step details
     const steps = await queryAntfarmDb(`
     SELECT s.*, r.workflow_id FROM steps s
@@ -342,7 +354,7 @@ export async function tryAutoFix(runId, cause, storyId) {
         },
         rate_limit: async () => {
             if (storyId) {
-                const safeStoryId = storyId.replace(/'/g, "''");
+                const safeStoryId = validateId(storyId, 'storyId');
                 await execAntfarmDb(`
           UPDATE stories SET status = 'done', output = 'SKIPPED: rate limit'
           WHERE id = '${safeStoryId}';
@@ -365,8 +377,8 @@ export async function tryAutoFix(runId, cause, storyId) {
     return result;
 }
 export async function skipStory(runId, storyId, reason) {
-    const safeStoryId = storyId.replace(/'/g, "''");
-    const safeReason = reason.replace(/'/g, "''");
+    const safeStoryId = validateId(storyId, 'storyId');
+    const safeReason = escapeStr(reason).slice(0, 200);
     await execAntfarmDb(`
     UPDATE stories SET status = 'done', output = 'SKIPPED: ${safeReason}'
     WHERE id = '${safeStoryId}';
@@ -378,7 +390,7 @@ export async function skipStory(runId, storyId, reason) {
 // === Pipeline Loop Prevention (v4) ===
 const CLAIM_LOOP_THRESHOLD = 5;
 export async function detectInfiniteLoop(runId) {
-    const safeRunId = runId.replace(/'/g, "''");
+    const safeId = validateId(runId, 'runId');
     const rows = await queryAntfarmDb(`
     SELECT
       s.id as step_id,
@@ -387,7 +399,7 @@ export async function detectInfiniteLoop(runId) {
       COALESCE(s.abandoned_count, 0) as abandoned_count,
       COALESCE(s.retry_count, 0) as retry_count
     FROM steps s
-    WHERE s.run_id = '${safeRunId}'
+    WHERE s.run_id = '${safeId}'
       AND s.status IN ('running', 'pending')
       AND (COALESCE(s.abandoned_count, 0) + COALESCE(s.retry_count, 0)) >= ${CLAIM_LOOP_THRESHOLD}
   `);
@@ -405,7 +417,7 @@ export async function detectInfiniteLoop(runId) {
     };
 }
 export async function checkMissingInput(runId) {
-    const safeRunId = runId.replace(/'/g, "''");
+    const safeId = validateId(runId, 'runId');
     const rows = await queryAntfarmDb(`
     SELECT
       s.id as step_id,
@@ -413,7 +425,7 @@ export async function checkMissingInput(runId) {
       s.input_template,
       s.status
     FROM steps s
-    WHERE s.run_id = '${safeRunId}'
+    WHERE s.run_id = '${safeId}'
       AND s.status IN ('running', 'pending')
   `);
     for (const step of rows) {
@@ -432,17 +444,17 @@ export async function checkMissingInput(runId) {
     return { hasMissing: false };
 }
 export async function failEntireRun(runId, reason) {
-    const safeRunId = runId.replace(/'/g, "''");
-    const safeReason = reason.replace(/'/g, "''");
+    const safeId = validateId(runId, 'runId');
+    const safeReason = escapeStr(reason).slice(0, 500);
     // Fail all non-done steps
     await execAntfarmDb(`
     UPDATE steps SET status = 'failed', output = '${safeReason}', updated_at = datetime('now')
-    WHERE run_id = '${safeRunId}' AND status NOT IN ('done', 'failed');
+    WHERE run_id = '${safeId}' AND status NOT IN ('done', 'failed');
   `);
     // Fail the run itself
     await execAntfarmDb(`
     UPDATE runs SET status = 'failed', updated_at = datetime('now')
-    WHERE id = '${safeRunId}';
+    WHERE id = '${safeId}';
   `);
     // WAL checkpoint
     await execAntfarmDb('PRAGMA wal_checkpoint(TRUNCATE);');

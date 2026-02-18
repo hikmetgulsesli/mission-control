@@ -190,3 +190,48 @@ export interface TaskCreateData {
   status: Task['status'];
   images?: string[];
 }
+
+// Pipeline / Stuck Recovery types
+export interface StuckStep {
+  id: string;
+  name: string;
+  stuckMinutes: number;
+  totalElapsedMinutes?: number;
+  stuckReason?: 'classic' | 'restart-loop' | 'total-elapsed';
+  abandonResets: number;
+}
+
+export interface StuckRun {
+  id: string;
+  workflowId: string;
+  status: string;
+  stuckSteps: StuckStep[];
+}
+
+export interface Diagnosis {
+  stepId?: string;
+  storyId?: string | null;
+  cause: string;
+  fixable: boolean;
+  description: string;
+  excerpt?: string;
+  suggestedFix?: string | null;
+}
+
+export interface AntfarmEvent {
+  id: string;
+  type: string;
+  runId: string;
+  stepId?: string;
+  agentId?: string;
+  timestamp: string;
+  message?: string;
+}
+
+export interface Story {
+  id: string;
+  run_id: string;
+  status: string;
+  title?: string;
+  output?: string;
+}

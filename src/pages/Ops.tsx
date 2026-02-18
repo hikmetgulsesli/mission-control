@@ -1,38 +1,22 @@
 import { useState } from 'react';
 import { usePolling } from '../hooks/usePolling';
+import { useToast } from '../components/Toast';
 import { api } from '../lib/api';
 import { CronTable } from '../components/CronTable';
 import { SystemMetricsPanel } from '../components/SystemMetrics';
 import { GlitchText } from '../components/GlitchText';
-import type { CronJob, SystemMetrics, DockerContainer } from '../lib/types';
-
-
-interface StuckStep {
-  id: string;
-  name: string;
-  stuckMinutes: number;
-  totalElapsedMinutes?: number;
-  stuckReason?: string;
-  abandonResets: number;
-}
-
-interface StuckRun {
-  id: string;
-  workflowId: string;
-  stuckSteps: StuckStep[];
-}
+import type { CronJob, SystemMetrics, DockerContainer, StuckRun, Diagnosis } from '../lib/types';
 
 export function Ops() {
+  const { toast } = useToast();
   const { data: crons, refresh: refreshCrons } = usePolling<CronJob[]>(api.cron, 30000);
   const { data: system } = usePolling<SystemMetrics>(api.system, 15000);
   const { data: docker } = usePolling<DockerContainer[]>(api.docker, 30000);
   const { data: stuckData, refresh: refreshStuck } = usePolling<{ runs: StuckRun[] }>(api.stuckRuns, 30000);
 
-  const [toggleError, setToggleError] = useState<string | null>(null);
-  const [unstickMsg, setUnstickMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [unsticking, setUnsticking] = useState<string | null>(null);
   const [diagnosing, setDiagnosing] = useState<string | null>(null);
-  const [diagnoses, setDiagnoses] = useState<Record<string, any>>({});
+  const [diagnoses, setDiagnoses] = useState<Record<string, Diagnosis>>({});
   const [fixing, setFixing] = useState<string | null>(null);
 
   const handleToggle = async (id: string) => {
@@ -40,26 +24,23 @@ export function Ops() {
       await api.cronToggle(id);
       refreshCrons();
     } catch (err: any) {
-      setToggleError(err.message);
-      setTimeout(() => setToggleError(null), 5000);
+      toast(`Toggle failed: ${err.message}`, 'error');
     }
   };
 
-
   const handleUnstick = async (runId: string, stepId?: string) => {
     setUnsticking(runId);
-    setUnstickMsg(null);
     try {
       const res = await api.unstickRun(runId, stepId);
       if (res.success) {
         const names = res.unstuckedSteps.map((s: any) => s.name).join(', ');
-        setUnstickMsg({ type: 'ok', text: `Unstuck: ${names}` });
+        toast(`Unstuck: ${names}`, 'success');
       } else {
-        setUnstickMsg({ type: 'err', text: res.message || 'No stuck steps found' });
+        toast(res.message || 'No stuck steps found', 'error');
       }
       refreshStuck();
     } catch (err: any) {
-      setUnstickMsg({ type: 'err', text: err.message });
+      toast(err.message, 'error');
     } finally {
       setUnsticking(null);
     }
@@ -82,10 +63,10 @@ export function Ops() {
     setFixing(runId);
     try {
       const result = await api.autofixRun(runId, cause, storyId);
-      setUnstickMsg({ type: result.success ? 'ok' : 'err', text: result.message });
+      toast(result.message, result.success ? 'success' : 'error');
       refreshStuck();
     } catch (err: any) {
-      setUnstickMsg({ type: 'err', text: err.message });
+      toast(err.message, 'error');
     } finally {
       setFixing(null);
     }
@@ -95,10 +76,10 @@ export function Ops() {
     setFixing(runId);
     try {
       const result = await api.skipStory(runId, storyId, reason);
-      setUnstickMsg({ type: result.success ? 'ok' : 'err', text: result.message });
+      toast(result.message, result.success ? 'success' : 'error');
       refreshStuck();
     } catch (err: any) {
-      setUnstickMsg({ type: 'err', text: err.message });
+      toast(err.message, 'error');
     } finally {
       setFixing(null);
     }
@@ -152,7 +133,7 @@ export function Ops() {
                           </button>
                         )}
                         {diag.storyId && !diag.fixable && (
-                          <button className="stuck-banner__btn" style={{ borderColor: '#f80' }} disabled={fixing === run.id} onClick={() => handleSkipStory(run.id, diag.storyId, diag.description)}>
+                          <button className="stuck-banner__btn" style={{ borderColor: '#f80' }} disabled={fixing === run.id} onClick={() => handleSkipStory(run.id, diag.storyId!, diag.description)}>
                             {fixing === run.id ? 'SKIPPING...' : 'SKIP STORY'}
                           </button>
                         )}
@@ -162,11 +143,6 @@ export function Ops() {
                 </div>
               );
             })
-          )}
-          {unstickMsg && (
-            <div className={`stuck-banner__msg stuck-banner__msg--${unstickMsg.type}`}>
-              {unstickMsg.text}
-            </div>
           )}
         </div>
       )}
@@ -193,7 +169,6 @@ export function Ops() {
         </div>
       </div>
 
-      {toggleError && <p style={{ color: '#f44', padding: '0.5rem 1rem' }}>Toggle failed: {toggleError}</p>}
       <h3 className="section-title">CRON JOBS</h3>
       {crons ? <CronTable jobs={crons} onToggle={handleToggle} /> : <div className="panel__empty">Loading crons...</div>}
     </div>

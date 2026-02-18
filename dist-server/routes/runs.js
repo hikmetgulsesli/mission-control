@@ -2,11 +2,12 @@ import { Router } from 'express';
 import { getRuns, getEvents } from '../utils/antfarm.js';
 import { cached } from '../utils/cache.js';
 import { runCli } from '../utils/cli.js';
+import { config } from '../config.js';
 import { getStuckRuns, unstickRun, getRunDetail, diagnoseStuckStep, tryAutoFix, skipStory } from '../utils/antfarm-db.js';
 const router = Router();
 router.get('/runs', async (_req, res) => {
     try {
-        const data = await cached('runs', 15000, getRuns);
+        const data = await cached('runs', 5000, getRuns);
         const active = data.filter((r) => r.status === 'running' || r.status === 'pending');
         res.json(active);
     }
@@ -49,15 +50,17 @@ router.post('/runs/:id/retry', async (req, res) => {
             args.push('--message', message);
         try {
             const out = await runCli('antfarm', args);
-            res.json({ success: true, output: out });
+            console.log(`[RETRY] CLI success: run=${id} step=${step_id || 'all'}`);
+            res.json({ success: true, source: 'cli', output: out });
         }
-        catch {
+        catch (cliErr) {
+            console.warn(`[RETRY] CLI failed: run=${id} err=${cliErr.message}, falling back to API`);
             // Fallback: if antfarm CLI doesn't have retry, try via API
             try {
                 const body = { step_id };
                 if (message)
                     body.message = message;
-                const apiRes = await fetch(`http://127.0.0.1:3333/api/runs/${id}/retry`, {
+                const apiRes = await fetch(`${config.antfarmUrl}/api/runs/${id}/retry`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body),
@@ -66,10 +69,12 @@ router.post('/runs/:id/retry', async (req, res) => {
                 if (!apiRes.ok)
                     throw new Error(`Antfarm API ${apiRes.status}`);
                 const data = await apiRes.json();
-                res.json({ success: true, output: data });
+                console.log(`[RETRY] API fallback success: run=${id}`);
+                res.json({ success: true, source: 'api', output: data });
             }
-            catch (err2) {
-                res.status(500).json({ error: `Retry failed: ${err2.message}` });
+            catch (apiErr) {
+                console.error(`[RETRY] Both CLI and API failed: run=${id} cli=${cliErr.message} api=${apiErr.message}`);
+                res.status(500).json({ error: `Retry failed (CLI: ${cliErr.message}, API: ${apiErr.message})` });
             }
         }
     }
