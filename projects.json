@@ -268,64 +268,6 @@
     "category": "own"
   },
   {
-    "id": "agentviz",
-    "name": "AgentViz",
-    "emoji": "🔮",
-    "status": "completed",
-    "description": "Gerçek zamanlı WebSocket tabanlı ajan aktivite görselleştirme paneli. Hangi ajanın çalıştığını, hangi araçları kullandığını, model geçişlerini ve token kullanımını canlı olarak gösterir.",
-    "ports": {
-      "frontend": 3503
-    },
-    "domain": "agentviz.setrox.com.tr",
-    "repo": "/home/setrox/.openclaw/agent-activity-viz",
-    "stack": [
-      "Node.js",
-      "React",
-      "Vite",
-      "WebSocket",
-      "TypeScript"
-    ],
-    "service": "agentviz.service",
-    "createdBy": "Antfarm Workflow",
-    "workflowRunId": "b2024647",
-    "createdAt": "2026-02-12",
-    "stories": {
-      "total": 15,
-      "done": 15
-    },
-    "pr": "https://github.com/hikmetgulsesli/agent-activity-viz/pull/1",
-    "features": [
-      "Gerçek zamanlı WebSocket veri akışı",
-      "Ajan listesi ve durum kartları",
-      "Aktivite akışı (araç kullanımı stream)",
-      "Token kullanım grafikleri",
-      "Model geçiş paneli",
-      "Entegrasyon testleri"
-    ],
-    "tasks": [
-      "US-001: Proje yapısı (Node.js + TypeScript)",
-      "US-002: WebSocket sunucu + streaming",
-      "US-003: Veri toplayıcı modülü",
-      "US-004: React dashboard shell (dark theme)",
-      "US-005: WebSocket client hook",
-      "US-006: Ajan listesi paneli",
-      "US-007: Aktivite akışı paneli",
-      "US-008: Token kullanım grafikleri",
-      "US-009: Model geçiş paneli",
-      "US-010: Ana dashboard layout",
-      "US-011: Statik dosya sunumu",
-      "US-012: Nginx reverse proxy config",
-      "US-013: Systemd service kurulumu",
-      "US-014: Entegrasyon testleri",
-      "US-015: README dokümantasyonu"
-    ],
-    "prd": "Gerçek zamanlı WebSocket tabanlı dashboard. OpenClaw ajanlarının aktivitelerini canlı olarak stream eder. Hangi ajanın çalıştığını, hangi araçları kullandığını, model geçişlerini ve token kullanımını gerçek zamanlı gösterir. Port 3503, ai.setrox.com.tr/agents-viz altında erişim.",
-    "github": "https://github.com/hikmetgulsesli/agent-activity-viz",
-    "category": "own",
-    "completedAt": "2026-02-12",
-    "duration": "5g"
-  },
-  {
     "id": "clawdocs",
     "name": "ClawDocs",
     "emoji": "📚",
@@ -864,7 +806,7 @@
     "duration": "24s 2dk"
   },
   {
-    "id": "an-expense-tracker",
+    "id": "expense-tracker",
     "name": "Expense Tracker",
     "emoji": "🏗",
     "status": "completed",
@@ -1013,19 +955,19 @@
     "antfarmRunIds": [
       "b76f308c-c0ee-4abd-8f4c-f7f5e98bb33c"
     ],
-    "updatedAt": "2026-02-17T17:56:23.562Z",
+    "updatedAt": "2026-02-18T18:00:09.995Z",
     "completedAt": "2026-02-17 03:15:03"
   },
   {
-    "id": "agentviz-real-time-agent-activity-visualization",
-    "name": "AgentViz — Real-time Agent Activity Visualization",
+    "id": "agentviz",
+    "name": "AgentViz",
     "emoji": "🚀",
     "status": "active",
     "description": "Rebuild AgentViz — Real-time Agent Activity Visualization Dashboard (v2, design rules applied).  IMPORTANT: This is a REBUILD of the existing AgentViz project. The old repo is at /home/setrox/.opencla",
     "ports": {
       "frontend": 3503
     },
-    "domain": "agentviz-real-time-agent-activity-visualization.setrox.com.tr",
+    "domain": "agentviz.setrox.com.tr",
     "repo": "/home/setrox/.openclaw/agent-viz-v2",
     "stack": [
       "React",
@@ -1033,13 +975,13 @@
       "Vite",
       "TypeScript"
     ],
-    "service": "agentviz-real-time-agent-activity-visualization.service",
+    "service": "agentviz.service",
     "serviceStatus": "active",
     "createdBy": "antfarm-workflow",
     "createdAt": "2026-02-17",
     "stories": {
       "total": 16,
-      "done": 12
+      "done": 16
     },
     "features": [],
     "tasks": [],
@@ -1090,7 +1032,532 @@
     "antfarmRunIds": [
       "e271378f-3db6-4e1b-8fca-f77112d74fef"
     ],
-    "updatedAt": "2026-02-17T17:56:23.558Z",
-    "completedAt": "2026-02-17 17:56:21"
+    "updatedAt": "2026-02-18T04:24:41.926Z",
+    "completedAt": "2026-02-17 23:33:06"
+  },
+  {
+    "id": "recipe-book",
+    "name": "Recipe Book",
+    "emoji": "🏗",
+    "status": "active",
+    "description": "Recipe Book - Tarif ekle, malzeme listesi, porsiyon hesap, timer. REPO: /home/setrox/recipe-book. Frontend port: 3516",
+    "ports": {
+      "frontend": 3516
+    },
+    "domain": "recipe-book.setrox.com.tr",
+    "repo": "/home/setrox/recipe-book",
+    "stack": [
+      "React",
+      "Vite",
+      "TypeScript"
+    ],
+    "service": "recipe-book.service",
+    "serviceStatus": "unknown",
+    "createdBy": "antfarm-workflow",
+    "createdAt": "2026-02-17",
+    "stories": {
+      "total": 0,
+      "done": 0
+    },
+    "features": [],
+    "tasks": [],
+    "github": "",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": false
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": false
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": false
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": false
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": false
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": false
+      }
+    ],
+    "antfarmRunIds": [
+      "b8a06a6e-4ed2-4afd-b56f-feb167e686cd"
+    ]
+  },
+  {
+    "id": "markdown-notepad",
+    "name": "Markdown Notepad",
+    "emoji": "🚀",
+    "status": "active",
+    "description": "Markdown Notepad - Live preview, syntax highlight, local storage. REPO: /home/setrox/markdown-notepad. Frontend port: 3515",
+    "ports": {
+      "frontend": 3515
+    },
+    "domain": "markdown.setrox.com.tr",
+    "repo": "/home/setrox/markdown-notepad",
+    "stack": [
+      "React",
+      "Vite",
+      "TypeScript"
+    ],
+    "service": "markdown-notepad.service",
+    "serviceStatus": "active",
+    "createdBy": "antfarm-workflow",
+    "createdAt": "2026-02-17",
+    "stories": {
+      "total": 11,
+      "done": 10
+    },
+    "features": [],
+    "tasks": [],
+    "github": "",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": false
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": false
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": false
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": false
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": false
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": false
+      }
+    ],
+    "antfarmRunIds": [
+      "6aad034b-f7b6-4007-95bc-6fb52a829c5a"
+    ],
+    "updatedAt": "2026-02-18T05:29:10.525Z",
+    "completedAt": "2026-02-18 05:29:03"
+  },
+  {
+    "id": "recipe-book-finish-remaining-stories-us-011-frontend-navi",
+    "name": "Recipe Book - Finish remaining stories US-011 (Frontend Navi",
+    "emoji": "🚀",
+    "status": "active",
+    "description": "Recipe Book - Finish remaining stories US-011 (Frontend Navigation and Layout) and US-012 (Integration API Client and Error Handling). REPO: /home/setrox/recipe-book. Frontend port: 3516. Only impleme",
+    "ports": {
+      "frontend": 3516
+    },
+    "domain": "recipe-book-finish-remaining-stories-us-011-frontend-navi.setrox.com.tr",
+    "repo": "/home/setrox/recipe-book",
+    "stack": [
+      "React",
+      "Express",
+      "Vite",
+      "TypeScript"
+    ],
+    "service": "recipe-book-finish-remaining-stories-us-011-frontend-navi.service",
+    "serviceStatus": "active",
+    "createdBy": "antfarm-workflow",
+    "createdAt": "2026-02-18",
+    "stories": {
+      "total": 10,
+      "done": 0
+    },
+    "features": [],
+    "tasks": [],
+    "github": "",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": false
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": false
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": false
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": false
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": false
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": false
+      }
+    ],
+    "antfarmRunIds": [
+      "16748a44-d9ae-4005-a1d0-0ecb464a7455"
+    ],
+    "updatedAt": "2026-02-18T18:00:02.829Z",
+    "completedAt": "2026-02-18 07:17:47"
+  },
+  {
+    "id": "recipe-book-tarif-ekle-malzeme-listesi-porsiyon-hesap-t",
+    "name": "Recipe Book - Tarif ekle, malzeme listesi, porsiyon hesap, t",
+    "emoji": "🚀",
+    "status": "active",
+    "description": "Recipe Book - Tarif ekle, malzeme listesi, porsiyon hesap, timer. REPO: /home/setrox/recipe-book. Frontend port: 3516",
+    "ports": {
+      "frontend": 3516
+    },
+    "domain": "recipe-book-tarif-ekle-malzeme-listesi-porsiyon-hesap-t.setrox.com.tr",
+    "repo": "/home/setrox/recipe-book",
+    "stack": [
+      "React",
+      "Express",
+      "Vite",
+      "TypeScript"
+    ],
+    "service": "recipe-book-tarif-ekle-malzeme-listesi-porsiyon-hesap-t.service",
+    "serviceStatus": "active",
+    "createdBy": "antfarm-workflow",
+    "createdAt": "2026-02-18",
+    "stories": {
+      "total": 12,
+      "done": 11
+    },
+    "features": [],
+    "tasks": [],
+    "github": "",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": false
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": false
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": false
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": false
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": false
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": false
+      }
+    ],
+    "antfarmRunIds": [
+      "b8a06a6e-4ed2-4afd-b56f-feb167e686cd"
+    ],
+    "updatedAt": "2026-02-18T18:00:05.175Z",
+    "completedAt": "2026-02-18 17:59:43"
+  },
+  {
+    "id": "markdown-notepad-live-preview-syntax-highlight-local-sto",
+    "name": "Markdown Notepad - Live preview, syntax highlight, local sto",
+    "emoji": "🚀",
+    "status": "active",
+    "description": "Markdown Notepad - Live preview, syntax highlight, local storage. REPO: /home/setrox/markdown-notepad. Frontend port: 3515",
+    "ports": {
+      "frontend": 3515
+    },
+    "domain": "markdown-notepad-live-preview-syntax-highlight-local-sto.setrox.com.tr",
+    "repo": "/home/setrox/markdown-notepad",
+    "stack": [
+      "React",
+      "Vite",
+      "TypeScript"
+    ],
+    "service": "markdown-notepad-live-preview-syntax-highlight-local-sto.service",
+    "serviceStatus": "active",
+    "createdBy": "antfarm-workflow",
+    "createdAt": "2026-02-18",
+    "stories": {
+      "total": 11,
+      "done": 10
+    },
+    "features": [],
+    "tasks": [],
+    "github": "",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": false
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": false
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": false
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": false
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": false
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": false
+      }
+    ],
+    "antfarmRunIds": [
+      "6aad034b-f7b6-4007-95bc-6fb52a829c5a"
+    ],
+    "updatedAt": "2026-02-18T18:00:07.489Z",
+    "completedAt": "2026-02-18 05:29:03"
+  },
+  {
+    "id": "agentviz-real-time-agent-activity-visualization",
+    "name": "AgentViz — Real-time Agent Activity Visualization",
+    "emoji": "🚀",
+    "status": "active",
+    "description": "Rebuild AgentViz — Real-time Agent Activity Visualization Dashboard (v2, design rules applied).  IMPORTANT: This is a REBUILD of the existing AgentViz project. The old repo is at /home/setrox/.opencla",
+    "ports": {
+      "frontend": 3503
+    },
+    "domain": "agentviz-real-time-agent-activity-visualization.setrox.com.tr",
+    "repo": "/home/setrox/.openclaw/agent-viz-v2",
+    "stack": [
+      "React",
+      "Express",
+      "Vite",
+      "TypeScript"
+    ],
+    "service": "agentviz-real-time-agent-activity-visualization.service",
+    "serviceStatus": "active",
+    "createdBy": "antfarm-workflow",
+    "createdAt": "2026-02-18",
+    "stories": {
+      "total": 16,
+      "done": 16
+    },
+    "features": [],
+    "tasks": [],
+    "github": "",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": false
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": false
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": false
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": false
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": false
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": false
+      }
+    ],
+    "antfarmRunIds": [
+      "98d34f80-80eb-43e4-8824-8da8d606c767"
+    ],
+    "updatedAt": "2026-02-18T18:00:09.990Z",
+    "completedAt": "2026-02-17 23:33:06"
+  },
+  {
+    "id": "an-expense-tracker",
+    "name": "an Expense Tracker",
+    "emoji": "🔧",
+    "status": "active",
+    "description": "Build an Expense Tracker web application with: Income/expense tracking, category management (Food, Transport, Bills, Entertainment, Shopping, Health, Other), monthly summary with charts. Modern dark U",
+    "ports": {},
+    "domain": "",
+    "repo": "",
+    "stack": [],
+    "service": "",
+    "serviceStatus": "unknown",
+    "createdBy": "antfarm-workflow",
+    "createdAt": "2026-02-18",
+    "stories": {
+      "total": 0,
+      "done": 0
+    },
+    "features": [],
+    "tasks": [],
+    "github": "",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": false
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": false
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": false
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": false
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": false
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": false
+      }
+    ],
+    "antfarmRunIds": [
+      "5a90b2f2-3d3f-4013-8438-f07ea41b3bf9"
+    ]
   }
 ]

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { getRuns, getEvents } from '../utils/antfarm.js';
 import { cached } from '../utils/cache.js';
 import { runCli } from '../utils/cli.js';
-import { getStuckRuns, unstickRun, getRunDetail } from '../utils/antfarm-db.js';
+import { getStuckRuns, unstickRun, getRunDetail, diagnoseStuckStep, tryAutoFix, skipStory } from '../utils/antfarm-db.js';
 
 const router = Router();
 
@@ -96,6 +96,38 @@ router.get('/runs/:id/detail', async (req, res) => {
 router.post('/runs/:id/unstick', async (req, res) => {
   try {
     const result = await unstickRun(req.params.id, req.body?.stepId);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+router.get('/runs/:id/diagnose', async (req, res) => {
+  try {
+    const result = await diagnoseStuckStep(req.params.id, req.query.stepId as string | undefined);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/runs/:id/autofix', async (req, res) => {
+  try {
+    const { cause, storyId } = req.body;
+    if (!cause) { res.status(400).json({ error: 'cause required' }); return; }
+    const result = await tryAutoFix(req.params.id, cause, storyId);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/runs/:id/skip-story', async (req, res) => {
+  try {
+    const { storyId, reason } = req.body;
+    if (!storyId) { res.status(400).json({ error: 'storyId required' }); return; }
+    const result = await skipStory(req.params.id, storyId, reason || 'Manual skip');
     res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: err.message });

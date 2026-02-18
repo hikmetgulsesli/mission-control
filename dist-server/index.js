@@ -6,7 +6,7 @@ import { existsSync } from 'fs';
 import { config } from './config.js';
 import { warmupAll } from './utils/cache.js';
 import { setupWsProxy } from './ws-proxy.js';
-import { getStuckRuns, unstickRun, STUCK_THRESHOLD_MS, MAX_AUTO_UNSTICK } from './utils/antfarm-db.js';
+import { getStuckRuns, unstickRun, diagnoseStuckStep, tryAutoFix, getLimboRuns, resumeLimboRun, detectInfiniteLoop, checkMissingInput, failEntireRun, STUCK_THRESHOLD_MS } from './utils/antfarm-db.js';
 import overviewRouter from './routes/overview.js';
 import agentsRouter from './routes/agents.js';
 import sessionsRouter from './routes/sessions.js';
@@ -96,20 +96,47 @@ server.listen(config.port, '127.0.0.1', () => {
     // Pre-warm cache so first request is instant
     warmupAll().then(() => console.log('Cache pre-warmed')).catch(() => { });
 });
-// Medic cron: auto-unstick steps stuck longer than threshold
+// Medic cron v4: diagnose -> LOOP CHECK -> MISSING CHECK -> auto-fix -> unstick
 const MEDIC_INTERVAL_MS = 5 * 60 * 1000;
 setInterval(async () => {
     try {
         const stuckRuns = await getStuckRuns(STUCK_THRESHOLD_MS);
         for (const run of stuckRuns) {
+            // A) Check for infinite loop (claim count >= 5)
+            const loopCheck = await detectInfiniteLoop(run.id);
+            if (loopCheck.isLooping) {
+                console.warn(`[MEDIC] INFINITE LOOP detected: run=${run.id} step=${loopCheck.stepName} claims=${loopCheck.claimCount}`);
+                await failEntireRun(run.id, `Infinite loop: ${loopCheck.reason}`);
+                continue; // Skip to next run, this one is dead
+            }
+            // B) Check for missing input variables ([missing: X])
+            const missingCheck = await checkMissingInput(run.id);
+            if (missingCheck.hasMissing) {
+                console.warn(`[MEDIC] MISSING INPUT detected: run=${run.id} step=${missingCheck.stepName} var=${missingCheck.missingVar}`);
+                await failEntireRun(run.id, `Missing input: ${missingCheck.reason}`);
+                continue; // Skip to next run
+            }
             for (const step of run.stuckSteps) {
-                if (step.abandonResets >= MAX_AUTO_UNSTICK) {
-                    console.warn(`[MEDIC] Skip auto-unstick: ${run.id} step=${step.name} (resets=${step.abandonResets}/${MAX_AUTO_UNSTICK})`);
-                    continue;
+                // C) Diagnose and auto-fix (existing logic)
+                const diagnosis = await diagnoseStuckStep(run.id, step.id);
+                console.warn(`[MEDIC] Diagnosed: run=${run.id} step=${step.name} cause=${diagnosis.cause} fixable=${diagnosis.fixable} retries=${step.abandonResets}`);
+                if (diagnosis.fixable) {
+                    const fixResult = await tryAutoFix(run.id, diagnosis.cause, diagnosis.storyId);
+                    console.warn(`[MEDIC] Auto-fix ${diagnosis.cause}: ${fixResult.success ? 'OK' : 'FAILED'} - ${fixResult.message}`);
+                    if (fixResult.success)
+                        continue;
                 }
-                console.warn(`[MEDIC] Auto-unstick: run=${run.id} step=${step.name} stuck=${step.stuckMinutes}min`);
+                // D) Unstick and retry
+                console.warn(`[MEDIC] Auto-unstick: run=${run.id} step=${step.name} stuck=${step.stuckMinutes}min retries=${step.abandonResets} cause=${diagnosis.cause}`);
                 await unstickRun(run.id, step.id);
             }
+        }
+        // E) Check for limbo runs: running but no active steps
+        const limboRuns = await getLimboRuns();
+        for (const limbo of limboRuns) {
+            console.warn(`[MEDIC] Limbo run detected: ${limbo.run_id} (${limbo.done_steps} done, ${limbo.failed_steps} failed, 0 running) - auto-resuming from ${limbo.first_failed_step}`);
+            const result = await resumeLimboRun(limbo.run_id);
+            console.warn(`[MEDIC] Limbo resume: ${result.success ? 'OK' : 'FAILED'} - ${result.message}`);
         }
     }
     catch (err) {

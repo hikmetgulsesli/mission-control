@@ -103,4 +103,19 @@ export const api = {
       headers: CT_JSON,
       body: JSON.stringify({ stepId }),
     }),
+  // Smart Stuck Recovery v2
+  diagnoseRun: (id: string, stepId?: string) =>
+    fetchApi<any>(`/api/runs/${id}/diagnose${stepId ? `?stepId=${stepId}` : ""}`),
+  autofixRun: (id: string, cause: string, storyId?: string) =>
+    fetchApi<any>(`/api/runs/${id}/autofix`, {
+      method: "POST",
+      headers: CT_JSON,
+      body: JSON.stringify({ cause, storyId }),
+    }),
+  skipStory: (runId: string, storyId: string, reason: string) =>
+    fetchApi<any>(`/api/runs/${runId}/skip-story`, {
+      method: "POST",
+      headers: CT_JSON,
+      body: JSON.stringify({ storyId, reason }),
+    }),
 };

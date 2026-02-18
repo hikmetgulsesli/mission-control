@@ -11,6 +11,8 @@ interface StuckStep {
   id: string;
   name: string;
   stuckMinutes: number;
+  totalElapsedMinutes?: number;
+  stuckReason?: string;
   abandonResets: number;
 }
 
@@ -29,6 +31,9 @@ export function Ops() {
   const [toggleError, setToggleError] = useState<string | null>(null);
   const [unstickMsg, setUnstickMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [unsticking, setUnsticking] = useState<string | null>(null);
+  const [diagnosing, setDiagnosing] = useState<string | null>(null);
+  const [diagnoses, setDiagnoses] = useState<Record<string, any>>({});
+  const [fixing, setFixing] = useState<string | null>(null);
 
   const handleToggle = async (id: string) => {
     try {
@@ -60,6 +65,45 @@ export function Ops() {
     }
   };
 
+  const handleDiagnose = async (runId: string, stepId: string) => {
+    const key = `${runId}-${stepId}`;
+    setDiagnosing(key);
+    try {
+      const result = await api.diagnoseRun(runId, stepId);
+      setDiagnoses((prev) => ({ ...prev, [key]: result }));
+    } catch (err: any) {
+      setDiagnoses((prev) => ({ ...prev, [key]: { cause: 'error', description: err.message, fixable: false } }));
+    } finally {
+      setDiagnosing(null);
+    }
+  };
+
+  const handleAutoFix = async (runId: string, cause: string, storyId?: string) => {
+    setFixing(runId);
+    try {
+      const result = await api.autofixRun(runId, cause, storyId);
+      setUnstickMsg({ type: result.success ? 'ok' : 'err', text: result.message });
+      refreshStuck();
+    } catch (err: any) {
+      setUnstickMsg({ type: 'err', text: err.message });
+    } finally {
+      setFixing(null);
+    }
+  };
+
+  const handleSkipStory = async (runId: string, storyId: string, reason: string) => {
+    setFixing(runId);
+    try {
+      const result = await api.skipStory(runId, storyId, reason);
+      setUnstickMsg({ type: result.success ? 'ok' : 'err', text: result.message });
+      refreshStuck();
+    } catch (err: any) {
+      setUnstickMsg({ type: 'err', text: err.message });
+    } finally {
+      setFixing(null);
+    }
+  };
+
   const stuckRuns = stuckData?.runs || [];
 
   return (
@@ -70,22 +114,54 @@ export function Ops() {
         <div className="stuck-banner">
           <div className="stuck-banner__title">[!] Stuck Runs Detected</div>
           {stuckRuns.map((run) =>
-            run.stuckSteps.map((step) => (
-              <div key={`${run.id}-${step.id}`} className="stuck-banner__item">
-                <div className="stuck-banner__info">
-                  <span className="stuck-banner__run-id">{run.id.slice(0, 8)}</span>
-                  <span className="stuck-banner__step">step: {step.name}</span>
-                  <span className="stuck-banner__time">{step.stuckMinutes}min</span>
+            run.stuckSteps.map((step) => {
+              const dKey = `${run.id}-${step.id}`;
+              const diag = diagnoses[dKey];
+              return (
+                <div key={dKey} className="stuck-banner__item">
+                  <div className="stuck-banner__info">
+                    <span className="stuck-banner__run-id">{run.id.slice(0, 8)}</span>
+                    <span className="stuck-banner__step">step: {step.name}</span>
+                    <span className="stuck-banner__time">{step.stuckReason === 'restart-loop' ? `loop (${step.abandonResets}x)` : step.stuckReason === 'total-elapsed' ? `${step.totalElapsedMinutes || step.stuckMinutes}min total` : `${step.stuckMinutes}min`}</span>
+                  </div>
+                  <div className="stuck-banner__actions" style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button
+                      className="stuck-banner__btn"
+                      disabled={unsticking === run.id}
+                      onClick={() => handleUnstick(run.id, step.id)}
+                    >
+                      {unsticking === run.id ? 'UNSTICKING...' : 'UNSTICK'}
+                    </button>
+                    <button
+                      className="stuck-banner__btn"
+                      style={{ borderColor: '#0ff' }}
+                      disabled={diagnosing === dKey}
+                      onClick={() => handleDiagnose(run.id, step.id)}
+                    >
+                      {diagnosing === dKey ? 'DIAGNOSING...' : 'DIAGNOSE'}
+                    </button>
+                  </div>
+                  {diag && (
+                    <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', fontSize: '0.85rem' }}>
+                      <div><strong style={{ color: diag.fixable ? '#0f0' : '#f44' }}>{diag.cause}</strong>: {diag.description}</div>
+                      {diag.excerpt && <div style={{ color: '#888', marginTop: '0.25rem', fontFamily: 'monospace', fontSize: '0.75rem' }}>{diag.excerpt}</div>}
+                      <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem' }}>
+                        {diag.fixable && (
+                          <button className="stuck-banner__btn" style={{ borderColor: '#0f0' }} disabled={fixing === run.id} onClick={() => handleAutoFix(run.id, diag.cause, diag.storyId)}>
+                            {fixing === run.id ? 'FIXING...' : 'AUTO-FIX'}
+                          </button>
+                        )}
+                        {diag.storyId && !diag.fixable && (
+                          <button className="stuck-banner__btn" style={{ borderColor: '#f80' }} disabled={fixing === run.id} onClick={() => handleSkipStory(run.id, diag.storyId, diag.description)}>
+                            {fixing === run.id ? 'SKIPPING...' : 'SKIP STORY'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <button
-                  className="stuck-banner__btn"
-                  disabled={unsticking === run.id}
-                  onClick={() => handleUnstick(run.id, step.id)}
-                >
-                  {unsticking === run.id ? 'UNSTICKING...' : 'UNSTICK'}
-                </button>
-              </div>
-            ))
+              );
+            })
           )}
           {unstickMsg && (
             <div className={`stuck-banner__msg stuck-banner__msg--${unstickMsg.type}`}>
