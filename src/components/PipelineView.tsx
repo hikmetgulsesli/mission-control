@@ -2,17 +2,18 @@ import { useState, useEffect } from 'react';
 import { StoryChecklist } from './StoryChecklist';
 import { api } from '../lib/api';
 
-const STEP_ORDER = ['plan', 'setup', 'implement', 'verify', 'test', 'pr', 'review', 'external-review', 'merge'];
+const STEP_ORDER = ['plan', 'setup', 'implement', 'verify', 'final-test'];
 const STEP_LABELS: Record<string, string> = {
   plan: 'PLAN', setup: 'SETUP', implement: 'IMPL',
-  verify: 'VERIFY', test: 'TEST', pr: 'PR', review: 'REVIEW',
+  verify: 'VERIFY', 'final-test': 'TEST & MERGE',
+  test: 'TEST', pr: 'PR', review: 'REVIEW',
   triage: 'TRIAGE', investigate: 'INVEST', fix: 'FIX',
   collect: 'COLLECT', report: 'REPORT',
   'external-review': 'EXT-REV', merge: 'MERGE',
 };
 
 const WORKFLOW_STEPS: Record<string, string[]> = {
-  'feature-dev': ['plan', 'setup', 'implement', 'verify', 'test', 'pr', 'review', 'external-review', 'merge'],
+  'feature-dev': ['plan', 'setup', 'implement', 'verify', 'final-test'],
   'bug-fix': ['triage', 'investigate', 'fix', 'verify', 'test', 'pr', 'review'],
   'security-audit': ['collect', 'plan', 'fix', 'verify', 'test', 'report', 'review'],
 };

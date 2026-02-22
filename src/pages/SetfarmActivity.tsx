@@ -4,16 +4,17 @@ import { api } from '../lib/api';
 import { GlitchText } from '../components/GlitchText';
 import { AgentMiniGrid } from '../components/AgentMiniGrid';
 import { PipelineView } from '../components/PipelineView';
-import { AntfarmFeed } from '../components/AntfarmFeed';
-import { WorkflowAgentStats } from '../components/WorkflowAgentStats';
+import { SetfarmFeed } from '../components/SetfarmFeed';
+import { CompactStatsBar } from '../components/CompactStatsBar';
+import { AgentChatFeed } from '../components/AgentChatFeed';
 import type { Workflow } from '../lib/types';
 
-export function AntfarmActivity() {
+export function SetfarmActivity() {
   const { data: agents } = usePolling(api.agents, 30_000);
-  const { data: pipeline, refresh: refreshPipeline } = usePolling(api.antfarmPipeline, 10_000);
-  const { data: activity } = usePolling(api.antfarmActivity, 10_000);
-  const { data: wfAgents } = usePolling(api.antfarmAgents, 30_000);
-  const { data: alerts } = usePolling(api.antfarmAlerts, 15_000);
+  const { data: pipeline, refresh: refreshPipeline } = usePolling(api.setfarmPipeline, 10_000);
+  const { data: activity } = usePolling(api.setfarmActivity, 10_000);
+  const { data: wfAgents } = usePolling(api.setfarmAgents, 30_000);
+  const { data: alerts } = usePolling(api.setfarmAlerts, 15_000);
   const { data: workflows } = usePolling<Workflow[]>(api.workflows, 30_000);
   const { data: sessions } = usePolling(api.sessions, 30_000);
 
@@ -42,8 +43,11 @@ export function AntfarmActivity() {
   return (
     <div className="af-page">
       <div className="af-page__header">
-        <GlitchText text="ANTFARM" />
-        <div className="af-page__subtitle">Agent Activity &amp; Workflow Pipeline</div>
+        <div className="af-page__header-left">
+          <GlitchText text="SETFARM" />
+          <div className="af-page__subtitle">Agent Activity &amp; Workflow Pipeline</div>
+        </div>
+        <CompactStatsBar alerts={alerts} agents={wfAgents || []} />
       </div>
 
       {/* Top half: Our 10 agents */}
@@ -63,11 +67,11 @@ export function AntfarmActivity() {
         </div>
         <div className="af-bottom__col af-bottom__col--feed">
           <div className="af-section__title">ACTIVITY FEED</div>
-          <AntfarmFeed events={activity || []} />
+          <SetfarmFeed events={activity || []} />
         </div>
         <div className="af-bottom__col af-bottom__col--stats">
-          <div className="af-section__title">STATS &amp; ALERTS</div>
-          <WorkflowAgentStats agents={wfAgents || []} alerts={alerts} />
+          <div className="af-section__title">AGENT OUTPUT</div>
+          <AgentChatFeed />
         </div>
       </section>
 

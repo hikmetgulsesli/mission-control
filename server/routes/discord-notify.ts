@@ -9,7 +9,7 @@ const router = Router();
 
 // ── Channel ID mapping ──
 const CHANNELS = {
-  'antfarm-pipeline': process.env.DISCORD_CH_PIPELINE || '',
+  'setfarm-pipeline': process.env.DISCORD_CH_PIPELINE || '',
   'code-changes': process.env.DISCORD_CH_CODECHANGES || '',
   'agent-activity': process.env.DISCORD_CH_ACTIVITY || '',
   'daily-reports': process.env.DISCORD_CH_REPORTS || '',
@@ -82,13 +82,13 @@ function formatMessage(ev: NotifyEvent): { channel: string; message: string }[] 
 
   switch (ev.event) {
     case 'run.started':
-      return [{ channel: 'antfarm-pipeline', message: `🚀 **${wf} ${num} basladi**${title}` }];
+      return [{ channel: 'setfarm-pipeline', message: `🚀 **${wf} ${num} basladi**${title}` }];
 
     case 'run.completed':
-      return [{ channel: 'antfarm-pipeline', message: `✅ **${wf} ${num} tamamlandi**${dur}${ev.storyCount ? ` — ${ev.storyCount} stories` : ''}` }];
+      return [{ channel: 'setfarm-pipeline', message: `✅ **${wf} ${num} tamamlandi**${dur}${ev.storyCount ? ` — ${ev.storyCount} stories` : ''}` }];
 
     case 'run.failed':
-      return [{ channel: 'antfarm-pipeline', message: `❌ **${wf} ${num} basarisiz** — step: ${ev.stepId || '?'}${ev.retryCount ? `, retry: ${ev.retryCount}` : ''}` }];
+      return [{ channel: 'setfarm-pipeline', message: `❌ **${wf} ${num} basarisiz** — step: ${ev.stepId || '?'}${ev.retryCount ? `, retry: ${ev.retryCount}` : ''}` }];
 
     case 'step.running':
       return [{ channel: 'agent-activity', message: `🔄 \`${wf}_${agent}\` calisiyor — ${ev.stepId || '?'} step` }];
@@ -112,10 +112,10 @@ function formatMessage(ev: NotifyEvent): { channel: string; message: string }[] 
     }
 
     case 'step.failed':
-      return [{ channel: 'antfarm-pipeline', message: `⚠️ Step failed: ${ev.stepId || '?'} — \`${wf}_${agent}\`` }];
+      return [{ channel: 'setfarm-pipeline', message: `⚠️ Step failed: ${ev.stepId || '?'} — \`${wf}_${agent}\`` }];
 
     case 'step.timeout':
-      return [{ channel: 'antfarm-pipeline', message: `⏰ Timeout: ${ev.stepId || '?'} — \`${wf}_${agent}\`` }];
+      return [{ channel: 'setfarm-pipeline', message: `⏰ Timeout: ${ev.stepId || '?'} — \`${wf}_${agent}\`` }];
 
     case 'story.done':
       return [{ channel: 'code-changes', message: `📝 Story done: "${ev.storyTitle || '?'}" — ${detail}` }];

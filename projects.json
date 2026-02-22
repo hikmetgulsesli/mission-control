@@ -439,7 +439,7 @@
     "createdAt": "2026-02-15",
     "stories": {
       "total": 12,
-      "done": 11
+      "done": 12
     },
     "features": [],
     "tasks": [],
@@ -518,7 +518,7 @@
     "createdAt": "2026-02-15",
     "stories": {
       "total": 13,
-      "done": 10
+      "done": 13
     },
     "features": [],
     "tasks": [],
@@ -595,7 +595,7 @@
     "createdAt": "2026-02-15",
     "stories": {
       "total": 30,
-      "done": 0
+      "done": 30
     },
     "features": [],
     "tasks": [],
@@ -748,7 +748,7 @@
     "createdAt": "2026-02-15",
     "stories": {
       "total": 27,
-      "done": 8
+      "done": 27
     },
     "features": [],
     "tasks": [],
@@ -955,7 +955,7 @@
     "antfarmRunIds": [
       "b76f308c-c0ee-4abd-8f4c-f7f5e98bb33c"
     ],
-    "updatedAt": "2026-02-18T18:00:09.995Z",
+    "updatedAt": "2026-02-19T15:57:34.801Z",
     "completedAt": "2026-02-17 03:15:03"
   },
   {
@@ -1032,7 +1032,7 @@
     "antfarmRunIds": [
       "e271378f-3db6-4e1b-8fca-f77112d74fef"
     ],
-    "updatedAt": "2026-02-18T04:24:41.926Z",
+    "updatedAt": "2026-02-19T15:57:34.796Z",
     "completedAt": "2026-02-17 23:33:06"
   },
   {
@@ -1056,8 +1056,8 @@
     "createdBy": "antfarm-workflow",
     "createdAt": "2026-02-17",
     "stories": {
-      "total": 0,
-      "done": 0
+      "total": 12,
+      "done": 12
     },
     "features": [],
     "tasks": [],
@@ -1107,7 +1107,9 @@
     ],
     "antfarmRunIds": [
       "b8a06a6e-4ed2-4afd-b56f-feb167e686cd"
-    ]
+    ],
+    "completedAt": "2026-02-18 17:59:43",
+    "updatedAt": "2026-02-19T15:57:34.786Z"
   },
   {
     "id": "markdown-notepad",
@@ -1131,160 +1133,6 @@
     "createdAt": "2026-02-17",
     "stories": {
       "total": 11,
-      "done": 10
-    },
-    "features": [],
-    "tasks": [],
-    "github": "",
-    "category": "own",
-    "checklist": [
-      {
-        "id": "task-received",
-        "label": "Gorev iletildi",
-        "completed": false
-      },
-      {
-        "id": "github-repo",
-        "label": "GitHub repo olusturuldu",
-        "completed": false
-      },
-      {
-        "id": "dns-setup",
-        "label": "Cloudflare DNS ve subdomain olusturuldu",
-        "completed": false
-      },
-      {
-        "id": "added-to-projects",
-        "label": "Projeler bolumune eklendi",
-        "completed": false
-      },
-      {
-        "id": "ports-assigned",
-        "label": "Portlar belirlendi",
-        "completed": false
-      },
-      {
-        "id": "setup-run",
-        "label": "Setup calistirildi",
-        "completed": false
-      },
-      {
-        "id": "dev-started",
-        "label": "Gelistirici calismaya basladi",
-        "completed": false
-      },
-      {
-        "id": "test-review",
-        "label": "Test ve review tamamlandi",
-        "completed": false
-      }
-    ],
-    "antfarmRunIds": [
-      "6aad034b-f7b6-4007-95bc-6fb52a829c5a"
-    ],
-    "updatedAt": "2026-02-18T05:29:10.525Z",
-    "completedAt": "2026-02-18 05:29:03"
-  },
-  {
-    "id": "recipe-book-finish-remaining-stories-us-011-frontend-navi",
-    "name": "Recipe Book - Finish remaining stories US-011 (Frontend Navi",
-    "emoji": "🚀",
-    "status": "active",
-    "description": "Recipe Book - Finish remaining stories US-011 (Frontend Navigation and Layout) and US-012 (Integration API Client and Error Handling). REPO: /home/setrox/recipe-book. Frontend port: 3516. Only impleme",
-    "ports": {
-      "frontend": 3516
-    },
-    "domain": "recipe-book-finish-remaining-stories-us-011-frontend-navi.setrox.com.tr",
-    "repo": "/home/setrox/recipe-book",
-    "stack": [
-      "React",
-      "Express",
-      "Vite",
-      "TypeScript"
-    ],
-    "service": "recipe-book-finish-remaining-stories-us-011-frontend-navi.service",
-    "serviceStatus": "active",
-    "createdBy": "antfarm-workflow",
-    "createdAt": "2026-02-18",
-    "stories": {
-      "total": 10,
-      "done": 0
-    },
-    "features": [],
-    "tasks": [],
-    "github": "",
-    "category": "own",
-    "checklist": [
-      {
-        "id": "task-received",
-        "label": "Gorev iletildi",
-        "completed": false
-      },
-      {
-        "id": "github-repo",
-        "label": "GitHub repo olusturuldu",
-        "completed": false
-      },
-      {
-        "id": "dns-setup",
-        "label": "Cloudflare DNS ve subdomain olusturuldu",
-        "completed": false
-      },
-      {
-        "id": "added-to-projects",
-        "label": "Projeler bolumune eklendi",
-        "completed": false
-      },
-      {
-        "id": "ports-assigned",
-        "label": "Portlar belirlendi",
-        "completed": false
-      },
-      {
-        "id": "setup-run",
-        "label": "Setup calistirildi",
-        "completed": false
-      },
-      {
-        "id": "dev-started",
-        "label": "Gelistirici calismaya basladi",
-        "completed": false
-      },
-      {
-        "id": "test-review",
-        "label": "Test ve review tamamlandi",
-        "completed": false
-      }
-    ],
-    "antfarmRunIds": [
-      "16748a44-d9ae-4005-a1d0-0ecb464a7455"
-    ],
-    "updatedAt": "2026-02-18T18:00:02.829Z",
-    "completedAt": "2026-02-18 07:17:47"
-  },
-  {
-    "id": "recipe-book-tarif-ekle-malzeme-listesi-porsiyon-hesap-t",
-    "name": "Recipe Book - Tarif ekle, malzeme listesi, porsiyon hesap, t",
-    "emoji": "🚀",
-    "status": "active",
-    "description": "Recipe Book - Tarif ekle, malzeme listesi, porsiyon hesap, timer. REPO: /home/setrox/recipe-book. Frontend port: 3516",
-    "ports": {
-      "frontend": 3516
-    },
-    "domain": "recipe-book-tarif-ekle-malzeme-listesi-porsiyon-hesap-t.setrox.com.tr",
-    "repo": "/home/setrox/recipe-book",
-    "stack": [
-      "React",
-      "Express",
-      "Vite",
-      "TypeScript"
-    ],
-    "service": "recipe-book-tarif-ekle-malzeme-listesi-porsiyon-hesap-t.service",
-    "serviceStatus": "active",
-    "createdBy": "antfarm-workflow",
-    "createdAt": "2026-02-18",
-    "stories": {
-      "total": 12,
       "done": 11
     },
     "features": [],
@@ -1334,111 +1182,35 @@
       }
     ],
     "antfarmRunIds": [
-      "b8a06a6e-4ed2-4afd-b56f-feb167e686cd"
-    ],
-    "updatedAt": "2026-02-18T18:00:05.175Z",
-    "completedAt": "2026-02-18 17:59:43"
-  },
-  {
-    "id": "markdown-notepad-live-preview-syntax-highlight-local-sto",
-    "name": "Markdown Notepad - Live preview, syntax highlight, local sto",
-    "emoji": "🚀",
-    "status": "active",
-    "description": "Markdown Notepad - Live preview, syntax highlight, local storage. REPO: /home/setrox/markdown-notepad. Frontend port: 3515",
-    "ports": {
-      "frontend": 3515
-    },
-    "domain": "markdown-notepad-live-preview-syntax-highlight-local-sto.setrox.com.tr",
-    "repo": "/home/setrox/markdown-notepad",
-    "stack": [
-      "React",
-      "Vite",
-      "TypeScript"
-    ],
-    "service": "markdown-notepad-live-preview-syntax-highlight-local-sto.service",
-    "serviceStatus": "active",
-    "createdBy": "antfarm-workflow",
-    "createdAt": "2026-02-18",
-    "stories": {
-      "total": 11,
-      "done": 10
-    },
-    "features": [],
-    "tasks": [],
-    "github": "",
-    "category": "own",
-    "checklist": [
-      {
-        "id": "task-received",
-        "label": "Gorev iletildi",
-        "completed": false
-      },
-      {
-        "id": "github-repo",
-        "label": "GitHub repo olusturuldu",
-        "completed": false
-      },
-      {
-        "id": "dns-setup",
-        "label": "Cloudflare DNS ve subdomain olusturuldu",
-        "completed": false
-      },
-      {
-        "id": "added-to-projects",
-        "label": "Projeler bolumune eklendi",
-        "completed": false
-      },
-      {
-        "id": "ports-assigned",
-        "label": "Portlar belirlendi",
-        "completed": false
-      },
-      {
-        "id": "setup-run",
-        "label": "Setup calistirildi",
-        "completed": false
-      },
-      {
-        "id": "dev-started",
-        "label": "Gelistirici calismaya basladi",
-        "completed": false
-      },
-      {
-        "id": "test-review",
-        "label": "Test ve review tamamlandi",
-        "completed": false
-      }
-    ],
-    "antfarmRunIds": [
       "6aad034b-f7b6-4007-95bc-6fb52a829c5a"
     ],
-    "updatedAt": "2026-02-18T18:00:07.489Z",
+    "updatedAt": "2026-02-19T15:57:34.789Z",
     "completedAt": "2026-02-18 05:29:03"
   },
   {
-    "id": "agentviz-real-time-agent-activity-visualization",
-    "name": "AgentViz — Real-time Agent Activity Visualization",
+    "id": "hizliokuma",
+    "name": "Hizli Okuma",
     "emoji": "🚀",
     "status": "active",
-    "description": "Rebuild AgentViz — Real-time Agent Activity Visualization Dashboard (v2, design rules applied).  IMPORTANT: This is a REBUILD of the existing AgentViz project. The old repo is at /home/setrox/.opencla",
+    "description": "HIZLI OKUMA UYGULAMASI - React Admin Panel  REPO: /home/setrox/hizliokuma",
     "ports": {
-      "frontend": 3503
+      "frontend": 3517
     },
-    "domain": "agentviz-real-time-agent-activity-visualization.setrox.com.tr",
-    "repo": "/home/setrox/.openclaw/agent-viz-v2",
+    "domain": "hizliokuma.setrox.com.tr",
+    "repo": "/home/setrox/hizliokuma",
     "stack": [
       "React",
-      "Express",
-      "Vite",
-      "TypeScript"
+      "Next.js",
+      "TypeScript",
+      "Tailwind CSS"
     ],
-    "service": "agentviz-real-time-agent-activity-visualization.service",
+    "service": "hizliokuma.service",
     "serviceStatus": "active",
     "createdBy": "antfarm-workflow",
-    "createdAt": "2026-02-18",
+    "createdAt": "2026-02-19",
     "stories": {
-      "total": 16,
-      "done": 16
+      "total": 5,
+      "done": 5
     },
     "features": [],
     "tasks": [],
@@ -1487,25 +1259,33 @@
       }
     ],
     "antfarmRunIds": [
-      "98d34f80-80eb-43e4-8824-8da8d606c767"
+      "1967cd0a-08de-4380-ae60-cf3e2cd27216",
+      "f66686d3-8990-4475-8e4c-9146a9853cc6"
     ],
-    "updatedAt": "2026-02-18T18:00:09.990Z",
-    "completedAt": "2026-02-17 23:33:06"
+    "updatedAt": "2026-02-21T00:31:49.782Z",
+    "completedAt": "2026-02-19 17:51:26"
   },
   {
-    "id": "an-expense-tracker",
-    "name": "an Expense Tracker",
-    "emoji": "🔧",
+    "id": "task-queue",
+    "name": "Task Queue",
+    "emoji": "🚀",
     "status": "active",
-    "description": "Build an Expense Tracker web application with: Income/expense tracking, category management (Food, Transport, Bills, Entertainment, Shopping, Health, Other), monthly summary with charts. Modern dark U",
-    "ports": {},
-    "domain": "",
-    "repo": "",
-    "stack": [],
-    "service": "",
-    "serviceStatus": "unknown",
+    "description": "GOREV KUYRUGU (Agent Task Queue) — OpenClaw agent gorevlerini yonetmek icin web dashboard. Repo: /home/setrox/task-queue | Port: 3518 | Domain: task-queue.setrox.com.tr | Stack: Next.js 14 + Tailwind ",
+    "ports": {
+      "frontend": 3518
+    },
+    "domain": "task-queue.setrox.com.tr",
+    "repo": "/home/setrox/task-queue",
+    "stack": [
+      "React",
+      "Next.js",
+      "TypeScript",
+      "Tailwind CSS"
+    ],
+    "service": "task-queue.service",
+    "serviceStatus": "active",
     "createdBy": "antfarm-workflow",
-    "createdAt": "2026-02-18",
+    "createdAt": "2026-02-19",
     "stories": {
       "total": 0,
       "done": 0
@@ -1557,7 +1337,165 @@
       }
     ],
     "antfarmRunIds": [
-      "5a90b2f2-3d3f-4013-8438-f07ea41b3bf9"
-    ]
+      "d05ac578-cbcc-48eb-973c-2da2bc7fd742"
+    ],
+    "updatedAt": "2026-02-19T22:19:54.322Z"
+  },
+  {
+    "id": "autopress",
+    "name": "autopress",
+    "emoji": "🚀",
+    "status": "active",
+    "description": "AutoPress Story 6: UX UI Iyilestirmeler — REPO: /home/setrox/autopress BRANCH: main TASK-FILE: /tmp/story6-task.md",
+    "ports": {
+      "frontend": 4519
+    },
+    "domain": "autopress.setrox.com.tr",
+    "repo": "/home/setrox/autopress",
+    "stack": [
+      "React",
+      "Vite",
+      "TypeScript",
+      "Express",
+      "Tailwind CSS"
+    ],
+    "service": "autopress.service",
+    "serviceStatus": "active",
+    "createdBy": "antfarm-workflow",
+    "createdAt": "2026-02-20",
+    "stories": {
+      "total": 18,
+      "done": 18
+    },
+    "features": [],
+    "tasks": [],
+    "github": "",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": false
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": false
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": false
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": false
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": false
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": false
+      }
+    ],
+    "antfarmRunIds": [
+      "c7e4e5dc-8898-4b32-ab35-9cf9ab8af24e"
+    ],
+    "updatedAt": "2026-02-22T12:24:39.650Z",
+    "completedAt": "2026-02-20 13:51:59",
+    "setfarmRunIds": []
+  },
+  {
+    "id": "ivf-asistan",
+    "name": "ivf-asistan",
+    "emoji": "🚀",
+    "status": "active",
+    "description": "--repo /home/setrox/ivf-asistan --branch main --task-file /tmp/ivf-asistan-prd.md",
+    "ports": {
+      "backend": 4520,
+      "frontend": 3520
+    },
+    "domain": "ivf-asistan.setrox.com.tr",
+    "repo": "/home/setrox/ivf-asistan",
+    "stack": [
+      "Express",
+      "TypeScript",
+      "PostgreSQL",
+      "React"
+    ],
+    "service": "ivf-asistan.service + ivf-asistan-frontend.service",
+    "serviceStatus": "active",
+    "createdBy": "setfarm-workflow",
+    "createdAt": "2026-02-21",
+    "stories": {
+      "total": 12,
+      "done": 12
+    },
+    "features": [],
+    "tasks": [],
+    "github": "",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": false
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": false
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": false
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": false
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": false
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": false
+      }
+    ],
+    "setfarmRunIds": [
+      "f9d0776f-8776-4d86-bb18-f7d38bec03cb"
+    ],
+    "updatedAt": "2026-02-22T12:24:39.610Z",
+    "completedAt": "2026-02-22 10:39:10"
   }
 ]

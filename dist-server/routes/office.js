@@ -2,10 +2,10 @@ import { Router } from 'express';
 import { existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { cached } from '../utils/cache.js';
-import { getRuns } from '../utils/antfarm.js';
+import { getRuns } from '../utils/setfarm.js';
 const router = Router();
-// Antfarm step agent → named agent mapping
-// Lives here so antfarm updates don't break it
+// Setfarm step agent → named agent mapping
+// Lives here so setfarm updates don't break it
 const STEP_MAPPING = {
     'feature-dev': {
         plan: ['defne'],
@@ -64,7 +64,7 @@ async function getOfficeStatus() {
     const working = new Map();
     // Arya always working (CEO)
     working.set('main', 'CEO orchestration');
-    // Source 1: Antfarm pipeline step mapping
+    // Source 1: Setfarm pipeline step mapping
     try {
         const runs = (await getRuns());
         const activeRuns = runs.filter((r) => r.status === 'running');
@@ -95,12 +95,12 @@ async function getOfficeStatus() {
         }
     }
     catch {
-        // If antfarm is down, only Arya shows as working
+        // If setfarm is down, only Arya shows as working
     }
     // Source 2: Session file activity (catches direct interactions via Discord/WhatsApp/Telegram)
     for (const agentId of allAgents) {
         if (working.has(agentId))
-            continue; // Already marked working by antfarm
+            continue; // Already marked working by setfarm
         const sessionActivity = getSessionActivity(agentId);
         if (sessionActivity) {
             working.set(agentId, sessionActivity);

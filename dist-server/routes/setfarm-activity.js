@@ -5,13 +5,14 @@ import { execSync } from 'child_process';
 import { cached } from '../utils/cache.js';
 import { readFileSync as readSync, writeFileSync as writeSync, renameSync } from 'fs';
 import { createProjectProgrammatic, updateProjectById } from './projects.js';
-import { getRuns, getRunStories, getAntfarmActivity, getAntfarmAgentStats, getAntfarmAlerts } from '../utils/antfarm.js';
+import { getRuns, getRunStories, getSetfarmActivity, getSetfarmAgentStats, getSetfarmAlerts } from '../utils/setfarm.js';
+import { ensureAgentFeedTable, insertFeedEntry, getAgentFeed, pruneAgentFeed } from "../utils/setfarm-db.js";
 const router = Router();
 // Recent activity events (last 50, reverse chronological)
-router.get('/antfarm/activity', async (_req, res) => {
+router.get('/setfarm/activity', async (_req, res) => {
     try {
         const limit = Math.min(parseInt(_req.query.limit) || 50, 200);
-        const data = await cached(`af-activity-${limit}`, 10_000, () => getAntfarmActivity(limit));
+        const data = await cached(`af-activity-${limit}`, 10_000, () => getSetfarmActivity(limit));
         res.json(data);
     }
     catch (err) {
@@ -19,9 +20,9 @@ router.get('/antfarm/activity', async (_req, res) => {
     }
 });
 // Workflow agent statistics
-router.get('/antfarm/agents', async (_req, res) => {
+router.get('/setfarm/agents', async (_req, res) => {
     try {
-        const data = await cached('af-agents', 30_000, getAntfarmAgentStats);
+        const data = await cached('af-agents', 30_000, getSetfarmAgentStats);
         res.json(data);
     }
     catch (err) {
@@ -29,9 +30,9 @@ router.get('/antfarm/agents', async (_req, res) => {
     }
 });
 // Alerts: timeout + failed + abandoned
-router.get('/antfarm/alerts', async (_req, res) => {
+router.get('/setfarm/alerts', async (_req, res) => {
     try {
-        const data = await cached('af-alerts', 15_000, getAntfarmAlerts);
+        const data = await cached('af-alerts', 15_000, getSetfarmAlerts);
         res.json(data);
     }
     catch (err) {
@@ -39,13 +40,13 @@ router.get('/antfarm/alerts', async (_req, res) => {
     }
 });
 // Active run pipeline state
-router.get('/antfarm/pipeline', async (_req, res) => {
+router.get('/setfarm/pipeline', async (_req, res) => {
     try {
         const data = await cached('af-pipeline', 10_000, async () => {
             const allRuns = (await getRuns());
             const running = allRuns.filter((r) => r.status === 'running');
             const recent = allRuns
-                .filter((r) => r.status !== 'running')
+                .filter((r) => r.status !== 'running' && r.workflow !== 'daily-standup')
                 .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
                 .slice(0, 3);
             // Auto-sync: check for newly finished runs (completed, failed, cancelled)
@@ -101,8 +102,8 @@ router.get('/antfarm/pipeline', async (_req, res) => {
         res.status(500).json({ error: err.message || 'Pipeline fetch failed' });
     }
 });
-// GET /antfarm/runs/:id/stories — Stories for a specific run
-router.get('/antfarm/runs/:id/stories', async (req, res) => {
+// GET /setfarm/runs/:id/stories — Stories for a specific run
+router.get('/setfarm/runs/:id/stories', async (req, res) => {
     try {
         const stories = await getRunStories(req.params.id);
         res.json(stories || []);
@@ -111,8 +112,8 @@ router.get('/antfarm/runs/:id/stories', async (req, res) => {
         res.status(500).json({ error: err.message || 'Stories fetch failed' });
     }
 });
-// GET /antfarm/runs/:id/plan — PRD/Plan document for a run
-router.get('/antfarm/runs/:id/plan', async (req, res) => {
+// GET /setfarm/runs/:id/plan — PRD/Plan document for a run
+router.get('/setfarm/runs/:id/plan', async (req, res) => {
     try {
         const allRuns = (await getRuns());
         const run = allRuns.find((r) => r.id === req.params.id);
@@ -155,7 +156,7 @@ router.get('/antfarm/runs/:id/plan', async (req, res) => {
     }
 });
 // Track last seen completed run IDs for auto-sync — persisted to disk
-const MC_SYNC_STATE_PATH = join('/home/setrox/.openclaw/antfarm', 'mc-sync-state.json');
+const MC_SYNC_STATE_PATH = join('/home/setrox/.openclaw/setfarm', 'mc-sync-state.json');
 function loadSyncState() {
     try {
         const data = JSON.parse(readSync(MC_SYNC_STATE_PATH, 'utf-8'));
@@ -189,6 +190,7 @@ const _initialState = loadSyncState();
 let lastSeenFinishedIds = _initialState.finished;
 let lastSeenRunningIds = _initialState.running;
 async function createBuildingProject(run) {
+    // Skip non-feature workflows — these are operational, not projects  const skipWorkflows = ["daily-standup", "security-audit"];  if (skipWorkflows.includes(run.workflow_id)) return;
     if (!run.task)
         return;
     const name = extractProjectName(run.task);
@@ -200,6 +202,17 @@ async function createBuildingProject(run) {
         repo = ctx?.repo || '';
     }
     catch { }
+    // Fallback: extract repo from task string when context is empty
+    if (!repo) {
+        const flagMatch = run.task.match(/--repo\s+(\/\S+)/i);
+        if (flagMatch)
+            repo = flagMatch[1].replace(/\/+$/, '');
+        else {
+            const labelMatch = run.task.match(/REPO:\s*(\/\S+)/i);
+            if (labelMatch)
+                repo = labelMatch[1].replace(/\/+$/, '');
+        }
+    }
     // Get next available port
     let port = null;
     try {
@@ -214,8 +227,8 @@ async function createBuildingProject(run) {
         repo,
         stack,
         emoji: '🏗',
-        createdBy: 'antfarm-workflow',
-        antfarmRunId: run.id,
+        createdBy: 'setfarm-workflow',
+        setfarmRunId: run.id,
         task: run.task.split('\n').slice(0, 3).join(' ').slice(0, 200),
         status: 'building',
         port: port || undefined,
@@ -658,7 +671,7 @@ function autoDeployProject(projectId, projectName, repo, task) {
             catch { }
             // Send Discord notification about failed deploy
             try {
-                const payload = JSON.stringify({ channel: 'antfarm-pipeline',
+                const payload = JSON.stringify({ channel: 'setfarm-pipeline',
                     message: 'Auto-deploy FAILED: ' + projectName + ' (port ' + port + ') - healthcheck failed, service rolled back' });
                 writeFileSync('/tmp/deploy-notify.json', payload);
                 execSync("curl -s -X POST http://127.0.0.1:3080/api/discord-notify -H 'Content-Type: application/json' -d @/tmp/deploy-notify.json", { timeout: 10000 });
@@ -695,10 +708,12 @@ function autoDeployProject(projectId, projectName, repo, task) {
 async function syncProjectsFromRuns() {
     const allRuns = (await getRuns());
     // Deploy completed runs AND failed/cancelled runs that have a built dist
+    // Skip non-feature workflows — operational runs should not create projects
+    const skipWorkflows = new Set(["daily-standup", "security-audit"]);
     const deployable = allRuns.filter((r) => {
         if (r.status === 'completed')
-            return true;
-        if (r.status === 'failed' || r.status === 'cancelled') {
+            return !skipWorkflows.has(r.workflow_id);
+        if ((r.status === 'failed' || r.status === 'cancelled') && !skipWorkflows.has(r.workflow_id)) {
             try {
                 const ctx = typeof r.context === 'string' ? JSON.parse(r.context) : r.context;
                 const repo = ctx?.repo || '';
@@ -727,14 +742,25 @@ async function syncProjectsFromRuns() {
             repo = ctx?.repo || '';
         }
         catch { }
+        // Fallback: extract repo from task string when context is empty
+        if (!repo) {
+            const flagMatch = run.task.match(/--repo\s+(\/\S+)/i);
+            if (flagMatch)
+                repo = flagMatch[1].replace(/\/+$/, '');
+            else {
+                const labelMatch = run.task.match(/REPO:\s*(\/\S+)/i);
+                if (labelMatch)
+                    repo = labelMatch[1].replace(/\/+$/, '');
+            }
+        }
         const stack = repo ? detectStack(repo) : [];
         const result = createProjectProgrammatic({
             name,
             repo,
             stack,
             emoji: '\u{1F527}',
-            createdBy: 'antfarm-workflow',
-            antfarmRunId: run.id,
+            createdBy: 'setfarm-workflow',
+            setfarmRunId: run.id,
             task: run.task.split('\n').slice(0, 3).join(' ').slice(0, 200),
         });
         const needsDeploy = result.created || (result.reason === 'exists' && !result.project?.service);
@@ -818,14 +844,86 @@ async function syncProjectsFromRuns() {
     }
     return { synced, skipped };
 }
-// POST /antfarm/sync-projects - manual trigger
-router.post('/antfarm/sync-projects', async (_req, res) => {
+// POST /setfarm/sync-projects - manual trigger
+router.post('/setfarm/sync-projects', async (_req, res) => {
     try {
         const result = await syncProjectsFromRuns();
         res.json(result);
     }
     catch (err) {
         res.status(500).json({ error: err.message || 'Sync failed' });
+    }
+});
+// Agent Feed: persistent chat-style agent output log
+router.get("/setfarm/agent-feed", async (req, res) => {
+    try {
+        await ensureAgentFeedTable();
+        const limit = Math.min(parseInt(req.query.limit) || 100, 500);
+        const data = await cached("af-agent-feed", 10_000, async () => {
+            // Scan agent sessions for new messages
+            const { existsSync, readdirSync, readFileSync, statSync } = await import("fs");
+            const { join } = await import("path");
+            const agentsDir = "/home/setrox/.openclaw/agents";
+            if (existsSync(agentsDir)) {
+                const agentDirs = readdirSync(agentsDir).filter((d) => {
+                    try {
+                        return statSync(join(agentsDir, d)).isDirectory();
+                    }
+                    catch {
+                        return false;
+                    }
+                });
+                for (const agentId of agentDirs) {
+                    const sessionsDir = join(agentsDir, agentId, "sessions");
+                    if (!existsSync(sessionsDir))
+                        continue;
+                    const files = readdirSync(sessionsDir)
+                        .filter((f) => f.endsWith(".jsonl"))
+                        .map((f) => ({
+                        name: f,
+                        path: join(sessionsDir, f),
+                        mtime: statSync(join(sessionsDir, f)).mtimeMs,
+                    }))
+                        .sort((a, b) => b.mtime - a.mtime);
+                    if (files.length === 0)
+                        continue;
+                    const latest = files[0];
+                    const sessionId = latest.name.replace(".jsonl", "");
+                    try {
+                        const raw = readFileSync(latest.path, "utf-8");
+                        const lines = raw.trim().split("\n");
+                        const tail = lines.slice(-60);
+                        for (const line of tail) {
+                            try {
+                                const entry = JSON.parse(line);
+                                const msg = entry.message || entry;
+                                if (msg.role !== "assistant")
+                                    continue;
+                                const contentArr = Array.isArray(msg.content) ? msg.content : [];
+                                const textParts = contentArr.filter((c) => c.type === "text").map((c) => c.text || "");
+                                const text = textParts.join(" ").trim();
+                                if (!text || text.length < 5)
+                                    continue;
+                                if (/HEARTBEAT|\[idle\]|polling|no.?tasks?/i.test(text))
+                                    continue;
+                                const truncated = text.length > 200 ? text.slice(0, 200) + "..." : text;
+                                await insertFeedEntry(agentId, agentId, truncated, sessionId);
+                            }
+                            catch { }
+                        }
+                    }
+                    catch { }
+                }
+            }
+            // Prune old entries periodically (1 in 20 chance)
+            if (Math.random() < 0.05)
+                pruneAgentFeed(5000).catch(() => { });
+            return getAgentFeed(limit);
+        });
+        res.json(data);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message || "Agent feed failed" });
     }
 });
 export default router;

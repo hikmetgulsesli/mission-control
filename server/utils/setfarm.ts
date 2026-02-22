@@ -1,37 +1,37 @@
 import { config } from '../config.js';
 import { readFile } from "fs/promises";
 
-const BASE = config.antfarmUrl;
+const BASE = config.setfarmUrl;
 
-async function antfarmFetch<T = unknown>(path: string): Promise<T> {
+async function setfarmFetch<T = unknown>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { signal: AbortSignal.timeout(5000) });
-  if (!res.ok) throw new Error(`Antfarm ${res.status}: ${path}`);
+  if (!res.ok) throw new Error(`Setfarm ${res.status}: ${path}`);
   return res.json() as Promise<T>;
 }
 
 export async function getWorkflows() {
-  return antfarmFetch('/api/workflows');
+  return setfarmFetch('/api/workflows');
 }
 
 export async function getRuns() {
-  return antfarmFetch('/api/runs');
+  return setfarmFetch('/api/runs');
 }
 
 export async function getStories() {
-  return antfarmFetch('/api/stories');
+  return setfarmFetch('/api/stories');
 }
 export async function getRunStories(runId: string) {
-  return antfarmFetch<any[]>('/api/runs/' + runId + '/stories');
+  return setfarmFetch<any[]>('/api/runs/' + runId + '/stories');
 }
 
 export async function getEvents(runId?: string) {
   const path = runId ? `/api/events?runId=${runId}` : '/api/events';
-  return antfarmFetch(path);
+  return setfarmFetch(path);
 }
 
-// --- Antfarm Activity Panel functions ---
+// --- Setfarm Activity Panel functions ---
 
-interface AntfarmEvent {
+interface SetfarmEvent {
   ts: string;
   event: string;
   runId?: string;
@@ -43,15 +43,15 @@ interface AntfarmEvent {
   detail?: string;
 }
 
-const EVENTS_PATH = '/home/setrox/.openclaw/antfarm/events.jsonl';
+const EVENTS_PATH = '/home/setrox/.openclaw/setfarm/events.jsonl';
 
-function parseEventsFile(content: string): AntfarmEvent[] {
+function parseEventsFile(content: string): SetfarmEvent[] {
   return content.trim().split('\n').filter(Boolean).map(line => {
     try { return JSON.parse(line); } catch { return null; }
-  }).filter(Boolean) as AntfarmEvent[];
+  }).filter(Boolean) as SetfarmEvent[];
 }
 
-export async function getAntfarmActivity(limit = 50): Promise<AntfarmEvent[]> {
+export async function getSetfarmActivity(limit = 50): Promise<SetfarmEvent[]> {
   try {
     const content = await readFile(EVENTS_PATH, 'utf-8');
     const events = parseEventsFile(content);
@@ -61,7 +61,7 @@ export async function getAntfarmActivity(limit = 50): Promise<AntfarmEvent[]> {
   }
 }
 
-export async function getAntfarmAgentStats() {
+export async function getSetfarmAgentStats() {
   try {
     const content = await readFile(EVENTS_PATH, 'utf-8');
     const events = parseEventsFile(content);
@@ -122,7 +122,7 @@ export async function getAntfarmAgentStats() {
   }
 }
 
-export async function getAntfarmAlerts() {
+export async function getSetfarmAlerts() {
   try {
     const content = await readFile(EVENTS_PATH, 'utf-8');
     const events = parseEventsFile(content);

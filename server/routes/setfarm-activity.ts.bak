@@ -1,0 +1,807 @@
+import { Router } from 'express';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { join } from 'path';
+import { execSync } from 'child_process';
+import { cached } from '../utils/cache.js';
+import { readFileSync as readSync, writeFileSync as writeSync, renameSync } from 'fs';
+import { tmpdir } from 'os';
+import { createProjectProgrammatic, updateProjectById } from './projects.js';
+import { getRuns, getRunStories, getSetfarmActivity, getSetfarmAgentStats, getSetfarmAlerts, getStories } from '../utils/setfarm.js';
+
+const router = Router();
+
+// Recent activity events (last 50, reverse chronological)
+router.get('/setfarm/activity', async (_req, res) => {
+  try {
+    const limit = Math.min(parseInt(_req.query.limit as string) || 50, 200);
+    const data = await cached(`af-activity-${limit}`, 10_000, () => getSetfarmActivity(limit));
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Activity fetch failed' });
+  }
+});
+
+// Workflow agent statistics
+router.get('/setfarm/agents', async (_req, res) => {
+  try {
+    const data = await cached('af-agents', 30_000, getSetfarmAgentStats);
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Agent stats failed' });
+  }
+});
+
+// Alerts: timeout + failed + abandoned
+router.get('/setfarm/alerts', async (_req, res) => {
+  try {
+    const data = await cached('af-alerts', 15_000, getSetfarmAlerts);
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Alerts fetch failed' });
+  }
+});
+
+// Active run pipeline state
+router.get('/setfarm/pipeline', async (_req, res) => {
+  try {
+    const data = await cached('af-pipeline', 10_000, async () => {
+      const allRuns = (await getRuns()) as any[];
+      const running = allRuns.filter((r: any) => r.status === 'running');
+      const recent = allRuns
+        .filter((r: any) => r.status !== 'running')
+        .sort((a: any, b: any) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+        .slice(0, 3);
+      // Auto-sync: check for newly finished runs (completed, failed, cancelled)
+      const finishedIds = new Set(allRuns.filter((r: any) => r.status !== 'running' && r.status !== 'pending').map((r: any) => r.id));
+      const newlyFinished = [...finishedIds].filter(id => !lastSeenFinishedIds.has(id));
+      if (newlyFinished.length > 0 && lastSeenFinishedIds.size > 0) {
+        syncProjectsFromRuns().catch(() => {});
+      }
+      lastSeenFinishedIds = finishedIds;
+
+      // Auto-create: detect newly started runs and create 'building' project cards
+      const runningIds = new Set(running.map((r: any) => r.id));
+      const newlyStarted = running.filter((r: any) => !lastSeenRunningIds.has(r.id));
+      if (newlyStarted.length > 0 && lastSeenRunningIds.size > 0) {
+        for (const run of newlyStarted) {
+          createBuildingProject(run).catch(() => {});
+        }
+      }
+      lastSeenRunningIds = runningIds;
+      saveSyncState(lastSeenFinishedIds, lastSeenRunningIds);
+
+      return Promise.all([...running, ...recent].map(async (r: any) => {
+        let storyProgress = { completed: 0, total: 0 };
+        try {
+          const stories = await getRunStories(r.id);
+          if (stories && stories.length > 0) {
+            const done = r.status === 'completed' ? stories.length : stories.filter((s: any) => s.status === 'done').length;
+            storyProgress = { completed: done, total: stories.length };
+          }
+        } catch {}
+        return {
+          id: r.id,
+          workflow: r.workflow_id,
+          task: r.task,
+          status: r.status,
+          updatedAt: r.updated_at,
+          createdAt: r.created_at,
+          steps: (r.steps || []).map((s: any) => ({
+            stepId: s.step_id,
+            agent: s.agent_id,
+            status: s.status,
+            retryCount: s.retry_count || 0,
+            type: s.type,
+            currentStoryId: s.current_story_id,
+            abandonedCount: s.abandoned_count || 0,
+          })),
+          storyProgress,
+        };
+      }));
+    });
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Pipeline fetch failed' });
+  }
+});
+
+// GET /setfarm/runs/:id/stories — Stories for a specific run
+router.get('/setfarm/runs/:id/stories', async (req, res) => {
+  try {
+    const stories = await getRunStories(req.params.id);
+    res.json(stories || []);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Stories fetch failed' });
+  }
+});
+
+// GET /setfarm/runs/:id/plan — PRD/Plan document for a run
+router.get('/setfarm/runs/:id/plan', async (req, res) => {
+  try {
+    const allRuns = (await getRuns()) as any[];
+    const run = allRuns.find((r: any) => r.id === req.params.id);
+    if (!run) { res.status(404).json({ error: 'Run not found' }); return; }
+
+    const planStep = (run.steps || []).find((s: any) => s.step_id === 'plan' && s.status === 'done');
+    if (!planStep || !planStep.output) {
+      res.json({ prd: '', stories: [], rawOutput: '' });
+      return;
+    }
+
+    const rawOutput = planStep.output;
+    let prd = rawOutput;
+    let stories: any[] = [];
+
+    // Parse STORIES_JSON marker
+    const marker = 'STORIES_JSON:';
+    const idx = rawOutput.indexOf(marker);
+    if (idx !== -1) {
+      prd = rawOutput.slice(0, idx).trim();
+      const jsonPart = rawOutput.slice(idx + marker.length).trim();
+      try { stories = JSON.parse(jsonPart); } catch {}
+    }
+
+    // Fallback: try to get stories from API
+    if (stories.length === 0) {
+      try {
+        const runStories = await getRunStories(req.params.id);
+        if (runStories && runStories.length > 0) stories = runStories;
+      } catch {}
+    }
+
+    res.json({ prd, stories, rawOutput });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Plan fetch failed' });
+  }
+});
+
+
+// Track last seen completed run IDs for auto-sync — persisted to disk
+const MC_SYNC_STATE_PATH = join('/home/setrox/.openclaw/setfarm', 'mc-sync-state.json');
+
+function loadSyncState(): { finished: Set<string>; running: Set<string> } {
+  try {
+    const data = JSON.parse(readSync(MC_SYNC_STATE_PATH, 'utf-8'));
+    return {
+      finished: new Set(data.finishedIds || []),
+      running: new Set(data.runningIds || []),
+    };
+  } catch {
+    return { finished: new Set(), running: new Set() };
+  }
+}
+
+function saveSyncState(finished: Set<string>, running: Set<string>): void {
+  try {
+    const data = JSON.stringify({
+      finishedIds: [...finished],
+      runningIds: [...running],
+      savedAt: new Date().toISOString(),
+    });
+    // Atomic write: write to tmp file, then rename
+    const tmpPath = MC_SYNC_STATE_PATH + '.tmp';
+    writeSync(tmpPath, data);
+    renameSync(tmpPath, MC_SYNC_STATE_PATH);
+  } catch (err: any) {
+    console.error('[mc-sync] Failed to save sync state:', err.message);
+  }
+}
+
+// Load persisted state on startup
+const _initialState = loadSyncState();
+let lastSeenFinishedIds = _initialState.finished;
+let lastSeenRunningIds = _initialState.running;
+
+async function createBuildingProject(run: any): Promise<void> {
+  if (!run.task) return;
+  const name = extractProjectName(run.task);
+  if (!name || name.length < 2) return;
+
+  let repo = '';
+  try {
+    const ctx = typeof run.context === 'string' ? JSON.parse(run.context) : run.context;
+    repo = ctx?.repo || '';
+  } catch {}
+
+  // Get next available port
+  let port: number | null = null;
+  try {
+    const res = await fetch('http://127.0.0.1:3080/api/projects/next-port');
+    const data = await res.json() as any;
+    port = data.port || null;
+  } catch {}
+
+  const stack = repo ? detectStack(repo) : [];
+
+  const result = createProjectProgrammatic({
+    name,
+    repo,
+    stack,
+    emoji: '🏗',
+    createdBy: 'setfarm-workflow',
+    setfarmRunId: run.id,
+    task: run.task.split('\n').slice(0, 3).join(' ').slice(0, 200),
+    status: 'building',
+    port: port || undefined,
+  });
+
+  if (result.created) {
+    console.log('[lifecycle] Created building project:', name, 'port:', port);
+  }
+}
+
+function extractProjectName(task: string): string {
+  // Priority 1: Explicit Domain field (most reliable — user specified the exact slug)
+  const domainMatch = task.match(/Domain:\s*([a-z0-9-]+)\.setrox\.com\.tr/i);
+  if (domainMatch) return domainMatch[1];
+
+  // Priority 2a: --repo flag format (CLI-style task strings)
+  const repoFlagMatch = task.match(/--repo\s+\/home\/setrox\/([a-z0-9-]+)/i);
+  if (repoFlagMatch) return repoFlagMatch[1];
+
+  // Priority 2b: Repo directory name (second most reliable — kebab-case project name)
+  const repoMatch = task.match(/Repo:\s*\/home\/setrox\/([a-z0-9-]+)/i);
+  if (repoMatch) return repoMatch[1];
+
+  const firstLine = task.split('\n')[0].replace(/^#+\s*/, '').trim();
+
+  // Pattern 1: "Build/Create X app/project/tool"
+  const buildMatch = firstLine.match(/(?:Build|Create|Implement|Add|Make|Develop)\s+(?:(?:a|an|the)\s+)?(.+?)\s+(?:web\s+)?(?:app(?:lication)?|project|service|tool|system|api|dashboard|page|site|feature)/i)
+  if (buildMatch) return stripArticles(buildMatch[1]).replace(/[:\-\u2013]+$/, '').trim();
+
+  // Pattern 2: "ProjectName - feature description" or "ProjectName — description"
+  // Split on " - ", " — ", " : " and take only the first part (project name)
+  const separatorMatch = firstLine.match(/^(.+?)\s+[\-\u2013\u2014:]{1,3}\s+/);
+  if (separatorMatch) {
+    const candidate = separatorMatch[1]
+      .replace(/^(?:Build|Create|Implement|Add|Make|Develop)\s+(?:(?:a|an|the)\s+)?/i, '')
+      .replace(/\s+(?:web\s+)?(?:app(?:lication)?|project|service|tool|system|api|dashboard|page|site|feature)$/i, '')
+      .replace(/[:\-\u2013.]+$/, '')
+      .trim();
+    if (candidate.length >= 2 && candidate.length <= 40) {
+      return stripArticles(candidate);
+    }
+  }
+
+  // Pattern 3: Fallback — strip verbs and suffixes
+  const clean = firstLine
+    .replace(/^(?:Build|Create|Implement|Add|Make|Develop)\s+(?:(?:a|an|the)\s+)?/i, '')
+    .replace(/\s+(?:web\s+)?(?:app(?:lication)?|project|service|tool|system|api|dashboard|page|site|feature).*/i, '')
+    .replace(/[:\-\u2013.]+$/, '')
+    .trim();
+  return stripArticles(clean).slice(0, 40) || firstLine.slice(0, 40);
+}
+
+/** Strip leading English articles (a, an, the) from project names */
+function stripArticles(name: string): string {
+  return name.replace(/^(?:a|an|the)\s+/i, '').trim();
+}
+
+function slugify(name: string, maxLen = 30): string {
+  let slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  if (slug.length > maxLen) slug = slug.slice(0, maxLen).replace(/-$/, "");
+  return slug;
+}
+
+function detectStack(repo: string): string[] {
+  try {
+    const pkgPath = join(repo, 'package.json');
+    if (!existsSync(pkgPath)) return [];
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+    const stack: string[] = [];
+    if (deps['react']) stack.push('React');
+    if (deps['vue']) stack.push('Vue');
+    if (deps['next']) stack.push('Next.js');
+    if (deps['express']) stack.push('Express');
+    if (deps['vite']) stack.push('Vite');
+    if (deps['typescript'] || deps['ts-node']) stack.push('TypeScript');
+    if (deps['tailwindcss']) stack.push('Tailwind CSS');
+    return stack;
+  } catch {
+    return [];
+  }
+}
+
+
+const TUNNEL_ID = '92d8df83-3623-4850-ba41-29126106d020';
+
+function detectPort(repo: string, task: string): number | null {
+  // 1. Check server/.env for PORT (monorepo: server + client pattern)
+  try {
+    const serverEnv = join(repo, 'server', '.env');
+    if (existsSync(serverEnv)) {
+      const env = readFileSync(serverEnv, 'utf-8');
+      const m = env.match(/^PORT\s*=\s*(\d+)/m);
+      if (m) return parseInt(m[1]);
+    }
+  } catch {}
+  // 2. Check server/src/index.ts for PORT constant (monorepo fallback)
+  try {
+    const serverIndex = join(repo, 'server', 'src', 'index.ts');
+    if (existsSync(serverIndex)) {
+      const src = readFileSync(serverIndex, 'utf-8');
+      const m = src.match(/PORT\s*(?:=|\|\|)\s*['"]?(\d{4})['"]?/);
+      if (m) return parseInt(m[1]);
+    }
+  } catch {}
+  // 3. Check root .env for PORT
+  try {
+    const rootEnv = join(repo, '.env');
+    if (existsSync(rootEnv)) {
+      const env = readFileSync(rootEnv, 'utf-8');
+      const m = env.match(/^PORT\s*=\s*(\d+)/m);
+      if (m) return parseInt(m[1]);
+    }
+  } catch {}
+  // 4. Check package.json start/dev script for explicit port
+  try {
+    const pkg = JSON.parse(readFileSync(join(repo, 'package.json'), 'utf-8'));
+    const startScript = (pkg.scripts?.start || '') + ' ' + (pkg.scripts?.dev || '');
+    const portMatch = startScript.match(/-p\s*(\d+)|--port\s*(\d+)|-l\s*(\d+)/);
+    if (portMatch) return parseInt(portMatch[1] || portMatch[2] || portMatch[3]);
+  } catch {}
+  // 5. Check vite.config for port (Vite dev port — only if no server port found above)
+  try {
+    for (const vp of ['vite.config.ts', 'client/vite.config.ts']) {
+      const vitePath = join(repo, vp);
+      if (existsSync(vitePath)) {
+        const vite = readFileSync(vitePath, 'utf-8');
+        const m = vite.match(/port\s*:\s*(\d+)/);
+        if (m) return parseInt(m[1]);
+      }
+    }
+  } catch {}
+  // 6. Allocate from port registry
+  return allocatePort();
+}
+
+const PORT_REGISTRY = '/home/setrox/.openclaw/workspace/references/port-registry.md';
+const PORT_RANGE_START = 3507;
+const PORT_RANGE_END = 3599;
+
+function getUsedPorts(): Set<number> {
+  const used = new Set<number>();
+  // From port-registry.md
+  try {
+    const reg = readFileSync(PORT_REGISTRY, 'utf-8');
+    for (const m of reg.matchAll(/\|\s*(\d{4})\s*\|/g)) {
+      used.add(parseInt(m[1]));
+    }
+  } catch {}
+  // From projects.json
+  try {
+    const pFile = join(import.meta.dirname, '../../projects.json');
+    const projects = JSON.parse(readFileSync(pFile, 'utf-8'));
+    for (const p of projects) {
+      for (const v of Object.values(p.ports || {})) {
+        if (typeof v === 'number') used.add(v as number);
+      }
+    }
+  } catch {}
+  // From system (ss -tlnp) — controlled command, no user input
+  try {
+    const ss = execSync('ss -tlnp 2>/dev/null', { timeout: 3000 }).toString();
+    for (const m of ss.matchAll(/:(\d+)\s/g)) {
+      used.add(parseInt(m[1]));
+    }
+  } catch {}
+  return used;
+}
+
+function allocatePort(): number | null {
+  const used = getUsedPorts();
+  for (let p = PORT_RANGE_START; p <= PORT_RANGE_END; p++) {
+    if (!used.has(p)) return p;
+  }
+  return null;
+}
+
+function updatePortRegistry(port: number, name: string): void {
+  try {
+    let reg = readFileSync(PORT_REGISTRY, 'utf-8');
+    if (reg.includes('| ' + port + ' |')) return;
+    const line = '| ' + port + ' | ' + name + ' | proje |\n';
+    if (reg.includes('Sonraki bos port')) {
+      reg = reg.replace(/(\nSonraki bos port)/s, '\n' + line + '$1');
+    } else {
+      reg = reg.trimEnd() + '\n' + line;
+    }
+    const used = getUsedPorts();
+    used.add(port);
+    let next = PORT_RANGE_START;
+    while (used.has(next) && next <= PORT_RANGE_END) next++;
+    reg = reg.replace(/Sonraki bos port:.*/, 'Sonraki bos port: ' + next);
+    writeFileSync(PORT_REGISTRY, reg);
+    console.log('[auto-deploy] Port registry updated: ' + port + ' -> ' + name);
+  } catch (err: any) {
+    console.error('[auto-deploy] Port registry update failed:', err.message);
+  }
+}
+
+function detectStartCmd(repo: string, port: number): string | null {
+  const SERVE_BIN = '/home/setrox/.npm-global/bin/serve';
+  try {
+    const pkg = JSON.parse(readFileSync(join(repo, 'package.json'), 'utf-8'));
+    const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+    // Monorepo: server/ + client/dist/ pattern (Express serving React build)
+    if (existsSync(join(repo, 'server', 'dist', 'index.js')) && existsSync(join(repo, 'client', 'dist', 'index.html'))) {
+      ensureExpressStatic(repo);
+      return `/usr/bin/node dist/index.js`;
+    }
+    // Static SPA (Vite/React/Vue) — use serve for zero node_modules dependency
+    if (existsSync(join(repo, 'dist', 'index.html'))) {
+      return `${SERVE_BIN} dist -l ${port} -s --no-port-switching`;
+    }
+    // Next.js
+    if (deps['next'] && existsSync(join(repo, '.next'))) {
+      return `/usr/bin/npx next start -p ${port}`;
+    }
+    // Express / generic Node with start script
+    if (pkg.scripts?.start) return `/usr/bin/npm start`;
+  } catch {}
+  return null;
+}
+
+/** For monorepo projects: ensure Express serves client/dist/ as static files */
+function ensureExpressStatic(repo: string): void {
+  const serverIndex = join(repo, 'server', 'src', 'index.ts');
+  if (!existsSync(serverIndex)) return;
+  let src = readFileSync(serverIndex, 'utf-8');
+  if (src.includes('express.static') && src.includes('client/dist')) return; // already patched
+  // Add path import if missing
+  if (!src.includes("import path from") && !src.includes("import * as path from")) {
+    src = "import path from 'path';\n" + src;
+  }
+  // Add static serving before error handler or before app.listen
+  const staticBlock = `
+// Serve client build (production) — auto-injected by setfarm deploy
+const clientDist = path.join(__dirname, '../../client/dist');
+app.use(express.static(clientDist));
+app.get('*', (_req, res) => { res.sendFile(path.join(clientDist, 'index.html')); });
+`;
+  if (src.includes('app.use(errorHandler')) {
+    src = src.replace('app.use(errorHandler', staticBlock + '\napp.use(errorHandler');
+  } else if (src.includes('app.listen')) {
+    src = src.replace('app.listen', staticBlock + '\napp.listen');
+  }
+  writeFileSync(serverIndex, src);
+  // Rebuild server after patching
+  try {
+    execSync('cd ' + join(repo, 'server') + ' && npm run build', { timeout: 30000 });
+  } catch (err: any) {
+    console.error('[ensureExpressStatic] Rebuild failed:', err.message);
+  }
+}
+
+function patchVitePreview(repo: string, port: number): void {
+  const vitePath = join(repo, 'vite.config.ts');
+  if (!existsSync(vitePath)) return;
+  let vite = readFileSync(vitePath, 'utf-8');
+  if (vite.includes('preview:') || vite.includes('allowedHosts')) return;
+  // Add preview block before server block
+  vite = vite.replace(
+    /(\s+server\s*:\s*\{)/,
+    `  preview: {\n    port: ${port},\n    host: true,\n    allowedHosts: true,\n  },\n$1`
+  );
+  writeFileSync(vitePath, vite);
+}
+
+function findExistingService(_port: number, slug: string, repo?: string): string | null {
+  try {
+    // 1. Check by repo WorkingDirectory (most reliable — same dir = same project)
+    if (repo) {
+      const grepResult = execSync(
+        'grep -rl "WorkingDirectory=' + repo + '" /etc/systemd/system/*.service 2>/dev/null || true',
+        { timeout: 3000 }
+      ).toString().trim();
+      if (grepResult) {
+        const svcPath = grepResult.split('\n')[0];
+        const svcName = svcPath.split('/').pop() || '';
+        if (svcName) return svcName;
+      }
+    }
+    // 2. Check by slug prefix (all services, not just running)
+    const prefix = slug.split('-').slice(0, 2).join('-');
+    const units = execSync(
+      'systemctl list-units --type=service --all --no-legend',
+      { timeout: 3000 }
+    ).toString();
+    for (const line of units.split('\n')) {
+      const svc = line.trim().split(/\s+/)[0];
+      if (svc && svc.endsWith('.service') && svc.includes(prefix)) {
+        return svc;
+      }
+    }
+  } catch {}
+  return null;
+}
+
+function runBuild(repo: string): { ok: boolean; error?: string } {
+  try {
+    const pkg = JSON.parse(readFileSync(join(repo, 'package.json'), 'utf-8'));
+    const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+    const hasPnpm = existsSync(join(repo, 'pnpm-lock.yaml'));
+    const pm = hasPnpm ? 'pnpm' : 'npm';
+
+    // Install deps if node_modules missing
+    if (!existsSync(join(repo, 'node_modules'))) {
+      console.log('[auto-deploy] Installing dependencies with ' + pm);
+      execSync(pm + ' install', { cwd: repo, timeout: 120000, stdio: 'pipe' });
+    }
+
+    // Next.js: check .next/BUILD_ID
+    if (deps['next'] && !existsSync(join(repo, '.next', 'BUILD_ID'))) {
+      console.log('[auto-deploy] Running next build for ' + repo);
+      execSync(pm + ' run build', { cwd: repo, timeout: 300000, stdio: 'pipe' });
+    }
+    // Vite: check dist/index.html
+    else if (deps['vite'] && !existsSync(join(repo, 'dist', 'index.html'))) {
+      console.log('[auto-deploy] Running vite build for ' + repo);
+      execSync(pm + ' run build', { cwd: repo, timeout: 120000, stdio: 'pipe' });
+    }
+
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: (err.message || '').slice(0, 200) };
+  }
+}
+
+function healthCheck(port: number, retries = 3, delay = 3): boolean {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const code = execSync(
+        "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:" + port + "/ 2>/dev/null",
+        { timeout: 10000 }
+      ).toString().trim();
+      if (['200', '301', '302', '304'].includes(code)) return true;
+    } catch {}
+    if (i < retries - 1) {
+      try { execSync('sleep ' + delay); } catch {}
+    }
+  }
+  return false;
+}
+
+function autoDeployProject(projectId: string, projectName: string, repo: string, task: string): { deployed: boolean; port?: number; domain?: string; service?: string; error?: string } {
+  if (!repo || !existsSync(repo)) return { deployed: false, error: 'no repo' };
+
+  const slug = slugify(projectName);
+  const serviceName = slug + '.service';
+  const domain = slug + '.setrox.com.tr';
+
+  // 1. Check for existing service for this REPO (not just slug)
+  const existing = findExistingService(0, slug, repo);
+  if (existing) {
+    try {
+      const svcContent = readFileSync('/etc/systemd/system/' + existing, 'utf-8');
+      const portMatch = svcContent.match(/(?:PORT=|(?:-p|-l)\s+)(\d+)/);
+      const existingPort = portMatch ? parseInt(portMatch[1]) : null;
+      console.log('[auto-deploy] Existing service "' + existing + '" for repo ' + repo + ' — restarting');
+      try { execSync('sudo systemctl restart ' + existing, { timeout: 15000 }); } catch {}
+      return { deployed: true, port: existingPort || undefined, domain, service: existing };
+    } catch {}
+  }
+
+  // 2. Build if needed (before creating service!)
+  const build = runBuild(repo);
+  if (!build.ok) {
+    console.error('[auto-deploy] Build FAILED for ' + repo + ': ' + build.error);
+    return { deployed: false, error: 'build failed: ' + (build.error || 'unknown') };
+  }
+
+  // 3. Detect port (package.json > vite.config > port registry)
+  const port = detectPort(repo, task);
+  if (!port) return { deployed: false, error: 'no port — registry full?' };
+
+  // 4. Detect start command (needs build artifacts)
+  const startCmd = detectStartCmd(repo, port);
+  if (!startCmd) return { deployed: false, error: 'no start command (build artifacts missing?)' };
+
+  try {
+    const unit = [
+      '[Unit]',
+      `Description=${projectName} (Auto-deployed)`,
+      'After=network.target',
+      'StartLimitBurst=5',
+      'StartLimitIntervalSec=60',
+      '',
+      '[Service]',
+      'Type=simple',
+      'User=setrox',
+      `WorkingDirectory=${repo}`,
+      `ExecStart=${startCmd}`,
+      'Restart=on-failure',
+      'RestartSec=5',
+      'Environment=NODE_ENV=production',
+      `Environment=PORT=${port}`,
+      '',
+      '[Install]',
+      'WantedBy=multi-user.target',
+    ].join('\n');
+
+    writeFileSync('/tmp/' + serviceName, unit);
+    execSync(`sudo cp /tmp/${serviceName} /etc/systemd/system/${serviceName}`, { timeout: 5000 });
+    execSync('sudo systemctl daemon-reload', { timeout: 5000 });
+    // Kill any dev server (vite, webpack, etc.) in the repo directory or occupying the port
+    try { execSync(`pkill -f "vite.*${repo}" 2>/dev/null || true`, { timeout: 5000 }); } catch {}
+    try { execSync(`fuser -k ${port}/tcp 2>/dev/null || true`, { timeout: 5000 }); } catch {}
+    // Wait for port to free up
+    try { execSync('sleep 1'); } catch {}
+    execSync(`sudo systemctl enable --now ${serviceName}`, { timeout: 10000 });
+
+    // 5. Healthcheck
+    const healthy = healthCheck(port);
+    if (!healthy) {
+      console.error('[auto-deploy] Healthcheck FAILED: ' + serviceName + ' port ' + port + ' - rolling back');
+      // Rollback: stop the broken service so it doesn't run in a broken state
+      try { execSync('sudo systemctl stop ' + serviceName, { timeout: 10000 }); } catch {}
+      try { execSync('sudo systemctl disable ' + serviceName, { timeout: 5000 }); } catch {}
+      // Send Discord notification about failed deploy
+      try {
+        const payload = JSON.stringify({ channel: 'setfarm-pipeline',
+          message: 'Auto-deploy FAILED: ' + projectName + ' (port ' + port + ') - healthcheck failed, service rolled back' });
+        writeFileSync('/tmp/deploy-notify.json', payload);
+        execSync("curl -s -X POST http://127.0.0.1:3080/api/discord-notify -H 'Content-Type: application/json' -d @/tmp/deploy-notify.json", { timeout: 10000 });
+      } catch {}
+      return { deployed: false, error: 'healthcheck failed - service stopped (rollback)' };
+    }
+    console.log('[auto-deploy] Healthcheck OK: ' + serviceName + ' port ' + port);
+
+    // 6. Update port registry
+    updatePortRegistry(port, projectName);
+
+    // Add to Cloudflare tunnel
+    try {
+      const cfgPath = '/etc/cloudflared/config.yml';
+      const cfg = readFileSync(cfgPath, 'utf-8');
+      if (!cfg.includes(domain)) {
+        const entry = `- hostname: ${domain}\n  service: http://127.0.0.1:${port}\n`;
+        // Match catch-all with any indent (or none)
+        const updated = cfg.replace(/^(\s*)- service: http_status:404/m, entry + '$1- service: http_status:404');
+        writeFileSync('/tmp/cloudflared-config.yml', updated);
+        execSync(`sudo cp /tmp/cloudflared-config.yml ${cfgPath}`, { timeout: 5000 });
+        execSync('sudo systemctl restart cloudflared', { timeout: 15000 });
+        execSync(`sudo cloudflared tunnel route dns ${TUNNEL_ID} ${domain}`, { timeout: 15000 });
+      }
+    } catch (err: any) {
+      console.error('Tunnel setup warning:', err.message);
+    }
+
+    return { deployed: true, port, domain, service: serviceName };
+  } catch (err: any) {
+    return { deployed: false, error: err.message };
+  }
+}
+
+async function syncProjectsFromRuns(): Promise<{ synced: any[]; skipped: string[] }> {
+  const allRuns = (await getRuns()) as any[];
+  // Deploy completed runs AND failed/cancelled runs that have a built dist
+  const deployable = allRuns.filter((r: any) => {
+    if (r.status === 'completed') return true;
+    if (r.status === 'failed' || r.status === 'cancelled') {
+      try {
+        const ctx = typeof r.context === 'string' ? JSON.parse(r.context) : r.context;
+        const repo = ctx?.repo || '';
+        if (repo && existsSync(join(repo, 'dist', 'index.html'))) return true;
+      } catch {}
+    }
+    return false;
+  });
+  const synced: any[] = [];
+  const skipped: string[] = [];
+
+  for (const run of deployable) {
+    if (!run.task) { skipped.push(run.id + ': no task'); continue; }
+
+    const name = extractProjectName(run.task);
+    if (!name || name.length < 2) { skipped.push(run.id + ': name too short'); continue; }
+
+    let repo = '';
+    try {
+      const ctx = typeof run.context === 'string' ? JSON.parse(run.context) : run.context;
+      repo = ctx?.repo || '';
+    } catch {}
+
+    const stack = repo ? detectStack(repo) : [];
+
+    const result = createProjectProgrammatic({
+      name,
+      repo,
+      stack,
+      emoji: '\u{1F527}',
+      createdBy: 'setfarm-workflow',
+      setfarmRunId: run.id,
+      task: run.task.split('\n').slice(0, 3).join(' ').slice(0, 200),
+    });
+
+    const needsDeploy = result.created || (result.reason === 'exists' && !result.project?.service);
+    if (needsDeploy && repo) {
+      const deploy = autoDeployProject(result.project.id, result.project.name, repo, run.task);
+      if (deploy.deployed) {
+        updateProjectById(result.project.id, {
+          ports: { frontend: deploy.port },
+          domain: deploy.domain,
+          service: deploy.service,
+          serviceStatus: 'active',
+          status: 'active',
+          emoji: '🚀',
+          repo,
+          stack,
+        });
+        // Update stories and completion date
+        try {
+          const stories = await getRunStories(run.id);
+          if (stories && stories.length > 0) {
+            const done = run.status === 'completed' ? stories.length : stories.filter((s: any) => s.status === 'done').length;
+            updateProjectById(result.project.id, {
+              stories: { total: stories.length, done },
+              completedAt: run.updated_at || new Date().toISOString(),
+            });
+          }
+        } catch {}
+        result.project.deployed = true;
+        result.project.port = deploy.port;
+        result.project.domain = deploy.domain;
+      } else {
+        result.project.deployed = false;
+        result.project.deployError = deploy.error;
+        updateProjectById(result.project.id, { status: 'failed', emoji: '\u274c' });
+      }
+    }
+        // Ensure DNS exists even for already-deployed projects
+        if (!result.created && result.project?.domain && result.project?.service) {
+          try {
+            const cfg = readFileSync('/etc/cloudflared/config.yml', 'utf-8');
+            const slug = slugify(result.project.name);
+            const domain = slug + '.setrox.com.tr';
+            if (!cfg.includes(domain)) {
+              const port = result.project.ports?.frontend;
+              if (port) {
+                const entry = '- hostname: ' + domain + '\n  service: http://127.0.0.1:' + port + '\n';
+                const updated = cfg.replace(/^(\s*)- service: http_status:404/m, entry + '$1- service: http_status:404');
+                writeFileSync('/tmp/cloudflared-config.yml', updated);
+                execSync('sudo cp /tmp/cloudflared-config.yml /etc/cloudflared/config.yml', { timeout: 5000 });
+                execSync('sudo systemctl restart cloudflared', { timeout: 15000 });
+                execSync('sudo cloudflared tunnel route dns ' + TUNNEL_ID + ' ' + domain, { timeout: 15000 });
+              }
+            }
+          } catch {}
+        }
+
+    if (result.created) {
+      synced.push(result.project);
+    } else {
+      // Update stories for any run
+      try {
+        const stories = await getRunStories(run.id);
+        if (stories && stories.length > 0) {
+          const done = run.status === 'completed' ? stories.length : stories.filter((s: any) => s.status === 'done').length;
+          updateProjectById(result.project.id, {
+            stories: { total: stories.length, done },
+            completedAt: (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') ? (run.updated_at || new Date().toISOString()) : undefined,
+          });
+        }
+      } catch {}
+      if (result.project?.status === 'building' || result.project?.status === 'failed') {
+        const st = run.status === 'completed' ? 'active' : 'failed';
+        updateProjectById(result.project.id, { status: st, emoji: st === 'active' ? '🚀' : '❌' });
+      }
+      skipped.push(run.id + ': exists' + (needsDeploy ? ' (deploy retried)' : ''));
+    }
+  }
+
+  return { synced, skipped };
+}
+
+// POST /setfarm/sync-projects - manual trigger
+router.post('/setfarm/sync-projects', async (_req, res) => {
+  try {
+    const result = await syncProjectsFromRuns();
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Sync failed' });
+  }
+});
+
+export default router;

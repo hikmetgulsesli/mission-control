@@ -386,8 +386,8 @@ router.get('/agents/:id/activity', async (req, res) => {
         const isWorkflowAgent = id.includes('/');
         const agentDir = id === 'main' ? 'main' : id;
         const sessionsDir = `/home/setrox/.openclaw/agents/${agentDir}/sessions`;
-        // Get all runs from Antfarm
-        const { getRuns } = await import('../utils/antfarm.js');
+        // Get all runs from Setfarm
+        const { getRuns } = await import('../utils/setfarm.js');
         const rawRuns = (await getRuns());
         // Find runs where this agent participated
         const agentRuns = [];

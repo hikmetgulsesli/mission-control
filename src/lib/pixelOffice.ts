@@ -21,8 +21,8 @@ const AGENT_COLORS: Record<string, string> = {
 };
 
 const AGENT_NAMES: Record<string, string> = {
-  main: 'Arya', koda: 'Koda', kaan: 'Kaan', atlas: 'Atlas', defne: 'Defne',
-  sinan: 'Sinan', elif: 'Elif', deniz: 'Deniz', onur: 'Onur', mert: 'Mert',
+  main: 'Arya', koda: 'Koda', kaan: 'Flux', atlas: 'Atlas', defne: 'Iris',
+  sinan: 'Sentinel', elif: 'Cipher', deniz: 'Lux', onur: 'Nexus', mert: 'Prism',
 };
 
 const DESK_ITEMS: Record<string, string> = {

@@ -2,7 +2,7 @@ import { Router } from "express";
 import { readFileSync, writeFileSync, existsSync, rmSync } from "fs";
 import { join } from "path";
 import { createConnection } from "net";
-import { execSync } from "child_process";
+import { execSync, execFileSync } from "child_process";
 import { config } from "../config.js";
 const router = Router();
 const PROJECTS_FILE = config.projectsJson || join(import.meta.dirname, "../../projects.json");
@@ -65,7 +65,20 @@ router.get("/projects/next-port", async (_req, res) => {
                     usedPorts.add(v);
             }
         }
-        // Antfarm project port range starts at 3507
+        // Also scan system ports in use (no shell injection — execFileSync with array args)
+        try {
+            const ssOutput = execFileSync("ss", ["-tlnp"], { encoding: 'utf-8', timeout: 5000 });
+            for (const line of ssOutput.split('\n')) {
+                const portMatch = line.match(/:(\d+)\s/);
+                if (portMatch) {
+                    const p = parseInt(portMatch[1], 10);
+                    if (p >= 3000 && p <= 9999)
+                        usedPorts.add(p);
+                }
+            }
+        }
+        catch { }
+        // Setfarm project port range starts at 3507
         let port = 3507;
         while (usedPorts.has(port))
             port++;
@@ -98,7 +111,9 @@ router.post("/projects", async (req, res) => {
             return;
         }
         const id = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-        if (projects.find((p) => p.id === id)) {
+        const normalizedId = normalizeProjectId(id);
+        // Check exact match OR normalized match
+        if (projects.find((p) => p.id === id || normalizeProjectId(p.id) === normalizedId)) {
             res.status(409).json({ error: "Project already exists" });
             return;
         }
@@ -172,11 +187,11 @@ router.get("/projects/:id/export", async (req, res) => {
             return;
         }
         let runs = [];
-        if (project.antfarmRunIds?.length || project.workflowRunId) {
+        if (project.setfarmRunIds?.length || project.workflowRunId) {
             try {
-                const { getRuns } = await import("../utils/antfarm.js");
+                const { getRuns } = await import("../utils/setfarm.js");
                 const allRuns = (await getRuns());
-                const runIds = [...(project.antfarmRunIds || [])];
+                const runIds = [...(project.setfarmRunIds || [])];
                 if (project.workflowRunId)
                     runIds.push(project.workflowRunId);
                 runs = allRuns.filter((r) => runIds.includes(r.id));
@@ -304,11 +319,88 @@ export function updateProjectById(id, fields) {
     saveProjects(projects);
     return projects[idx];
 }
+/** Normalize ID for duplicate detection: strip articles, common suffixes */
+function normalizeProjectId(id) {
+    return id.replace(/^(?:a-|an-|the-)/, '').replace(/-(app|project|service|tool|system)$/, '');
+}
+/** Check if newId is an extension of an existing project (prefix match).
+ *  e.g. "recipe-book-finish-remaining" starts with existing "recipe-book" */
+function findByPrefix(projects, newId) {
+    // Check if any existing project id is a prefix of newId (min 3 chars to avoid false matches)
+    for (const p of projects) {
+        const pid = p.id;
+        if (pid.length >= 3 && newId.startsWith(pid + '-') && newId.length > pid.length + 1) {
+            return p;
+        }
+    }
+    // Also check reverse: newId is prefix of existing (shouldn't happen often but be safe)
+    for (const p of projects) {
+        if (newId.length >= 3 && p.id.startsWith(newId + '-')) {
+            return p;
+        }
+    }
+    return null;
+}
 export function createProjectProgrammatic(data) {
     const projects = loadProjects();
     const id = data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-    if (projects.find((p) => p.id === id)) {
-        return { created: false, project: projects.find((p) => p.id === id), reason: "exists" };
+    const normalizedId = normalizeProjectId(id);
+    // CHECK 1 (PRIMARY): Repo path match — most reliable dedup signal
+    if (data.repo) {
+        const repoNorm = data.repo.replace(/\/+$/, '');
+        const repoBase = repoNorm.split('/').pop() || '';
+        const repoMatch = projects.find((p) => {
+            if (!p.repo)
+                return false;
+            const pNorm = p.repo.replace(/\/+$/, '');
+            if (pNorm === repoNorm)
+                return true;
+            const pBase = pNorm.split('/').pop() || '';
+            return repoBase.length >= 3 && pBase.length >= 3 && repoBase === pBase;
+        });
+        if (repoMatch) {
+            // Backfill repo path if empty on existing entry
+            if (!repoMatch.repo && data.repo) {
+                try {
+                    const all = JSON.parse(readFileSync(PROJECTS_FILE, "utf-8"));
+                    const idx = all.findIndex((p) => p.id === repoMatch.id);
+                    if (idx >= 0) {
+                        all[idx].repo = data.repo;
+                        writeFileSync(PROJECTS_FILE, JSON.stringify(all, null, 2));
+                    }
+                }
+                catch { }
+            }
+            return { created: false, project: repoMatch, reason: "exists" };
+        }
+    }
+    // CHECK 2: Also match by repo when incoming has no repo but existing projects do
+    // (catches building-project with empty repo being re-checked after context fills in)
+    if (!data.repo) {
+        const idBasedRepoMatch = projects.find((p) => {
+            if (!p.repo)
+                return false;
+            const pBase = p.repo.replace(/\/+$/, '').split('/').pop() || '';
+            return pBase.length >= 3 && (pBase === id || pBase === normalizedId);
+        });
+        if (idBasedRepoMatch) {
+            return { created: false, project: idBasedRepoMatch, reason: "exists" };
+        }
+    }
+    // CHECK 3: Normalized ID match (catches "an-expense-tracker" vs "expense-tracker")
+    const existing = projects.find((p) => {
+        if (p.id === id)
+            return true;
+        const pNorm = normalizeProjectId(p.id);
+        return pNorm === normalizedId || pNorm === id || p.id === normalizedId;
+    });
+    if (existing) {
+        return { created: false, project: existing, reason: "exists" };
+    }
+    // CHECK 4: Prefix match (catches "recipe-book-finish-remaining" matching existing "recipe-book")
+    const prefixMatch = findByPrefix(projects, id);
+    if (prefixMatch) {
+        return { created: false, project: prefixMatch, reason: "exists" };
     }
     const project = {
         id,
@@ -322,7 +414,7 @@ export function createProjectProgrammatic(data) {
         stack: data.stack || [],
         service: "",
         serviceStatus: "unknown",
-        createdBy: data.createdBy || "antfarm-workflow",
+        createdBy: data.createdBy || "setfarm-workflow",
         createdAt: new Date().toISOString().split("T")[0],
         stories: { total: 0, done: 0 },
         features: [],
@@ -330,10 +422,64 @@ export function createProjectProgrammatic(data) {
         github: "",
         category: "own",
         checklist: DEFAULT_CHECKLIST.map(c => ({ ...c })),
-        antfarmRunIds: data.antfarmRunId ? [data.antfarmRunId] : [],
+        setfarmRunIds: data.setfarmRunId ? [data.setfarmRunId] : [],
     };
     projects.push(project);
     saveProjects(projects);
     return { created: true, project };
 }
+/** One-time cleanup: merge duplicate projects sharing the same repo path.
+ *  Keeps the entry with the shortest ID (usually the correct one).
+ *  Merges missing fields from duplicates into the winner. */
+export function deduplicateProjects() {
+    const projects = loadProjects();
+    const repoMap = new Map();
+    for (const p of projects) {
+        if (!p.repo)
+            continue;
+        const key = p.repo.replace(/\/+$/, '');
+        if (!repoMap.has(key))
+            repoMap.set(key, []);
+        repoMap.get(key).push(p);
+    }
+    const idsToRemove = new Set();
+    for (const [, group] of repoMap) {
+        if (group.length <= 1)
+            continue;
+        // Shortest ID wins (e.g. "autopress" beats "repo-home-setrox-autopress-branch-m")
+        group.sort((a, b) => a.id.length - b.id.length);
+        const winner = group[0];
+        for (let i = 1; i < group.length; i++) {
+            const loser = group[i];
+            idsToRemove.add(loser.id);
+            // Merge missing fields from loser into winner
+            if (!winner.domain && loser.domain)
+                winner.domain = loser.domain;
+            if (!winner.service && loser.service)
+                winner.service = loser.service;
+            if (loser.stack?.length && !winner.stack?.length)
+                winner.stack = loser.stack;
+            if (loser.description?.length > (winner.description || '').length
+                && !loser.description.includes('REPO:'))
+                winner.description = loser.description;
+            // Merge setfarm run IDs
+            const runIds = new Set([
+                ...(winner.setfarmRunIds || []), ...(loser.setfarmRunIds || [])
+            ]);
+            winner.setfarmRunIds = [...runIds];
+            // Merge ports
+            if (loser.ports) {
+                winner.ports = { ...(loser.ports || {}), ...(winner.ports || {}) };
+            }
+        }
+    }
+    if (idsToRemove.size > 0) {
+        const cleaned = projects.filter((p) => !idsToRemove.has(p.id));
+        saveProjects(cleaned);
+        console.log('[dedup] Removed', idsToRemove.size, 'duplicate project(s):', [...idsToRemove].join(', '));
+    }
+    return idsToRemove.size;
+}
+// Run dedup on module load to clean up any existing duplicates
+deduplicateProjects();
 export default router;

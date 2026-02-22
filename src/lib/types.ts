@@ -218,7 +218,7 @@ export interface Diagnosis {
   suggestedFix?: string | null;
 }
 
-export interface AntfarmEvent {
+export interface SetfarmEvent {
   id: string;
   type: string;
   runId: string;

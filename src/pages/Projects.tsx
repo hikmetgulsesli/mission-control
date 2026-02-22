@@ -55,7 +55,7 @@ interface Project {
 
 const TOOL_LOGOS: Record<string, string> = {
   "openclaw-dashboard": "https://cdn.simpleicons.org/openlayers/ff6600",
-  "antfarm-dashboard": "https://cdn.simpleicons.org/apachekafka/00c853",
+  "setfarm-dashboard": "https://cdn.simpleicons.org/apachekafka/00c853",
   "uptime-kuma": "https://cdn.simpleicons.org/uptimekuma/5cdd8b",
   "grafana": "https://cdn.simpleicons.org/grafana/f46800",
   "n8n": "https://cdn.simpleicons.org/n8n/ea4b71",

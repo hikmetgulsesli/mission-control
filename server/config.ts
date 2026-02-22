@@ -23,7 +23,7 @@ loadEnv();
 export const config = {
   port: parseInt(process.env.MC_PORT || '3080', 10),
   gatewayWs: process.env.GATEWAY_WS || 'ws://127.0.0.1:18789',
-  antfarmUrl: process.env.ANTFARM_URL || 'http://127.0.0.1:3333',
+  setfarmUrl: process.env.ANTFARM_URL || 'http://127.0.0.1:3333',
   prometheusUrl: process.env.PROMETHEUS_URL || 'http://127.0.0.1:9090',
   dataJson: process.env.DATA_JSON || '/home/setrox/.openclaw/dashboard/data.json',
   jobsJson: process.env.JOBS_JSON || '/home/setrox/.openclaw/cron/jobs.json',

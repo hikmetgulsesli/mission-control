@@ -5,7 +5,7 @@ import { config } from '../config.js';
 const router = Router();
 
 const ALLOWED_COMMANDS = new Set([
-  'openclaw', 'antfarm', 'docker', 'git', 'systemctl',
+  'openclaw', 'setfarm', 'docker', 'git', 'systemctl',
   'tail', 'cat', 'ls', 'df', 'free', 'uptime', 'top',
   'uname', 'whoami', 'date', 'which', 'ps',
 ]);

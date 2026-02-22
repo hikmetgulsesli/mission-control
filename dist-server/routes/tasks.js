@@ -170,7 +170,7 @@ router.post("/tasks/:id/images", express.json({ limit: "10mb" }), async (req, re
         const savedName = `${Date.now()}-${randomUUID().slice(0, 8)}.${ext}`;
         const filePath = join(UPLOADS_DIR, savedName);
         writeFileSync(filePath, Buffer.from(base64, "base64"));
-        // Update task images in antfarm
+        // Update task images in setfarm
         const allTasks = await (await fetch(`${ANTFARM}/api/tasks`)).json();
         const task = allTasks.find((t) => t.id === req.params.id);
         if (task) {
@@ -194,7 +194,7 @@ router.delete("/tasks/:id/images/:filename", async (req, res) => {
         const filePath = join(UPLOADS_DIR, req.params.filename);
         if (existsSync(filePath))
             unlinkSync(filePath);
-        // Update task images in antfarm
+        // Update task images in setfarm
         const allTasks = await (await fetch(`${ANTFARM}/api/tasks`)).json();
         const task = allTasks.find((t) => t.id === req.params.id);
         if (task) {

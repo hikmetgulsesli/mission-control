@@ -65,14 +65,15 @@ export const api = {
   approvals: () => fetchApi<any[]>('/api/approvals'),
   approveStep: (id: string) => fetchApi<any>('/api/approvals/' + id + '/approve', { method: 'POST' }),
   rejectStep: (id: string, reason: string) => fetchApi<any>('/api/approvals/' + id + '/reject', { method: 'POST', headers: CT_JSON, body: JSON.stringify({ reason }) }),
-  // Antfarm Activity
-  antfarmActivity: (limit = 50) => fetchApi<any[]>('/api/antfarm/activity?limit=' + limit),
-  antfarmAgents: () => fetchApi<any[]>('/api/antfarm/agents'),
-  antfarmAlerts: () => fetchApi<any>('/api/antfarm/alerts'),
-  antfarmPipeline: () => fetchApi<any[]>('/api/antfarm/pipeline'),
+  // Setfarm Activity
+  setfarmActivity: (limit = 50) => fetchApi<any[]>('/api/setfarm/activity?limit=' + limit),
+  setfarmAgents: () => fetchApi<any[]>('/api/setfarm/agents'),
+  setfarmAlerts: () => fetchApi<any>('/api/setfarm/alerts'),
+  setfarmPipeline: () => fetchApi<any[]>('/api/setfarm/pipeline'),
+  setfarmAgentFeed: (limit = 100) => fetchApi<any[]>("/api/setfarm/agent-feed?limit=" + limit),
   // New: Stories + Plan for runs
-  runStories: (id: string) => fetchApi<any[]>(`/api/antfarm/runs/${id}/stories`),
-  runPlan: (id: string) => fetchApi<any>(`/api/antfarm/runs/${id}/plan`),
+  runStories: (id: string) => fetchApi<any[]>(`/api/setfarm/runs/${id}/stories`),
+  runPlan: (id: string) => fetchApi<any>(`/api/setfarm/runs/${id}/plan`),
   // Terminal
   terminalExec: (command: string, args: string[]) =>
     fetchApi<{ output: string; exitCode: number; command: string }>('/api/terminal/exec', {

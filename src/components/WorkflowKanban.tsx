@@ -3,7 +3,7 @@ import type { Workflow, Run } from '../lib/types';
 
 const STEP_LABELS: Record<string, string> = {
   plan: 'PLAN', setup: 'SETUP', implement: 'IMPL',
-  verify: 'VERIFY', test: 'TEST', pr: 'PR', review: 'REVIEW',
+  verify: 'VERIFY', 'final-test': 'TEST & MERGE', test: 'TEST', pr: 'PR', review: 'REVIEW',
   triage: 'TRIAGE', investigate: 'INVEST', fix: 'FIX',
   collect: 'COLLECT', report: 'REPORT',
   scan: 'SCAN', prioritize: 'PRIORITIZE',

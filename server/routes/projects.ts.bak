@@ -2,7 +2,7 @@ import { Router } from "express";
 import { readFileSync, writeFileSync, existsSync, rmSync } from "fs";
 import { join } from "path";
 import { createConnection } from "net";
-import { execSync, execFileSync } from "child_process";
+import { execSync } from "child_process";
 import { config } from "../config.js";
 
 const router = Router();
@@ -70,17 +70,6 @@ router.get("/projects/next-port", async (_req, res) => {
         if (typeof v === "number") usedPorts.add(v);
       }
     }
-    // Also scan system ports in use (no shell injection — execFileSync with array args)
-    try {
-      const ssOutput = execFileSync("ss", ["-tlnp"], { encoding: 'utf-8', timeout: 5000 });
-      for (const line of ssOutput.split('\n')) {
-        const portMatch = line.match(/:(\d+)\s/);
-        if (portMatch) {
-          const p = parseInt(portMatch[1], 10);
-          if (p >= 3000 && p <= 9999) usedPorts.add(p);
-        }
-      }
-    } catch {}
     // Setfarm project port range starts at 3507
     let port = 3507;
     while (usedPorts.has(port)) port++;
@@ -347,7 +336,17 @@ export function createProjectProgrammatic(data: {
   const id = data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
   const normalizedId = normalizeProjectId(id);
 
-  // CHECK 1 (PRIMARY): Repo path match — most reliable dedup signal
+  // Check exact match OR normalized match (catches "an-expense-tracker" vs "expense-tracker")
+  const existing = projects.find((p: any) => {
+    if (p.id === id) return true;
+    const pNorm = normalizeProjectId(p.id);
+    return pNorm === normalizedId || pNorm === id || p.id === normalizedId;
+  });
+  if (existing) {
+    return { created: false, project: existing, reason: "exists" };
+  }
+
+  // Check repo match — exact path OR same basename (same dir = same project, period)
   if (data.repo) {
     const repoNorm = data.repo.replace(/\/+$/, '');
     const repoBase = repoNorm.split('/').pop() || '';
@@ -371,30 +370,7 @@ export function createProjectProgrammatic(data: {
     }
   }
 
-  // CHECK 2: Also match by repo when incoming has no repo but existing projects do
-  // (catches building-project with empty repo being re-checked after context fills in)
-  if (!data.repo) {
-    const idBasedRepoMatch = projects.find((p: any) => {
-      if (!p.repo) return false;
-      const pBase = p.repo.replace(/\/+$/, '').split('/').pop() || '';
-      return pBase.length >= 3 && (pBase === id || pBase === normalizedId);
-    });
-    if (idBasedRepoMatch) {
-      return { created: false, project: idBasedRepoMatch, reason: "exists" };
-    }
-  }
-
-  // CHECK 3: Normalized ID match (catches "an-expense-tracker" vs "expense-tracker")
-  const existing = projects.find((p: any) => {
-    if (p.id === id) return true;
-    const pNorm = normalizeProjectId(p.id);
-    return pNorm === normalizedId || pNorm === id || p.id === normalizedId;
-  });
-  if (existing) {
-    return { created: false, project: existing, reason: "exists" };
-  }
-
-  // CHECK 4: Prefix match (catches "recipe-book-finish-remaining" matching existing "recipe-book")
+  // Check prefix match (catches "recipe-book-finish-remaining" matching existing "recipe-book")
   const prefixMatch = findByPrefix(projects, id);
   if (prefixMatch) {
     return { created: false, project: prefixMatch, reason: "exists" };
@@ -427,57 +403,6 @@ export function createProjectProgrammatic(data: {
   saveProjects(projects);
   return { created: true, project };
 }
-
-
-/** One-time cleanup: merge duplicate projects sharing the same repo path.
- *  Keeps the entry with the shortest ID (usually the correct one).
- *  Merges missing fields from duplicates into the winner. */
-export function deduplicateProjects(): number {
-  const projects = loadProjects();
-  const repoMap = new Map<string, any[]>();
-  for (const p of projects) {
-    if (!p.repo) continue;
-    const key = p.repo.replace(/\/+$/, '');
-    if (!repoMap.has(key)) repoMap.set(key, []);
-    repoMap.get(key)!.push(p);
-  }
-  const idsToRemove = new Set<string>();
-  for (const [, group] of repoMap) {
-    if (group.length <= 1) continue;
-    // Shortest ID wins (e.g. "autopress" beats "repo-home-setrox-autopress-branch-m")
-    group.sort((a: any, b: any) => a.id.length - b.id.length);
-    const winner = group[0];
-    for (let i = 1; i < group.length; i++) {
-      const loser = group[i];
-      idsToRemove.add(loser.id);
-      // Merge missing fields from loser into winner
-      if (!winner.domain && loser.domain) winner.domain = loser.domain;
-      if (!winner.service && loser.service) winner.service = loser.service;
-      if (loser.stack?.length && !winner.stack?.length) winner.stack = loser.stack;
-      if (loser.description?.length > (winner.description || '').length
-          && !loser.description.includes('REPO:'))
-        winner.description = loser.description;
-      // Merge setfarm run IDs
-      const runIds = new Set([
-        ...(winner.setfarmRunIds || []), ...(loser.setfarmRunIds || [])
-      ]);
-      winner.setfarmRunIds = [...runIds];
-      // Merge ports
-      if (loser.ports) {
-        winner.ports = { ...(loser.ports || {}), ...(winner.ports || {}) };
-      }
-    }
-  }
-  if (idsToRemove.size > 0) {
-    const cleaned = projects.filter((p: any) => !idsToRemove.has(p.id));
-    saveProjects(cleaned);
-    console.log('[dedup] Removed', idsToRemove.size, 'duplicate project(s):', [...idsToRemove].join(', '));
-  }
-  return idsToRemove.size;
-}
-
-// Run dedup on module load to clean up any existing duplicates
-deduplicateProjects();
 
 
 export default router;

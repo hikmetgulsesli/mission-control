@@ -1,9 +1,9 @@
 import { Router } from 'express';
-import { getRuns, getEvents } from '../utils/antfarm.js';
+import { getRuns, getEvents } from '../utils/setfarm.js';
 import { cached } from '../utils/cache.js';
 import { runCli } from '../utils/cli.js';
 import { config } from '../config.js';
-import { getStuckRuns, unstickRun, getRunDetail, diagnoseStuckStep, tryAutoFix, skipStory } from '../utils/antfarm-db.js';
+import { getStuckRuns, unstickRun, getRunDetail, diagnoseStuckStep, tryAutoFix, skipStory } from '../utils/setfarm-db.js';
 
 const router = Router();
 
@@ -32,7 +32,7 @@ router.post('/runs', async (req, res) => {
     if (!workflow || !task) {
       res.status(400).json({ error: 'workflow and task required' }); return;
     }
-    const out = await runCli('antfarm', ['workflow', 'run', workflow, task]);
+    const out = await runCli('setfarm', ['workflow', 'run', workflow, task]);
     res.json({ success: true, output: out });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -50,22 +50,22 @@ router.post('/runs/:id/retry', async (req, res) => {
     if (message) args.push('--message', message);
 
     try {
-      const out = await runCli('antfarm', args);
+      const out = await runCli('setfarm', args);
       console.log(`[RETRY] CLI success: run=${id} step=${step_id || 'all'}`);
       res.json({ success: true, source: 'cli', output: out });
     } catch (cliErr: any) {
       console.warn(`[RETRY] CLI failed: run=${id} err=${cliErr.message}, falling back to API`);
-      // Fallback: if antfarm CLI doesn't have retry, try via API
+      // Fallback: if setfarm CLI doesn't have retry, try via API
       try {
         const body: any = { step_id };
         if (message) body.message = message;
-        const apiRes = await fetch(`${config.antfarmUrl}/api/runs/${id}/retry`, {
+        const apiRes = await fetch(`${config.setfarmUrl}/api/runs/${id}/retry`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
           signal: AbortSignal.timeout(10000),
         });
-        if (!apiRes.ok) throw new Error(`Antfarm API ${apiRes.status}`);
+        if (!apiRes.ok) throw new Error(`Setfarm API ${apiRes.status}`);
         const data = await apiRes.json();
         console.log(`[RETRY] API fallback success: run=${id}`);
         res.json({ success: true, source: 'api', output: data });

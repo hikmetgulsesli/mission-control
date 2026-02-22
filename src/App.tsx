@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Layout } from './components/Layout';
 import { Overview } from './pages/Overview';
-import { AntfarmActivity } from './pages/AntfarmActivity';
+import { SetfarmActivity } from './pages/SetfarmActivity';
 import { Chat } from './pages/Chat';
 import { Ops } from './pages/Ops';
 import { Costs } from './pages/Costs';
@@ -20,8 +20,8 @@ export default function App() {
         <Route element={<Layout />}>
           <Route index element={<Overview />} />
           <Route path="office" element={<PixelOffice />} />
-          <Route path="antfarm" element={<AntfarmActivity />} />
-          <Route path="agents" element={<Navigate to="/antfarm" replace />} />
+          <Route path="setfarm" element={<SetfarmActivity />} />
+          <Route path="agents" element={<Navigate to="/setfarm" replace />} />
           <Route path="chat" element={<Chat />} />
           <Route path="ops" element={<Ops />} />
           <Route path="costs" element={<Costs />} />

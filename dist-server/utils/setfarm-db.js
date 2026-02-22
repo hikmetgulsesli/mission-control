@@ -1,13 +1,14 @@
+import { createHash } from 'crypto';
 import { execFile as execFileCb } from 'child_process';
 import { promisify } from 'util';
 import { readFile } from 'fs/promises';
 const execFileAsync = promisify(execFileCb);
-const DB_PATH = '/home/setrox/.openclaw/antfarm/antfarm.db';
+const DB_PATH = '/home/setrox/.openclaw/setfarm/setfarm.db';
 const STUCK_DETECTION_MS = 10 * 60 * 1000; // 10min - show in UI
 const STUCK_THRESHOLD_MS = 15 * 60 * 1000; // 15min - auto-unstick
 const MAX_AUTO_UNSTICK = 3;
 export { STUCK_DETECTION_MS, STUCK_THRESHOLD_MS, MAX_AUTO_UNSTICK };
-// Whitelist validation: IDs must be alphanumeric/dash/underscore (antfarm uses UUIDs and slugs)
+// Whitelist validation: IDs must be alphanumeric/dash/underscore (setfarm uses UUIDs and slugs)
 const SAFE_ID_RE = /^[a-zA-Z0-9_-]+$/;
 function validateId(value, name) {
     if (!value || !SAFE_ID_RE.test(value)) {
@@ -39,17 +40,17 @@ async function sqlite3(sql, json = true) {
         return [];
     return JSON.parse(trimmed);
 }
-export async function queryAntfarmDb(sql) {
+export async function querySetfarmDb(sql) {
     return sqlite3(sql, true);
 }
-export async function execAntfarmDb(sql) {
+export async function execSetfarmDb(sql) {
     return sqlite3(sql, false);
 }
 export async function getStuckRuns(thresholdMs = STUCK_DETECTION_MS) {
     const thresholdSec = Math.floor(Number(thresholdMs) / 1000);
     if (!Number.isFinite(thresholdSec) || thresholdSec < 0)
         throw new Error('Invalid threshold');
-    const rows = await queryAntfarmDb(`
+    const rows = await querySetfarmDb(`
     SELECT
       r.id as run_id,
       r.workflow_id,
@@ -104,7 +105,7 @@ export async function getStuckRuns(thresholdMs = STUCK_DETECTION_MS) {
  */
 export async function getLimboRuns() {
     // No user input — static query
-    const rows = await queryAntfarmDb(`
+    const rows = await querySetfarmDb(`
     SELECT
       r.id as run_id,
       r.workflow_id,
@@ -126,10 +127,10 @@ export async function getLimboRuns() {
  */
 export async function resumeLimboRun(runId) {
     const safeId = validateId(runId, 'runId');
-    await execAntfarmDb(`UPDATE runs SET status = 'failed', updated_at = datetime('now') WHERE id = '${safeId}';`);
-    await execAntfarmDb('PRAGMA wal_checkpoint(TRUNCATE);');
+    await execSetfarmDb(`UPDATE runs SET status = 'failed', updated_at = datetime('now') WHERE id = '${safeId}';`);
+    await execSetfarmDb('PRAGMA wal_checkpoint(TRUNCATE);');
     try {
-        const result = await antfarmCli(['workflow', 'resume', safeId]);
+        const result = await setfarmCli(['workflow', 'resume', safeId]);
         return { success: true, message: result || 'Resumed' };
     }
     catch (err) {
@@ -140,8 +141,8 @@ const ANTFARM_CLI_ENV = {
     ...process.env,
     PATH: `/home/setrox/.local/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH || ''}`,
 };
-async function antfarmCli(args) {
-    const { stdout } = await execFileAsync('antfarm', args, {
+async function setfarmCli(args) {
+    const { stdout } = await execFileAsync('setfarm', args, {
         env: ANTFARM_CLI_ENV,
         timeout: 30000,
         maxBuffer: 1024 * 1024,
@@ -153,7 +154,7 @@ export async function unstickRun(runId, stepId) {
     const whereStep = stepId
         ? `AND s.id = '${validateId(stepId, 'stepId')}'`
         : '';
-    const stuckSteps = await queryAntfarmDb(`
+    const stuckSteps = await querySetfarmDb(`
     SELECT s.id, s.step_id as step_name FROM steps s
     WHERE s.run_id = '${safeRunId}'
       AND s.status = 'running'
@@ -164,25 +165,25 @@ export async function unstickRun(runId, stepId) {
     }
     const stepIds = stuckSteps.map((s) => `'${validateId(s.id, 'step.id')}'`).join(',');
     // Mark stuck steps as failed
-    await execAntfarmDb(`
+    await execSetfarmDb(`
     UPDATE steps
     SET status = 'failed', updated_at = datetime('now')
     WHERE id IN (${stepIds});
   `);
     // Mark the run as failed
-    await execAntfarmDb(`
+    await execSetfarmDb(`
     UPDATE runs
     SET status = 'failed', updated_at = datetime('now')
     WHERE id = '${safeRunId}';
   `);
-    // WAL checkpoint so antfarm CLI sees the changes
-    await execAntfarmDb('PRAGMA wal_checkpoint(TRUNCATE);');
-    // Resume via antfarm CLI
+    // WAL checkpoint so setfarm CLI sees the changes
+    await execSetfarmDb('PRAGMA wal_checkpoint(TRUNCATE);');
+    // Resume via setfarm CLI
     try {
-        await antfarmCli(['workflow', 'resume', safeRunId]);
+        await setfarmCli(['workflow', 'resume', safeRunId]);
     }
     catch (err) {
-        console.error(`antfarm resume failed for run ${runId}:`, err.message);
+        console.error(`setfarm resume failed for run ${runId}:`, err.message);
         return {
             success: false,
             message: `Steps marked failed but resume failed: ${err.message}`,
@@ -197,9 +198,9 @@ export async function unstickRun(runId, stepId) {
 export async function getRunDetail(runId) {
     const safeId = validateId(runId, 'runId');
     const [runs, steps, stories] = await Promise.all([
-        queryAntfarmDb(`SELECT * FROM runs WHERE id = '${safeId}';`),
-        queryAntfarmDb(`SELECT * FROM steps WHERE run_id = '${safeId}' ORDER BY step_index;`),
-        queryAntfarmDb(`SELECT id, run_id, status FROM stories WHERE run_id = '${safeId}';`),
+        querySetfarmDb(`SELECT * FROM runs WHERE id = '${safeId}';`),
+        querySetfarmDb(`SELECT * FROM steps WHERE run_id = '${safeId}' ORDER BY step_index;`),
+        querySetfarmDb(`SELECT id, run_id, status FROM stories WHERE run_id = '${safeId}';`),
     ]);
     if (runs.length === 0)
         return null;
@@ -247,7 +248,7 @@ export async function diagnoseStuckStep(runId, stepId) {
     const safeRunId = validateId(runId, 'runId');
     const stepFilter = stepId ? `AND s.id = '${validateId(stepId, 'stepId')}'` : '';
     // Get step details
-    const steps = await queryAntfarmDb(`
+    const steps = await querySetfarmDb(`
     SELECT s.*, r.workflow_id FROM steps s
     JOIN runs r ON r.id = s.run_id
     WHERE s.run_id = '${safeRunId}' ${stepFilter}
@@ -262,9 +263,9 @@ export async function diagnoseStuckStep(runId, stepId) {
     if (step.output) {
         textToAnalyze += step.output;
     }
-    // 2. Check recent antfarm logs
+    // 2. Check recent setfarm logs
     try {
-        const logPath = '/home/setrox/.openclaw/antfarm/logs/antfarm.log';
+        const logPath = '/home/setrox/.openclaw/setfarm/logs/setfarm.log';
         const logContent = await readFile(logPath, 'utf-8');
         const logTail = logContent.split('\n').slice(-100).join('\n');
         textToAnalyze += '\n' + logTail;
@@ -348,7 +349,7 @@ export async function tryAutoFix(runId, cause, storyId) {
             try {
                 await execFileAsync('npm', ['install'], {
                     timeout: 60000,
-                    cwd: '/home/setrox/.openclaw/antfarm',
+                    cwd: '/home/setrox/.openclaw/setfarm',
                     env: ANTFARM_CLI_ENV,
                 });
                 console.log(`[MEDIC] Auto-fix: dependency_error -> npm install ok`);
@@ -362,7 +363,7 @@ export async function tryAutoFix(runId, cause, storyId) {
         rate_limit: async () => {
             if (storyId) {
                 const safeStoryId = validateId(storyId, 'storyId');
-                await execAntfarmDb(`
+                await execSetfarmDb(`
           UPDATE stories SET status = 'done', output = 'SKIPPED: rate limit'
           WHERE id = '${safeStoryId}';
         `);
@@ -386,7 +387,7 @@ export async function tryAutoFix(runId, cause, storyId) {
 export async function skipStory(runId, storyId, reason) {
     const safeStoryId = validateId(storyId, 'storyId');
     const safeReason = escapeStr(reason).slice(0, 200);
-    await execAntfarmDb(`
+    await execSetfarmDb(`
     UPDATE stories SET status = 'done', output = 'SKIPPED: ${safeReason}'
     WHERE id = '${safeStoryId}';
   `);
@@ -398,7 +399,7 @@ export async function skipStory(runId, storyId, reason) {
 const CLAIM_LOOP_THRESHOLD = 5;
 export async function detectInfiniteLoop(runId) {
     const safeId = validateId(runId, 'runId');
-    const rows = await queryAntfarmDb(`
+    const rows = await querySetfarmDb(`
     SELECT
       s.id as step_id,
       s.step_id as step_name,
@@ -425,7 +426,7 @@ export async function detectInfiniteLoop(runId) {
 }
 export async function checkMissingInput(runId) {
     const safeId = validateId(runId, 'runId');
-    const rows = await queryAntfarmDb(`
+    const rows = await querySetfarmDb(`
     SELECT
       s.id as step_id,
       s.step_id as step_name,
@@ -454,17 +455,17 @@ export async function failEntireRun(runId, reason) {
     const safeId = validateId(runId, 'runId');
     const safeReason = escapeStr(reason).slice(0, 500);
     // Fail all non-done steps
-    await execAntfarmDb(`
+    await execSetfarmDb(`
     UPDATE steps SET status = 'failed', output = '${safeReason}', updated_at = datetime('now')
     WHERE run_id = '${safeId}' AND status NOT IN ('done', 'failed');
   `);
     // Fail the run itself
-    await execAntfarmDb(`
+    await execSetfarmDb(`
     UPDATE runs SET status = 'failed', updated_at = datetime('now')
     WHERE id = '${safeId}';
   `);
     // WAL checkpoint
-    await execAntfarmDb('PRAGMA wal_checkpoint(TRUNCATE);');
+    await execSetfarmDb('PRAGMA wal_checkpoint(TRUNCATE);');
     // Discord alert
     try {
         await execFileAsync('bash', ['/home/setrox/.openclaw/scripts/discord-log.sh',
@@ -476,4 +477,48 @@ export async function failEntireRun(runId, reason) {
     }
     console.warn(`[MEDIC] failEntireRun: ${runId} - ${reason}`);
     return { success: true, message: `Run ${runId} failed: ${reason}` };
+}
+// === Agent Feed (chat-style agent output log) ===
+export async function ensureAgentFeedTable() {
+    await execSetfarmDb(`
+    CREATE TABLE IF NOT EXISTS agent_feed (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      agent_id TEXT NOT NULL,
+      agent_name TEXT NOT NULL,
+      message TEXT NOT NULL,
+      session_id TEXT,
+      msg_hash TEXT UNIQUE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+    await execSetfarmDb(`CREATE INDEX IF NOT EXISTS idx_agent_feed_created ON agent_feed(created_at DESC);`);
+}
+export async function insertFeedEntry(agentId, agentName, message, sessionId) {
+    const safeAgentId = validateId(agentId, 'agentId');
+    const safeAgentName = escapeStr(agentName).slice(0, 50);
+    const safeMessage = escapeStr(message).slice(0, 500);
+    const safeSessionId = sessionId ? escapeStr(sessionId).slice(0, 100) : '';
+    const hash = createHash('md5').update(safeAgentId + safeSessionId + safeMessage).digest('hex');
+    try {
+        await execSetfarmDb(`
+      INSERT OR IGNORE INTO agent_feed (agent_id, agent_name, message, session_id, msg_hash)
+      VALUES ('${safeAgentId}', '${safeAgentName}', '${safeMessage}', '${safeSessionId}', '${hash}');
+    `);
+        return true;
+    }
+    catch {
+        return false;
+    }
+}
+export async function getAgentFeed(limit = 100) {
+    const safeLimit = Math.min(Math.max(1, Number(limit) || 100), 500);
+    return querySetfarmDb(`SELECT * FROM agent_feed ORDER BY created_at DESC LIMIT ${safeLimit};`);
+}
+export async function pruneAgentFeed(keep = 5000) {
+    const safeKeep = Math.max(100, Number(keep) || 5000);
+    await execSetfarmDb(`
+    DELETE FROM agent_feed WHERE id NOT IN (
+      SELECT id FROM agent_feed ORDER BY created_at DESC LIMIT ${safeKeep}
+    );
+  `);
 }

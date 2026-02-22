@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 
-interface AntfarmEvent {
+interface SetfarmEvent {
   ts: string;
   event: string;
   runId?: string;
@@ -41,7 +41,7 @@ function eventLabel(event: string): string {
   return event.replace('.', ' ').toUpperCase();
 }
 
-export function AntfarmFeed({ events }: { events: AntfarmEvent[] }) {
+export function SetfarmFeed({ events }: { events: SetfarmEvent[] }) {
   const [paused, setPaused] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
