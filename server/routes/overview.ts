@@ -15,7 +15,7 @@ async function fetchOpenPRs(): Promise<any[]> {
   try {
     const raw = await runCli('gh', [
       'pr', 'list', '--state', 'open', '--json',
-      'number,title,headRefName,updatedAt,author,mergeable,url,repository',
+      'number,title,headRefName,updatedAt,author,mergeable,url',
       '--limit', '10',
     ]);
     return JSON.parse(raw);

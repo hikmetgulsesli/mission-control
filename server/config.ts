@@ -23,7 +23,7 @@ loadEnv();
 export const config = {
   port: parseInt(process.env.MC_PORT || '3080', 10),
   gatewayWs: process.env.GATEWAY_WS || 'ws://127.0.0.1:18789',
-  setfarmUrl: process.env.ANTFARM_URL || 'http://127.0.0.1:3333',
+  setfarmUrl: process.env.SETFARM_URL || 'http://127.0.0.1:3333',
   prometheusUrl: process.env.PROMETHEUS_URL || 'http://127.0.0.1:9090',
   dataJson: process.env.DATA_JSON || '/home/setrox/.openclaw/dashboard/data.json',
   jobsJson: process.env.JOBS_JSON || '/home/setrox/.openclaw/cron/jobs.json',
@@ -31,6 +31,6 @@ export const config = {
   cliPath: process.env.CLI_PATH || '/home/setrox/.local/bin',
   clawtabsConfig: process.env.CLAWTABS_CONFIG || '/home/setrox/.openclaw/clawtabs-config.json',
   gatewayToken: process.env.GATEWAY_TOKEN || '',
-  projectsJson: process.env.PROJECTS_JSON || '/home/setrox/mission-control/projects.json',
+  projectsJson: process.env.PROJECTS_JSON || '/home/setrox/projects/mission-control/projects.json',
   wsOrigin: process.env.WS_ORIGIN || '',
 };

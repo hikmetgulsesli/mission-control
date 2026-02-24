@@ -3,14 +3,20 @@ import { writeFileSync, mkdirSync, existsSync, unlinkSync } from "fs";
 import { join, resolve } from "path";
 import { randomUUID } from "crypto";
 import express from "express";
+import { config } from "../config.js";
 
 const router = Router();
-const ANTFARM = "http://localhost:3333";
 const UPLOADS_DIR = resolve(import.meta.dirname || __dirname, "..", "..", "uploads");
 
 async function proxy(url: string, opts?: RequestInit) {
-  const res = await fetch(url, opts);
-  return res.json();
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 10_000);
+  try {
+    const res = await fetch(url, { ...opts, signal: ctrl.signal });
+    return res.json();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // ── Auto-sync tasks with workflow story progress ──────────────────
@@ -34,7 +40,7 @@ async function syncTasksWithStories() {
 
   try {
     // Get all runs
-    const runs = await proxy(`${ANTFARM}/api/runs`);
+    const runs = await proxy(`${config.setfarmUrl}/api/runs`);
     if (!Array.isArray(runs) || runs.length === 0) return;
 
     // Find the active/latest run
@@ -42,14 +48,14 @@ async function syncTasksWithStories() {
     if (!activeRun?.id) return;
 
     // Get stories for this run
-    const detail = await proxy(`${ANTFARM}/api/runs/${activeRun.id}`);
+    const detail = await proxy(`${config.setfarmUrl}/api/runs/${activeRun.id}`);
     const stories: Array<{ story_id: string; status: string }> = detail?.stories || [];
     if (stories.length === 0) return;
 
     const storyStatus = new Map(stories.map((s: any) => [s.story_id, s.status]));
 
     // Get current tasks
-    const tasks = await proxy(`${ANTFARM}/api/tasks`);
+    const tasks = await proxy(`${config.setfarmUrl}/api/tasks`);
     if (!Array.isArray(tasks)) return;
 
     for (const task of tasks) {
@@ -80,7 +86,7 @@ async function syncTasksWithStories() {
 
       if (newStatus) {
         try {
-          await proxy(`${ANTFARM}/api/tasks/${task.id}/status`, {
+          await proxy(`${config.setfarmUrl}/api/tasks/${task.id}/status`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ status: newStatus }),
@@ -93,7 +99,7 @@ async function syncTasksWithStories() {
     for (const task of tasks) {
       if (task.status === "in_progress") {
         try {
-          await proxy(`${ANTFARM}/api/tasks/${task.id}`, {
+          await proxy(`${config.setfarmUrl}/api/tasks/${task.id}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ ...task, updated_at: new Date().toISOString() }),
@@ -108,7 +114,7 @@ router.get("/tasks", async (_req, res) => {
   try {
     // Sync tasks with story progress (throttled to every 60s)
     syncTasksWithStories();
-    const data = await proxy(`${ANTFARM}/api/tasks`);
+    const data = await proxy(`${config.setfarmUrl}/api/tasks`);
     res.json(data);
   } catch (e: any) {
     res.status(502).json({ error: e.message });
@@ -117,7 +123,7 @@ router.get("/tasks", async (_req, res) => {
 
 router.post("/tasks", async (req, res) => {
   try {
-    const data = await proxy(`${ANTFARM}/api/tasks`, {
+    const data = await proxy(`${config.setfarmUrl}/api/tasks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req.body),
@@ -130,7 +136,7 @@ router.post("/tasks", async (req, res) => {
 
 router.put("/tasks/:id", async (req, res) => {
   try {
-    const data = await proxy(`${ANTFARM}/api/tasks/${req.params.id}`, {
+    const data = await proxy(`${config.setfarmUrl}/api/tasks/${req.params.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req.body),
@@ -143,7 +149,7 @@ router.put("/tasks/:id", async (req, res) => {
 
 router.patch("/tasks/:id/status", async (req, res) => {
   try {
-    const data = await proxy(`${ANTFARM}/api/tasks/${req.params.id}/status`, {
+    const data = await proxy(`${config.setfarmUrl}/api/tasks/${req.params.id}/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req.body),
@@ -156,7 +162,7 @@ router.patch("/tasks/:id/status", async (req, res) => {
 
 router.delete("/tasks/:id", async (req, res) => {
   try {
-    const data = await proxy(`${ANTFARM}/api/tasks/${req.params.id}`, {
+    const data = await proxy(`${config.setfarmUrl}/api/tasks/${req.params.id}`, {
       method: "DELETE",
     });
     res.json(data);
@@ -178,12 +184,12 @@ router.post("/tasks/:id/images", express.json({ limit: "10mb" }), async (req, re
     writeFileSync(filePath, Buffer.from(base64, "base64"));
 
     // Update task images in setfarm
-    const allTasks = await (await fetch(`${ANTFARM}/api/tasks`)).json();
+    const allTasks = await (await fetch(`${config.setfarmUrl}/api/tasks`)).json();
     const task = allTasks.find((t: any) => t.id === req.params.id);
     if (task) {
       const images = typeof task.images === "string" ? JSON.parse(task.images) : (task.images || []);
       images.push(savedName);
-      await proxy(`${ANTFARM}/api/tasks/${req.params.id}`, {
+      await proxy(`${config.setfarmUrl}/api/tasks/${req.params.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...task, images }),
@@ -203,11 +209,11 @@ router.delete("/tasks/:id/images/:filename", async (req, res) => {
     if (existsSync(filePath)) unlinkSync(filePath);
 
     // Update task images in setfarm
-    const allTasks = await (await fetch(`${ANTFARM}/api/tasks`)).json();
+    const allTasks = await (await fetch(`${config.setfarmUrl}/api/tasks`)).json();
     const task = allTasks.find((t: any) => t.id === req.params.id);
     if (task) {
       const images = (typeof task.images === "string" ? JSON.parse(task.images) : (task.images || [])).filter((i: string) => i !== req.params.filename);
-      await proxy(`${ANTFARM}/api/tasks/${req.params.id}`, {
+      await proxy(`${config.setfarmUrl}/api/tasks/${req.params.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...task, images }),
