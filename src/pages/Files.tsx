@@ -1,5 +1,6 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { api } from '../lib/api';
+import { useToast } from '../components/Toast';
 import { GlitchText } from '../components/GlitchText';
 import { FileTree } from '../components/FileTree';
 import { FileViewer } from '../components/FileViewer';
@@ -17,6 +18,7 @@ type DialogState =
 type CtxTarget = { path: string; name: string; isDir: boolean } | null;
 
 export function Files() {
+  const { toast } = useToast();
   const [currentPath, setCurrentPath] = useState('/home/setrox/');
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [fileData, setFileData] = useState<any>(null);
@@ -42,8 +44,8 @@ export function Files() {
   const uploadRef = useRef<HTMLInputElement>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
 
-  const fetcher = useCallback(() => api.filesList(currentPath), [currentPath]);
-  const { data: listing, error: listError, loading: listLoading, refresh } = usePolling(fetcher, 30000);
+  
+  const { data: listing, error: listError, loading: listLoading, refresh } = usePolling(() => api.filesList(currentPath), 30000, currentPath);
 
   const handleNavigate = (path: string) => {
     if (editMode) {
@@ -94,7 +96,7 @@ export function Files() {
       setEditMode(false);
       refresh();
     } catch (err: any) {
-      alert('Kaydetme hatasi: ' + (err.message || 'Bilinmeyen hata'));
+      toast('Kaydetme hatasi: ' + (err.message || 'Bilinmeyen hata'), 'error');
     } finally {
       setSaving(false);
     }
