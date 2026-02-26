@@ -72,12 +72,17 @@ router.get('/setfarm/pipeline', async (_req, res) => {
       saveSyncState(lastSeenFinishedIds, lastSeenRunningIds);
 
       return Promise.all([...running, ...recent].map(async (r: any) => {
-        let storyProgress = { completed: 0, total: 0 };
+        let storyProgress: any = { completed: 0, total: 0, verified: 0, skipped: 0, running: 0, pending: 0, done: 0 };
         try {
           const stories = await getRunStories(r.id);
           if (stories && stories.length > 0) {
             const done = r.status === 'completed' ? stories.length : stories.filter((s: any) => ['done', 'verified', 'skipped'].includes(s.status)).length;
-            storyProgress = { completed: done, total: stories.length };
+            const v = stories.filter((s: any) => s.status === "verified").length;
+            const sk = stories.filter((s: any) => s.status === "skipped").length;
+            const ru = stories.filter((s: any) => s.status === "running").length;
+            const pe = stories.filter((s: any) => s.status === "pending").length;
+            const dn = stories.filter((s: any) => s.status === "done").length;
+            storyProgress = { completed: done, total: stories.length, verified: v, skipped: sk, running: ru, pending: pe, done: dn };
           }
         } catch {}
         return {

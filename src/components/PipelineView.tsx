@@ -197,19 +197,36 @@ export function PipelineView({ runs }: { runs: PipelineRun[] }) {
               ))}
             </div>
 
-            {/* Progress bar */}
-            {run.storyProgress.total > 0 && (
+            {/* Progress bar — color-coded */}
+            {run.storyProgress.total > 0 && (() => {
+              const t = run.storyProgress.total;
+              const sp = run.storyProgress as any;
+              const verifiedPct = ((sp.verified || 0) / t) * 100;
+              const donePct = ((sp.done || 0) / t) * 100;
+              const skippedPct = ((sp.skipped || 0) / t) * 100;
+              const runningPct = ((sp.running || 0) / t) * 100;
+              return (
               <div className="af-pipeline__actions">
                 <div className="af-pipeline__progress">
-                  <div className="af-pipeline__progress-bar">
-                    <div className="af-pipeline__progress-fill" style={{ width: `${progressPct}%` }} />
+                  <div className="af-pipeline__progress-bar" style={{ display: flex, overflow: hidden }}>
+                    {verifiedPct > 0 && <div style={{ width: `${verifiedPct}%`, background: #22c55e, height: 100%, transition: width .3s }} title={`${sp.verified} verified`} />}
+                    {donePct > 0 && <div style={{ width: `${donePct}%`, background: #3b82f6, height: 100%, transition: width .3s }} title={`${sp.done} done`} />}
+                    {skippedPct > 0 && <div style={{ width: `${skippedPct}%`, background: #6b7280, height: 100%, transition: width .3s }} title={`${sp.skipped} skipped`} />}
+                    {runningPct > 0 && <div style={{ width: `${runningPct}%`, background: #f59e0b, height: 100%, transition: width .3s, animation: pulse 2s ease-in-out infinite }} title={`${sp.running} running`} />}
                   </div>
                   <span className="af-pipeline__progress-text">
                     {run.storyProgress.completed}/{run.storyProgress.total} stories ({progressPct}%)
+                    <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.7 }}>
+                      {sp.verified > 0 && <span style={{ color: #22c55e }}>{sp.verified}v </span>}
+                      {sp.done > 0 && <span style={{ color: #3b82f6 }}>{sp.done}d </span>}
+                      {sp.running > 0 && <span style={{ color: #f59e0b }}>{sp.running}r </span>}
+                      {sp.skipped > 0 && <span style={{ color: #6b7280 }}>{sp.skipped}s</span>}
+                    </span>
                   </span>
                 </div>
               </div>
-            )}
+              );
+            })()}
 
             {/* Expanded: inline plan view with PRD/STORIES/RAW tabs */}
             {isExpanded && (
