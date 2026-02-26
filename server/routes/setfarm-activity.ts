@@ -155,7 +155,14 @@ router.get('/setfarm/runs/:id/plan', async (req, res) => {
       } catch {}
     }
 
-    res.json({ prd, stories, rawOutput });
+    // Extract project_memory from run context
+    let projectMemory = '';
+    try {
+      const ctx = typeof run.context === 'string' ? JSON.parse(run.context) : run.context;
+      projectMemory = ctx.project_memory || '';
+    } catch {}
+
+    res.json({ prd, stories, rawOutput, projectMemory });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Plan fetch failed' });
   }

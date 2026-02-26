@@ -46,7 +46,7 @@ function truncate(s: string, n: number): string {
 }
 
 function InlinePlanView({ runId, onRetry }: { runId: string; onRetry?: (storyId: string) => void }) {
-  const [tab, setTab] = useState<'prd' | 'stories' | 'raw'>('prd');
+  const [tab, setTab] = useState<'prd' | 'stories' | 'raw' | 'memory'>('prd');
   const [planData, setPlanData] = useState<PlanData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -69,6 +69,7 @@ function InlinePlanView({ runId, onRetry }: { runId: string; onRetry?: (storyId:
         <button className={`af-inline-plan__tab ${tab === 'prd' ? 'af-inline-plan__tab--active' : ''}`} onClick={() => setTab('prd')}>PRD</button>
         <button className={`af-inline-plan__tab ${tab === 'stories' ? 'af-inline-plan__tab--active' : ''}`} onClick={() => setTab('stories')}>STORIES ({storyCount})</button>
         <button className={`af-inline-plan__tab ${tab === 'raw' ? 'af-inline-plan__tab--active' : ''}`} onClick={() => setTab('raw')}>RAW</button>
+        <button className={`af-inline-plan__tab ${tab === 'memory' ? 'af-inline-plan__tab--active' : ''}`} onClick={() => setTab('memory')}>MEMORY</button>
       </div>
 
       <div className="af-inline-plan__content">
@@ -99,6 +100,10 @@ function InlinePlanView({ runId, onRetry }: { runId: string; onRetry?: (storyId:
 
         {tab === 'raw' && (
           <pre className="af-inline-plan__raw">{planData.rawOutput}</pre>
+        )}
+
+        {tab === 'memory' && (
+          <pre className="af-inline-plan__raw">{(planData as any).projectMemory || '(no project memory yet)'}</pre>
         )}
       </div>
     </div>
@@ -217,10 +222,10 @@ export function PipelineView({ runs }: { runs: PipelineRun[] }) {
                   <span className="af-pipeline__progress-text">
                     {run.storyProgress.completed}/{run.storyProgress.total} stories ({progressPct}%)
                     <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.7 }}>
-                      {sp.verified > 0 && <span style={{ color: '#22c55e' }}>{sp.verified}v </span>}
-                      {sp.done > 0 && <span style={{ color: '#3b82f6' }}>{sp.done}d </span>}
-                      {sp.running > 0 && <span style={{ color: '#f59e0b' }}>{sp.running}r </span>}
-                      {sp.skipped > 0 && <span style={{ color: '#6b7280' }}>{sp.skipped}s</span>}
+                      {sp.verified > 0 && <span style={{ color: '#22c55e' }}>{sp.verified} verified </span>}
+                      {sp.done > 0 && <span style={{ color: '#3b82f6' }}>{sp.done} done </span>}
+                      {sp.running > 0 && <span style={{ color: '#f59e0b' }}>{sp.running} running </span>}
+                      {sp.skipped > 0 && <span style={{ color: '#6b7280' }}>{sp.skipped} skipped</span>}
                     </span>
                   </span>
                 </div>
