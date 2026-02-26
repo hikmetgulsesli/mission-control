@@ -8,7 +8,7 @@ import { getRuns } from '../utils/setfarm.js';
 
 const router = Router();
 
-const REAL_AGENTS = ['main', 'koda', 'kaan', 'atlas', 'defne', 'sinan', 'elif', 'deniz', 'onur', 'mert'];
+const REAL_AGENTS = ['main', 'koda', 'flux', 'atlas', 'iris', 'sentinel', 'cipher', 'lux', 'nexus', 'prism'];
 
 // Fetch open PRs from GitHub (cached 5 min)
 async function fetchOpenPRs(): Promise<any[]> {
@@ -73,9 +73,9 @@ async function fetchAgentSummary(dataFile: any): Promise<any[]> {
     working.set('main', 'CEO orchestration');
 
     const STEP_MAPPING: Record<string, Record<string, string[]>> = {
-      'feature-dev': { plan: ['defne'], setup: ['atlas'], implement: ['koda', 'mert'], verify: ['sinan'], test: ['onur', 'mert'], pr: ['koda', 'mert'], review: ['kaan', 'deniz'] },
-      'bug-fix': { triage: ['defne'], investigate: ['koda'], setup: ['atlas'], fix: ['elif'], verify: ['sinan'], pr: ['kaan', 'deniz'] },
-      'security-audit': { scan: ['defne'], prioritize: ['main'], setup: ['atlas'], fix: ['koda'], verify: ['sinan'], test: ['onur', 'mert'], pr: ['kaan', 'deniz'] },
+      'feature-dev': { plan: ['iris'], setup: ['atlas'], implement: ['koda', 'prism'], verify: ['sentinel'], test: ['nexus', 'prism'], pr: ['koda', 'prism'], review: ['flux', 'lux'] },
+      'bug-fix': { triage: ['iris'], investigate: ['koda'], setup: ['atlas'], fix: ['cipher'], verify: ['sentinel'], pr: ['flux', 'lux'] },
+      'security-audit': { scan: ['iris'], prioritize: ['main'], setup: ['atlas'], fix: ['koda'], verify: ['sentinel'], test: ['nexus', 'prism'], pr: ['flux', 'lux'] },
     };
 
     for (const run of activeRuns) {

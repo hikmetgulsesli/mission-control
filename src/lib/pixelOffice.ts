@@ -10,35 +10,35 @@ const H = 720;
 const AGENT_COLORS: Record<string, string> = {
   main:  '#ff6600',
   koda:  '#00ff41',
-  kaan:  '#00ffff',
+  flux:  '#00ffff',
   atlas: '#4488ff',
-  defne: '#ff44ff',
-  sinan: '#ffaa00',
-  elif:  '#44ff88',
-  deniz: '#ff8844',
-  onur:  '#8844ff',
-  mert:  '#ff4488',
+  iris: '#ff44ff',
+  sentinel: '#ffaa00',
+  cipher:  '#44ff88',
+  lux: '#ff8844',
+  nexus:  '#8844ff',
+  prism:  '#ff4488',
 };
 
 const AGENT_NAMES: Record<string, string> = {
-  main: 'Arya', koda: 'Koda', kaan: 'Flux', atlas: 'Atlas', defne: 'Iris',
-  sinan: 'Sentinel', elif: 'Cipher', deniz: 'Lux', onur: 'Nexus', mert: 'Prism',
+  main: 'Arya', koda: 'Koda', flux: 'Flux', atlas: 'Atlas', iris: 'Iris',
+  sentinel: 'Sentinel', cipher: 'Cipher', lux: 'Lux', nexus: 'Nexus', prism: 'Prism',
 };
 
 const DESK_ITEMS: Record<string, string> = {
-  main: 'lobster', koda: 'robot', kaan: 'bolt', atlas: 'globe', defne: 'magnifier',
-  sinan: 'shield', elif: 'laptop', deniz: 'pen', onur: 'gear', mert: 'palette',
+  main: 'lobster', koda: 'robot', flux: 'bolt', atlas: 'globe', iris: 'magnifier',
+  sentinel: 'shield', cipher: 'laptop', lux: 'pen', nexus: 'gear', prism: 'palette',
 };
 
 
 const AGENT_ROLES: Record<string, string> = {
-  main: 'CEO', koda: 'Lead Dev', kaan: 'Architect', atlas: 'Infra',
-  defne: 'Research', sinan: 'QA', elif: 'Backend', deniz: 'Writer',
-  onur: 'SRE', mert: 'Frontend',
+  main: 'CEO', koda: 'Lead Dev', flux: 'Architect', atlas: 'Infra',
+  iris: 'Research', sentinel: 'QA', cipher: 'Backend', lux: 'Writer',
+  nexus: 'SRE', prism: 'Frontend',
 };
 
-const ROW0_AGENTS = ['koda', 'kaan', 'atlas', 'defne'];
-const ROW1_AGENTS = ['sinan', 'elif', 'deniz', 'onur', 'mert'];
+const ROW0_AGENTS = ['koda', 'flux', 'atlas', 'iris'];
+const ROW1_AGENTS = ['sentinel', 'cipher', 'lux', 'nexus', 'prism'];
 const ALL_AGENTS = ['main', ...ROW0_AGENTS, ...ROW1_AGENTS];
 
 // ===== TYPES =====
@@ -231,7 +231,7 @@ class ActivityManager {
         weight = 6;
       }
       if (def.type === 'water_cooler_chat' && occ === 1) weight += 4;
-      if (def.type === 'read_book' && agentId === 'defne') weight += 3;
+      if (def.type === 'read_book' && agentId === 'iris') weight += 3;
 
       if (weight > 0) weights.push({ type: def.type, weight });
     }

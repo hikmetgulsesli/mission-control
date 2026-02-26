@@ -88,6 +88,11 @@ export interface OverviewData {
   gateway: { status: string; pid: number; uptime: string; memory: string } | null;
   sessions: Session[];
   alerts: { agent?: string; message?: string; timestamp?: number; type?: string; [key: string]: unknown }[];
+  crons?: CronStatusItem[];
+  agentLastActive?: Record<string, number>;
+  openPRs?: OpenPR[];
+  recentDeploys?: DeployInfo[];
+  agentSummary?: AgentSummary[];
 }
 
 export interface Session {

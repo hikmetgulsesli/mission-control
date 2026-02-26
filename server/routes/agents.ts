@@ -7,7 +7,7 @@ import { config } from '../config.js';
 
 const router = Router();
 
-const REAL_AGENTS = ['main', 'koda', 'kaan', 'atlas', 'defne', 'sinan', 'elif', 'deniz', 'onur', 'mert'];
+const REAL_AGENTS = ['main', 'koda', 'flux', 'atlas', 'iris', 'sentinel', 'cipher', 'lux', 'nexus', 'prism'];
 
 
 function getAgentActivity(agentId: string): { lastActive?: string; status: string } {

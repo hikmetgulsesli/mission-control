@@ -1,10 +1,10 @@
 import { usePolling } from '../hooks/usePolling';
-import { api } from '../lib/api';
+import { useAppStore } from '../store/appStore';
 import { AgentCard } from '../components/AgentCard';
 import { ActivityFeed } from '../components/ActivityFeed';
 import { GlitchText } from '../components/GlitchText';
 import { AGENT_MAP } from '../lib/constants';
-import type { OverviewData, CronStatusItem, OpenPR, DeployInfo, AgentSummary, ModelLimitItem, ModelBadge } from '../lib/types';
+import type { CronStatusItem, OpenPR, DeployInfo, AgentSummary, ModelLimitItem, ModelBadge } from '../lib/types';
 import { formatDistanceToNow } from 'date-fns';
 
 function CronStatus({ crons }: { crons: CronStatusItem[] }) {
@@ -209,15 +209,10 @@ function AgentSummaryPanel({ agents }: { agents: AgentSummary[] }) {
 }
 
 export function Overview() {
-  const { data, loading } = usePolling<OverviewData & {
-    crons?: CronStatusItem[];
-    agentLastActive?: Record<string, number>;
-    openPRs?: OpenPR[];
-    recentDeploys?: DeployInfo[];
-    agentSummary?: AgentSummary[];
-  }>(api.overview, 15000);
+  const data = useAppStore(s => s.overview);
+  const initialLoading = useAppStore(s => s.initialLoading);
 
-  if (loading || !data) {
+  if (initialLoading || !data) {
     return <div className="page-loading">Loading overview...</div>;
   }
 
@@ -242,9 +237,9 @@ export function Overview() {
           <div className="stat-card__sub">active</div>
         </div>
         <div className="stat-card stat-card--green">
-          <div className="stat-card__value">${data.costToday.toFixed(2)}</div>
+          <div className="stat-card__value">${(data.costToday ?? 0).toFixed(2)}</div>
           <div className="stat-card__label">TODAY</div>
-          <div className="stat-card__sub">${data.costAllTime.toFixed(0)} total</div>
+          <div className="stat-card__sub">${(data.costAllTime ?? 0).toFixed(0)} total</div>
         </div>
       </div>
 

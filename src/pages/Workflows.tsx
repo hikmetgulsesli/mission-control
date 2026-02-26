@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
-import { usePolling } from '../hooks/usePolling';
+import { useAppStore } from '../store/appStore';
 import { api } from '../lib/api';
 import { WorkflowKanban } from '../components/WorkflowKanban';
 import { GlitchText } from '../components/GlitchText';
-import type { Workflow, Run } from '../lib/types';
 
 export function Workflows() {
-  const { data: workflows, loading } = usePolling<Workflow[]>(api.workflows, 30000);
-  const { data: runs, refresh: refreshRuns } = usePolling<Run[]>(api.runs, 15000);
+  const workflows = useAppStore(s => s.workflows);
+  const runs = useAppStore(s => s.runs);
+  const initialLoading = useAppStore(s => s.initialLoading);
   const [showModal, setShowModal] = useState(false);
   const [selectedWf, setSelectedWf] = useState('');
   const [task, setTask] = useState('');
@@ -32,7 +32,7 @@ export function Workflows() {
       setError(null);
       setShowModal(false);
       setTask('');
-      refreshRuns();
+      api.runs().then(data => useAppStore.setState({ runs: data })).catch(() => {});
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -40,7 +40,7 @@ export function Workflows() {
     }
   };
 
-  if (loading) return <div className="page-loading">Loading workflows...</div>;
+  if (initialLoading) return <div className="page-loading">Loading workflows...</div>;
 
   const allRuns = runs || [];
 

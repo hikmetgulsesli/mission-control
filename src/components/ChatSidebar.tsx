@@ -29,27 +29,29 @@ export function ChatSidebar({ agents, selected, onSelect, loading }: Props) {
     setLoadingHistory(true);
 
     async function loadPreviews() {
+      const results = await Promise.allSettled(
+        agents.map(agent => api.agentHistory(agent.id, 1).then(data => ({ agent, data })))
+      );
+      if (cancelled) return;
+
       const previews: HistoryPreview[] = [];
-      for (const agent of agents) {
-        try {
-          const data = await api.agentHistory(agent.id, 1);
-          const msgs = data.messages || [];
-          if (msgs.length > 0) {
-            const last = msgs[msgs.length - 1];
-            previews.push({
-              agentId: agent.id,
-              lastMessage: last.text?.slice(0, 80) || '',
-              lastTimestamp: last.timestamp ? new Date(last.timestamp).getTime() : Date.now(),
-              messageCount: data.total || msgs.length,
-            });
-          }
-        } catch {}
+      for (const r of results) {
+        if (r.status !== 'fulfilled') continue;
+        const { agent, data } = r.value;
+        const msgs = data.messages || [];
+        if (msgs.length > 0) {
+          const last = msgs[msgs.length - 1];
+          previews.push({
+            agentId: agent.id,
+            lastMessage: last.text?.slice(0, 80) || '',
+            lastTimestamp: last.timestamp ? new Date(last.timestamp).getTime() : Date.now(),
+            messageCount: data.total || msgs.length,
+          });
+        }
       }
-      if (!cancelled) {
-        previews.sort((a, b) => b.lastTimestamp - a.lastTimestamp);
-        setHistoryPreviews(previews);
-        setLoadingHistory(false);
-      }
+      previews.sort((a, b) => b.lastTimestamp - a.lastTimestamp);
+      setHistoryPreviews(previews);
+      setLoadingHistory(false);
     }
 
     loadPreviews();

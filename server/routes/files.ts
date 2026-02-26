@@ -63,23 +63,28 @@ router.get('/files/list', async (req, res) => {
     }
 
     const entries = await readdir(resolved, { withFileTypes: true });
-    const items = [];
-    for (const entry of entries) {
-      if (!showHidden && entry.name.startsWith('.')) continue;
-      if (isBlocked(entry.name)) continue;
-      try {
-        const fullPath = join(resolved, entry.name);
-        const s = await stat(fullPath);
-        items.push({
-          name: entry.name,
-          type: entry.isDirectory() ? 'directory' : 'file',
-          size: s.size,
-          mtime: s.mtime.toISOString(),
-        });
-      } catch {
-        // Skip entries we can't stat
-      }
-    }
+    const filtered = entries.filter(entry => {
+      if (!showHidden && entry.name.startsWith('.')) return false;
+      if (isBlocked(entry.name)) return false;
+      return true;
+    });
+    const results = await Promise.all(
+      filtered.map(async (entry) => {
+        try {
+          const fullPath = join(resolved, entry.name);
+          const s = await stat(fullPath);
+          return {
+            name: entry.name,
+            type: entry.isDirectory() ? 'directory' : 'file',
+            size: s.size,
+            mtime: s.mtime.toISOString(),
+          };
+        } catch {
+          return null;
+        }
+      })
+    );
+    const items = results.filter((r): r is NonNullable<typeof r> => r !== null);
     items.sort((a, b) => {
       if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
       return a.name.localeCompare(b.name);

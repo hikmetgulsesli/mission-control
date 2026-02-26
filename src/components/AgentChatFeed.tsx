@@ -1,6 +1,14 @@
 import { usePolling } from '../hooks/usePolling';
 import { api } from '../lib/api';
 import { AGENTS } from '../lib/constants';
+import { marked } from 'marked';
+import DOMPurify from 'dompurify';
+
+marked.setOptions({ breaks: true, gfm: true });
+
+function renderMd(text: string): { __html: string } {
+  return { __html: DOMPurify.sanitize(marked.parse(text) as string) };
+}
 
 const AGENT_LOOKUP = Object.fromEntries(AGENTS.map(a => [a.id, a]));
 
@@ -56,7 +64,7 @@ export function AgentChatFeed() {
               </span>
               <span className="agent-chat__time">{timeAgo(e.created_at)}</span>
             </div>
-            <div className="agent-chat__text">{e.message}</div>
+            <div className="agent-chat__text" dangerouslySetInnerHTML={renderMd(e.message)} />
           </div>
         );
       })}

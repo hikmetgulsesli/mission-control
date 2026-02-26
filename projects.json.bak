@@ -2,14 +2,14 @@
   {
     "id": "mission-control",
     "name": "Mission Control",
-    "emoji": "💎",
+    "emoji": "\ud83d\udc8e",
     "status": "active",
-    "description": "OpenClaw ekosisteminin merkezi yönetim paneli. Ajanlar, workflow'lar, cron job'lar, maliyet takibi, performans metrikleri ve görev yönetimini tek bir arayüzde sunar.",
+    "description": "OpenClaw ekosisteminin merkezi y\u00f6netim paneli. Ajanlar, workflow'lar, cron job'lar, maliyet takibi, performans metrikleri ve g\u00f6rev y\u00f6netimini tek bir aray\u00fczde sunar.",
     "ports": {
       "frontend": 3080
     },
     "domain": "ai.setrox.com.tr",
-    "repo": "/home/setrox/projects/mission-control",
+    "repo": "/home/setrox/mission-control",
     "stack": [
       "React",
       "Vite",
@@ -21,7 +21,7 @@
     "createdAt": "2026-02-01",
     "features": [
       "10 ajan yonetimi ve durum izleme",
-      "Workflow run takibi ve gorselleştirme",
+      "Workflow run takibi ve gorselle\u015ftirme",
       "Cron job izleme ve durum paneli",
       "Model maliyet analizi",
       "Ajan performans metrikleri",
@@ -47,9 +47,9 @@
   {
     "id": "openclaw-dashboard",
     "name": "Mudrii Dashboard",
-    "emoji": "🦞",
+    "emoji": "\ud83e\udd9e",
     "status": "active",
-    "description": "OpenClaw gateway'unun resmi web arayuzu (mudrii). Ajan listesi, session yonetimi ve temel konfigurasyona erisim sağlar.",
+    "description": "OpenClaw gateway'unun resmi web arayuzu (mudrii). Ajan listesi, session yonetimi ve temel konfigurasyona erisim sa\u011flar.",
     "ports": {
       "frontend": 8090
     },
@@ -76,7 +76,7 @@
   {
     "id": "antfarm-dashboard",
     "name": "Antfarm Dashboard",
-    "emoji": "🐜",
+    "emoji": "\ud83d\udc1c",
     "status": "active",
     "description": "Antfarm workflow engine'inin izleme paneli. Workflow run'lari, step durumlari, story ilerlemesi ve gorev yonetimini gosterir.",
     "ports": {
@@ -106,7 +106,7 @@
   {
     "id": "uptime-kuma",
     "name": "Uptime Kuma",
-    "emoji": "📡",
+    "emoji": "\ud83d\udce1",
     "status": "active",
     "description": "Servis izleme ve uptime monitoring araci. 15 monitor ile tum servislerin calisma durumunu takip eder ve bildirim gonderir.",
     "ports": {
@@ -134,9 +134,9 @@
   {
     "id": "grafana",
     "name": "Grafana",
-    "emoji": "📈",
+    "emoji": "\ud83d\udcc8",
     "status": "active",
-    "description": "Metrik gorselleştirme ve izleme paneli. Prometheus + Node Exporter verileriyle sunucu performansini detayli olarak gosterir.",
+    "description": "Metrik gorselle\u015ftirme ve izleme paneli. Prometheus + Node Exporter verileriyle sunucu performansini detayli olarak gosterir.",
     "ports": {
       "frontend": 3002
     },
@@ -163,7 +163,7 @@
   {
     "id": "n8n",
     "name": "n8n",
-    "emoji": "🔄",
+    "emoji": "\ud83d\udd04",
     "status": "active",
     "description": "Workflow otomasyon platformu. API entegrasyonlari, veri islemleri ve otomasyon senaryolari icin gorsel workflow olusturma araci.",
     "ports": {
@@ -191,9 +191,9 @@
   {
     "id": "restmenu",
     "name": "RestMenu",
-    "emoji": "🍽️",
+    "emoji": "\ud83c\udf7d\ufe0f",
     "status": "active",
-    "description": "Restoran dijital menü yönetim sistemi. QR kod ile müşterilerin menüye erişmesini sağlar. Çoklu dil desteği, kategori yönetimi, analitik ve özel kampanya modülleri içerir.",
+    "description": "Restoran dijital men\u00fc y\u00f6netim sistemi. QR kod ile m\u00fc\u015fterilerin men\u00fcye eri\u015fmesini sa\u011flar. \u00c7oklu dil deste\u011fi, kategori y\u00f6netimi, analitik ve \u00f6zel kampanya mod\u00fclleri i\u00e7erir.",
     "ports": {
       "frontend": 3501
     },
@@ -206,20 +206,20 @@
       "i18n"
     ],
     "service": "restmenu.service",
-    "createdBy": "Manuel Geliştirme",
+    "createdBy": "Manuel Geli\u015ftirme",
     "createdAt": "2026-01-15",
     "features": [
-      "QR kod ile dijital menü erişimi",
-      "Çoklu dil desteği (TR/EN/AR)",
-      "Kategori ve ürün yönetimi",
-      "Sayfa görüntüleme analitiği",
-      "Özel günler ve kampanya modülü"
+      "QR kod ile dijital men\u00fc eri\u015fimi",
+      "\u00c7oklu dil deste\u011fi (TR/EN/AR)",
+      "Kategori ve \u00fcr\u00fcn y\u00f6netimi",
+      "Sayfa g\u00f6r\u00fcnt\u00fcleme analiti\u011fi",
+      "\u00d6zel g\u00fcnler ve kampanya mod\u00fcl\u00fc"
     ],
     "tasks": [
-      "Proje yapısı ve Next.js kurulumu",
-      "Çoklu dil altyapısı (i18n)",
-      "Menü CRUD API endpointleri",
-      "Responsive menü görünümü",
+      "Proje yap\u0131s\u0131 ve Next.js kurulumu",
+      "\u00c7oklu dil altyap\u0131s\u0131 (i18n)",
+      "Men\u00fc CRUD API endpointleri",
+      "Responsive men\u00fc g\u00f6r\u00fcn\u00fcm\u00fc",
       "Analitik dashboard"
     ],
     "github": "https://github.com/hikmetgulsesli/restmenu",
@@ -228,14 +228,14 @@
   {
     "id": "logpulse",
     "name": "LogPulse (VeriSentez)",
-    "emoji": "📊",
+    "emoji": "\ud83d\udcca",
     "status": "active",
-    "description": "OpenClaw ajan log analiz ve görselleştirme aracı. Session loglarını tarayarak token kullanımı, hata oranları, anomali tespiti ve ajan performans metriklerini hesaplar.",
+    "description": "OpenClaw ajan log analiz ve g\u00f6rselle\u015ftirme arac\u0131. Session loglar\u0131n\u0131 tarayarak token kullan\u0131m\u0131, hata oranlar\u0131, anomali tespiti ve ajan performans metriklerini hesaplar.",
     "ports": {
       "frontend": 3502
     },
     "domain": "logpulse.setrox.com.tr",
-    "repo": "/home/setrox/projects/logpulse",
+    "repo": "/home/setrox/logpulse",
     "stack": [
       "Node.js",
       "Express",
@@ -249,36 +249,36 @@
     "createdAt": "2026-02-11",
     "features": [
       "Session log tarama ve parsing",
-      "Token kullanım analizi (giriş/çıkış)",
-      "Anomali tespiti (yüksek hata, uzun süre)",
-      "Ajan bazlı performans metrikleri",
+      "Token kullan\u0131m analizi (giri\u015f/\u00e7\u0131k\u0131\u015f)",
+      "Anomali tespiti (y\u00fcksek hata, uzun s\u00fcre)",
+      "Ajan bazl\u0131 performans metrikleri",
       "REST API + web dashboard",
-      "CLI araçları (scan, report)"
+      "CLI ara\u00e7lar\u0131 (scan, report)"
     ],
     "tasks": [
-      "Log parser ve scanner modülü",
-      "SQLite veritabanı şeması",
+      "Log parser ve scanner mod\u00fcl\u00fc",
+      "SQLite veritaban\u0131 \u015femas\u0131",
       "Metrik hesaplama motoru",
-      "Anomali tespit algoritmaları",
+      "Anomali tespit algoritmalar\u0131",
       "Express API endpointleri",
-      "Dashboard arayüzü",
-      "CLI komutları (scan/report)"
+      "Dashboard aray\u00fcz\u00fc",
+      "CLI komutlar\u0131 (scan/report)"
     ],
-    "prd": "OpenClaw ajanlarının session loglarını analiz ederek performans metrikleri, anomali tespiti ve maliyet optimizasyonu sağlayan bir araç. Her session için token kullanımı, süre, hata sayısı, araç çağrıları gibi verileri toplar ve görselleştirir.",
+    "prd": "OpenClaw ajanlar\u0131n\u0131n session loglar\u0131n\u0131 analiz ederek performans metrikleri, anomali tespiti ve maliyet optimizasyonu sa\u011flayan bir ara\u00e7. Her session i\u00e7in token kullan\u0131m\u0131, s\u00fcre, hata say\u0131s\u0131, ara\u00e7 \u00e7a\u011fr\u0131lar\u0131 gibi verileri toplar ve g\u00f6rselle\u015ftirir.",
     "category": "own"
   },
   {
     "id": "clawdocs",
     "name": "ClawDocs",
-    "emoji": "📚",
+    "emoji": "\ud83d\udcda",
     "status": "active",
-    "description": "Auto-generated Agent Documentation. Tüm OpenClaw agent'larının otomatik taranmış dokümantasyonu. Agent yetenekleri, skill'leri ve araçları görsel dashboard'da sunar.",
+    "description": "Auto-generated Agent Documentation. T\u00fcm OpenClaw agent'lar\u0131n\u0131n otomatik taranm\u0131\u015f dok\u00fcmantasyonu. Agent yetenekleri, skill'leri ve ara\u00e7lar\u0131 g\u00f6rsel dashboard'da sunar.",
     "ports": {
       "frontend": 3504,
       "backend": 3504
     },
     "domain": "clawdocs.setrox.com.tr",
-    "repo": "/home/setrox/projects/clawdocs",
+    "repo": "/home/setrox/clawdocs",
     "stack": [
       "Node.js",
       "Express",
@@ -289,9 +289,9 @@
     "createdBy": "Arya",
     "createdAt": "2026-02-13",
     "features": [
-      "Otomatik agent tarayıcı",
-      "Görsel agent kartları",
-      "Skill ve yetenek görüntüleme",
+      "Otomatik agent taray\u0131c\u0131",
+      "G\u00f6rsel agent kartlar\u0131",
+      "Skill ve yetenek g\u00f6r\u00fcnt\u00fcleme",
       "Model bilgisi",
       "Search ve filtreleme",
       "Dark theme UI"
@@ -310,15 +310,15 @@
   {
     "id": "url-shortener",
     "name": "URL Shortener",
-    "emoji": "🔗",
+    "emoji": "\ud83d\udd17",
     "status": "active",
-    "description": "Minimal URL kısaltma servisi. Kısa link oluşturma, tıklama takibi ve istatistikler sunar.",
+    "description": "Minimal URL k\u0131saltma servisi. K\u0131sa link olu\u015fturma, t\u0131klama takibi ve istatistikler sunar.",
     "ports": {
       "frontend": 3506,
       "backend": 3506
     },
     "domain": "link.setrox.com.tr",
-    "repo": "/home/setrox/projects/url-shortener",
+    "repo": "/home/setrox/url-shortener",
     "stack": [
       "Node.js",
       "Express",
@@ -329,10 +329,10 @@
     "createdBy": "Manuel Deploy",
     "createdAt": "2026-02-14",
     "features": [
-      "Kısa link oluşturma",
-      "Tıklama takibi",
-      "Otomatik yönlendirme",
-      "İstatistik paneli"
+      "K\u0131sa link olu\u015fturma",
+      "T\u0131klama takibi",
+      "Otomatik y\u00f6nlendirme",
+      "\u0130statistik paneli"
     ],
     "tasks": [],
     "category": "own"
@@ -340,14 +340,14 @@
   {
     "id": "pomodoro-timer",
     "name": "Pomodoro Timer",
-    "emoji": "🍅",
+    "emoji": "\ud83c\udf45",
     "status": "completed",
     "description": "Build a Pomodoro Timer web application.  REQUIREMENTS:",
     "ports": {
       "frontend": 3507
     },
     "domain": "pomodoro-timer.setrox.com.tr",
-    "repo": "/home/setrox/projects/pomodoro-timer",
+    "repo": "/home/setrox/pomodoro-timer",
     "stack": [
       "React",
       "Vite",
@@ -411,7 +411,7 @@
     "antfarmRunIds": [
       "b252bebb-e79f-4c92-93d9-b4e011bd937d"
     ],
-    "updatedAt": "2026-02-26T03:18:54.450Z",
+    "updatedAt": "2026-02-23T18:55:48.703Z",
     "completedAt": "2026-02-23 07:48:04",
     "buildStartedAt": "2026-02-14T18:39:00+03:00",
     "buildCompletedAt": "2026-02-15T05:26:47+03:00",
@@ -420,14 +420,14 @@
   {
     "id": "qr-code-generator",
     "name": "QR Code Generator",
-    "emoji": "🔧",
+    "emoji": "\ud83d\udd27",
     "status": "completed",
     "description": "Build a QR Code Generator web application with: - Generate QR codes from text/URL - Customize colors (foreground/background)",
     "ports": {
       "frontend": 3511
     },
     "domain": "qr-code-generator.setrox.com.tr",
-    "repo": "/home/setrox/projects/qr-code-generator",
+    "repo": "/home/setrox/qr-code-generator",
     "stack": [
       "React",
       "Vite",
@@ -499,14 +499,14 @@
   {
     "id": "color-palette-generator",
     "name": "Color Palette Generator",
-    "emoji": "🔧",
+    "emoji": "\ud83d\udd27",
     "status": "completed",
     "description": "Build a Color Palette Generator web application with: - Generate random color palettes - Lock specific colors",
     "ports": {
       "frontend": 3510
     },
     "domain": "color-palette-generator.setrox.com.tr",
-    "repo": "/home/setrox/projects/color-palette-generator",
+    "repo": "/home/setrox/color-palette-generator",
     "stack": [
       "React",
       "Vite",
@@ -576,14 +576,14 @@
   {
     "id": "typing-speed-test",
     "name": "Typing Speed Test",
-    "emoji": "🔧",
+    "emoji": "\ud83d\udd27",
     "status": "completed",
     "description": "Build a Typing Speed Test web application with: - WPM (words per minute) calculation - Accuracy percentage tracking",
     "ports": {
       "frontend": 3509
     },
     "domain": "typing-speed-test.setrox.com.tr",
-    "repo": "/home/setrox/projects/typing-speed-test",
+    "repo": "/home/setrox/typing-speed-test",
     "stack": [
       "React",
       "Vite",
@@ -653,14 +653,14 @@
   {
     "id": "habit-tracker",
     "name": "Habit Tracker",
-    "emoji": "🔧",
+    "emoji": "\ud83d\udd27",
     "status": "completed",
     "description": "Build a Habit Tracker web application with: - Daily habit tracking (add/complete/delete habits) - GitHub-style heatmap (365-day activity grid)",
     "ports": {
       "frontend": 3508
     },
     "domain": "habit-tracker.setrox.com.tr",
-    "repo": "/home/setrox/projects/habit-tracker",
+    "repo": "/home/setrox/habit-tracker",
     "stack": [],
     "service": "habit-tracker.service",
     "serviceStatus": "active",
@@ -728,14 +728,14 @@
   {
     "id": "setrox-com-portfolio",
     "name": "setrox.com portfolio",
-    "emoji": "🚀",
+    "emoji": "\ud83d\ude80",
     "status": "completed",
-    "description": "setrox.com portfolio site - REPO: /home/setrox/projects/setrox-com - Multi-theme terminal-aesthetic developer portfolio with Next.js 15, Tailwind CSS 4, Framer Motion. 5 accent themes, cursor glow, ASCII terminal.",
+    "description": "setrox.com portfolio site - REPO: /home/setrox/setrox-com - Multi-theme terminal-aesthetic developer portfolio with Next.js 15, Tailwind CSS 4, Framer Motion. 5 accent themes, cursor glow, ASCII terminal.",
     "ports": {
       "frontend": 3512
     },
     "domain": "setrox-com-portfolio.setrox.com.tr",
-    "repo": "/home/setrox/projects/setrox-com",
+    "repo": "/home/setrox/setrox-com",
     "stack": [
       "React",
       "Next.js",
@@ -808,14 +808,14 @@
   {
     "id": "expense-tracker",
     "name": "Expense Tracker",
-    "emoji": "🏗",
+    "emoji": "\ud83c\udfd7",
     "status": "completed",
     "description": "Build an Expense Tracker web application with: Income/expense tracking, category management (Food, Transport, Bills, Entertainment, Shopping, Health, Other), monthly summary with charts. Modern dark U",
     "ports": {
       "frontend": 3513
     },
     "domain": "expense-tracker.setrox.com.tr",
-    "repo": "/home/setrox/projects/expense-tracker",
+    "repo": "/home/setrox/expense-tracker",
     "stack": [
       "React",
       "Vite",
@@ -885,14 +885,14 @@
   {
     "id": "unit-converter",
     "name": "Unit Converter",
-    "emoji": "🚀",
+    "emoji": "\ud83d\ude80",
     "status": "active",
     "description": "Build a Unit Converter web application with: Length (km, m, cm, mm, mile, yard, feet, inch), Weight (kg, g, mg, lb, oz), Temperature (C, F, K), Currency (USD, EUR, GBP, TRY, JPY) conversion. Modern da",
     "ports": {
       "frontend": 3514
     },
     "domain": "unit-converter.setrox.com.tr",
-    "repo": "/home/setrox/projects/unit-converter",
+    "repo": "/home/setrox/unit-converter",
     "stack": [
       "React",
       "Vite",
@@ -961,9 +961,9 @@
   {
     "id": "agentviz",
     "name": "AgentViz",
-    "emoji": "🚀",
+    "emoji": "\ud83d\ude80",
     "status": "active",
-    "description": "Rebuild AgentViz — Real-time Agent Activity Visualization Dashboard (v2, design rules applied).  IMPORTANT: This is a REBUILD of the existing AgentViz project. The old repo is at /home/setrox/.opencla",
+    "description": "Rebuild AgentViz \u2014 Real-time Agent Activity Visualization Dashboard (v2, design rules applied).  IMPORTANT: This is a REBUILD of the existing AgentViz project. The old repo is at /home/setrox/.opencla",
     "ports": {
       "frontend": 3503
     },
@@ -1038,14 +1038,14 @@
   {
     "id": "recipe-book",
     "name": "Recipe Book",
-    "emoji": "🏗",
+    "emoji": "\ud83c\udfd7",
     "status": "active",
-    "description": "Recipe Book - Tarif ekle, malzeme listesi, porsiyon hesap, timer. REPO: /home/setrox/projects/recipe-book. Frontend port: 3516",
+    "description": "Recipe Book - Tarif ekle, malzeme listesi, porsiyon hesap, timer. REPO: /home/setrox/recipe-book. Frontend port: 3516",
     "ports": {
       "frontend": 3516
     },
     "domain": "recipe-book.setrox.com.tr",
-    "repo": "/home/setrox/projects/recipe-book",
+    "repo": "/home/setrox/recipe-book",
     "stack": [
       "React",
       "Vite",
@@ -1114,14 +1114,14 @@
   {
     "id": "markdown-notepad",
     "name": "Markdown Notepad",
-    "emoji": "🚀",
+    "emoji": "\ud83d\ude80",
     "status": "active",
-    "description": "Markdown Notepad - Live preview, syntax highlight, local storage. REPO: /home/setrox/projects/markdown-notepad. Frontend port: 3515",
+    "description": "Markdown Notepad - Live preview, syntax highlight, local storage. REPO: /home/setrox/markdown-notepad. Frontend port: 3515",
     "ports": {
       "frontend": 3515
     },
     "domain": "markdown.setrox.com.tr",
-    "repo": "/home/setrox/projects/markdown-notepad",
+    "repo": "/home/setrox/markdown-notepad",
     "stack": [
       "React",
       "Vite",
@@ -1190,14 +1190,14 @@
   {
     "id": "hizliokuma",
     "name": "Hizli Okuma",
-    "emoji": "🚀",
+    "emoji": "\ud83d\ude80",
     "status": "active",
-    "description": "HIZLI OKUMA UYGULAMASI - React Admin Panel  REPO: /home/setrox/projects/hizliokuma",
+    "description": "HIZLI OKUMA UYGULAMASI - React Admin Panel  REPO: /home/setrox/hizliokuma",
     "ports": {
       "frontend": 3517
     },
     "domain": "hizliokuma.setrox.com.tr",
-    "repo": "/home/setrox/projects/hizliokuma",
+    "repo": "/home/setrox/hizliokuma",
     "stack": [
       "React",
       "Next.js",
@@ -1268,14 +1268,14 @@
   {
     "id": "task-queue",
     "name": "Task Queue",
-    "emoji": "🚀",
+    "emoji": "\ud83d\ude80",
     "status": "active",
-    "description": "GOREV KUYRUGU (Agent Task Queue) — OpenClaw agent gorevlerini yonetmek icin web dashboard. Repo: /home/setrox/projects/task-queue | Port: 3518 | Domain: task-queue.setrox.com.tr | Stack: Next.js 14 + Tailwind ",
+    "description": "GOREV KUYRUGU (Agent Task Queue) \u2014 OpenClaw agent gorevlerini yonetmek icin web dashboard. Repo: /home/setrox/task-queue | Port: 3518 | Domain: task-queue.setrox.com.tr | Stack: Next.js 14 + Tailwind ",
     "ports": {
       "frontend": 3518
     },
     "domain": "task-queue.setrox.com.tr",
-    "repo": "/home/setrox/projects/task-queue",
+    "repo": "/home/setrox/task-queue",
     "stack": [
       "React",
       "Next.js",
@@ -1344,14 +1344,14 @@
   {
     "id": "autopress",
     "name": "autopress",
-    "emoji": "🚀",
+    "emoji": "\ud83d\ude80",
     "status": "active",
-    "description": "AutoPress Story 6: UX UI Iyilestirmeler — REPO: /home/setrox/projects/autopress BRANCH: main TASK-FILE: /tmp/story6-task.md",
+    "description": "AutoPress Story 6: UX UI Iyilestirmeler \u2014 REPO: /home/setrox/autopress BRANCH: main TASK-FILE: /tmp/story6-task.md",
     "ports": {
       "frontend": 4519
     },
     "domain": "autopress.setrox.com.tr",
-    "repo": "/home/setrox/projects/autopress",
+    "repo": "/home/setrox/autopress",
     "stack": [
       "React",
       "Vite",
@@ -1416,22 +1416,22 @@
     "antfarmRunIds": [
       "c7e4e5dc-8898-4b32-ab35-9cf9ab8af24e"
     ],
-    "updatedAt": "2026-02-26T03:18:54.503Z",
+    "updatedAt": "2026-02-23T18:55:48.723Z",
     "completedAt": "2026-02-20 13:51:59",
     "setfarmRunIds": []
   },
   {
     "id": "ivf-asistan",
     "name": "ivf-asistan",
-    "emoji": "🚀",
+    "emoji": "\ud83d\ude80",
     "status": "active",
-    "description": "--repo /home/setrox/projects/ivf-asistan --branch main --task-file /tmp/ivf-asistan-prd.md",
+    "description": "--repo /home/setrox/ivf-asistan --branch main --task-file /tmp/ivf-asistan-prd.md",
     "ports": {
       "backend": 4520,
       "frontend": 3520
     },
     "domain": "ivf-asistan.setrox.com.tr",
-    "repo": "/home/setrox/projects/ivf-asistan",
+    "repo": "/home/setrox/ivf-asistan",
     "stack": [
       "Express",
       "TypeScript",
@@ -1495,27 +1495,27 @@
     "setfarmRunIds": [
       "f9d0776f-8776-4d86-bb18-f7d38bec03cb"
     ],
-    "updatedAt": "2026-02-26T03:18:54.469Z",
+    "updatedAt": "2026-02-23T18:55:48.711Z",
     "completedAt": "2026-02-22 10:39:10"
   },
   {
     "id": "snippetbox",
     "name": "SnippetBox",
-    "emoji": "🚀",
+    "emoji": "\ud83d\ude80",
     "status": "active",
     "description": "Build SnippetBox - a code snippet manager. Repo: https://github.com/hikmetgulsesli/snippetbox. PRD is in PRD.md in the repo root. Tech stack: React 18 + Vite + TailwindCSS frontend, Express + TypeScri",
     "ports": {
-      "frontend": 3521
+      "server": 3521
     },
     "domain": "snippetbox.setrox.com.tr",
-    "repo": "/home/setrox/projects/snippetbox",
+    "repo": "hikmetgulsesli/snippetbox",
     "stack": [
       "React",
       "Express",
       "PostgreSQL",
       "TypeScript"
     ],
-    "service": "snippetbox.service",
+    "service": "snippetbox",
     "serviceStatus": "online",
     "createdBy": "setfarm-workflow",
     "createdAt": "2026-02-23",
@@ -1572,292 +1572,7 @@
     "setfarmRunIds": [
       "6aa03647-7c0e-4814-ace0-8e72f5b0d47e"
     ],
-    "updatedAt": "2026-02-26T03:18:54.457Z",
+    "updatedAt": "2026-02-23T18:55:48.706Z",
     "completedAt": "2026-02-23 07:43:31"
-  },
-  {
-    "id": "scrapling",
-    "name": "scrapling",
-    "emoji": "🚀",
-    "status": "active",
-    "description": "Scrapling fork - Python web scraping framework: Fork https://github.com/D4Vinci/Scrapling and add custom features: (1) Pipeline wrapper classes for reusable fetch-parse-save cycles, (2) Custom fetcher",
-    "ports": {},
-    "domain": "",
-    "repo": "/home/setrox/scrapling",
-    "stack": [],
-    "service": "",
-    "serviceStatus": "unknown",
-    "createdBy": "setfarm-workflow",
-    "createdAt": "2026-02-25",
-    "stories": {
-      "total": 8,
-      "done": 8
-    },
-    "features": [],
-    "tasks": [],
-    "github": "",
-    "category": "own",
-    "checklist": [
-      {
-        "id": "task-received",
-        "label": "Gorev iletildi",
-        "completed": false
-      },
-      {
-        "id": "github-repo",
-        "label": "GitHub repo olusturuldu",
-        "completed": false
-      },
-      {
-        "id": "dns-setup",
-        "label": "Cloudflare DNS ve subdomain olusturuldu",
-        "completed": false
-      },
-      {
-        "id": "added-to-projects",
-        "label": "Projeler bolumune eklendi",
-        "completed": false
-      },
-      {
-        "id": "ports-assigned",
-        "label": "Portlar belirlendi",
-        "completed": false
-      },
-      {
-        "id": "setup-run",
-        "label": "Setup calistirildi",
-        "completed": false
-      },
-      {
-        "id": "dev-started",
-        "label": "Gelistirici calismaya basladi",
-        "completed": false
-      },
-      {
-        "id": "test-review",
-        "label": "Test ve review tamamlandi",
-        "completed": false
-      }
-    ],
-    "setfarmRunIds": [
-      "fb41e7cb-9ce0-492f-a8ed-90b61181ecc4"
-    ],
-    "updatedAt": "2026-02-26T03:18:54.446Z",
-    "completedAt": "2026-02-23 18:54:43"
-  },
-  {
-    "id": "sosyal-medya-ai-panel",
-    "name": "Sosyal Medya AI Panel",
-    "emoji": "🏗",
-    "status": "active",
-    "description": "Sosyal Medya AI Panel",
-    "ports": {
-      "frontend": 3522
-    },
-    "domain": "",
-    "repo": "",
-    "stack": [],
-    "service": "",
-    "serviceStatus": "unknown",
-    "createdBy": "setfarm-workflow",
-    "createdAt": "2026-02-26",
-    "stories": {
-      "total": 0,
-      "done": 0
-    },
-    "features": [],
-    "tasks": [],
-    "github": "",
-    "category": "own",
-    "checklist": [
-      {
-        "id": "task-received",
-        "label": "Gorev iletildi",
-        "completed": false
-      },
-      {
-        "id": "github-repo",
-        "label": "GitHub repo olusturuldu",
-        "completed": false
-      },
-      {
-        "id": "dns-setup",
-        "label": "Cloudflare DNS ve subdomain olusturuldu",
-        "completed": false
-      },
-      {
-        "id": "added-to-projects",
-        "label": "Projeler bolumune eklendi",
-        "completed": false
-      },
-      {
-        "id": "ports-assigned",
-        "label": "Portlar belirlendi",
-        "completed": false
-      },
-      {
-        "id": "setup-run",
-        "label": "Setup calistirildi",
-        "completed": false
-      },
-      {
-        "id": "dev-started",
-        "label": "Gelistirici calismaya basladi",
-        "completed": false
-      },
-      {
-        "id": "test-review",
-        "label": "Test ve review tamamlandi",
-        "completed": false
-      }
-    ],
-    "setfarmRunIds": [
-      "0766a64d-4d5a-4e42-8009-787ce2155a4b"
-    ]
-  },
-  {
-    "id": "ai-g-nl-k-mobil-uygulama-geli-tirme-prd",
-    "name": "AI Günlük mobil uygulama geliştirme. PRD",
-    "emoji": "🚀",
-    "status": "active",
-    "description": "AI Günlük mobil uygulama geliştirme. PRD: /home/setrox/mobile/ai-journal/PRD.md - US-001 den US-008 e kadar 8 user story. React Native + Expo SDK 54 + TypeScript. AI destekli journal uygulaması.",
-    "ports": {
-      "frontend": 3523
-    },
-    "domain": "ai-g-nl-k-mobil-uygulama-geli.setrox.com.tr",
-    "repo": "/home/setrox/mobile/ai-journal",
-    "stack": [
-      "React",
-      "TypeScript"
-    ],
-    "service": "ai-g-nl-k-mobil-uygulama-geli.service",
-    "serviceStatus": "active",
-    "createdBy": "setfarm-workflow",
-    "createdAt": "2026-02-26",
-    "stories": {
-      "total": 7,
-      "done": 7
-    },
-    "features": [],
-    "tasks": [],
-    "github": "",
-    "category": "own",
-    "checklist": [
-      {
-        "id": "task-received",
-        "label": "Gorev iletildi",
-        "completed": false
-      },
-      {
-        "id": "github-repo",
-        "label": "GitHub repo olusturuldu",
-        "completed": false
-      },
-      {
-        "id": "dns-setup",
-        "label": "Cloudflare DNS ve subdomain olusturuldu",
-        "completed": false
-      },
-      {
-        "id": "added-to-projects",
-        "label": "Projeler bolumune eklendi",
-        "completed": false
-      },
-      {
-        "id": "ports-assigned",
-        "label": "Portlar belirlendi",
-        "completed": false
-      },
-      {
-        "id": "setup-run",
-        "label": "Setup calistirildi",
-        "completed": false
-      },
-      {
-        "id": "dev-started",
-        "label": "Gelistirici calismaya basladi",
-        "completed": false
-      },
-      {
-        "id": "test-review",
-        "label": "Test ve review tamamlandi",
-        "completed": false
-      }
-    ],
-    "setfarmRunIds": [
-      "05c28921-3666-4aab-b629-b5d8c31a5df1"
-    ],
-    "updatedAt": "2026-02-26T03:18:54.435Z",
-    "completedAt": "2026-02-25 15:02:22"
-  },
-  {
-    "id": "sabah-standup-raporu",
-    "name": "Sabah standup raporu",
-    "emoji": "🏗",
-    "status": "active",
-    "description": "Sabah standup raporu",
-    "ports": {
-      "frontend": 3524
-    },
-    "domain": "",
-    "repo": "",
-    "stack": [],
-    "service": "",
-    "serviceStatus": "unknown",
-    "createdBy": "setfarm-workflow",
-    "createdAt": "2026-02-26",
-    "stories": {
-      "total": 0,
-      "done": 0
-    },
-    "features": [],
-    "tasks": [],
-    "github": "",
-    "category": "own",
-    "checklist": [
-      {
-        "id": "task-received",
-        "label": "Gorev iletildi",
-        "completed": false
-      },
-      {
-        "id": "github-repo",
-        "label": "GitHub repo olusturuldu",
-        "completed": false
-      },
-      {
-        "id": "dns-setup",
-        "label": "Cloudflare DNS ve subdomain olusturuldu",
-        "completed": false
-      },
-      {
-        "id": "added-to-projects",
-        "label": "Projeler bolumune eklendi",
-        "completed": false
-      },
-      {
-        "id": "ports-assigned",
-        "label": "Portlar belirlendi",
-        "completed": false
-      },
-      {
-        "id": "setup-run",
-        "label": "Setup calistirildi",
-        "completed": false
-      },
-      {
-        "id": "dev-started",
-        "label": "Gelistirici calismaya basladi",
-        "completed": false
-      },
-      {
-        "id": "test-review",
-        "label": "Test ve review tamamlandi",
-        "completed": false
-      }
-    ],
-    "setfarmRunIds": [
-      "5dd3bf00-53f7-470b-9b4d-d2ccfb7faabb"
-    ]
   }
 ]

@@ -1,12 +1,10 @@
-import { usePolling } from '../hooks/usePolling';
-import { api } from '../lib/api';
-import type { SystemMetrics } from '../lib/types';
+import { useAppStore } from '../store/appStore';
 import { format } from 'date-fns';
 import { useState, useEffect } from 'react';
 
 export function StatusBar() {
-  const { data: system } = usePolling<SystemMetrics>(api.system, 15000);
-  const { data: overview } = usePolling(api.overview, 30000);
+  const system = useAppStore(s => s.system);
+  const overview = useAppStore(s => s.overview);
   const [time, setTime] = useState(format(new Date(), 'HH:mm'));
 
   useEffect(() => {

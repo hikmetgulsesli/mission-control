@@ -251,10 +251,10 @@ router.delete("/projects/:id", async (req, res) => {
 
     const log: string[] = [];
 
-    if (project.service && !project.service.startsWith("docker:")) {
+    if (project.service && !project.service.startsWith("docker:") && /^[a-zA-Z0-9_.-]+$/.test(project.service)) {
       try {
-        execSync("sudo systemctl stop " + project.service + " 2>/dev/null || true", { timeout: 10000 });
-        execSync("sudo systemctl disable " + project.service + " 2>/dev/null || true", { timeout: 10000 });
+        execFileSync("sudo", ["systemctl", "stop", project.service], { timeout: 10000, stdio: 'pipe' });
+        execFileSync("sudo", ["systemctl", "disable", project.service], { timeout: 10000, stdio: 'pipe' });
         log.push("Service " + project.service + " stopped and disabled");
       } catch { log.push("Service " + project.service + " stop failed"); }
     }

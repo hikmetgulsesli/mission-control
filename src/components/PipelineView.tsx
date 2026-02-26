@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react';
 import { StoryChecklist } from './StoryChecklist';
 import { api } from '../lib/api';
 
-const STEP_ORDER = ['plan', 'setup', 'implement', 'verify', 'final-test'];
+const STEP_ORDER = ['plan', 'setup', 'implement', 'verify', 'security-gate', 'final-test'];
 const STEP_LABELS: Record<string, string> = {
   plan: 'PLAN', setup: 'SETUP', implement: 'IMPL',
-  verify: 'VERIFY', 'final-test': 'TEST & MERGE',
+  verify: 'VERIFY', 'security-gate': 'SEC GATE', 'final-test': 'TEST & MERGE',
   test: 'TEST', pr: 'PR', review: 'REVIEW',
   triage: 'TRIAGE', investigate: 'INVEST', fix: 'FIX',
   collect: 'COLLECT', report: 'REPORT',
@@ -13,7 +13,7 @@ const STEP_LABELS: Record<string, string> = {
 };
 
 const WORKFLOW_STEPS: Record<string, string[]> = {
-  'feature-dev': ['plan', 'setup', 'implement', 'verify', 'final-test'],
+  'feature-dev': ['plan', 'setup', 'implement', 'verify', 'security-gate', 'final-test'],
   'bug-fix': ['triage', 'investigate', 'fix', 'verify', 'test', 'pr', 'review'],
   'security-audit': ['collect', 'plan', 'fix', 'verify', 'test', 'report', 'review'],
 };
@@ -147,12 +147,14 @@ export function PipelineView({ runs }: { runs: PipelineRun[] }) {
           return true;
         }).reverse();
 
-        // Always show all workflow steps, even if not yet in data
+        // For completed/failed runs, only show steps that actually ran; for running, show all
         const wfSteps = WORKFLOW_STEPS[run.workflow] || STEP_ORDER;
         const stepMap = new Map(uniqueSteps.map(s => [s.stepId, s]));
-        const allSteps = wfSteps.map(stepId => stepMap.get(stepId) || {
-          stepId, agent: '', status: 'pending', retryCount: 0, type: 'step', abandonedCount: 0
-        });
+        const allSteps = wfSteps
+          .filter(stepId => run.status === 'running' || stepMap.has(stepId))
+          .map(stepId => stepMap.get(stepId) || {
+            stepId, agent: ''  , status: 'pending', retryCount: 0, type: 'step', abandonedCount: 0
+          });
 
         const progressPct = run.storyProgress.total > 0
           ? Math.round((run.storyProgress.completed / run.storyProgress.total) * 100)

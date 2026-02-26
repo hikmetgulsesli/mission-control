@@ -1,20 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 import { PixelOfficeEngine, OfficeAgentState } from '../lib/pixelOffice';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { AGENT_MAP } from '../lib/constants';
 import { api } from '../lib/api';
 import { formatDistanceToNow } from 'date-fns';
 
-// Note: marked.parse output is used with dangerouslySetInnerHTML below.
-// This is the same pattern as the original code - content comes from our own
-// agent WebSocket responses (trusted internal source), not user input.
-
 // Format workflow agent IDs: "bug-fix_investigator" -> "Bug Fix / Investigator"
 function formatAgentId(id: string): { name: string; emoji: string } {
   const meta = AGENT_MAP[id];
   if (meta) return { name: meta.name, emoji: meta.emoji };
-  // Workflow agent
   const name = id.split('_').map(part =>
     part.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
   ).join(' / ');
@@ -31,7 +27,17 @@ function formatAgentId(id: string): { name: string; emoji: string } {
   return { name, emoji };
 }
 
-export function PixelOffice() {
+function sanitizeMarkdown(text: string): { __html: string } {
+  // Content comes from our own agent WebSocket responses (trusted internal source)
+  // DOMPurify sanitization provides defense-in-depth
+  return { __html: DOMPurify.sanitize(marked.parse(text) as string) };
+}
+
+interface Props {
+  visible: boolean;
+}
+
+export function PixelOffice({ visible }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<PixelOfficeEngine | null>(null);
   const prevStatesRef = useRef<Map<string, 'working' | 'idle'>>(new Map());
@@ -40,8 +46,75 @@ export function PixelOffice() {
   const [agentStates, setAgentStates] = useState<OfficeAgentState[]>([]);
   const [recentEvents, setRecentEvents] = useState<{ agent: string; text: string; time: number }[]>([]);
 
-  // WebSocket for real-time chat bubbles
   const { messages: wsEvents } = useWebSocket();
+
+  // Create engine once, persist across navigations
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    const engine = new PixelOfficeEngine(canvasRef.current);
+    engineRef.current = engine;
+    engine.start();
+    return () => {
+      engine.destroy();
+      engineRef.current = null;
+    };
+  }, []);
+
+  // Pause/resume engine based on visibility
+  useEffect(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    if (visible) {
+      engine.start();
+    } else {
+      engine.stop();
+    }
+  }, [visible]);
+
+  // Poll office status (only when visible), using setInterval instead of while loop
+  useEffect(() => {
+    if (!visible) return;
+
+    let mounted = true;
+
+    async function poll() {
+      try {
+        const data = await api.officeStatus();
+        if (!mounted || !data?.agents) return;
+
+        const agents = data.agents as OfficeAgentState[];
+        setAgentStates(agents);
+
+        // Handoff detection
+        const prevStates = prevStatesRef.current;
+        const newStates = new Map<string, 'working' | 'idle'>();
+        for (const a of agents) newStates.set(a.id, a.status);
+
+        if (prevStates.size > 0) {
+          for (const [id, prev] of prevStates) {
+            if (prev === 'working' && newStates.get(id) === 'idle') {
+              for (const [otherId, otherNew] of newStates) {
+                if (otherId !== id && prevStates.get(otherId) === 'idle' && otherNew === 'working') {
+                  engineRef.current?.triggerHandoff(id, otherId);
+                  break;
+                }
+              }
+            }
+          }
+        }
+        prevStatesRef.current = newStates;
+
+        engineRef.current?.updateAgentStates(agents);
+        setError(null);
+      } catch (err: any) {
+        if (mounted) setError(err.message || 'Failed to fetch office status');
+      }
+    }
+
+    poll();
+    const id = setInterval(poll, 5000);
+    return () => { mounted = false; clearInterval(id); };
+  }, [visible]);
 
   // Process WS events -> chat bubbles + activity feed
   useEffect(() => {
@@ -68,7 +141,6 @@ export function PixelOffice() {
       const done = payload.state === 'final';
       engine.updateChatBubble(agentId, text, done);
 
-      // Track activity for info panel (filter noise)
       if (done && text.length > 10 && !text.startsWith('HEARTBEAT') && text !== 'HEARTBEAT_OK') {
         setRecentEvents(prev => [
           { agent: agentId, text: text.slice(0, 80), time: Date.now() },
@@ -78,7 +150,6 @@ export function PixelOffice() {
     }
   }, [wsEvents]);
 
-  // Canvas click handler for chat bubbles
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const engine = engineRef.current;
     const canvas = canvasRef.current;
@@ -96,69 +167,9 @@ export function PixelOffice() {
     }
   };
 
-  useEffect(() => {
-    if (!canvasRef.current) return;
-
-    const engine = new PixelOfficeEngine(canvasRef.current);
-    engineRef.current = engine;
-    engine.start();
-
-    let mounted = true;
-
-    async function poll() {
-      while (mounted) {
-        try {
-          const data = await api.officeStatus();
-          if (mounted && data?.agents) {
-            const agents = data.agents as OfficeAgentState[];
-            setAgentStates(agents);
-
-            // Handoff detection: compare prev states
-            const prevStates = prevStatesRef.current;
-            const newStates = new Map<string, 'working' | 'idle'>();
-            for (const a of agents) newStates.set(a.id, a.status);
-
-            if (prevStates.size > 0) {
-              for (const [id, prev] of prevStates) {
-                if (prev === 'working' && newStates.get(id) === 'idle') {
-                  for (const [otherId, otherNew] of newStates) {
-                    if (otherId !== id && prevStates.get(otherId) === 'idle' && otherNew === 'working') {
-                      engine.triggerHandoff(id, otherId);
-                      break;
-                    }
-                  }
-                }
-              }
-            }
-            prevStatesRef.current = newStates;
-
-            engine.updateAgentStates(agents);
-            setError(null);
-          }
-        } catch (err: any) {
-          if (mounted) setError(err.message || 'Failed to fetch office status');
-        }
-        await new Promise(r => setTimeout(r, 5000));
-      }
-    }
-
-    poll();
-
-    return () => {
-      mounted = false;
-      engine.destroy();
-      engineRef.current = null;
-    };
-  }, []);
-
   const agentInfo = chatOverlay ? AGENT_MAP[chatOverlay.agent] : null;
   const workingAgents = agentStates.filter(a => a.status === 'working');
   const idleAgents = agentStates.filter(a => a.status === 'idle');
-
-  // Render parsed markdown safely - content is from our own trusted agent responses
-  const renderMarkdown = (text: string) => {
-    return { __html: marked.parse(text) as string };
-  };
 
   return (
     <div className="pixel-office">
@@ -175,7 +186,6 @@ export function PixelOffice() {
         </div>
       )}
 
-      {/* Office Info Panel */}
       <div className="office-info">
         <div className="office-info__col">
           <h4 className="office-info__title">WORKING ({workingAgents.length})</h4>
@@ -240,7 +250,7 @@ export function PixelOffice() {
             </div>
             <div
               className="pixel-office__chat-overlay-body"
-              dangerouslySetInnerHTML={renderMarkdown(chatOverlay.text)}
+              dangerouslySetInnerHTML={sanitizeMarkdown(chatOverlay.text)}
             />
           </div>
         </div>

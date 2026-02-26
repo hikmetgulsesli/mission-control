@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { format } from 'date-fns';
 import { api } from '../lib/api';
+import { useToast } from './Toast';
 import type { Run } from '../lib/types';
 
 interface Props {
@@ -18,6 +19,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export function RunCard({ run, onClick, onDelete }: Props) {
+  const { toast } = useToast();
   const [expanded, setExpanded] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -37,7 +39,7 @@ export function RunCard({ run, onClick, onDelete }: Props) {
       await api.deleteRun(run.id);
       onDelete?.();
     } catch (err) {
-      alert('Failed to delete: ' + (err as Error).message);
+      toast('Failed to delete: ' + (err as Error).message, 'error');
     } finally {
       setDeleting(false);
     }

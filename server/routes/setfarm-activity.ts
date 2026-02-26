@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
 import { cached } from '../utils/cache.js';
 import { readFileSync as readSync, writeFileSync as writeSync, renameSync } from 'fs';
 import { tmpdir } from 'os';
@@ -76,7 +76,7 @@ router.get('/setfarm/pipeline', async (_req, res) => {
         try {
           const stories = await getRunStories(r.id);
           if (stories && stories.length > 0) {
-            const done = r.status === 'completed' ? stories.length : stories.filter((s: any) => s.status === 'done').length;
+            const done = r.status === 'completed' ? stories.length : stories.filter((s: any) => ['done', 'verified', 'skipped'].includes(s.status)).length;
             storyProgress = { completed: done, total: stories.length };
           }
         } catch {}
@@ -480,7 +480,7 @@ app.get('*', (_req, res) => { res.sendFile(path.join(clientDist, 'index.html'));
   writeFileSync(serverIndex, src);
   // Rebuild server after patching
   try {
-    execSync('cd ' + join(repo, 'server') + ' && npm run build', { timeout: 30000 });
+    execFileSync('npm', ['run', 'build'], { cwd: join(repo, 'server'), timeout: 30000 });
   } catch (err: any) {
     console.error('[ensureExpressStatic] Rebuild failed:', err.message);
   }
@@ -502,11 +502,11 @@ function patchVitePreview(repo: string, port: number): void {
 function findExistingService(_port: number, slug: string, repo?: string): string | null {
   try {
     // 1. Check by repo WorkingDirectory (most reliable — same dir = same project)
-    if (repo) {
-      const grepResult = execSync(
-        'grep -rl "WorkingDirectory=' + repo + '" /etc/systemd/system/*.service 2>/dev/null || true',
-        { timeout: 3000 }
-      ).toString().trim();
+    if (repo && /^[a-zA-Z0-9/_.-]+$/.test(repo)) {
+      const grepResult = execFileSync(
+        'grep', ['-rl', `WorkingDirectory=${repo}`, '/etc/systemd/system/'],
+        { timeout: 3000, encoding: 'utf-8' }
+      ).trim();
       if (grepResult) {
         const svcPath = grepResult.split('\n')[0];
         const svcName = svcPath.split('/').pop() || '';
@@ -515,10 +515,10 @@ function findExistingService(_port: number, slug: string, repo?: string): string
     }
     // 2. Check by slug prefix (all services, not just running)
     const prefix = slug.split('-').slice(0, 2).join('-');
-    const units = execSync(
-      'systemctl list-units --type=service --all --no-legend',
-      { timeout: 3000 }
-    ).toString();
+    const units = execFileSync(
+      'systemctl', ['list-units', '--type=service', '--all', '--no-legend'],
+      { timeout: 3000, encoding: 'utf-8' }
+    );
     for (const line of units.split('\n')) {
       const svc = line.trim().split(/\s+/)[0];
       if (svc && svc.endsWith('.service') && svc.includes(prefix)) {
@@ -756,7 +756,7 @@ async function syncProjectsFromRuns(): Promise<{ synced: any[]; skipped: string[
         try {
           const stories = await getRunStories(run.id);
           if (stories && stories.length > 0) {
-            const done = run.status === 'completed' ? stories.length : stories.filter((s: any) => s.status === 'done').length;
+            const done = run.status === 'completed' ? stories.length : stories.filter((s: any) => ['done', 'verified', 'skipped'].includes(s.status)).length;
             updateProjectById(result.project.id, {
               stories: { total: stories.length, done },
               completedAt: run.updated_at || new Date().toISOString(),
@@ -799,7 +799,7 @@ async function syncProjectsFromRuns(): Promise<{ synced: any[]; skipped: string[
       try {
         const stories = await getRunStories(run.id);
         if (stories && stories.length > 0) {
-          const done = run.status === 'completed' ? stories.length : stories.filter((s: any) => s.status === 'done').length;
+          const done = run.status === 'completed' ? stories.length : stories.filter((s: any) => ['done', 'verified', 'skipped'].includes(s.status)).length;
           updateProjectById(result.project.id, {
             stories: { total: stories.length, done },
             completedAt: (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') ? (run.updated_at || new Date().toISOString()) : undefined,

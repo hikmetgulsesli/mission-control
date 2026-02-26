@@ -4,13 +4,14 @@ import { NavLink, useLocation } from 'react-router-dom';
 const tabs: { to: string; label: string; key?: string }[] = [
   { to: '/', label: 'OVERVIEW' },
   { to: '/office', label: 'OFFICE', key: '0' },
-  { to: '/agents', label: 'AGENTS', key: '1' },
+  { to: '/setfarm', label: 'AGENTS', key: '1' },
   { to: '/chat', label: 'CHAT', key: '2' },
   { to: '/ops', label: 'OPS', key: '3' },
   { to: '/costs', label: 'COSTS', key: '4' },
   { to: '/performance', label: 'PERF', key: '5' },
   { to: '/projects', label: 'PROJECTS', key: '6' },
   { to: '/files', label: 'FILES', key: '7' },
+  { to: '/scrape', label: 'SCRAPE', key: '9' },
 ];
 
 interface TabNavProps {

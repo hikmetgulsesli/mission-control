@@ -10,36 +10,36 @@ const router = Router();
 // Lives here so setfarm updates don't break it
 const STEP_MAPPING: Record<string, Record<string, string[]>> = {
   'feature-dev': {
-    plan:      ['defne'],
+    plan:      ['iris'],
     setup:     ['atlas'],
-    implement: ['koda', 'mert'],
-    verify:    ['sinan'],
-    test:      ['onur', 'mert'],
-    pr:        ['koda', 'mert'],
-    review:    ['kaan', 'deniz'],
+    implement: ['koda', 'prism'],
+    verify:    ['sentinel'],
+    test:      ['nexus', 'prism'],
+    pr:        ['koda', 'prism'],
+    review:    ['flux', 'lux'],
   },
   'bug-fix': {
-    triage:      ['defne'],
+    triage:      ['iris'],
     investigate: ['koda'],
     setup:       ['atlas'],
-    fix:         ['elif'],
-    verify:      ['sinan'],
-    pr:          ['kaan', 'deniz'],
+    fix:         ['cipher'],
+    verify:      ['sentinel'],
+    pr:          ['flux', 'lux'],
   },
   'security-audit': {
-    scan:       ['defne'],
+    scan:       ['iris'],
     prioritize: ['main'],
     setup:      ['atlas'],
     fix:        ['koda'],
-    verify:     ['sinan'],
-    test:       ['onur', 'mert'],
-    pr:         ['kaan', 'deniz'],
+    verify:     ['sentinel'],
+    test:       ['nexus', 'prism'],
+    pr:         ['flux', 'lux'],
   },
 };
 
 // Cron-based agent activity
 const CRON_AGENTS: Record<string, string[]> = {
-  'daily-standup': ['deniz'],
+  'daily-standup': ['lux'],
 };
 
 const SESSIONS_BASE = '/home/setrox/.openclaw/agents';
@@ -68,7 +68,7 @@ function getSessionActivity(agentId: string): string | null {
 }
 
 async function getOfficeStatus(): Promise<{ agents: AgentStatus[]; timestamp: number }> {
-  const allAgents = ['main', 'koda', 'kaan', 'atlas', 'defne', 'sinan', 'elif', 'deniz', 'onur', 'mert'];
+  const allAgents = ['main', 'koda', 'flux', 'atlas', 'iris', 'sentinel', 'cipher', 'lux', 'nexus', 'prism'];
   const working = new Map<string, string>();
 
   // Arya always working (CEO)

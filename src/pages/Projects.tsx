@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { GlitchText } from "../components/GlitchText";
 import { ProjectChecklist } from "../components/ProjectChecklist";
 import { api } from "../lib/api";
+import { useToast } from "../components/Toast";
 
 
 function formatDuration(createdAt?: string, completedAt?: string, buildStartedAt?: string, buildCompletedAt?: string): string | null {
@@ -62,6 +63,7 @@ const TOOL_LOGOS: Record<string, string> = {
 };
 
 export function Projects() {
+  const { toast } = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -108,7 +110,7 @@ export function Projects() {
       setShowCreate(false);
       setCreateForm({ name: "", description: "", emoji: "", category: "own" });
     } catch (err: any) {
-      alert("Create failed: " + err.message);
+      toast("Create failed: " + err.message, 'error');
     } finally {
       setCreateLoading(false);
     }
@@ -125,7 +127,7 @@ export function Projects() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (err: any) {
-      alert("Export failed: " + err.message);
+      toast("Export failed: " + err.message, 'error');
     }
   };
 
@@ -138,7 +140,7 @@ export function Projects() {
       const project = await api.importProject(data);
       setProjects(prev => [...prev, project]);
     } catch (err: any) {
-      alert("Import failed: " + err.message);
+      toast("Import failed: " + err.message, 'error');
     }
     if (importRef.current) importRef.current.value = "";
   };

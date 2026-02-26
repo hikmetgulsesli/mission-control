@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 import { api } from '../lib/api';
 import { AGENT_MAP } from '../lib/constants';
 
@@ -11,7 +12,7 @@ marked.setOptions({
 
 function renderMarkdown(text: string): string {
   try {
-    return marked.parse(text) as string;
+    return DOMPurify.sanitize(marked.parse(text) as string);
   } catch {
     return text;
   }
@@ -187,7 +188,7 @@ export function ChatPanel({ events, onSend, connected, selectedAgent }: Props) {
 
       <div className="chat-panel__messages">
         <div ref={topRef} />
-        {isThinking && allMessages.every(m => m.done) && (
+        {isThinking && !agentMessages.some(m => !m.done && m.text) && (
           <div className="chat-msg chat-msg--assistant">
             <div className="chat-msg__header">
               <span className="chat-msg__from">{agentEmoji} {agentName}</span>

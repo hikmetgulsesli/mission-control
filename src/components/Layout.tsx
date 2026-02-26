@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { StatusBar } from './StatusBar';
 import { TabNav } from './TabNav';
 import { ScanlineOverlay } from './ScanlineOverlay';
 import { TerminalDrawer } from './TerminalWidget';
+import { PixelOffice } from '../pages/PixelOffice';
+import { useDataSync } from '../hooks/useDataSync';
 
 const KEY_MAP: Record<string, string | null> = {
   '0': '/office',
-  '1': '/agents',
+  '1': '/setfarm',
   '2': '/chat',
   '3': '/ops',
   '4': '/costs',
@@ -15,11 +17,15 @@ const KEY_MAP: Record<string, string | null> = {
   '6': '/projects',
   '7': '/files',
   '8': null, // shell toggle
+  '9': '/scrape',
 };
 
 export function Layout() {
   const [shellOpen, setShellOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const isOffice = location.pathname === '/office';
+  useDataSync();
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -55,7 +61,10 @@ export function Layout() {
       <StatusBar />
       <TabNav onShellToggle={() => setShellOpen(o => !o)} shellOpen={shellOpen} />
       <main className={`layout__content ${shellOpen ? 'layout__content--shell-open' : ''}`}>
-        <Outlet />
+        <div style={{ display: isOffice ? 'contents' : 'none' }}>
+          <PixelOffice visible={isOffice} />
+        </div>
+        {!isOffice && <Outlet />}
       </main>
       <TerminalDrawer open={shellOpen} onClose={() => setShellOpen(false)} />
     </div>

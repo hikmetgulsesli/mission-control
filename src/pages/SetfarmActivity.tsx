@@ -1,22 +1,23 @@
 import { useState } from 'react';
-import { usePolling } from '../hooks/usePolling';
+import { useAppStore } from '../store/appStore';
 import { api } from '../lib/api';
+import { useToast } from '../components/Toast';
 import { GlitchText } from '../components/GlitchText';
 import { AgentMiniGrid } from '../components/AgentMiniGrid';
 import { PipelineView } from '../components/PipelineView';
 import { SetfarmFeed } from '../components/SetfarmFeed';
 import { CompactStatsBar } from '../components/CompactStatsBar';
 import { AgentChatFeed } from '../components/AgentChatFeed';
-import type { Workflow } from '../lib/types';
 
 export function SetfarmActivity() {
-  const { data: agents } = usePolling(api.agents, 30_000);
-  const { data: pipeline, refresh: refreshPipeline } = usePolling(api.setfarmPipeline, 10_000);
-  const { data: activity } = usePolling(api.setfarmActivity, 10_000);
-  const { data: wfAgents } = usePolling(api.setfarmAgents, 30_000);
-  const { data: alerts } = usePolling(api.setfarmAlerts, 15_000);
-  const { data: workflows } = usePolling<Workflow[]>(api.workflows, 30_000);
-  const { data: sessions } = usePolling(api.sessions, 30_000);
+  const { toast } = useToast();
+  const agents = useAppStore(s => s.agents);
+  const pipeline = useAppStore(s => s.pipeline);
+  const activity = useAppStore(s => s.activity);
+  const wfAgents = useAppStore(s => s.wfAgents);
+  const alerts = useAppStore(s => s.alerts);
+  const workflows = useAppStore(s => s.workflows);
+  const sessions = useAppStore(s => s.sessions);
 
   const [showModal, setShowModal] = useState(false);
   const [selectedWf, setSelectedWf] = useState('');
@@ -32,9 +33,9 @@ export function SetfarmActivity() {
       setShowModal(false);
       setTask('');
       setSelectedWf('');
-      refreshPipeline();
+      api.setfarmPipeline().then(data => useAppStore.setState({ pipeline: data })).catch(() => {});
     } catch (err: any) {
-      alert('Failed: ' + err.message);
+      toast('Failed: ' + err.message, 'error');
     } finally {
       setStarting(false);
     }
