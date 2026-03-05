@@ -30,6 +30,7 @@ interface Project {
   name: string;
   emoji: string;
   status: string;
+  type?: "web" | "mobile";
   description: string;
   ports: { frontend?: number; backend?: number };
   domain: string;
@@ -72,10 +73,12 @@ export function Projects() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteResult, setDeleteResult] = useState<{ success: boolean; log?: string[]; error?: string } | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [createForm, setCreateForm] = useState({ name: "", description: "", emoji: "", category: "own" });
+  const [createForm, setCreateForm] = useState({ name: "", description: "", emoji: "", category: "own", type: "web" as string });
   const [createLoading, setCreateLoading] = useState(false);
   const [sortBy, setSortBy] = useState<'date' | 'port' | 'name' | 'status'>('name');
   const importRef = useRef<HTMLInputElement>(null);
+  const [toggling, setToggling] = useState<string | null>(null);
+  const [bulkAction, setBulkAction] = useState<string | null>(null);
 
   useEffect(() => {
     api.projects()
@@ -108,7 +111,7 @@ export function Projects() {
       const project = await api.createProject(createForm);
       setProjects(prev => [...prev, project]);
       setShowCreate(false);
-      setCreateForm({ name: "", description: "", emoji: "", category: "own" });
+      setCreateForm({ name: "", description: "", emoji: "", category: "own", type: "web" as string });
     } catch (err: any) {
       toast("Create failed: " + err.message, 'error');
     } finally {
@@ -149,6 +152,45 @@ export function Projects() {
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, checklist } : p));
   };
 
+  const handleToggle = async (e: React.MouseEvent, p: Project) => {
+    e.stopPropagation();
+    if (p.id === "mission-control" || p.type === "mobile") return;
+    const action = p.serviceStatus === "active" ? "stop" : "start";
+    setToggling(p.id);
+    try {
+      await api.toggleProject(p.id, action);
+      setProjects(prev => prev.map(pr =>
+        pr.id === p.id ? { ...pr, serviceStatus: action === "start" ? "active" : "inactive" } : pr
+      ));
+      toast(p.name + " " + (action === "start" ? "baslatildi" : "durduruldu"), "success");
+    } catch (err: any) {
+      toast("Toggle failed: " + err.message, "error");
+    } finally {
+      setToggling(null);
+    }
+  };
+
+  const handleBulkToggle = async (action: "start" | "stop") => {
+    const targets = ownProjects.filter(p =>
+      p.id !== "mission-control" && p.type !== "mobile" && p.service &&
+      (action === "start" ? p.serviceStatus !== "active" : p.serviceStatus === "active")
+    );
+    if (targets.length === 0) { toast("Degistirilecek servis yok", "error"); return; }
+    setBulkAction(action);
+    let ok = 0, fail = 0;
+    for (const p of targets) {
+      try {
+        await api.toggleProject(p.id, action);
+        setProjects(prev => prev.map(pr =>
+          pr.id === p.id ? { ...pr, serviceStatus: action === "start" ? "active" : "inactive" } : pr
+        ));
+        ok++;
+      } catch { fail++; }
+    }
+    toast(ok + " servis " + (action === "start" ? "baslatildi" : "durduruldu") + (fail ? ", " + fail + " basarisiz" : ""), ok > 0 ? "success" : "error");
+    setBulkAction(null);
+  };
+
   const openDeleteModal = (e: React.MouseEvent, project: Project) => {
     e.stopPropagation();
     setDeleteTarget(project);
@@ -182,6 +224,12 @@ export function Projects() {
           <button className="btn btn--small btn--primary" onClick={() => setShowCreate(true)}>+ YENI PROJE</button>
           <button className="btn btn--small" onClick={() => importRef.current?.click()}>IMPORT</button>
           <input ref={importRef} type="file" accept=".json" style={{ display: "none" }} onChange={handleImport} />
+          <button className="btn btn--small btn--success" onClick={() => handleBulkToggle("start")} disabled={!!bulkAction}>
+            {bulkAction === "start" ? "BASLATILIYOR..." : "TUMUNU BASLAT"}
+          </button>
+          <button className="btn btn--small btn--danger" onClick={() => handleBulkToggle("stop")} disabled={!!bulkAction}>
+            {bulkAction === "stop" ? "DURDURULUYOR..." : "TUMUNU DURDUR"}
+          </button>
         </div>
       </div>
 
@@ -225,36 +273,46 @@ export function Projects() {
         {ownProjects.map((p) => (
           <div
             key={p.id}
-            className={`project-card ${selected === p.id ? "project-card--selected" : ""} ${p.status === "building" ? "project-card--building" : p.status === "failed" ? "project-card--failed" : ""} project-card--${p.serviceStatus === "active" ? "online" : "offline"}`}
+            className={`project-card ${selected === p.id ? "project-card--selected" : ""} ${p.status === "building" ? "project-card--building" : p.status === "failed" ? "project-card--failed" : ""} ${p.type === "mobile" ? "project-card--mobile" : `project-card--${p.serviceStatus === "active" ? "online" : "offline"}`}`}
             onClick={() => setSelected(selected === p.id ? null : p.id)}
           >
             <div className="project-card__header">
               <span className="project-card__emoji">{p.emoji}</span>
               <span className="project-card__name">{p.name}</span>
-              <span className={`project-card__status project-card__status--${p.status === "building" ? "building" : p.status === "failed" ? "failed" : p.serviceStatus}`}>
-                {p.status === "building" ? "BUILDING" : p.status === "failed" ? "FAILED" : p.serviceStatus === "active" ? "ONLINE" : "OFFLINE"}
+              <span className={`project-card__status project-card__status--${p.status === "building" ? "building" : p.status === "failed" ? "failed" : p.type === "mobile" ? "mobile" : p.serviceStatus}`}>
+                {p.status === "building" ? "BUILDING" : p.status === "failed" ? "FAILED" : p.type === "mobile" ? "MOBILE" : p.serviceStatus === "active" ? "ONLINE" : "OFFLINE"}
               </span>
             </div>
 
             <p className="project-card__desc">{p.description}</p>
 
             <div className="project-card__meta">
-              <div className="project-card__meta-row">
-                <span className="project-card__label">PORT</span>
-                <span className="project-card__value">
-                  {p.ports.frontend}{p.ports.backend ? ` / ${p.ports.backend}` : ""}
-                </span>
-              </div>
-              <div className="project-card__meta-row">
-                <span className="project-card__label">DOMAIN</span>
-                <a className="project-card__link" href={`https://${p.domain}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
-                  {p.domain}
-                </a>
-              </div>
+              {p.type !== "mobile" && (
+                <div className="project-card__meta-row">
+                  <span className="project-card__label">PORT</span>
+                  <span className="project-card__value">
+                    {p.ports.frontend}{p.ports.backend ? ` / ${p.ports.backend}` : ""}
+                  </span>
+                </div>
+              )}
+              {p.type !== "mobile" && p.domain && (
+                <div className="project-card__meta-row">
+                  <span className="project-card__label">DOMAIN</span>
+                  <a className="project-card__link" href={`https://${p.domain}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+                    {p.domain}
+                  </a>
+                </div>
+              )}
+              {p.type === "mobile" && p.repo && (
+                <div className="project-card__meta-row">
+                  <span className="project-card__label">REPO</span>
+                  <span className="project-card__value">{p.repo.split("/").pop()}</span>
+                </div>
+              )}
               <div className="project-card__meta-row">
                 <span className="project-card__label">STACK</span>
                 <div className="project-card__tags">
-                  {p.stack.map((s) => <span key={s} className="project-card__tag">{s}</span>)}
+                  {(p.stack || []).map((s) => <span key={s} className="project-card__tag">{s}</span>)}
                 </div>
               </div>
               {p.github && (
@@ -309,6 +367,16 @@ export function Projects() {
 
             {/* Card actions */}
             <div className="project-card__actions" onClick={(e) => e.stopPropagation()}>
+              {p.type !== "mobile" && p.id !== "mission-control" && (
+                <button
+                  className={"btn btn--tiny " + (p.serviceStatus === "active" ? "btn--danger" : "btn--success")}
+                  onClick={(e) => handleToggle(e, p)}
+                  disabled={toggling === p.id}
+                  title={p.serviceStatus === "active" ? "Servisi durdur" : "Servisi baslat"}
+                >
+                  {toggling === p.id ? "..." : p.serviceStatus === "active" ? "DURDUR" : "BASLAT"}
+                </button>
+              )}
               <button className="btn btn--tiny" onClick={() => handleExport(p.id)} title="Export JSON">EXPORT</button>
               {p.id !== "mission-control" && (
                 <button className="btn btn--tiny btn--danger" onClick={(e) => openDeleteModal(e, p)} title="Projeyi sil">SIL</button>
@@ -334,8 +402,9 @@ export function Projects() {
                 <tbody>
                   <tr><td>Durum</td><td>{sel.serviceStatus === "active" ? "Calisiyor" : "Durmus"}</td></tr>
                   <tr><td>Servis</td><td><code>{sel.service}</code></td></tr>
-                  <tr><td>Port</td><td>{sel.ports.frontend}{sel.ports.backend ? ` (frontend) / ${sel.ports.backend} (backend)` : ""}</td></tr>
-                  <tr><td>Domain</td><td><a href={`https://${sel.domain}`} target="_blank" rel="noopener noreferrer">{sel.domain}</a></td></tr>
+                  {sel.type !== "mobile" && <tr><td>Port</td><td>{sel.ports.frontend}{sel.ports.backend ? ` (frontend) / ${sel.ports.backend} (backend)` : ""}</td></tr>}
+                  {sel.type !== "mobile" && sel.domain && <tr><td>Domain</td><td><a href={`https://${sel.domain}`} target="_blank" rel="noopener noreferrer">{sel.domain}</a></td></tr>}
+                  {sel.type === "mobile" && <tr><td>Platform</td><td>React Native / Expo</td></tr>}
                   <tr><td>Repo</td><td><code>{sel.repo}</code></td></tr>
                   {sel.github && <tr><td>GitHub</td><td><a href={sel.github} target="_blank" rel="noopener noreferrer">{sel.github.replace("https://github.com/", "")}</a></td></tr>}
                   <tr><td>Olusturan</td><td>{sel.createdBy}</td></tr>
@@ -401,6 +470,13 @@ export function Projects() {
             <label>
               Aciklama
               <textarea value={createForm.description} onChange={(e) => setCreateForm(f => ({ ...f, description: e.target.value }))} rows={2} placeholder="Proje aciklamasi..." />
+            </label>
+            <label>
+              Tur
+              <select value={createForm.type} onChange={(e) => setCreateForm(f => ({ ...f, type: e.target.value }))}>
+                <option value="web">Web Uygulamasi</option>
+                <option value="mobile">Mobil Uygulama</option>
+              </select>
             </label>
             <label>
               Emoji

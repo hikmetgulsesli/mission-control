@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react';
 import { StoryChecklist } from './StoryChecklist';
 import { api } from '../lib/api';
 
-const STEP_ORDER = ['plan', 'setup', 'implement', 'verify', 'security-gate', 'final-test'];
+const STEP_ORDER = ['plan', 'setup', 'design', 'implement', 'verify', 'security-gate', 'final-test', 'deploy'];
 const STEP_LABELS: Record<string, string> = {
-  plan: 'PLAN', setup: 'SETUP', implement: 'IMPL',
+  plan: 'PLAN', setup: 'SETUP', design: 'DESIGN', implement: 'IMPL', deploy: 'DEPLOY',
   verify: 'VERIFY', 'security-gate': 'SEC GATE', 'final-test': 'TEST & MERGE',
   test: 'TEST', pr: 'PR', review: 'REVIEW',
   triage: 'TRIAGE', investigate: 'INVEST', fix: 'FIX',
@@ -13,13 +13,14 @@ const STEP_LABELS: Record<string, string> = {
 };
 
 const WORKFLOW_STEPS: Record<string, string[]> = {
-  'feature-dev': ['plan', 'setup', 'implement', 'verify', 'security-gate', 'final-test'],
+  'feature-dev': ['plan', 'setup', 'design', 'implement', 'verify', 'security-gate', 'final-test', 'deploy'],
   'bug-fix': ['triage', 'investigate', 'fix', 'verify', 'test', 'pr', 'review'],
   'security-audit': ['collect', 'plan', 'fix', 'verify', 'test', 'report', 'review'],
 };
 
 interface PipelineRun {
   id: string;
+  runNumber?: number;
   workflow: string;
   task: string;
   status: string;
@@ -174,6 +175,7 @@ export function PipelineView({ runs }: { runs: PipelineRun[] }) {
                 {run.status === 'running' && <span className="af-pulse" />}
                 {run.status.toUpperCase()}
               </span>
+              {run.runNumber && <span className="af-pipeline__run-id">#{run.runNumber}</span>}
               <span className="af-pipeline__wf">{run.workflow}</span>
               <span className="af-pipeline__task">{truncate(run.task, 60)}</span>
               <span className="af-pipeline__expand">{isExpanded ? '\u25B2' : '\u25BC'}</span>

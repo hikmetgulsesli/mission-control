@@ -2363,6 +2363,20 @@ html, body, #root {
 }
 .project-card--online { border-left: 3px solid var(--neon-green); }
 .project-card--offline { border-left: 3px solid var(--neon-red); }
+/* Mobile app card styling */
+.project-card--mobile {
+  border-left: 3px solid #a855f7;
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.08), rgba(139, 92, 246, 0.04));
+}
+.project-card--mobile:hover {
+  border-color: #c084fc;
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.15);
+}
+.project-card__status--mobile {
+  color: #a855f7;
+  background: rgba(168, 85, 247, 0.12);
+}
+
 
 .project-card__header {
   display: flex;
@@ -2834,6 +2848,7 @@ html, body, #root {
   opacity: 0.4;
   cursor: not-allowed;
 }
+.btn--success {  background: rgba(34, 197, 94, 0.15);  border-color: #22c55e;  color: #22c55e;}.btn--success:hover:not(:disabled) {  background: #22c55e;  color: #fff;}.btn--success:disabled {  opacity: 0.4;  cursor: not-allowed;}
 
 /* ── Workflow Tabs ── */
 .wf-tabs {
@@ -3111,6 +3126,12 @@ html, body, #root {
 .af-pipeline__status--running { background: rgba(0, 255, 65, 0.12); color: #00ff41; }
 .af-pipeline__status--completed { background: rgba(0, 255, 65, 0.08); color: #00ff41; }
 .af-pipeline__status--failed { background: rgba(255, 0, 64, 0.12); color: #ff0040; }
+.af-pipeline__run-id {
+  font-size: 10px;
+  color: var(--neon-green);
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
 .af-pipeline__wf {
   font-size: 10px;
   color: var(--neon-cyan);

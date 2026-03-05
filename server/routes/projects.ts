@@ -232,6 +232,135 @@ router.post("/projects/import", async (req, res) => {
   }
 });
 
+function systemctlAction(action: string, service: string) {
+  // "start" → use "restart" to handle stale processes
+  const cmd = action === "start" ? "restart" : action;
+  // Try user-level first, then system-level
+  try {
+    execFileSync("systemctl", ["--user", cmd, service], { timeout: 10000, stdio: 'pipe' });
+    return;
+  } catch {}
+  execFileSync("sudo", ["systemctl", cmd, service], { timeout: 10000, stdio: 'pipe' });
+}
+
+router.post("/projects/:id/toggle", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { action } = req.body;
+    if (action !== "start" && action !== "stop") {
+      res.status(400).json({ error: "action must be 'start' or 'stop'" });
+      return;
+    }
+    if (id === "mission-control") {
+      res.status(403).json({ error: "Cannot toggle Mission Control" });
+      return;
+    }
+    const projects = loadProjects();
+    const project = projects.find((p: any) => p.id === id);
+    if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+
+    const service = project.service;
+    if (!service || !(/^[a-zA-Z0-9_.-]+$/).test(service)) {
+      res.status(400).json({ error: "Invalid or missing service name" });
+      return;
+    }
+
+    if (action === "stop") {
+      // Kill orphan processes on the port first
+      const port = project.ports?.frontend || project.ports?.backend;
+      if (port) {
+        try {
+          execFileSync("fuser", ["-k", `${port}/tcp`], { timeout: 5000, stdio: 'pipe' });
+        } catch {}
+      }
+      try { systemctlAction("stop", service); } catch {}
+    } else {
+      try {
+        systemctlAction("start", service);
+      } catch (err: any) {
+        res.status(500).json({ error: "Failed to start service: " + err.message });
+        return;
+      }
+    }
+
+    // Check new status
+    const port = project.ports?.frontend || project.ports?.backend;
+    // Give service a moment to start/stop
+    await new Promise(r => setTimeout(r, 1000));
+    const serviceStatus = port ? ((await checkPort(port)) ? "active" : "inactive") : "unknown";
+
+    res.json({ success: true, serviceStatus });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/projects/stop-all", async (_req, res) => {
+  try {
+    const projects = loadProjects();
+    const results: { id: string; name: string; stopped: boolean; error?: string }[] = [];
+
+    for (const project of projects) {
+      if (project.id === "mission-control") continue;
+      if (project.category === "external") continue;
+
+      const service = project.service;
+      if (!service || !(/^[a-zA-Z0-9_.-]+$/).test(service)) continue;
+
+      const port = project.ports?.frontend || project.ports?.backend;
+      if (!port) continue;
+
+      const isOnline = await checkPort(port);
+      if (!isOnline) continue;
+
+      try {
+        // Kill orphan processes on port
+        try { execFileSync("fuser", ["-k", `${port}/tcp`], { timeout: 5000, stdio: 'pipe' }); } catch {}
+        systemctlAction("stop", service);
+        results.push({ id: project.id, name: project.name, stopped: true });
+      } catch (err: any) {
+        results.push({ id: project.id, name: project.name, stopped: false, error: err.message });
+      }
+    }
+
+    res.json({ success: true, results });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/projects/start-all", async (_req, res) => {
+  try {
+    const projects = loadProjects();
+    const results: { id: string; name: string; started: boolean; error?: string }[] = [];
+
+    for (const project of projects) {
+      if (project.id === "mission-control") continue;
+      if (project.category === "external") continue;
+
+      const service = project.service;
+      if (!service || !(/^[a-zA-Z0-9_.-]+$/).test(service)) continue;
+
+      const port = project.ports?.frontend || project.ports?.backend;
+      if (!port) continue;
+
+      const isOnline = await checkPort(port);
+      if (isOnline) continue;
+
+      try {
+        systemctlAction("start", service);
+        results.push({ id: project.id, name: project.name, started: true });
+      } catch (err: any) {
+        results.push({ id: project.id, name: project.name, started: false, error: err.message });
+      }
+    }
+
+    res.json({ success: true, results });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.delete("/projects/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -342,6 +471,7 @@ export function createProjectProgrammatic(data: {
   task?: string;
   status?: string;
   port?: number;
+  type?: string;
 }): { created: boolean; project: any; reason?: string } {
   const projects = loadProjects();
   const id = data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
