@@ -25,7 +25,7 @@ function loadAgentModels() {
         const defaultModel = agents.defaults?.model?.primary || agents.defaults?.primary || 'unknown';
         const list = agents.list || [];
         const models = {};
-        const knownIds = ['main', 'koda', 'kaan', 'atlas', 'defne', 'sinan', 'elif', 'deniz', 'onur', 'mert'];
+        const knownIds = ['main', 'koda', 'flux', 'atlas', 'iris', 'sentinel', 'cipher', 'lux', 'nexus', 'prism'];
         for (const id of knownIds) {
             const entry = list.find((a) => a.id === id);
             const primary = entry?.model?.primary || defaultModel;
@@ -36,9 +36,9 @@ function loadAgentModels() {
     catch {
         // Fallback if config is unreadable
         return {
-            main: 'minimax-m2.5', koda: 'kimi-k2p5', kaan: 'kimi-k2p5', atlas: 'kimi-k2p5',
-            defne: 'minimax-m2.5', sinan: 'minimax-m2.5', elif: 'kimi-k2p5',
-            deniz: 'minimax-m2.5', onur: 'minimax-m2.5', mert: 'minimax-m2.5',
+            main: 'minimax-m2.5', koda: 'kimi-k2p5', flux: 'kimi-k2p5', atlas: 'kimi-k2p5',
+            iris: 'minimax-m2.5', sentinel: 'minimax-m2.5', cipher: 'kimi-k2p5',
+            lux: 'minimax-m2.5', nexus: 'minimax-m2.5', prism: 'minimax-m2.5',
         };
     }
 }

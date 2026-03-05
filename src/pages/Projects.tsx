@@ -279,12 +279,26 @@ export function Projects() {
             <div className="project-card__header">
               <span className="project-card__emoji">{p.emoji}</span>
               <span className="project-card__name">{p.name}</span>
-              <span className={`project-card__status project-card__status--${p.status === "building" ? "building" : p.status === "failed" ? "failed" : p.type === "mobile" ? "mobile" : p.serviceStatus}`}>
-                {p.status === "building" ? "BUILDING" : p.status === "failed" ? "FAILED" : p.type === "mobile" ? "MOBILE" : p.serviceStatus === "active" ? "ONLINE" : "OFFLINE"}
-              </span>
+              {p.type === "mobile" ? (
+                <span className="project-card__status project-card__status--mobile">MOBILE</span>
+              ) : p.status === "building" ? (
+                <span className="project-card__status project-card__status--building">BUILDING</span>
+              ) : (
+                <button
+                  className={"project-card__toggle " + (p.serviceStatus === "active" ? "project-card__toggle--on" : "project-card__toggle--off")}
+                  onClick={(e) => handleToggle(e, p)}
+                  disabled={toggling === p.id || p.id === "mission-control"}
+                  title={p.serviceStatus === "active" ? "Durdur" : "Baslat"}
+                >
+                  <span className="project-card__toggle-knob" />
+                  <span className="project-card__toggle-label">
+                    {toggling === p.id ? "..." : p.serviceStatus === "active" ? "ON" : "OFF"}
+                  </span>
+                </button>
+              )}
             </div>
 
-            <p className="project-card__desc">{p.description}</p>
+            <p className="project-card__desc" title={p.description}>{p.description}</p>
 
             <div className="project-card__meta">
               {p.type !== "mobile" && (
@@ -339,16 +353,6 @@ export function Projects() {
                   </span>
                 </div>
               )}
-              {p.createdAt && (
-                <div className="project-card__meta-row">
-                  <span className="project-card__label">SÜRE</span>
-                  <span className="project-card__value project-card__duration">
-                    <span className="project-card__duration-value">{formatDuration(p.createdAt, p.completedAt, p.buildStartedAt, p.buildCompletedAt) ?? "-"}</span>
-                    {!p.completedAt && !p.buildCompletedAt && <span className="project-card__duration-badge">devam ediyor</span>}
-                    {(p.completedAt || p.buildCompletedAt) && <span className="project-card__duration-badge project-card__duration-badge--done">tamamlandi</span>}
-                  </span>
-                </div>
-              )}
             </div>
 
             {/* Checklist progress mini */}
@@ -365,23 +369,6 @@ export function Projects() {
               </div>
             )}
 
-            {/* Card actions */}
-            <div className="project-card__actions" onClick={(e) => e.stopPropagation()}>
-              {p.type !== "mobile" && p.id !== "mission-control" && (
-                <button
-                  className={"btn btn--tiny " + (p.serviceStatus === "active" ? "btn--danger" : "btn--success")}
-                  onClick={(e) => handleToggle(e, p)}
-                  disabled={toggling === p.id}
-                  title={p.serviceStatus === "active" ? "Servisi durdur" : "Servisi baslat"}
-                >
-                  {toggling === p.id ? "..." : p.serviceStatus === "active" ? "DURDUR" : "BASLAT"}
-                </button>
-              )}
-              <button className="btn btn--tiny" onClick={() => handleExport(p.id)} title="Export JSON">EXPORT</button>
-              {p.id !== "mission-control" && (
-                <button className="btn btn--tiny btn--danger" onClick={(e) => openDeleteModal(e, p)} title="Projeyi sil">SIL</button>
-              )}
-            </div>
           </div>
         ))}
       </div>

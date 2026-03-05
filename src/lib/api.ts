@@ -50,6 +50,9 @@ export const api = {
   createProject: (data: any) => fetchApi<any>("/api/projects", { method: "POST", headers: CT_JSON, body: JSON.stringify(data) }),
   updateProject: (id: string, data: any) => fetchApi<any>(`/api/projects/${id}`, { method: "PATCH", headers: CT_JSON, body: JSON.stringify(data) }),
   deleteProject: (id: string, confirmName: string) => fetchApi<any>(`/api/projects/${id}`, { method: "DELETE", headers: CT_JSON, body: JSON.stringify({ confirmName }) }),
+  toggleProject: (id: string, action: "start" | "stop") =>
+    fetchApi<any>(`/api/projects/${id}/toggle`, { method: "POST", headers: CT_JSON, body: JSON.stringify({ action }) }),
+  stopAllProjects: () => fetchApi<any>("/api/projects/stop-all", { method: "POST" }),
   exportProject: (id: string) => fetchApi<any>(`/api/projects/${id}/export`),
   importProject: (data: any) => fetchApi<any>("/api/projects/import", { method: "POST", headers: CT_JSON, body: JSON.stringify(data) }),
   // Tasks

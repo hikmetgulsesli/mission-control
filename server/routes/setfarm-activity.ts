@@ -6,6 +6,17 @@ import { cached } from '../utils/cache.js';
 import { readFileSync as readSync, writeFileSync as writeSync, renameSync } from 'fs';
 import { tmpdir } from 'os';
 import { createProjectProgrammatic, updateProjectById } from './projects.js';
+/** Detect if a task describes a mobile app */
+function isMobileProject(task: string, repo: string): boolean {
+  const mobileKeywords = [
+    'react native', 'expo', 'mobil uygulama', 'mobile app',
+    'android', 'ios app', 'flutter', 'swift', 'kotlin'
+  ];
+  const lower = (task + ' ' + repo).toLowerCase();
+  if (repo && repo.includes('/mobile/')) return true;
+  return mobileKeywords.some(kw => lower.includes(kw));
+}
+
 import { getRuns, getRunStories, getSetfarmActivity, getSetfarmAgentStats, getSetfarmAlerts, getStories } from '../utils/setfarm.js';
 import { ensureAgentFeedTable, insertFeedEntry, getAgentFeed, pruneAgentFeed } from "../utils/setfarm-db.js";
 
@@ -87,6 +98,7 @@ router.get('/setfarm/pipeline', async (_req, res) => {
         } catch {}
         return {
           id: r.id,
+          runNumber: r.run_number,
           workflow: r.workflow_id,
           task: r.task,
           status: r.status,
@@ -206,10 +218,21 @@ let lastSeenFinishedIds = _initialState.finished;
 let lastSeenRunningIds = _initialState.running;
 
 async function createBuildingProject(run: any): Promise<void> {
-// Skip non-feature workflows — these are operational, not projects  const skipWorkflows = ["daily-standup", "security-audit"];  if (skipWorkflows.includes(run.workflow_id)) return;
+  // Skip non-feature workflows — only feature-dev creates new projects
+  // bug-fix and ui-refactor work on EXISTING projects, no new project creation needed
+  const allowedWorkflows = ["feature-dev"];
+  if (!allowedWorkflows.includes(run.workflow_id)) return;
   if (!run.task) return;
   const name = extractProjectName(run.task);
   if (!name || name.length < 2) return;
+
+  // Quality gate: reject generic/short names that are clearly not project names
+  const rejectNames = ['projects', 'sabah', 'aksam', 'rapor', 'standup', 'report', 'test', 'debug', 'fix', 'update', 'cleanup'];
+  const nameLower = name.toLowerCase();
+  if (rejectNames.some(r => nameLower === r || nameLower === r + 's')) {
+    console.log('[lifecycle] Rejected generic name:', name);
+    return;
+  }
 
   let repo = '';
   try {
@@ -321,6 +344,22 @@ function detectStack(repo: string): string[] {
     if (deps['vite']) stack.push('Vite');
     if (deps['typescript'] || deps['ts-node']) stack.push('TypeScript');
     if (deps['tailwindcss']) stack.push('Tailwind CSS');
+    // Detect Python backend frameworks in monorepo
+    try {
+      const reqPaths = [join(repo, 'backend', 'requirements.txt'), join(repo, 'requirements.txt')];
+      for (const reqPath of reqPaths) {
+        if (existsSync(reqPath)) {
+          const reqs = readFileSync(reqPath, 'utf-8').toLowerCase();
+          if (reqs.includes('fastapi') && !stack.includes('FastAPI')) stack.push('FastAPI');
+          else if (reqs.includes('flask') && !stack.includes('Flask')) stack.push('Flask');
+          else if (reqs.includes('django') && !stack.includes('Django')) stack.push('Django');
+          if ((reqs.includes('fastapi') || reqs.includes('flask') || reqs.includes('django') || reqs.includes('scrapy')) && !stack.includes('Python')) {
+            stack.push('Python');
+          }
+          break;
+        }
+      }
+    } catch {}
     return stack;
   } catch {
     return [];
@@ -329,6 +368,60 @@ function detectStack(repo: string): string[] {
 
 
 const TUNNEL_ID = '92d8df83-3623-4850-ba41-29126106d020';
+
+/**
+ * Detect if repo has a separate backend service (FastAPI, Express server dir, etc.)
+ * Returns { hasBackend, backendDir, backendType } or null.
+ */
+function detectBackend(repo: string): { hasBackend: boolean; backendDir: string; backendType: string; port: number | null } | null {
+  // Pattern 1: backend/ directory with Python (FastAPI/Flask/Django)
+  const backendDir = join(repo, 'backend');
+  if (existsSync(backendDir)) {
+    const reqPath = join(backendDir, 'requirements.txt');
+    if (existsSync(reqPath)) {
+      const reqs = readFileSync(reqPath, 'utf-8').toLowerCase();
+      let type = 'python';
+      if (reqs.includes('fastapi')) type = 'fastapi';
+      else if (reqs.includes('flask')) type = 'flask';
+      else if (reqs.includes('django')) type = 'django';
+      // Check if backend has its own .env with PORT
+      let port: number | null = null;
+      try {
+        const envPath = join(backendDir, '.env');
+        if (existsSync(envPath)) {
+          const env = readFileSync(envPath, 'utf-8');
+          const m = env.match(/^PORT\s*=\s*(\d+)/m);
+          if (m) port = parseInt(m[1]);
+        }
+      } catch {}
+      // Check for existing systemd service
+      if (!port) {
+        try {
+          const slug = repo.split('/').pop() || '';
+          const svcPath = '/etc/systemd/system/' + slug + '-backend.service';
+          if (existsSync(svcPath)) {
+            const svc = readFileSync(svcPath, 'utf-8');
+            const m = svc.match(/--port\s+(\d+)|PORT=(\d+)/);
+            if (m) port = parseInt(m[1] || m[2]);
+          }
+        } catch {}
+      }
+      return { hasBackend: true, backendDir, backendType: type, port };
+    }
+  }
+  // Pattern 2: server/ directory with package.json (Node.js backend)
+  const serverDir = join(repo, 'server');
+  if (existsSync(join(serverDir, 'package.json'))) {
+    let port: number | null = null;
+    try {
+      const env = readFileSync(join(serverDir, '.env'), 'utf-8');
+      const m = env.match(/^PORT\s*=\s*(\d+)/m);
+      if (m) port = parseInt(m[1]);
+    } catch {}
+    return { hasBackend: true, backendDir: serverDir, backendType: 'node', port };
+  }
+  return null;
+}
 
 function detectPort(repo: string, task: string): number | null {
   // 1. Check server/.env for PORT (monorepo: server + client pattern)
@@ -698,14 +791,37 @@ function autoDeployProject(projectId: string, projectName: string, repo: string,
   }
 }
 
+function autoUpdateChecklist(project: any) {
+  if (!project.checklist) return;
+  const checks: Record<string, boolean> = {
+    'task-received': true,
+    'github-repo': !!(project.github || project.repo),
+    'added-to-projects': true,
+    'ports-assigned': !!(project.ports?.frontend || project.ports?.backend),
+    'setup-run': (project.setfarmRunIds?.length || 0) > 0,
+    'dev-started': (project.stories?.done || 0) > 0,
+    'dns-setup': !!project.domain,
+    'test-review': (project.stories?.done === project.stories?.total && project.stories?.total > 0),
+  };
+  for (const [itemId, completed] of Object.entries(checks)) {
+    if (completed) {
+      const item = project.checklist.find((c: any) => c.id === itemId);
+      if (item && !item.completed) {
+        item.completed = true;
+        item.completedAt = new Date().toISOString();
+      }
+    }
+  }
+}
+
 async function syncProjectsFromRuns(): Promise<{ synced: any[]; skipped: string[] }> {
   const allRuns = (await getRuns()) as any[];
   // Deploy completed runs AND failed/cancelled runs that have a built dist
-  // Skip non-feature workflows — operational runs should not create projects
-  const skipWorkflows = new Set(["daily-standup", "security-audit"]);
+  // Only feature-dev creates deployable projects
+  const allowedDeployWorkflows = new Set(["feature-dev"]);
   const deployable = allRuns.filter((r: any) => {
-    if (r.status === 'completed') return !skipWorkflows.has(r.workflow_id);
-    if ((r.status === 'failed' || r.status === 'cancelled') && !skipWorkflows.has(r.workflow_id)) {
+    if (r.status === 'completed') return allowedDeployWorkflows.has(r.workflow_id);
+    if ((r.status === 'failed' || r.status === 'cancelled') && allowedDeployWorkflows.has(r.workflow_id)) {
       try {
         const ctx = typeof r.context === 'string' ? JSON.parse(r.context) : r.context;
         const repo = ctx?.repo || '';
@@ -738,24 +854,61 @@ async function syncProjectsFromRuns(): Promise<{ synced: any[]; skipped: string[
       }
     }
 
+    // Repo validation: only ~/projects/ and ~/mobile/
+    if (repo) {
+      const validPrefixes = ['/home/setrox/projects/', '/home/setrox/mobile/'];
+      if (!validPrefixes.some(prefix => repo.startsWith(prefix))) {
+        skipped.push(run.id + ': non-project repo ' + repo);
+        continue;
+      }
+    }
+
+    // Name quality gate
+    const rejectNames2 = ['projects', 'sabah', 'aksam', 'rapor', 'standup', 'report', 'test', 'debug', 'fix', 'update', 'cleanup'];
+    if (rejectNames2.some(r => name.toLowerCase() === r || name.toLowerCase() === r + 's')) {
+      skipped.push(run.id + ': generic name ' + name);
+      continue;
+    }
+
     const stack = repo ? detectStack(repo) : [];
+    const mobile = isMobileProject(run.task, repo);
 
     const result = createProjectProgrammatic({
       name,
       repo,
       stack,
-      emoji: '\u{1F527}',
+      emoji: mobile ? '\u{1F4F1}' : '\u{1F527}',
       createdBy: 'setfarm-workflow',
       setfarmRunId: run.id,
       task: run.task.split('\n').slice(0, 3).join(' ').slice(0, 200),
+      type: mobile ? 'mobile' : 'web',
     });
 
-    const needsDeploy = result.created || (result.reason === 'exists' && !result.project?.service);
+    // B2: Re-detect stack if project exists but stack is empty
+    if (!result.created && result.project && (!result.project.stack || result.project.stack.length === 0) && stack.length > 0) {
+      updateProjectById(result.project.id, { stack });
+    }
+
+    // Detect backend port for existing projects
+    if (!result.created && result.project && repo) {
+      const backend = detectBackend(repo);
+      if (backend?.hasBackend && backend.port && !result.project.ports?.backend) {
+        updateProjectById(result.project.id, {
+          ports: { ...(result.project.ports || {}), backend: backend.port },
+        });
+      }
+    }
+
+    const needsDeploy = !mobile && (result.created || (result.reason === 'exists' && !result.project?.service));
     if (needsDeploy && repo) {
       const deploy = autoDeployProject(result.project.id, result.project.name, repo, run.task);
       if (deploy.deployed) {
         updateProjectById(result.project.id, {
-          ports: { frontend: deploy.port },
+          // Detect backend service port
+          ports: (() => {
+            const bp = repo ? detectBackend(repo) : null;
+            return { frontend: deploy.port, ...(bp?.port ? { backend: bp.port } : {}) };
+          })(),
           domain: deploy.domain,
           service: deploy.service,
           serviceStatus: 'active',
@@ -818,6 +971,9 @@ async function syncProjectsFromRuns(): Promise<{ synced: any[]; skipped: string[
           });
         }
       } catch {}
+      // B4: Auto-update checklist based on project state
+      autoUpdateChecklist(result.project);
+      updateProjectById(result.project.id, { checklist: result.project.checklist });
       if (result.project?.status === 'building' || result.project?.status === 'failed') {
         const st = run.status === 'completed' ? 'active' : 'failed';
         updateProjectById(result.project.id, { status: st, emoji: st === 'active' ? '🚀' : '❌' });

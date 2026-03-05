@@ -5,7 +5,7 @@ import { runCliJson, runCli } from '../utils/cli.js';
 import { cached, setCache } from '../utils/cache.js';
 import { config } from '../config.js';
 const router = Router();
-const REAL_AGENTS = ['main', 'koda', 'kaan', 'atlas', 'defne', 'sinan', 'elif', 'deniz', 'onur', 'mert'];
+const REAL_AGENTS = ['main', 'koda', 'flux', 'atlas', 'iris', 'sentinel', 'cipher', 'lux', 'nexus', 'prism'];
 function getAgentActivity(agentId) {
     const dir = agentId === "main" ? "main" : agentId;
     const sessionsDir = join("/home/setrox/.openclaw/agents", dir, "sessions");

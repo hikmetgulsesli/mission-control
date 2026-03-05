@@ -73,7 +73,7 @@ async function fetchAgentSummary(dataFile: any): Promise<any[]> {
     working.set('main', 'CEO orchestration');
 
     const STEP_MAPPING: Record<string, Record<string, string[]>> = {
-      'feature-dev': { plan: ['iris'], setup: ['atlas'], implement: ['koda', 'prism'], verify: ['sentinel'], test: ['nexus', 'prism'], pr: ['koda', 'prism'], review: ['flux', 'lux'] },
+      'feature-dev': { plan: ['iris'], setup: ['atlas'], design: ['prism'], implement: ['koda', 'prism'], verify: ['sentinel'], test: ['nexus', 'prism'], pr: ['koda', 'prism'], review: ['flux', 'lux'] },
       'bug-fix': { triage: ['iris'], investigate: ['koda'], setup: ['atlas'], fix: ['cipher'], verify: ['sentinel'], pr: ['flux', 'lux'] },
       'security-audit': { scan: ['iris'], prioritize: ['main'], setup: ['atlas'], fix: ['koda'], verify: ['sentinel'], test: ['nexus', 'prism'], pr: ['flux', 'lux'] },
     };

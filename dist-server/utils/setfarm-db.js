@@ -137,13 +137,13 @@ export async function resumeLimboRun(runId) {
         return { success: false, message: err.message || String(err) };
     }
 }
-const ANTFARM_CLI_ENV = {
+const SETFARM_CLI_ENV = {
     ...process.env,
     PATH: `/home/setrox/.local/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH || ''}`,
 };
 async function setfarmCli(args) {
     const { stdout } = await execFileAsync('setfarm', args, {
-        env: ANTFARM_CLI_ENV,
+        env: SETFARM_CLI_ENV,
         timeout: 30000,
         maxBuffer: 1024 * 1024,
     });
@@ -350,7 +350,7 @@ export async function tryAutoFix(runId, cause, storyId) {
                 await execFileAsync('npm', ['install'], {
                     timeout: 60000,
                     cwd: '/home/setrox/.openclaw/setfarm',
-                    env: ANTFARM_CLI_ENV,
+                    env: SETFARM_CLI_ENV,
                 });
                 console.log(`[MEDIC] Auto-fix: dependency_error -> npm install ok`);
                 return { success: true, message: 'npm install basarili' };
@@ -470,7 +470,7 @@ export async function failEntireRun(runId, reason) {
     try {
         await execFileAsync('bash', ['/home/setrox/.openclaw/scripts/discord-log.sh',
             `Pipeline FAILED: Run ${runId} - ${reason}`
-        ], { timeout: 10000, env: ANTFARM_CLI_ENV });
+        ], { timeout: 10000, env: SETFARM_CLI_ENV });
     }
     catch {
         // Discord alert is best-effort

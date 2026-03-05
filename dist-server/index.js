@@ -27,6 +27,7 @@ import officeRouter from "./routes/office.js";
 import terminalRouter from "./routes/terminal.js";
 import filesRouter from "./routes/files.js";
 import discordNotifyRouter from "./routes/discord-notify.js";
+import scrapeRouter from "./routes/scrape.js";
 const app = express();
 app.use(express.json({ limit: "2mb" }));
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -51,6 +52,7 @@ app.use("/api", officeRouter);
 app.use("/api", terminalRouter);
 app.use("/api", filesRouter);
 app.use("/api", discordNotifyRouter);
+app.use("/api", scrapeRouter);
 // Serve avatars
 if (existsSync(config.avatarsDir)) {
     app.use('/avatars', express.static(config.avatarsDir));

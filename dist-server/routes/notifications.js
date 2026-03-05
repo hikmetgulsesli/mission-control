@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { sendDiscord } from '../utils/discord.js';
 const router = Router();
-const TELEGRAM_BOT_TOKEN = '8278662543:AAF6iwgIo4Rp1R0OGa-gMJRm7aXv29qeQFY';
-const TELEGRAM_CHAT_ID = '725838988';
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || '';
 const DISCORD_CH_ALERTS = process.env.DISCORD_CH_ALERTS || '';
 async function sendTelegram(message) {
     try {

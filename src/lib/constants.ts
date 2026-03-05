@@ -8,16 +8,17 @@ export const AGENTS = [
   { id: 'cipher', name: 'Cipher', emoji: '\u{1F4BB}', role: 'Backend Dev', model: 'kimi-k2p5', color: '#44ff88' },
   { id: 'lux', name: 'Lux', emoji: '\u270D\uFE0F', role: 'Content Writer', model: 'minimax-m2.5', color: '#ff8844' },
   { id: 'nexus', name: 'Nexus', emoji: '\u{1F504}', role: 'SRE / Monitoring', model: 'minimax-m2.5', color: '#8844ff' },
-  { id: 'prism', name: 'Prism', emoji: '\u{1F3A8}', role: 'Frontend Dev', model: 'minimax-m2.5', color: '#ff4488' },
+  { id: 'prism', name: 'Prism', emoji: '\u{1F3A8}', role: 'UI Designer', model: 'kimi-k2p5', color: '#ff4488' },
 ] as const;
 
 export const AGENT_MAP = Object.fromEntries(AGENTS.map(a => [a.id, a]));
 
 // Map Setfarm workflow agents to real MC agents
 export const WORKFLOW_AGENT_MAP: Record<string, string> = {
-  // feature-dev workflow
+  // feature-dev workflow v11.0
   "feature-dev_planner": "flux",
   "feature-dev_setup": "atlas",
+  "feature-dev_designer": "prism",
   "feature-dev_developer": "koda",
   "feature-dev_verifier": "sentinel",
   "feature-dev_tester": "sentinel",

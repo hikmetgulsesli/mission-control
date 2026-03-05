@@ -232,17 +232,6 @@ router.post("/projects/import", async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
-function systemctlAction(action, service) {
-    // "start" → use "restart" to handle stale processes
-    const cmd = action === "start" ? "restart" : action;
-    // Try user-level first, then system-level
-    try {
-        execFileSync("systemctl", ["--user", cmd, service], { timeout: 10000, stdio: 'pipe' });
-        return;
-    }
-    catch { }
-    execFileSync("sudo", ["systemctl", cmd, service], { timeout: 10000, stdio: 'pipe' });
-}
 router.post("/projects/:id/toggle", async (req, res) => {
     try {
         const { id } = req.params;
@@ -276,13 +265,13 @@ router.post("/projects/:id/toggle", async (req, res) => {
                 catch { }
             }
             try {
-                systemctlAction("stop", service);
+                execFileSync("sudo", ["systemctl", "stop", service], { timeout: 10000, stdio: 'pipe' });
             }
             catch { }
         }
         else {
             try {
-                systemctlAction("start", service);
+                execFileSync("sudo", ["systemctl", "start", service], { timeout: 10000, stdio: 'pipe' });
             }
             catch (err) {
                 res.status(500).json({ error: "Failed to start service: " + err.message });
@@ -324,43 +313,11 @@ router.post("/projects/stop-all", async (_req, res) => {
                     execFileSync("fuser", ["-k", `${port}/tcp`], { timeout: 5000, stdio: 'pipe' });
                 }
                 catch { }
-                systemctlAction("stop", service);
+                execFileSync("sudo", ["systemctl", "stop", service], { timeout: 10000, stdio: 'pipe' });
                 results.push({ id: project.id, name: project.name, stopped: true });
             }
             catch (err) {
                 results.push({ id: project.id, name: project.name, stopped: false, error: err.message });
-            }
-        }
-        res.json({ success: true, results });
-    }
-    catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-router.post("/projects/start-all", async (_req, res) => {
-    try {
-        const projects = loadProjects();
-        const results = [];
-        for (const project of projects) {
-            if (project.id === "mission-control")
-                continue;
-            if (project.category === "external")
-                continue;
-            const service = project.service;
-            if (!service || !(/^[a-zA-Z0-9_.-]+$/).test(service))
-                continue;
-            const port = project.ports?.frontend || project.ports?.backend;
-            if (!port)
-                continue;
-            const isOnline = await checkPort(port);
-            if (isOnline)
-                continue;
-            try {
-                systemctlAction("start", service);
-                results.push({ id: project.id, name: project.name, started: true });
-            }
-            catch (err) {
-                results.push({ id: project.id, name: project.name, started: false, error: err.message });
             }
         }
         res.json({ success: true, results });

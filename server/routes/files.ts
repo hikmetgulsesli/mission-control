@@ -125,7 +125,7 @@ router.put('/files/write', async (req, res) => {
   try {
     const { path: filePath, content } = req.body;
     const v = validatePath(filePath);
-    if (!v.ok) { res.status(v.status).json({ error: v.error }); return; }
+    if (!v.ok) { res.status((v as any).status).json({ error: (v as any).error }); return; }
     if (typeof content !== 'string') { res.status(400).json({ error: 'content must be a string' }); return; }
     const buf = Buffer.from(content, 'utf-8');
     if (buf.length > MAX_FILE_SIZE) { res.status(413).json({ error: 'Content too large. Max: 1MB' }); return; }
@@ -144,7 +144,7 @@ router.delete('/files/delete', async (req, res) => {
   try {
     const { path: filePath } = req.body;
     const v = validatePath(filePath);
-    if (!v.ok) { res.status(v.status).json({ error: v.error }); return; }
+    if (!v.ok) { res.status((v as any).status).json({ error: (v as any).error }); return; }
     if (isRootPath(v.resolved)) { res.status(403).json({ error: 'Cannot delete root directory' }); return; }
 
     await rm(v.resolved, { recursive: true });
@@ -161,7 +161,7 @@ router.post('/files/mkdir', async (req, res) => {
   try {
     const { path: dirPath } = req.body;
     const v = validatePath(dirPath);
-    if (!v.ok) { res.status(v.status).json({ error: v.error }); return; }
+    if (!v.ok) { res.status((v as any).status).json({ error: (v as any).error }); return; }
     if (existsSync(v.resolved)) { res.status(409).json({ error: 'Already exists' }); return; }
 
     await mkdir(v.resolved);
@@ -177,9 +177,9 @@ router.post('/files/rename', async (req, res) => {
   try {
     const { oldPath, newPath } = req.body;
     const vOld = validatePath(oldPath);
-    if (!vOld.ok) { res.status(vOld.status).json({ error: vOld.error }); return; }
+    if (!vOld.ok) { res.status((vOld as any).status).json({ error: (vOld as any).error }); return; }
     const vNew = validatePath(newPath);
-    if (!vNew.ok) { res.status(vNew.status).json({ error: vNew.error }); return; }
+    if (!vNew.ok) { res.status((vNew as any).status).json({ error: (vNew as any).error }); return; }
 
     if (dirname(vOld.resolved) !== dirname(vNew.resolved)) {
       res.status(400).json({ error: 'Rename must stay in the same directory' }); return;
@@ -205,7 +205,7 @@ router.post('/files/upload', async (req, res) => {
     if (/[/\\]|\.\./.test(filename)) { res.status(400).json({ error: 'Invalid filename' }); return; }
 
     const vDir = validatePath(directory);
-    if (!vDir.ok) { res.status(vDir.status).json({ error: vDir.error }); return; }
+    if (!vDir.ok) { res.status((vDir as any).status).json({ error: (vDir as any).error }); return; }
 
     const fullPath = join(vDir.resolved, filename);
     if (isBlockedPath(fullPath)) { res.status(403).json({ error: 'Access denied: blocked path' }); return; }

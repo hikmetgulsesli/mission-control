@@ -11,13 +11,13 @@ import { GlitchText } from '../components/GlitchText';
 
 export function Agents() {
   const { data: agents, loading, refresh } = usePolling(api.agents, 30000);
-  const { data: sessions } = usePolling(api.sessions, 30000);
+  const { data: sessions, loading: sessionsLoading } = usePolling(api.sessions, 30000);
   const [editAgent, setEditAgent] = useState<Agent | null>(null);
   const [activityAgent, setActivityAgent] = useState<{ id: string; name: string } | null>(null);
   const [liveAgent, setLiveAgent] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  if (loading) return <div className="page-loading">Loading agents...</div>;
+  if (loading || sessionsLoading) return <div className="page-loading">Loading agents...</div>;
 
   const handleChat = (agent: Agent) => {
     navigate(`/chat?agent=${agent.id}`);

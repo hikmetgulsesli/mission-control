@@ -53,26 +53,29 @@ router.get('/files/list', async (req, res) => {
             return;
         }
         const entries = await readdir(resolved, { withFileTypes: true });
-        const items = [];
-        for (const entry of entries) {
+        const filtered = entries.filter(entry => {
             if (!showHidden && entry.name.startsWith('.'))
-                continue;
+                return false;
             if (isBlocked(entry.name))
-                continue;
+                return false;
+            return true;
+        });
+        const results = await Promise.all(filtered.map(async (entry) => {
             try {
                 const fullPath = join(resolved, entry.name);
                 const s = await stat(fullPath);
-                items.push({
+                return {
                     name: entry.name,
                     type: entry.isDirectory() ? 'directory' : 'file',
                     size: s.size,
                     mtime: s.mtime.toISOString(),
-                });
+                };
             }
             catch {
-                // Skip entries we can't stat
+                return null;
             }
-        }
+        }));
+        const items = results.filter((r) => r !== null);
         items.sort((a, b) => {
             if (a.type !== b.type)
                 return a.type === 'directory' ? -1 : 1;
