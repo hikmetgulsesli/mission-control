@@ -369,6 +369,22 @@ export function Projects() {
               </div>
             )}
 
+            {/* Card actions */}
+            <div className="project-card__actions" onClick={(e) => e.stopPropagation()}>
+              <button className="btn btn--tiny" onClick={() => handleExport(p.id)} title="Export JSON">EXPORT</button>
+              {p.id !== "mission-control" && (
+                <button className="btn btn--tiny btn--danger" onClick={(e) => openDeleteModal(e, p)} title="Projeyi sil">SIL</button>
+              )}
+              {p.type !== "mobile" && p.id !== "mission-control" && p.serviceStatus === "active" && (
+                <button
+                  className="btn btn--tiny btn--danger"
+                  onClick={(e) => handleToggle(e, p)}
+                  disabled={toggling === p.id}
+                >
+                  {toggling === p.id ? "..." : "DURDUR"}
+                </button>
+              )}
+            </div>
           </div>
         ))}
       </div>
