@@ -200,7 +200,7 @@ export function Projects() {
 
   if (loading) return <div className="page-loading">Projeler yukleniyor...</div>;
 
-  const ownProjectsRaw = projects.filter((p) => p.category === "own");
+  const ownProjectsRaw = projects.filter((p) => p.category === "own" && p.id !== "mission-control");
   const ownProjects = [...ownProjectsRaw].sort((a, b) => {
     switch (sortBy) {
       case 'date': return (b.createdAt || '').localeCompare(a.createdAt || '');
