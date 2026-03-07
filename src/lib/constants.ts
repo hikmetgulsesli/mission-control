@@ -15,15 +15,18 @@ export const AGENT_MAP = Object.fromEntries(AGENTS.map(a => [a.id, a]));
 
 // Map Setfarm workflow agents to real MC agents
 export const WORKFLOW_AGENT_MAP: Record<string, string> = {
-  // feature-dev workflow v11.0
+  // feature-dev workflow v12.0
   "feature-dev_planner": "flux",
-  "feature-dev_setup": "atlas",
   "feature-dev_designer": "prism",
+  "feature-dev_story-writer": "iris",
+  "feature-dev_setup": "atlas",
   "feature-dev_developer": "koda",
   "feature-dev_verifier": "sentinel",
-  "feature-dev_tester": "sentinel",
+  "feature-dev_tester": "nexus",
   "feature-dev_reviewer": "iris",
   "feature-dev_merge": "atlas",
+  "feature-dev_security": "sentinel",
+  "feature-dev_deployer": "atlas",
   // bug-fix workflow
   "bug-fix_triager": "iris",
   "bug-fix_setup": "atlas",

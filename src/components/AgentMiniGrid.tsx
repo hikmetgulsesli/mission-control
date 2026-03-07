@@ -14,10 +14,25 @@ function getAgentStatus(agentId: string, agentsData: any[], pipeline: any[]): { 
     if (run.status !== 'running') continue;
     for (const step of run.steps || []) {
       if (step.status !== 'running') continue;
-      const wfAgent = step.agent || '';
+      const wfAgent = (step.agent || '').trim().toLowerCase();
+      if (!wfAgent) continue;
       const mappedAgent = WORKFLOW_AGENT_MAP[wfAgent];
       if (mappedAgent === agentId) {
         return { status: 'workflow', label: `${step.stepId} (${run.workflow || ''})` };
+      }
+      // Fallback: match by stepId if WORKFLOW_AGENT_MAP misses
+      if (!mappedAgent) {
+        const stepId = (step.stepId || step.step_id || step.id || '').toLowerCase();
+        const STEP_AGENT_FALLBACK: Record<string, string[]> = {
+          plan: ['iris'], design: ['prism'], stories: ['iris'],
+          setup: ['atlas'], implement: ['koda', 'cipher'], verify: ['sentinel'],
+          'security-gate': ['sentinel', 'iris'], 'final-test': ['nexus', 'flux'],
+          deploy: ['atlas'],
+        };
+        const fallbackAgents = STEP_AGENT_FALLBACK[stepId];
+        if (fallbackAgents?.includes(agentId)) {
+          return { status: 'workflow', label: `${stepId} (${run.workflow || ''})` };
+        }
       }
     }
   }

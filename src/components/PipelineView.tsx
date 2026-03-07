@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react';
 import { StoryChecklist } from './StoryChecklist';
 import { api } from '../lib/api';
 
-const STEP_ORDER = ['plan', 'setup', 'design', 'implement', 'verify', 'security-gate', 'final-test', 'deploy'];
+const STEP_ORDER = ['plan', 'design', 'stories', 'setup', 'implement', 'verify', 'security-gate', 'final-test', 'deploy'];
 const STEP_LABELS: Record<string, string> = {
-  plan: 'PLAN', setup: 'SETUP', design: 'DESIGN', implement: 'IMPL', deploy: 'DEPLOY',
-  verify: 'VERIFY', 'security-gate': 'SEC GATE', 'final-test': 'TEST & MERGE',
+  plan: 'PLAN', design: 'DESIGN', stories: 'STORIES', setup: 'SETUP', implement: 'IMPL', deploy: 'DEPLOY',
+  verify: 'VERIFY', 'security-gate': 'SEC GATE', 'final-test': 'FINAL TEST',
   test: 'TEST', pr: 'PR', review: 'REVIEW',
   triage: 'TRIAGE', investigate: 'INVEST', fix: 'FIX',
   collect: 'COLLECT', report: 'REPORT',
@@ -13,9 +13,11 @@ const STEP_LABELS: Record<string, string> = {
 };
 
 const WORKFLOW_STEPS: Record<string, string[]> = {
-  'feature-dev': ['plan', 'setup', 'design', 'implement', 'verify', 'security-gate', 'final-test', 'deploy'],
+  'feature-dev': ['plan', 'design', 'stories', 'setup', 'implement', 'verify', 'security-gate', 'final-test', 'deploy'],
   'bug-fix': ['triage', 'investigate', 'fix', 'verify', 'test', 'pr', 'review'],
   'security-audit': ['collect', 'plan', 'fix', 'verify', 'test', 'report', 'review'],
+  'daily-standup': ['collect', 'report'],
+  'ui-refactor': ['plan', 'setup', 'implement', 'verify', 'test', 'deploy'],
 };
 
 interface PipelineRun {
@@ -115,7 +117,9 @@ export function PipelineView({ runs }: { runs: PipelineRun[] }) {
   const [expandedRun, setExpandedRun] = useState<string | null>(null);
   const [retrying, setRetrying] = useState<string | null>(null);
 
-  if (!runs || runs.length === 0) {
+  const HIDDEN_WORKFLOWS = ["daily-standup"];
+  const filteredRuns = (runs || []).filter(r => !HIDDEN_WORKFLOWS.includes(r.workflow));
+  if (filteredRuns.length === 0) {
     return <div className="af-empty">No runs found</div>;
   }
 
@@ -140,7 +144,7 @@ export function PipelineView({ runs }: { runs: PipelineRun[] }) {
 
   return (
     <div className="af-pipeline">
-      {runs.map((run) => {
+      {filteredRuns.map((run) => {
         const steps = run.steps.sort((a, b) => {
           const ai = STEP_ORDER.indexOf(a.stepId);
           const bi = STEP_ORDER.indexOf(b.stepId);

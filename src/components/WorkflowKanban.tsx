@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { Workflow, Run } from '../lib/types';
 
 const STEP_LABELS: Record<string, string> = {
-  plan: 'PLAN', setup: 'SETUP', design: 'DESIGN', implement: 'IMPL',
+  plan: 'PLAN', design: 'DESIGN', stories: 'STORIES', setup: 'SETUP', implement: 'IMPL',
   verify: 'VERIFY', 'security-gate': 'SEC GATE', 'final-test': 'TEST & MERGE', deploy: 'DEPLOY', test: 'TEST', pr: 'PR', review: 'REVIEW',
   triage: 'TRIAGE', investigate: 'INVEST', fix: 'FIX',
   collect: 'COLLECT', report: 'REPORT',

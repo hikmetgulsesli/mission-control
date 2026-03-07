@@ -10,13 +10,15 @@ const router = Router();
 // Lives here so setfarm updates don't break it
 const STEP_MAPPING: Record<string, Record<string, string[]>> = {
   'feature-dev': {
-    plan:      ['iris'],
-    setup:     ['atlas'],
-    implement: ['koda', 'prism'],
-    verify:    ['sentinel'],
-    test:      ['nexus', 'prism'],
-    pr:        ['koda', 'prism'],
-    review:    ['flux', 'lux'],
+    plan:            ['iris'],
+    design:          ['prism'],
+    stories:         ['iris'],
+    setup:           ['atlas'],
+    implement:       ['koda', 'cipher'],
+    verify:          ['sentinel'],
+    'security-gate': ['sentinel', 'iris'],
+    'final-test':    ['nexus', 'flux'],
+    deploy:          ['atlas'],
   },
   'bug-fix': {
     triage:      ['iris'],
