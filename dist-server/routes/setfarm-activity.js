@@ -1022,6 +1022,11 @@ async function syncProjectsFromRuns() {
             task: run.task.split('\n').slice(0, 3).join(' ').slice(0, 200),
             type: mobile ? 'mobile' : 'web',
         });
+        // Skip deleted projects — don't update or sync them
+        if (result.reason === 'deleted') {
+            skipped.push(run.id + ': deleted project ' + name);
+            continue;
+        }
         // B2: Re-detect stack if project exists but stack is empty
         if (!result.created && result.project && (!result.project.stack || result.project.stack.length === 0) && stack.length > 0) {
             updateProjectById(result.project.id, { stack });

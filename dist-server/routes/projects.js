@@ -365,18 +365,28 @@ router.post("/projects/stop-all", async (_req, res) => {
             if (!isOnline)
                 continue;
             try {
-                // Kill orphan processes on port
                 try {
                     execFileSync("fuser", ["-k", `${port}/tcp`], { timeout: 5000, stdio: 'pipe' });
                 }
                 catch { }
                 systemctlAction("stop", service);
+                try {
+                    execFileSync("systemctl", ["--user", "disable", service], { timeout: 5000, stdio: 'pipe' });
+                }
+                catch { }
+                try {
+                    mkdirSync(DISABLED_DIR, { recursive: true });
+                    writeFileSync(join(DISABLED_DIR, service), new Date().toISOString());
+                }
+                catch { }
+                project.manuallyDisabled = true;
                 results.push({ id: project.id, name: project.name, stopped: true });
             }
             catch (err) {
                 results.push({ id: project.id, name: project.name, stopped: false, error: err.message });
             }
         }
+        saveProjects(projects);
         res.json({ success: true, results });
     }
     catch (err) {
@@ -392,6 +402,9 @@ router.post("/projects/start-all", async (_req, res) => {
                 continue;
             if (project.category === "external")
                 continue;
+            // Skip individually disabled projects — respect user intent
+            if (project.manuallyDisabled)
+                continue;
             const service = project.service;
             if (!service || !(/^[a-zA-Z0-9_.-]+$/).test(service))
                 continue;
@@ -402,7 +415,15 @@ router.post("/projects/start-all", async (_req, res) => {
             if (isOnline)
                 continue;
             try {
+                try {
+                    execFileSync("systemctl", ["--user", "enable", service], { timeout: 5000, stdio: 'pipe' });
+                }
+                catch { }
                 systemctlAction("start", service);
+                try {
+                    unlinkSync(join(DISABLED_DIR, service));
+                }
+                catch { }
                 results.push({ id: project.id, name: project.name, started: true });
             }
             catch (err) {
@@ -436,8 +457,21 @@ router.delete("/projects/:id", async (req, res) => {
         const log = [];
         if (project.service && !project.service.startsWith("docker:") && /^[a-zA-Z0-9_.-]+$/.test(project.service)) {
             try {
-                execFileSync("sudo", ["systemctl", "stop", project.service], { timeout: 10000, stdio: 'pipe' });
-                execFileSync("sudo", ["systemctl", "disable", project.service], { timeout: 10000, stdio: 'pipe' });
+                // Try user-level first (most services are user-level)
+                try {
+                    execFileSync("systemctl", ["--user", "stop", project.service], { timeout: 10000, stdio: 'pipe' });
+                    execFileSync("systemctl", ["--user", "disable", project.service], { timeout: 10000, stdio: 'pipe' });
+                }
+                catch {
+                    // Fallback to system-level
+                    execFileSync("sudo", ["systemctl", "stop", project.service], { timeout: 10000, stdio: 'pipe' });
+                    execFileSync("sudo", ["systemctl", "disable", project.service], { timeout: 10000, stdio: 'pipe' });
+                }
+                // Clean up marker file
+                try {
+                    unlinkSync(join(DISABLED_DIR, project.service));
+                }
+                catch { }
                 log.push("Service " + project.service + " stopped and disabled");
             }
             catch {
@@ -491,6 +525,9 @@ router.delete("/projects/:id", async (req, res) => {
     }
 });
 export function updateProjectById(id, fields) {
+    const deletedIds = loadDeletedIds();
+    if (deletedIds.has(id))
+        return null;
     const projects = loadProjects();
     const idx = projects.findIndex((p) => p.id === id);
     if (idx === -1)
@@ -661,6 +698,12 @@ export function deduplicateProjects() {
                 winner.ports = { ...(loser.ports || {}), ...(winner.ports || {}) };
             }
         }
+    }
+    // Also filter out any projects that were manually deleted
+    const deletedIds = loadDeletedIds();
+    for (const p of projects) {
+        if (deletedIds.has(p.id))
+            idsToRemove.add(p.id);
     }
     if (idsToRemove.size > 0) {
         const cleaned = projects.filter((p) => !idsToRemove.has(p.id));

@@ -29,7 +29,6 @@ interface Project {
   id: string;
   name: string;
   emoji: string;
-  status: string;
   type?: "web" | "mobile";
   description: string;
   ports: { frontend?: number; backend?: number };
@@ -80,10 +79,12 @@ export function Projects() {
   const [toggling, setToggling] = useState<string | null>(null);
   const [bulkAction, setBulkAction] = useState<string | null>(null);
 
+  const fetchProjects = () => api.projects().then((d) => { setProjects(d); setLoading(false); }).catch(() => setLoading(false));
+
   useEffect(() => {
-    api.projects()
-      .then((d) => { setProjects(d); setLoading(false); })
-      .catch(() => setLoading(false));
+    fetchProjects();
+    const interval = setInterval(fetchProjects, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleDelete = async () => {
@@ -158,9 +159,9 @@ export function Projects() {
     const action = p.serviceStatus === "active" ? "stop" : "start";
     setToggling(p.id);
     try {
-      await api.toggleProject(p.id, action);
+      const result = await api.toggleProject(p.id, action);
       setProjects(prev => prev.map(pr =>
-        pr.id === p.id ? { ...pr, serviceStatus: action === "start" ? "active" : "inactive" } : pr
+        pr.id === p.id ? { ...pr, serviceStatus: result.serviceStatus ?? (action === "start" ? "active" : "inactive"), manuallyDisabled: action === "stop" } : pr
       ));
       toast(p.name + " " + (action === "start" ? "baslatildi" : "durduruldu"), "success");
     } catch (err: any) {
