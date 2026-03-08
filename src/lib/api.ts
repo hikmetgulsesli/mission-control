@@ -35,6 +35,10 @@ export const api = {
     }),
   deleteRun: (id: string) =>
     fetchApi<any>(`/api/runs/${id}`, { method: 'DELETE' }),
+  stopRun: (id: string) =>
+    fetchApi<any>(`/api/runs/${id}/stop`, { method: 'POST' }),
+  resumeRun: (id: string) =>
+    fetchApi<any>(`/api/runs/${id}/resume`, { method: 'POST' }),
   retryRun: (id: string, step_id?: string, message?: string) =>
     fetchApi<any>(`/api/runs/${id}/retry`, {
       method: 'POST',

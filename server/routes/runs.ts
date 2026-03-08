@@ -139,5 +139,46 @@ router.post('/runs/:id/skip-story', async (req, res) => {
   }
 });
 
+
+// POST /runs/:id/stop — Stop/cancel a running workflow
+router.post('/runs/:id/stop', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const out = await runCli('setfarm', ['workflow', 'stop', id]);
+    res.json({ success: true, output: out });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /runs/:id — Delete a workflow run
+router.delete('/runs/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const out = await runCli('setfarm', ['workflow', 'delete', id]);
+    res.json({ success: true, output: out });
+  } catch (err: any) {
+    // If CLI doesn't support delete, try direct DB
+    try {
+      const { failEntireRun } = await import('../utils/setfarm-db.js');
+      await failEntireRun(req.params.id, 'Manually deleted from dashboard');
+      res.json({ success: true, output: 'Marked as failed (delete not supported by CLI)' });
+    } catch (e2: any) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+});
+
+// POST /runs/:id/resume — Resume a failed run
+router.post('/runs/:id/resume', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const out = await runCli('setfarm', ['workflow', 'resume', id]);
+    res.json({ success: true, output: out });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
 

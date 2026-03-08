@@ -180,6 +180,7 @@ function InlinePlanView({ runId, onRetry }: { runId: string; onRetry?: (storyId:
 export function PipelineView({ runs }: { runs: PipelineRun[] }) {
   const [expandedRun, setExpandedRun] = useState<string | null>(null);
   const [retrying, setRetrying] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const HIDDEN_WORKFLOWS = ["daily-standup"];
   const filteredRuns = (runs || []).filter(r => !HIDDEN_WORKFLOWS.includes(r.workflow));
@@ -204,6 +205,26 @@ export function PipelineView({ runs }: { runs: PipelineRun[] }) {
     } catch (err: any) {
       console.error('Story retry failed:', err);
     }
+  };
+
+  const handleStop = async (runId: string) => {
+    if (!confirm('Bu workflow durdurulsun mu?')) return;
+    setActionLoading(runId + ':stop');
+    try { await api.stopRun(runId); } catch (err: any) { console.error('Stop failed:', err); }
+    finally { setActionLoading(null); }
+  };
+
+  const handleDelete = async (runId: string) => {
+    if (!confirm('Bu run silinsin mi?')) return;
+    setActionLoading(runId + ':delete');
+    try { await api.deleteRun(runId); } catch (err: any) { console.error('Delete failed:', err); }
+    finally { setActionLoading(null); }
+  };
+
+  const handleResume = async (runId: string) => {
+    setActionLoading(runId + ':resume');
+    try { await api.resumeRun(runId); } catch (err: any) { console.error('Resume failed:', err); }
+    finally { setActionLoading(null); }
   };
 
   return (
@@ -246,6 +267,21 @@ export function PipelineView({ runs }: { runs: PipelineRun[] }) {
               {run.runNumber && <span className="af-pipeline__run-id">#{run.runNumber}</span>}
               <span className="af-pipeline__wf">{run.workflow}</span>
               <span className="af-pipeline__task">{truncate(run.task, 60)}</span>
+              <span className="af-pipeline__run-actions" onClick={(e) => e.stopPropagation()}>
+                {run.status === 'running' && (
+                  <button className="af-run-btn af-run-btn--stop" onClick={() => handleStop(run.id)} disabled={actionLoading === run.id + ':stop'} title="Durdur">
+                    {actionLoading === run.id + ':stop' ? '...' : '\u25A0'}
+                  </button>
+                )}
+                {(run.status === 'failed' || run.status === 'cancelled') && (
+                  <button className="af-run-btn af-run-btn--resume" onClick={() => handleResume(run.id)} disabled={actionLoading === run.id + ':resume'} title="Resume">
+                    {actionLoading === run.id + ':resume' ? '...' : '\u25B6'}
+                  </button>
+                )}
+                <button className="af-run-btn af-run-btn--delete" onClick={() => handleDelete(run.id)} disabled={actionLoading === run.id + ':delete'} title="Sil">
+                  {actionLoading === run.id + ':delete' ? '...' : '\u2715'}
+                </button>
+              </span>
               <span className="af-pipeline__expand">{isExpanded ? '\u25B2' : '\u25BC'}</span>
             </div>
 
