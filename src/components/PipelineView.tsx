@@ -177,13 +177,16 @@ function InlinePlanView({ runId, onRetry }: { runId: string; onRetry?: (storyId:
   );
 }
 
-export function PipelineView({ runs }: { runs: PipelineRun[] }) {
+export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefresh?: () => void }) {
   const [expandedRun, setExpandedRun] = useState<string | null>(null);
   const [retrying, setRetrying] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [hiddenRuns, setHiddenRuns] = useState<Set<string>>(new Set());
 
   const HIDDEN_WORKFLOWS = ["daily-standup"];
-  const filteredRuns = (runs || []).filter(r => !HIDDEN_WORKFLOWS.includes(r.workflow));
+  const filteredRuns = (runs || [])
+    .filter(r => !HIDDEN_WORKFLOWS.includes(r.workflow) && !hiddenRuns.has(r.id))
+    .sort((a, b) => (b.runNumber || 0) - (a.runNumber || 0));
   if (filteredRuns.length === 0) {
     return <div className="af-empty">No runs found</div>;
   }
@@ -210,20 +213,24 @@ export function PipelineView({ runs }: { runs: PipelineRun[] }) {
   const handleStop = async (runId: string) => {
     if (!confirm('Bu workflow durdurulsun mu?')) return;
     setActionLoading(runId + ':stop');
-    try { await api.stopRun(runId); } catch (err: any) { console.error('Stop failed:', err); }
+    try { await api.stopRun(runId); if (onRefresh) onRefresh(); } catch (err: any) { console.error('Stop failed:', err); }
     finally { setActionLoading(null); }
   };
 
   const handleDelete = async (runId: string) => {
     if (!confirm('Bu run silinsin mi?')) return;
     setActionLoading(runId + ':delete');
-    try { await api.deleteRun(runId); } catch (err: any) { console.error('Delete failed:', err); }
+    try {
+      await api.deleteRun(runId);
+      setHiddenRuns(prev => new Set([...prev, runId]));
+      if (onRefresh) onRefresh();
+    } catch (err: any) { console.error('Delete failed:', err); }
     finally { setActionLoading(null); }
   };
 
   const handleResume = async (runId: string) => {
     setActionLoading(runId + ':resume');
-    try { await api.resumeRun(runId); } catch (err: any) { console.error('Resume failed:', err); }
+    try { await api.resumeRun(runId); if (onRefresh) onRefresh(); } catch (err: any) { console.error('Resume failed:', err); }
     finally { setActionLoading(null); }
   };
 
