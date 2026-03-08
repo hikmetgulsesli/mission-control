@@ -42,6 +42,11 @@ function saveProjects(projects: any[]) {
 
 async function enrichWithStatus(projects: any[]) {
   for (const p of projects) {
+    // Respect manually disabled state — don't override with port check
+    if (p.manuallyDisabled) {
+      p.serviceStatus = "inactive";
+      continue;
+    }
     const port = p.ports?.frontend || p.ports?.backend;
     if (port) {
       p.serviceStatus = (await checkPort(port)) ? "active" : "inactive";
