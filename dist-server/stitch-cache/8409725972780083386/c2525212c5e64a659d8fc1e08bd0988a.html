@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Modern SaaS Landing Page</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,100..1000&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#137fec",
+                        "background-light": "#ffffff",
+                        "background-dark": "#101922",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "sans-serif"],
+                        "body": ["DM Sans", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-body antialiased selection:bg-primary/30">
+<div class="relative flex h-auto min-h-screen w-full flex-col group/design-root overflow-x-hidden">
+<div class="layout-container flex h-full grow flex-col">
+<header class="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md sticky top-0 z-50">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white font-display font-bold text-xl">
+                        S
+                    </div>
+<span class="font-display font-bold text-xl tracking-tight text-slate-900 dark:text-white">SaaSFast</span>
+</div>
+<nav class="hidden md:flex items-center gap-8">
+<a class="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-primary transition-colors" href="#">Features</a>
+<a class="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-primary transition-colors" href="#">Pricing</a>
+<a class="text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-primary transition-colors" href="#">Resources</a>
+</nav>
+<div class="flex items-center gap-4">
+<a class="hidden sm:block text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-primary transition-colors" href="#">Log in</a>
+<button class="flex items-center justify-center rounded-lg h-9 px-4 bg-primary text-white text-sm font-medium hover:bg-primary/90 transition-colors shadow-sm">
+                        Get Started
+                    </button>
+</div>
+</header>
+<main class="flex-1 flex justify-center py-12 md:py-20 lg:py-24 px-6">
+<div class="layout-content-container flex flex-col max-w-[1024px] w-full gap-24">
+<section class="@container">
+<div class="flex flex-col items-center text-center gap-8 max-w-[800px] mx-auto">
+<div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium">
+<span class="flex h-2 w-2 rounded-full bg-primary"></span>
+                                Now in public beta
+                            </div>
+<h1 class="font-display text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight text-slate-900 dark:text-white leading-[1.1]">
+                                Build better software, <br class="hidden md:block"/>
+<span class="text-transparent bg-clip-text bg-gradient-to-r from-primary to-blue-400">deliver faster.</span>
+</h1>
+<p class="text-lg md:text-xl text-slate-600 dark:text-slate-400 max-w-[600px] leading-relaxed">
+                                Our minimalist platform helps modern engineering teams ship high-quality products without the unnecessary clutter.
+                            </p>
+<div class="flex flex-col sm:flex-row gap-4 w-full sm:w-auto mt-4">
+<button class="flex items-center justify-center rounded-lg h-12 px-8 bg-primary text-white text-base font-semibold hover:bg-primary/90 transition-all shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-0.5">
+                                    Start for free
+                                </button>
+<button class="flex items-center justify-center rounded-lg h-12 px-8 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-base font-medium border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+<span class="material-symbols-outlined mr-2 text-[20px]">play_circle</span>
+                                    Watch demo
+                                </button>
+</div>
+<p class="text-sm text-slate-500 dark:text-slate-400">No credit card required. 14-day free trial.</p>
+</div>
+</section>
+<section class="@container pt-12">
+<div class="relative rounded-2xl md:rounded-3xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 p-2 overflow-hidden shadow-2xl shadow-slate-200/50 dark:shadow-none">
+<div class="absolute inset-0 bg-gradient-to-b from-white/50 to-transparent dark:from-white/5 pointer-events-none"></div>
+<img alt="Dashboard interface showing analytics" class="w-full h-auto rounded-xl md:rounded-2xl border border-slate-200 dark:border-slate-800 object-cover object-top aspect-[16/10]" data-alt="Abstract dashboard interface mockup" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBtK1F1BTdM2BWeoTPzMSUEqqHa8JRdXNVhNmz5spkk35zKsJ2PHbI_p5pRNCtULqaDy0sng_jdVtychYPEf5Dft1kg6PpUpqIezMdEDDRS-H7SObMhtGJox3HL-CmA8taOsV8Mfz50oGvOKrPHBoiuO4ESQneP-Eu-ir6AAN7I0Ks-oSKInBGYZZRvvgUzb6SI4kRgIlTg_2QjNLP-bqEzJwF4-gLNbe_OJ0YPQle9NqPWthS1gJoCamdpkFCUWxhQZY-YD1uQvDc"/>
+</div>
+</section>
+<section class="flex flex-col gap-12 @container py-12">
+<div class="flex flex-col gap-4 text-center items-center">
+<h2 class="font-display text-3xl md:text-4xl font-bold tracking-tight text-slate-900 dark:text-white max-w-[600px]">
+                                Everything you need to scale
+                            </h2>
+<p class="text-slate-600 dark:text-slate-400 text-lg max-w-[600px]">
+                                We've stripped away the complexity so you can focus on what matters most: building great products.
+                            </p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<div class="flex flex-col gap-4 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-primary/50 transition-colors shadow-sm group">
+<div class="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-2xl">bolt</span>
+</div>
+<div>
+<h3 class="font-display text-xl font-bold text-slate-900 dark:text-white mb-2">Lightning Fast</h3>
+<p class="text-slate-600 dark:text-slate-400 leading-relaxed">Built on a modern stack to ensure your workflows never slow down, no matter how much data you process.</p>
+</div>
+</div>
+<div class="flex flex-col gap-4 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-primary/50 transition-colors shadow-sm group">
+<div class="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-2xl">shield_lock</span>
+</div>
+<div>
+<h3 class="font-display text-xl font-bold text-slate-900 dark:text-white mb-2">Secure by Design</h3>
+<p class="text-slate-600 dark:text-slate-400 leading-relaxed">Enterprise-grade security built-in from day one. Your data is encrypted at rest and in transit.</p>
+</div>
+</div>
+<div class="flex flex-col gap-4 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-primary/50 transition-colors shadow-sm group">
+<div class="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-2xl">extension</span>
+</div>
+<div>
+<h3 class="font-display text-xl font-bold text-slate-900 dark:text-white mb-2">Seamless Integration</h3>
+<p class="text-slate-600 dark:text-slate-400 leading-relaxed">Connects effortlessly with your existing tools. Slack, GitHub, Jira, and hundreds more supported natively.</p>
+</div>
+</div>
+</div>
+</section>
+<section class="@container">
+<div class="flex flex-col items-center justify-center gap-8 px-6 py-16 md:py-24 rounded-3xl bg-primary text-center relative overflow-hidden">
+<div class="absolute inset-0 opacity-10" style="background-image: radial-gradient(circle at center, white 1px, transparent 1px); background-size: 24px 24px;"></div>
+<div class="relative z-10 flex flex-col gap-4 max-w-[600px]">
+<h2 class="font-display text-3xl md:text-5xl font-bold tracking-tight text-white">
+                                    Ready to transform your workflow?
+                                </h2>
+<p class="text-blue-100 text-lg md:text-xl">
+                                    Join thousands of forward-thinking teams already building the future on our platform.
+                                </p>
+</div>
+<div class="relative z-10 flex flex-col sm:flex-row gap-4 w-full sm:w-auto mt-4">
+<button class="flex items-center justify-center rounded-lg h-12 px-8 bg-white text-primary text-base font-bold hover:bg-slate-50 transition-colors shadow-lg">
+                                    Start Your Free Trial
+                                </button>
+<button class="flex items-center justify-center rounded-lg h-12 px-8 bg-primary-600 text-white text-base font-medium border border-blue-400 hover:bg-blue-600 transition-colors">
+                                    Talk to Sales
+                                </button>
+</div>
+</div>
+</section>
+</div>
+</main>
+<footer class="border-t border-slate-200 dark:border-slate-800 py-12 px-6">
+<div class="max-w-[1024px] mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 bg-primary rounded flex items-center justify-center text-white font-display font-bold text-xs">
+                            S
+                        </div>
+<span class="font-display font-bold text-lg text-slate-900 dark:text-white">SaaSFast</span>
+</div>
+<div class="text-sm text-slate-500 dark:text-slate-400">
+                        © 2024 SaaSFast Inc. All rights reserved.
+                    </div>
+</div>
+</footer>
+</div>
+</div>
+</body></html>

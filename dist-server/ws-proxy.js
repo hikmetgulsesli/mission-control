@@ -128,6 +128,7 @@ export function setupWsProxy(server) {
         });
         clientWs.on('error', (err) => {
             console.error('[WS] Client error:', err.message);
+            clearInterval(pingInterval);
             if (gatewayWs && gatewayWs.readyState === WebSocket.OPEN) {
                 gatewayWs.close();
             }

@@ -9,12 +9,14 @@ const router = Router();
 const STEP_MAPPING = {
     'feature-dev': {
         plan: ['iris'],
+        design: ['prism'],
+        stories: ['iris'],
         setup: ['atlas'],
-        implement: ['koda', 'prism'],
+        implement: ['koda', 'cipher'],
         verify: ['sentinel'],
-        test: ['nexus', 'prism'],
-        pr: ['koda', 'prism'],
-        review: ['flux', 'lux'],
+        'security-gate': ['sentinel', 'iris'],
+        'final-test': ['nexus', 'flux'],
+        deploy: ['atlas'],
     },
     'bug-fix': {
         triage: ['iris'],

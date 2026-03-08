@@ -49,14 +49,20 @@ function truncate(s: string, n: number): string {
 }
 
 function InlinePlanView({ runId, onRetry }: { runId: string; onRetry?: (storyId: string) => void }) {
-  const [tab, setTab] = useState<'prd' | 'stories' | 'raw' | 'memory'>('prd');
+  const [tab, setTab] = useState<'prd' | 'design' | 'stories' | 'raw' | 'memory'>('prd');
   const [planData, setPlanData] = useState<PlanData | null>(null);
+  const [designData, setDesignData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.runPlan(runId)
-      .then((d) => { setPlanData(d); setLoading(false); })
-      .catch(() => setLoading(false));
+    Promise.all([
+      api.runPlan(runId),
+      api.runDesign(runId).catch(() => null),
+    ]).then(([plan, design]) => {
+      setPlanData(plan);
+      if (design) setDesignData(design);
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, [runId]);
 
   if (loading) return <div className="af-inline-plan__loading">Loading plan data...</div>;
@@ -70,6 +76,9 @@ function InlinePlanView({ runId, onRetry }: { runId: string; onRetry?: (storyId:
     <div className="af-inline-plan">
       <div className="af-inline-plan__tabs">
         <button className={`af-inline-plan__tab ${tab === 'prd' ? 'af-inline-plan__tab--active' : ''}`} onClick={() => setTab('prd')}>PRD</button>
+        {designData && designData.screens && designData.screens.length > 0 && (
+          <button className={`af-inline-plan__tab ${tab === 'design' ? 'af-inline-plan__tab--active' : ''}`} onClick={() => setTab('design')}>DESIGN ({designData.screens.length})</button>
+        )}
         <button className={`af-inline-plan__tab ${tab === 'stories' ? 'af-inline-plan__tab--active' : ''}`} onClick={() => setTab('stories')}>STORIES ({storyCount})</button>
         <button className={`af-inline-plan__tab ${tab === 'raw' ? 'af-inline-plan__tab--active' : ''}`} onClick={() => setTab('raw')}>RAW</button>
         <button className={`af-inline-plan__tab ${tab === 'memory' ? 'af-inline-plan__tab--active' : ''}`} onClick={() => setTab('memory')}>MEMORY</button>
@@ -94,6 +103,61 @@ function InlinePlanView({ runId, onRetry }: { runId: string; onRetry?: (storyId:
               if (line.trim() === '') return <br key={i} />;
               return <p key={i} className="af-inline-plan__text">{line}</p>;
             })}
+          </div>
+        )}
+
+
+        {tab === 'design' && designData && (
+          <div className="af-inline-plan__design">
+            {designData.designSystem && (
+              <div className="af-design-system">
+                <h4 className="af-design-system__title">Design System</h4>
+                <div className="af-design-system__tokens">
+                  {Object.entries(designData.designSystem).map(([key, value]: [string, any]) => (
+                    <span key={key} className="af-design-token">
+                      <span className="af-design-token__key">{key}</span>
+                      <span className="af-design-token__val">{value}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {designData.designNotes && (
+              <p className="af-design-notes">{designData.designNotes}</p>
+            )}
+            <div className="af-design-grid">
+              {designData.screens.map((screen: any) => (
+                <div key={screen.screenId} className="af-design-card">
+                  <div className="af-design-card__header">
+                    <span className="af-design-card__name">{screen.name || screen.title}</span>
+                    <span className="af-design-card__type">{screen.type || screen.deviceType}</span>
+                  </div>
+                  {screen.description && <p className="af-design-card__desc">{screen.description}</p>}
+                  {screen.screenshotUrl ? (
+                    <div className="af-design-card__img-wrap">
+                      <img
+                        src={screen.screenshotUrl}
+                        alt={screen.name || screen.title}
+                        className="af-design-card__img"
+                        loading="lazy"
+                      />
+                    </div>
+                  ) : (
+                    <div className="af-design-card__no-img">No screenshot available</div>
+                  )}
+                  <div className="af-design-card__actions">
+                    {screen.htmlUrl && (
+                      <a href={screen.htmlUrl} target="_blank" rel="noopener noreferrer" className="af-design-card__btn">
+                        View HTML
+                      </a>
+                    )}
+                    {screen.width && screen.height && (
+                      <span className="af-design-card__size">{screen.width}x{screen.height}</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

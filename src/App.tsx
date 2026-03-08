@@ -29,7 +29,7 @@ export default function App() {
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<Overview />} />
-          <Route path="office" element={<></>} />
+          <Route path="office" element={<Navigate to="/" replace />} />
           <Route path="setfarm" element={<SetfarmActivity />} />
           <Route path="setfarm/runs/:id" element={<RunDetailRoute />} />
           <Route path="agents" element={<Navigate to="/setfarm" replace />} />

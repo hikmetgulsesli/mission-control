@@ -66,7 +66,17 @@ async function fetchAgentSummary(dataFile) {
         const working = new Map();
         working.set('main', 'CEO orchestration');
         const STEP_MAPPING = {
-            'feature-dev': { plan: ['iris'], setup: ['atlas'], design: ['prism'], implement: ['koda', 'prism'], verify: ['sentinel'], test: ['nexus', 'prism'], pr: ['koda', 'prism'], review: ['flux', 'lux'] },
+            'feature-dev': {
+                plan: ['iris'],
+                design: ['prism'],
+                stories: ['iris'],
+                setup: ['atlas'],
+                implement: ['koda', 'cipher'],
+                verify: ['sentinel'],
+                'security-gate': ['sentinel', 'iris'],
+                'final-test': ['nexus', 'flux'],
+                deploy: ['atlas'],
+            },
             'bug-fix': { triage: ['iris'], investigate: ['koda'], setup: ['atlas'], fix: ['cipher'], verify: ['sentinel'], pr: ['flux', 'lux'] },
             'security-audit': { scan: ['iris'], prioritize: ['main'], setup: ['atlas'], fix: ['koda'], verify: ['sentinel'], test: ['nexus', 'prism'], pr: ['flux', 'lux'] },
         };

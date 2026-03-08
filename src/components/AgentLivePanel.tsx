@@ -134,7 +134,7 @@ export function AgentLivePanel({ agentId, onClose }: Props) {
           {data && tab === 'output' && (
             <div className="live-panel__output" ref={outputRef}>
               {hasOutput ? (
-                data.currentSession!.recentOutput.map((line, i) => (
+                (data.currentSession?.recentOutput ?? []).map((line, i) => (
                   <div key={i} className="live-panel__line">{line}</div>
                 ))
               ) : (

@@ -77,6 +77,7 @@ export const api = {
   // New: Stories + Plan for runs
   runStories: (id: string) => fetchApi<any[]>(`/api/setfarm/runs/${id}/stories`),
   runPlan: (id: string) => fetchApi<any>(`/api/setfarm/runs/${id}/plan`),
+  runDesign: (id: string) => fetchApi<any>(`/api/setfarm/runs/${id}/design`),
   // Terminal
   terminalExec: (command: string, args: string[]) =>
     fetchApi<{ output: string; exitCode: number; command: string }>('/api/terminal/exec', {

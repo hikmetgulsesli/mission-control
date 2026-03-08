@@ -197,7 +197,10 @@ function AgentSummaryPanel({ agents }: { agents: AgentSummary[] }) {
                 {isWorking
                   ? a.currentTask
                   : a.lastActivity
-                    ? formatDistanceToNow(typeof a.lastActivity === 'number' ? a.lastActivity : new Date(a.lastActivity), { addSuffix: true })
+                    ? (() => {
+                        const ts = typeof a.lastActivity === 'number' ? a.lastActivity : new Date(a.lastActivity as string).getTime();
+                        return isNaN(ts) ? 'idle' : formatDistanceToNow(ts, { addSuffix: true });
+                      })()
                     : 'idle'}
               </span>
             </div>

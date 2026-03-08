@@ -62,6 +62,10 @@ if (existsSync(config.avatarsDir)) {
   app.use('/avatars', express.static(config.avatarsDir));
 }
 
+// Serve Stitch design cache (screenshots + HTML)
+const stitchCacheDir = resolve(import.meta.dirname || __dirname, "stitch-cache");
+app.use("/stitch-cache", express.static(stitchCacheDir));
+
 // Serve uploads (task images)
 const uploadsDir = resolve(import.meta.dirname || __dirname, '..', 'uploads');
 app.use('/uploads', express.static(uploadsDir));

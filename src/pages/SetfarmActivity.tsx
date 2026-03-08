@@ -11,6 +11,7 @@ import { AgentChatFeed } from '../components/AgentChatFeed';
 
 export function SetfarmActivity() {
   const { toast } = useToast();
+  const initialLoading = useAppStore(s => s.initialLoading);
   const agents = useAppStore(s => s.agents);
   const pipeline = useAppStore(s => s.pipeline);
   const activity = useAppStore(s => s.activity);
@@ -41,6 +42,7 @@ export function SetfarmActivity() {
     }
   };
 
+  if (initialLoading) return <div className="page-loading">Loading agents...</div>;
   return (
     <div className="af-page">
       <div className="af-page__header">

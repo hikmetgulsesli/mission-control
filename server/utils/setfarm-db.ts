@@ -1,3 +1,5 @@
+import { homedir } from 'os';
+import path from 'path';
 import { createHash } from 'crypto';
 import { execFile as execFileCb } from 'child_process';
 import { promisify } from 'util';
@@ -5,7 +7,7 @@ import { readFile } from 'fs/promises';
 
 const execFileAsync = promisify(execFileCb);
 
-const DB_PATH = '/home/setrox/.openclaw/setfarm/setfarm.db';
+const DB_PATH = path.join(homedir(), '.openclaw/setfarm/setfarm.db');
 const STUCK_DETECTION_MS = 10 * 60 * 1000;  // 10min - show in UI
 const STUCK_THRESHOLD_MS = 15 * 60 * 1000;  // 15min - auto-unstick
 const MAX_AUTO_UNSTICK = 3;
@@ -153,7 +155,7 @@ export async function resumeLimboRun(runId: string) {
 
 const SETFARM_CLI_ENV = {
   ...process.env,
-  PATH: `/home/setrox/.local/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH || ''}`,
+  PATH: `${homedir()}/.local/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH || ''}`,
 };
 
 async function setfarmCli(args: string[]): Promise<string> {
@@ -298,7 +300,7 @@ export async function diagnoseStuckStep(runId: string, stepId?: string) {
 
   // 2. Check recent setfarm logs
   try {
-    const logPath = '/home/setrox/.openclaw/setfarm/logs/setfarm.log';
+    const logPath = path.join(homedir(), '.openclaw/setfarm/logs/setfarm.log');
     const logContent = await readFile(logPath, 'utf-8');
     const logTail = logContent.split('\n').slice(-100).join('\n');
     textToAnalyze += '\n' + logTail;
@@ -309,7 +311,7 @@ export async function diagnoseStuckStep(runId: string, stepId?: string) {
   // 3. Try reading session transcript if we have a story id
   if (step.current_story_id) {
     try {
-      const sessionsDir = '/home/setrox/.openclaw/sessions';
+      const sessionsDir = path.join(homedir(), '.openclaw/sessions');
       const { stdout } = await execFileAsync('bash', ['-c',
         `ls -t "${sessionsDir}" 2>/dev/null | head -5`
       ], { timeout: 5000 });
@@ -389,7 +391,7 @@ export async function tryAutoFix(runId: string, cause: string, storyId?: string 
       try {
         await execFileAsync('npm', ['install'], {
           timeout: 60000,
-          cwd: '/home/setrox/.openclaw/setfarm',
+          cwd: path.join(homedir(), '.openclaw/setfarm'),
           env: SETFARM_CLI_ENV,
         });
         console.log(`[MEDIC] Auto-fix: dependency_error -> npm install ok`);
@@ -526,7 +528,7 @@ export async function failEntireRun(runId: string, reason: string) {
 
   // Discord alert
   try {
-    await execFileAsync('bash', ['/home/setrox/.openclaw/scripts/discord-log.sh',
+    await execFileAsync('bash', [path.join(homedir(), '.openclaw/scripts/discord-log.sh'),
       `Pipeline FAILED: Run ${runId} - ${reason}`
     ], { timeout: 10000, env: SETFARM_CLI_ENV });
   } catch {

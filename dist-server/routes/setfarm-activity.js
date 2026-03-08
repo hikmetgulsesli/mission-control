@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { execSync, execFileSync } from 'child_process';
 import { cached } from '../utils/cache.js';
@@ -18,6 +18,7 @@ function isMobileProject(task, repo) {
 }
 import { getRuns, getRunStories, getSetfarmActivity, getSetfarmAgentStats, getSetfarmAlerts } from '../utils/setfarm.js';
 import { ensureAgentFeedTable, insertFeedEntry, getAgentFeed, pruneAgentFeed } from "../utils/setfarm-db.js";
+let syncInProgress = false;
 const router = Router();
 // Recent activity events (last 50, reverse chronological)
 router.get('/setfarm/activity', async (_req, res) => {
@@ -64,7 +65,10 @@ router.get('/setfarm/pipeline', async (_req, res) => {
             const finishedIds = new Set(allRuns.filter((r) => r.status !== 'running' && r.status !== 'pending').map((r) => r.id));
             const newlyFinished = [...finishedIds].filter(id => !lastSeenFinishedIds.has(id));
             if (newlyFinished.length > 0 && lastSeenFinishedIds.size > 0) {
-                syncProjectsFromRuns().catch(() => { });
+                if (!syncInProgress) {
+                    syncInProgress = true;
+                    syncProjectsFromRuns().catch(() => { }).finally(() => { syncInProgress = false; });
+                }
             }
             lastSeenFinishedIds = finishedIds;
             // Auto-create: detect newly started runs and create 'building' project cards
@@ -177,6 +181,105 @@ router.get('/setfarm/runs/:id/plan', async (req, res) => {
     }
     catch (err) {
         res.status(500).json({ error: err.message || 'Plan fetch failed' });
+    }
+});
+// GET /setfarm/runs/:id/design — Stitch design screens with local screenshots
+router.get('/setfarm/runs/:id/design', async (req, res) => {
+    try {
+        const allRuns = (await getRuns());
+        const run = allRuns.find((r) => r.id === req.params.id);
+        if (!run) {
+            res.status(404).json({ error: 'Run not found' });
+            return;
+        }
+        const designStep = (run.steps || []).find((s) => s.step_id === 'design' && s.status === 'done');
+        if (!designStep || !designStep.output) {
+            res.json({ screens: [], projectId: null, designSystem: null });
+            return;
+        }
+        const output = designStep.output;
+        // Parse STITCH_PROJECT_ID
+        const pidMatch = output.match(/STITCH_PROJECT_ID:\s*(\S+)/);
+        const projectId = pidMatch ? pidMatch[1] : null;
+        // Parse SCREEN_MAP JSON
+        let screenMap = [];
+        const smMatch = output.match(/SCREEN_MAP:\s*\n(\[[\s\S]*?\n\])/);
+        if (smMatch) {
+            try {
+                screenMap = JSON.parse(smMatch[1]);
+            }
+            catch { }
+        }
+        // Parse DESIGN_SYSTEM
+        let designSystem = null;
+        const dsMatch = output.match(/DESIGN_SYSTEM:\s*\n((?:\s+\w+:.*\n)+)/);
+        if (dsMatch) {
+            designSystem = {};
+            for (const line of dsMatch[1].split('\n')) {
+                const kv = line.trim().match(/^(\w+):\s*(.+)$/);
+                if (kv)
+                    designSystem[kv[1]] = kv[2];
+            }
+        }
+        // Parse DESIGN_NOTES
+        const notesMatch = output.match(/DESIGN_NOTES:\s*(.+)/);
+        const designNotes = notesMatch ? notesMatch[1] : '';
+        if (!projectId || screenMap.length === 0) {
+            res.json({ screens: screenMap, projectId, designSystem, designNotes });
+            return;
+        }
+        // Cache dir for this project's screenshots
+        const cacheDir = join(import.meta.dirname || __dirname, '..', 'stitch-cache', projectId);
+        mkdirSync(cacheDir, { recursive: true });
+        const STITCH_SCRIPT = join(process.env.HOME || '/home/setrox', '.openclaw/setfarm-repo/scripts/stitch-api.mjs');
+        const screens = await Promise.all(screenMap.map(async (screen) => {
+            const screenshotPath = join(cacheDir, `${screen.screenId}.png`);
+            const htmlPath = join(cacheDir, `${screen.screenId}.html`);
+            const screenshotExists = existsSync(screenshotPath);
+            const htmlExists = existsSync(htmlPath);
+            if (!screenshotExists || !htmlExists) {
+                try {
+                    // Fetch screen details from Stitch API
+                    const result = execSync(`node ${STITCH_SCRIPT} get-screen ${projectId} ${screen.screenId}`, { timeout: 30_000, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+                    const data = JSON.parse(result);
+                    // Download screenshot
+                    if (!screenshotExists && data.screenshot?.downloadUrl) {
+                        try {
+                            execSync(`node ${STITCH_SCRIPT} download "${data.screenshot.downloadUrl}" "${screenshotPath}"`, { timeout: 60_000, stdio: ['pipe', 'pipe', 'pipe'] });
+                        }
+                        catch { }
+                    }
+                    // Download HTML
+                    if (!htmlExists && data.htmlCode?.downloadUrl) {
+                        try {
+                            execSync(`node ${STITCH_SCRIPT} download "${data.htmlCode.downloadUrl}" "${htmlPath}"`, { timeout: 60_000, stdio: ['pipe', 'pipe', 'pipe'] });
+                        }
+                        catch { }
+                    }
+                    return {
+                        ...screen,
+                        title: data.title || screen.name,
+                        screenshotUrl: existsSync(screenshotPath) ? `/stitch-cache/${projectId}/${screen.screenId}.png` : null,
+                        htmlUrl: existsSync(htmlPath) ? `/stitch-cache/${projectId}/${screen.screenId}.html` : null,
+                        width: data.width ? parseInt(data.width) : null,
+                        height: data.height ? parseInt(data.height) : null,
+                        deviceType: data.deviceType || 'DESKTOP',
+                    };
+                }
+                catch {
+                    return { ...screen, screenshotUrl: null, htmlUrl: null };
+                }
+            }
+            return {
+                ...screen,
+                screenshotUrl: `/stitch-cache/${projectId}/${screen.screenId}.png`,
+                htmlUrl: `/stitch-cache/${projectId}/${screen.screenId}.html`,
+            };
+        }));
+        res.json({ screens, projectId, designSystem, designNotes });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message || 'Design fetch failed' });
     }
 });
 // Track last seen completed run IDs for auto-sync — persisted to disk

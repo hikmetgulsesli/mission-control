@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { readFileSync, writeFileSync, existsSync, rmSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, rmSync, mkdirSync, unlinkSync } from "fs";
 import { join } from "path";
 import { createConnection } from "net";
 import { execSync, execFileSync } from "child_process";
@@ -7,6 +7,7 @@ import { config } from "../config.js";
 
 const router = Router();
 const PROJECTS_FILE = (config as any).projectsJson || join(import.meta.dirname, "../../projects.json");
+const DISABLED_DIR = join(process.env.HOME || "/home/setrox", ".openclaw/disabled-services");
 
 const DEFAULT_CHECKLIST = [
   { id: "task-received", label: "Gorev iletildi", completed: false },
@@ -274,13 +275,26 @@ router.post("/projects/:id/toggle", async (req, res) => {
         } catch {}
       }
       try { systemctlAction("stop", service); } catch {}
+      // Disable so systemd won't auto-restart
+      try { execFileSync("systemctl", ["--user", "disable", service], { timeout: 5000, stdio: 'pipe' }); } catch {}
+      // Marker file for medic guard
+      try { mkdirSync(DISABLED_DIR, { recursive: true }); writeFileSync(join(DISABLED_DIR, service), new Date().toISOString()); } catch {}
+      // Persist state
+      project.manuallyDisabled = true;
+      saveProjects(projects);
     } else {
+      // Re-enable + start
+      try { execFileSync("systemctl", ["--user", "enable", service], { timeout: 5000, stdio: 'pipe' }); } catch {}
       try {
         systemctlAction("start", service);
       } catch (err: any) {
         res.status(500).json({ error: "Failed to start service: " + err.message });
         return;
       }
+      // Remove marker file
+      try { unlinkSync(join(DISABLED_DIR, service)); } catch {}
+      project.manuallyDisabled = false;
+      saveProjects(projects);
     }
 
     // Check new status

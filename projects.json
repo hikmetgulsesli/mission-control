@@ -419,7 +419,7 @@
     "antfarmRunIds": [
       "b252bebb-e79f-4c92-93d9-b4e011bd937d"
     ],
-    "updatedAt": "2026-03-04T23:58:02.154Z",
+    "updatedAt": "2026-03-08T03:58:02.733Z",
     "completedAt": "2026-03-03 06:20:50",
     "buildStartedAt": "2026-02-14T18:39:00+03:00",
     "buildCompletedAt": "2026-02-15T05:26:47+03:00",
@@ -1740,7 +1740,7 @@
     "setfarmRunIds": [
       "05c28921-3666-4aab-b629-b5d8c31a5df1"
     ],
-    "updatedAt": "2026-03-04T23:58:02.159Z",
+    "updatedAt": "2026-03-08T03:58:02.740Z",
     "completedAt": "2026-02-25 15:02:22",
     "type": "mobile",
     "buildStartedAt": "2026-02-24T09:42:26.825Z",
@@ -2282,5 +2282,915 @@
     "completedAt": "2026-03-04T23:57:54",
     "buildStartedAt": "2026-03-04T22:37:30",
     "buildCompletedAt": "2026-03-04T23:57:54"
+  },
+  {
+    "id": "snake-game",
+    "name": "snake-game",
+    "emoji": "📦",
+    "status": "active",
+    "description": "Snake Game — Build a modern Snake browser game. Classic snake game with modern design.",
+    "ports": {
+      "frontend": 3531
+    },
+    "domain": "snake-game.setrox.com.tr",
+    "repo": "/home/setrox/projects/snake-game",
+    "stack": [
+      "React",
+      "Express",
+      "Vite",
+      "TypeScript",
+      "Tailwind CSS"
+    ],
+    "service": "snake-game",
+    "serviceStatus": "running",
+    "createdBy": "dashboard",
+    "createdAt": "2026-03-05",
+    "stories": {
+      "total": 7,
+      "done": 7
+    },
+    "features": [],
+    "tasks": [],
+    "github": "hikmetgulsesli/snake-game",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": true
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": true
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": true
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": true
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": true
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": true
+      }
+    ],
+    "updatedAt": "2026-03-08T03:58:02.727Z",
+    "completedAt": "2026-03-05T04:53:52.327Z"
+  },
+  {
+    "id": "3d-tetris",
+    "name": "3d-tetris",
+    "emoji": "📦",
+    "status": "active",
+    "description": "3D Tetris Oyunu — Modern, görsel olarak etkileyici bir 3D Tetris deneyimi.\n\nTECH STACK:\n- Next.js 14 (App Router)\n- Three.js + @react-three/fiber + @react-three/drei (3D rendering)\n- Tailwind CSS (UI panelleri)\n- TypeScript\n\nCORE GAMEPLAY:\n- Klasik Tetris mekaniği: 7 standart tetromino (I, O, T, S, Z, J, L)\n- 3D perspektifle render edilen oyun alanı (10x20 grid)\n- Parçalar 3D bloklar olarak görünür (bevel, glow efektleri)\n- Satır tamamlandığında parlama animasyonu + satır silme\n- Ghost piece (parçanın nereye düşeceğini gösteren hayalet)\n- Hard drop (Space) ve soft drop (aşağı ok)\n- Parça döndürme (yukarı ok veya Z/X)\n- Hold piece (C tuşu — bir parçayı saklama)\n- Next piece preview (sonraki 3 parça)",
+    "ports": {
+      "frontend": 3532
+    },
+    "domain": "3d-tetris.setrox.com.tr",
+    "repo": "/home/setrox/projects/3d-tetris",
+    "stack": [
+      "React",
+      "Next.js",
+      "TypeScript",
+      "Tailwind CSS",
+      "Three.js"
+    ],
+    "service": "3d-tetris",
+    "serviceStatus": "running",
+    "createdBy": "dashboard",
+    "createdAt": "2026-03-05",
+    "stories": {
+      "total": 12,
+      "done": 12
+    },
+    "features": [],
+    "tasks": [],
+    "github": "hikmetgulsesli/3d-tetris",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": true
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": true
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": true
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": true
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": true
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": true
+      },
+      {
+        "id": "deployed",
+        "label": "Deploy edildi",
+        "completed": true
+      }
+    ],
+    "updatedAt": "2026-03-08T03:58:02.721Z",
+    "completedAt": "2026-03-05T13:37:20.718Z"
+  },
+  {
+    "id": "chess-ai",
+    "name": "chess-ai",
+    "emoji": "📦",
+    "status": "active",
+    "description": "Chess AI Game — Modern web-based chess with AI opponent. Next.js 15 + Tailwind + shadcn/ui. Features: full chess rules (castling, en passant, pawn promotion), AI opponent using chess.js + Stockfish WASM, difficulty levels, move history, drag-and-drop, check/checkmate/stalemate detection, undo moves, responsive SVG board.",
+    "ports": {
+      "frontend": 3533
+    },
+    "domain": "chess-ai.setrox.com.tr",
+    "repo": "/home/setrox/projects/chess-ai",
+    "stack": [
+      "React",
+      "Next.js",
+      "TypeScript",
+      "Tailwind CSS"
+    ],
+    "service": "chess-ai",
+    "serviceStatus": "running",
+    "createdBy": "dashboard",
+    "createdAt": "2026-03-06",
+    "stories": {
+      "total": 8,
+      "done": 8
+    },
+    "features": [],
+    "tasks": [],
+    "github": "hikmetgulsesli/chess-ai",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": true
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": true
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": true
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": true
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": true
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": true
+      }
+    ],
+    "updatedAt": "2026-03-08T03:58:02.708Z",
+    "completedAt": "2026-03-06T08:41:10.488Z"
+  },
+  {
+    "id": "nakliye-crm",
+    "name": "nakliye-crm",
+    "emoji": "📦",
+    "status": "active",
+    "description": "Uluslararasi Nakliye CRM - Hakan Gulsesli",
+    "ports": {
+      "frontend": 3535
+    },
+    "domain": "nakliye-crm.setrox.com.tr",
+    "repo": "/home/setrox/projects/nakliye-crm",
+    "stack": [
+      "React",
+      "Next.js",
+      "TypeScript",
+      "Tailwind CSS"
+    ],
+    "service": "nakliye-crm",
+    "serviceStatus": "running",
+    "createdBy": "dashboard",
+    "createdAt": "2026-03-06",
+    "stories": {
+      "total": 17,
+      "done": 17
+    },
+    "features": [],
+    "tasks": [],
+    "github": "hikmetgulsesli/nakliye-crm",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": true
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": true
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": true
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": true
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": true
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": true
+      },
+      {
+        "id": "deployed",
+        "label": "Deployed",
+        "completed": true
+      }
+    ],
+    "updatedAt": "2026-03-08T03:58:02.715Z",
+    "completedAt": "2026-03-06T10:47:15.676Z"
+  },
+  {
+    "id": "repo-projects-space-shooter-fronten",
+    "name": "Space Shooter",
+    "emoji": "🚀",
+    "status": "active",
+    "description": "HTML5 Canvas ile klasik Asteroids tarzi uzay shooter oyunu. Next.js + TypeScript.",
+    "ports": {
+      "frontend": 3534
+    },
+    "domain": "space-shooter.setrox.com.tr",
+    "repo": "/home/setrox/projects/space-shooter",
+    "stack": [
+      "TypeScript"
+    ],
+    "service": "space-shooter",
+    "serviceStatus": "active",
+    "createdBy": "setfarm-workflow",
+    "createdAt": "2026-03-06",
+    "stories": {
+      "total": 10,
+      "done": 0
+    },
+    "features": [],
+    "tasks": [],
+    "github": "hikmetgulsesli/space-shooter",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": true
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": true
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": true
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": true
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": true
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": true
+      }
+    ],
+    "setfarmRunIds": [
+      "e3ed6963-b829-4687-bb24-b12192d18343"
+    ],
+    "updatedAt": "2026-03-08T03:58:02.702Z",
+    "completedAt": "2026-03-06T18:39:50.252Z"
+  },
+  {
+    "id": "hello-world",
+    "name": "Hello World",
+    "emoji": "❌",
+    "status": "failed",
+    "description": "Hello World — Single HTML page with centered heading \"Hello World\" in blue color. No frameworks, no build tools. Just ONE index.html file. Tech: plain HTML/CSS only.",
+    "ports": {},
+    "domain": "",
+    "repo": "/home/setrox/projects/hello-world",
+    "stack": [],
+    "service": "",
+    "serviceStatus": "unknown",
+    "createdBy": "setfarm-workflow",
+    "createdAt": "2026-03-06",
+    "stories": {
+      "total": 1,
+      "done": 1
+    },
+    "features": [],
+    "tasks": [],
+    "github": "",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": true,
+        "completedAt": "2026-03-06T19:23:52.003Z"
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": true,
+        "completedAt": "2026-03-06T19:23:52.003Z"
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": true,
+        "completedAt": "2026-03-06T19:23:52.003Z"
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": false
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": true,
+        "completedAt": "2026-03-06T19:23:52.003Z"
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": true,
+        "completedAt": "2026-03-06T19:33:51.741Z"
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": true,
+        "completedAt": "2026-03-06T19:33:51.741Z"
+      }
+    ],
+    "setfarmRunIds": [
+      "05f7bc9c-de31-49f4-9a79-3d0252d060b9"
+    ],
+    "updatedAt": "2026-03-07T02:26:04.415Z",
+    "completedAt": "2026-03-03T07:10:45.381Z"
+  },
+  {
+    "id": "screenmap-test",
+    "name": "screenmap-test",
+    "emoji": "📦",
+    "status": "active",
+    "description": "Simple counter page with increment/decrement buttons and settings page. Vanilla HTML/CSS/JS.",
+    "ports": {
+      "frontend": 3536
+    },
+    "domain": "screenmap-test.setrox.com.tr",
+    "repo": "/home/setrox/projects/screenmap-test",
+    "stack": [
+      "HTML",
+      "CSS",
+      "JavaScript"
+    ],
+    "service": "screenmap-test",
+    "serviceStatus": "running",
+    "createdBy": "dashboard",
+    "createdAt": "2026-03-07",
+    "stories": {
+      "total": 0,
+      "done": 0
+    },
+    "features": [],
+    "tasks": [],
+    "github": "hikmetgulsesli/screenmap-test",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": true
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": true
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": true
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": true
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": true
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": true
+      }
+    ],
+    "updatedAt": "2026-03-07T02:25:16.834Z"
+  },
+  {
+    "id": "2048-oyunu",
+    "name": "2048 Oyunu",
+    "emoji": "🚀",
+    "status": "active",
+    "description": "2048 Oyunu — Klasik 2048 sayı kaydırma bulmaca oyunu. Tek sayfa, responsive, modern tasarım. Özellikler: 4x4 grid, yukarı/aşağı/sağ/sol kaydırma (klavye + swipe), skor takibi, en yüksek skor (localSto",
+    "ports": {
+      "frontend": 3537
+    },
+    "domain": "game2048.setrox.com.tr",
+    "repo": "/home/setrox/projects/2048-game",
+    "stack": [],
+    "service": "2048-oyunu.service",
+    "serviceStatus": "active",
+    "createdBy": "setfarm-workflow",
+    "createdAt": "2026-03-07",
+    "stories": {
+      "total": 10,
+      "done": 0
+    },
+    "features": [],
+    "tasks": [],
+    "github": "",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": true,
+        "completedAt": "2026-03-07T03:11:52.360Z"
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": true,
+        "completedAt": "2026-03-07T03:11:52.360Z"
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": true,
+        "completedAt": "2026-03-07T03:11:52.360Z"
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": true,
+        "completedAt": "2026-03-07T03:11:52.360Z"
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": true,
+        "completedAt": "2026-03-07T03:11:52.360Z"
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": true,
+        "completedAt": "2026-03-07T03:11:52.360Z"
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": true,
+        "completedAt": "2026-03-07T04:34:21.228Z"
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": false
+      }
+    ],
+    "setfarmRunIds": [
+      "1efc03b7-80d9-44f0-823d-51b6a5707cfc"
+    ],
+    "updatedAt": "2026-03-08T03:58:02.695Z",
+    "completedAt": "2026-03-07T03:04:40.649Z"
+  },
+  {
+    "id": "memory-card",
+    "name": "memory-card",
+    "emoji": "📦",
+    "status": "active",
+    "description": "Memory Card Game - Kartlari cevirerek eslerini bulan hafiza oyunu. Next.js 15, React 19, TypeScript. 4 ekran: Ana Menu, Oyun Ekrani, Pause Overlay, Victory. 3 zorluk: Easy 4x3, Medium 4x4, Hard 6x4.",
+    "ports": {
+      "frontend": 3538
+    },
+    "domain": "memory-card.setrox.com.tr",
+    "repo": "/home/setrox/projects/memory-card",
+    "stack": [
+      "React",
+      "Next.js",
+      "TypeScript",
+      "Tailwind CSS"
+    ],
+    "service": "memory-card",
+    "serviceStatus": "running",
+    "createdBy": "dashboard",
+    "createdAt": "2026-03-07",
+    "stories": {
+      "total": 12,
+      "done": 0
+    },
+    "features": [],
+    "tasks": [],
+    "github": "hikmetgulsesli/memory-card",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": true
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": true
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": true
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": true
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": true
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": true
+      }
+    ],
+    "updatedAt": "2026-03-08T03:58:02.657Z",
+    "completedAt": "2026-03-07T13:20:07.974Z"
+  },
+  {
+    "id": "google-stitch-ai-taraf-ndan-olu-turulaca",
+    "name": "Google Stitch AI tarafından oluşturulaca",
+    "emoji": "🏗",
+    "status": "active",
+    "description": "Google Stitch AI tarafından oluşturulacak bir UI design'ı implemente eden küçük test projesi. REPO: ~/projects/stitch-design-test. Frontend port: 3539. Tech stack: Next.js 14 + React + TypeScript + Ta",
+    "ports": {
+      "frontend": 3539
+    },
+    "domain": "",
+    "repo": "",
+    "stack": [
+      "React",
+      "Next.js",
+      "TypeScript",
+      "Tailwind CSS"
+    ],
+    "service": "",
+    "serviceStatus": "unknown",
+    "createdBy": "setfarm-workflow",
+    "createdAt": "2026-03-07",
+    "stories": {
+      "total": 12,
+      "done": 0
+    },
+    "features": [],
+    "tasks": [],
+    "github": "",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": true,
+        "completedAt": "2026-03-07T23:31:27.155Z"
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": false
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": true,
+        "completedAt": "2026-03-07T23:31:27.155Z"
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": true,
+        "completedAt": "2026-03-07T23:31:27.155Z"
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": true,
+        "completedAt": "2026-03-07T23:31:27.155Z"
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": false
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": false
+      }
+    ],
+    "setfarmRunIds": [
+      "b9fe96d1-221c-412e-b85f-117fbb7e8edd"
+    ],
+    "updatedAt": "2026-03-08T03:58:02.628Z",
+    "completedAt": "2026-03-07 22:26:46"
+  },
+  {
+    "id": "brick-breaker",
+    "name": "brick-breaker",
+    "emoji": "📦",
+    "status": "active",
+    "description": "Proje: Retro Brick Breaker (brick-breaker). Klasik tugla kirma oyunu, modern web teknolojileriyle. Next.js 15, React 19, TypeScript. Ozellikler: mouse/touch ile platform kontrolu, tugla desenleri (3 seviye), top fizigi (aci hesabi, hiz artisi), power-uplar (genis platform, multi-top, laser), can sistemi (3 hak), skor tablosu (localStorage), responsive tasarim (375-1440px), retro neon estetigi (koyu arka plan, parlak neon tuglalar, glow efektleri), ses efektleri. Ekranlar: (1) Ana Menu - baslik, baslat, seviye secici, skor tablosu, (2) Oyun Alani - tuglalar, top, platform, skor/can gostergesi, (3) Pause Overlay - devam/yeniden-basla/menu, (4) Game Over/Victory - skor ozeti, yildiz puanlama, tekrar oyna. Port: 3540",
+    "ports": {
+      "frontend": 3540
+    },
+    "domain": "brick-breaker.setrox.com.tr",
+    "repo": "/home/setrox/projects/brick-breaker",
+    "stack": [
+      "React",
+      "Next.js",
+      "TypeScript",
+      "Tailwind CSS"
+    ],
+    "service": "brick-breaker",
+    "serviceStatus": "running",
+    "createdBy": "dashboard",
+    "createdAt": "2026-03-07",
+    "stories": {
+      "total": 23,
+      "done": 23
+    },
+    "features": [],
+    "tasks": [],
+    "github": "hikmetgulsesli/brick-breaker",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": true
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": true
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": true
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": true
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": true
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": true
+      }
+    ],
+    "updatedAt": "2026-03-08T03:58:02.640Z",
+    "completedAt": "2026-03-07T23:31:16.705Z"
+  },
+  {
+    "id": "pipeline-test",
+    "name": "pipeline-test",
+    "emoji": "📦",
+    "status": "active",
+    "description": "Tek sayfalı HTML counter app - Pipeline Test v3",
+    "ports": {
+      "frontend": 3599
+    },
+    "domain": "pipeline-test.setrox.com.tr",
+    "repo": "/home/setrox/projects/pipeline-test",
+    "stack": [
+      "HTML",
+      "Static"
+    ],
+    "service": "pipeline-test",
+    "serviceStatus": "running",
+    "createdBy": "dashboard",
+    "createdAt": "2026-03-08",
+    "stories": {
+      "total": 7,
+      "done": 7
+    },
+    "features": [],
+    "tasks": [],
+    "github": "hikmetgulsesli/pipeline-test",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": true
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": true
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": true
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": true
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": true
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": true
+      }
+    ],
+    "updatedAt": "2026-03-08T03:58:02.621Z",
+    "completedAt": "2026-03-08T03:58:00.922Z"
   }
 ]
