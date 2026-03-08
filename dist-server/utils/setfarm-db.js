@@ -524,3 +524,109 @@ export async function pruneAgentFeed(keep = 5000) {
     );
   `);
 }
+export async function clearAgentFeed() {
+    await execSetfarmDb(`DELETE FROM agent_feed;`);
+    await execSetfarmDb(`PRAGMA wal_checkpoint(TRUNCATE);`);
+}
+export async function deleteRun(runId, cleanupProject = false) {
+    const safeId = validateId(runId, 'runId');
+    // Get run info before deleting
+    const runs = await querySetfarmDb(`SELECT * FROM runs WHERE id = '${safeId}';`);
+    const run = runs[0];
+    // Delete from DB
+    await execSetfarmDb(`
+    BEGIN;
+    DELETE FROM stories WHERE run_id = '${safeId}';
+    DELETE FROM steps WHERE run_id = '${safeId}';
+    
+    DELETE FROM runs WHERE id = '${safeId}';
+    COMMIT;
+  `);
+    await execSetfarmDb('PRAGMA wal_checkpoint(TRUNCATE);');
+    const log = ['DB records deleted'];
+    // If cleanupProject requested, parse task for repo/path info and cleanup
+    if (cleanupProject && run?.task) {
+        const repoMatch = run.task.match(/Repo:\s*(https:\/\/github\.com\/[^\s|]+)/);
+        const localMatch = run.task.match(/Lokal:\s*(\/[^\s|]+)/);
+        const ghRepo = repoMatch?.[1];
+        const localPath = localMatch?.[1];
+        // Guard: if another run uses the same repo, skip project cleanup
+        if (localPath) {
+            const otherRuns = await querySetfarmDb(`SELECT id, run_number, status FROM runs WHERE id != '${safeId}';`);
+            const sameRepoRun = otherRuns.find((r) => r.task?.includes(localPath));
+            if (sameRepoRun) {
+                log.push(`Skipped project cleanup: run #${sameRepoRun.run_number} (${sameRepoRun.status}) uses same repo`);
+                return { deleted: true, runId, log };
+            }
+        }
+        // Delete GitHub repo
+        if (ghRepo) {
+            try {
+                const repoSlug = ghRepo.replace('https://github.com/', '');
+                await execFileAsync('gh', ['repo', 'delete', repoSlug, '--yes'], { timeout: 15000, env: SETFARM_CLI_ENV });
+                log.push('GitHub repo deleted: ' + repoSlug);
+            }
+            catch (err) {
+                log.push('GitHub delete failed: ' + err.message);
+            }
+        }
+        // Delete local project files
+        if (localPath) {
+            try {
+                const { rmSync, existsSync } = await import('fs');
+                if (existsSync(localPath)) {
+                    rmSync(localPath, { recursive: true, force: true });
+                    log.push('Local repo deleted: ' + localPath);
+                }
+            }
+            catch (err) {
+                log.push('Local delete failed: ' + err.message);
+            }
+        }
+        // Stop & disable service if exists
+        if (localPath) {
+            const name = localPath.split('/').pop() || '';
+            if (name) {
+                for (const svc of [name, name + '-server', name + '-client']) {
+                    try {
+                        await execFileAsync('systemctl', ['--user', 'stop', svc], { timeout: 5000 });
+                        await execFileAsync('systemctl', ['--user', 'disable', svc], { timeout: 5000 });
+                        log.push('Service stopped: ' + svc);
+                    }
+                    catch { }
+                }
+            }
+        }
+        // Remove from projects.json
+        if (localPath) {
+            try {
+                const { readFileSync, writeFileSync } = await import('fs');
+                const pjPath = '/home/setrox/projects/mission-control/projects.json';
+                const projects = JSON.parse(readFileSync(pjPath, 'utf-8'));
+                const name = localPath.split('/').pop() || '';
+                const filtered = projects.filter((p) => p.id !== name && !p.repo?.includes(name));
+                if (filtered.length < projects.length) {
+                    writeFileSync(pjPath, JSON.stringify(filtered, null, 2));
+                    log.push('Removed from projects.json');
+                }
+            }
+            catch (err) {
+                log.push('projects.json cleanup failed: ' + err.message);
+            }
+        }
+        // Remove tunnel entry via tunnel-remove.sh (YAML-safe + DNS cleanup)
+        if (localPath) {
+            const name = localPath.split('/').pop() || '';
+            const hostname = name + '.setrox.com.tr';
+            try {
+                const tunnelScript = homedir() + '/.openclaw/scripts/tunnel-remove.sh';
+                const { stdout: tunnelOut } = await execFileAsync('bash', [tunnelScript, hostname], { timeout: 30000 });
+                log.push('Tunnel: ' + tunnelOut.trim());
+            }
+            catch (err) {
+                log.push('Tunnel cleanup failed: ' + err.message);
+            }
+        }
+    }
+    return { deleted: true, runId, log };
+}

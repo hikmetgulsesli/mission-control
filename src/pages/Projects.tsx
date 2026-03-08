@@ -88,7 +88,7 @@ export function Projects() {
   }, []);
 
   const handleDelete = async () => {
-    if (!deleteTarget || deleteConfirm !== deleteTarget.name) return;
+    if (!deleteTarget || deleteConfirm.trim() !== deleteTarget.name.trim()) return;
     setDeleteLoading(true);
     setDeleteResult(null);
     try {
@@ -520,7 +520,7 @@ export function Projects() {
             </div>
             <div className="modal__actions">
               <button className="btn" onClick={() => setDeleteTarget(null)} disabled={deleteLoading}>Vazgec</button>
-              <button className="btn btn--danger" onClick={handleDelete} disabled={deleteConfirm !== deleteTarget.name || deleteLoading}>
+              <button className="btn btn--danger" onClick={handleDelete} disabled={deleteConfirm.trim() !== deleteTarget.name.trim() || deleteLoading}>
                 {deleteLoading ? "Siliniyor..." : "Kalici Olarak Sil"}
               </button>
             </div>

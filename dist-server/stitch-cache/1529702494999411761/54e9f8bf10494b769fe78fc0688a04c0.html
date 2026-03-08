@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Pipeline Test Counter</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#2463eb",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#111621",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+</head>
+<body class="font-display bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex items-center justify-center antialiased">
+<div class="flex flex-col items-center justify-center gap-6 p-8 max-w-md w-full">
+<h1 class="text-[32px] font-bold tracking-tight text-center leading-tight">
+            Pipeline Test
+        </h1>
+<div class="text-[64px] font-bold tabular-nums leading-none tracking-tight">
+            0
+        </div>
+<button class="flex w-full sm:w-auto min-w-[120px] cursor-pointer items-center justify-center rounded-lg h-12 px-8 bg-primary hover:bg-primary/90 text-white text-base font-bold leading-normal tracking-wide transition-colors">
+<span class="truncate">Artır</span>
+</button>
+<button class="flex mt-2 cursor-pointer items-center justify-center rounded-lg h-10 px-5 border border-slate-300 dark:border-slate-700 bg-transparent hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 gap-2 text-sm font-semibold leading-normal transition-colors">
+<span class="material-symbols-outlined" style="font-size: 20px;">light_mode</span>
+<span class="truncate">Toggle Theme</span>
+</button>
+</div>
+</body></html>

@@ -74,23 +74,23 @@
     "category": "external"
   },
   {
-    "id": "antfarm-dashboard",
-    "name": "Antfarm Dashboard",
+    "id": "setfarm-dashboard",
+    "name": "Setfarm Dashboard",
     "emoji": "🐜",
     "status": "active",
-    "description": "Antfarm workflow engine'inin izleme paneli. Workflow run'lari, step durumlari, story ilerlemesi ve gorev yonetimini g...",
+    "description": "Setfarm workflow engine'inin izleme paneli. Workflow run'lari, step durumlari, story ilerlemesi ve gorev yonetimini g...",
     "ports": {
       "frontend": 3333
     },
-    "domain": "antfarm.setrox.com.tr",
-    "repo": "/home/setrox/.openclaw/antfarm-repo",
+    "domain": "setfarm.setrox.com.tr",
+    "repo": "/home/setrox/.openclaw/setfarm-repo",
     "stack": [
       "Node.js",
       "Express",
       "SQLite"
     ],
-    "service": "antfarm-dashboard.service",
-    "createdBy": "Antfarm",
+    "service": "setfarm-dashboard.service",
+    "createdBy": "Setfarm",
     "createdAt": "2026-02-08",
     "features": [
       "Workflow run listesi ve detaylari",
@@ -100,7 +100,7 @@
       "Run resume/retry destegi"
     ],
     "tasks": [],
-    "github": "https://github.com/snarktank/antfarm",
+    "github": "https://github.com/snarktank/setfarm",
     "category": "external"
   },
   {
@@ -244,7 +244,7 @@
       "Chart.js"
     ],
     "service": "logpulse.service",
-    "createdBy": "Antfarm Workflow",
+    "createdBy": "Setfarm Workflow",
     "workflowRunId": "aa96d169",
     "createdAt": "2026-02-11",
     "features": [
@@ -357,7 +357,7 @@
     ],
     "service": "pomodoro-timer.service",
     "serviceStatus": "unknown",
-    "createdBy": "antfarm-workflow",
+    "createdBy": "setfarm-workflow",
     "createdAt": "2026-02-15",
     "stories": {
       "total": 6,
@@ -417,18 +417,15 @@
         "completedAt": "2026-03-03T06:21:08.848Z"
       }
     ],
-    "antfarmRunIds": [
-      "b252bebb-e79f-4c92-93d9-b4e011bd937d"
-    ],
-    "updatedAt": "2026-03-08T03:58:02.733Z",
-    "completedAt": "2026-03-03 06:20:50",
-    "buildStartedAt": "2026-02-14T18:39:00+03:00",
-    "buildCompletedAt": "2026-02-15T05:26:47+03:00",
-    "duration": "2s 26dk",
     "setfarmRunIds": [
       "e9da9f08-981c-487d-9791-b19ecd7f4300",
       "4c73e3fd-109f-4c1f-b101-690f6fbc358e"
-    ]
+    ],
+    "updatedAt": "2026-03-08T21:58:50.251Z",
+    "completedAt": "2026-03-03 06:20:50",
+    "buildStartedAt": "2026-02-14T18:39:00+03:00",
+    "buildCompletedAt": "2026-02-15T05:26:47+03:00",
+    "duration": "2s 26dk"
   },
   {
     "id": "qr-code-generator",
@@ -448,7 +445,7 @@
     ],
     "service": "qr-code-generator.service",
     "serviceStatus": "inactive",
-    "createdBy": "antfarm-workflow",
+    "createdBy": "setfarm-workflow",
     "createdAt": "2026-02-15",
     "stories": {
       "total": 12,
@@ -500,7 +497,7 @@
         "completed": false
       }
     ],
-    "antfarmRunIds": [
+    "setfarmRunIds": [
       "4fae3350-964f-499e-b750-490b48d0fc2f"
     ],
     "updatedAt": "2026-02-16T22:58:43.836Z",
@@ -527,7 +524,7 @@
     ],
     "service": "color-palette-generator.service",
     "serviceStatus": "inactive",
-    "createdBy": "antfarm-workflow",
+    "createdBy": "setfarm-workflow",
     "createdAt": "2026-02-15",
     "stories": {
       "total": 13,
@@ -579,7 +576,7 @@
         "completed": false
       }
     ],
-    "antfarmRunIds": [
+    "setfarmRunIds": [
       "0b02ab6e-447b-45e2-9f58-4fd180074c2f"
     ],
     "updatedAt": "2026-02-16T22:58:43.839Z",
@@ -604,7 +601,7 @@
     ],
     "service": "typing-speed-test.service",
     "serviceStatus": "inactive",
-    "createdBy": "antfarm-workflow",
+    "createdBy": "setfarm-workflow",
     "createdAt": "2026-02-15",
     "stories": {
       "total": 30,
@@ -656,7 +653,7 @@
         "completed": false
       }
     ],
-    "antfarmRunIds": [
+    "setfarmRunIds": [
       "00cad222-0a46-4955-a3a0-e34c09d735c9"
     ],
     "updatedAt": "2026-02-16T22:58:43.844Z",
@@ -677,7 +674,7 @@
     "stack": [],
     "service": "habit-tracker.service",
     "serviceStatus": "inactive",
-    "createdBy": "antfarm-workflow",
+    "createdBy": "setfarm-workflow",
     "createdAt": "2026-02-15",
     "stories": {
       "total": 19,
@@ -729,7 +726,7 @@
         "completed": false
       }
     ],
-    "antfarmRunIds": [
+    "setfarmRunIds": [
       "c3bff3ab-7db0-4e52-8f47-1a484d4e89ac"
     ],
     "updatedAt": "2026-02-15T12:32:46.667Z",
@@ -758,7 +755,7 @@
     ],
     "service": "setrox-com-portfolio.service",
     "serviceStatus": "inactive",
-    "createdBy": "antfarm-workflow",
+    "createdBy": "setfarm-workflow",
     "createdAt": "2026-02-15",
     "stories": {
       "total": 27,
@@ -810,14 +807,15 @@
         "completed": false
       }
     ],
-    "antfarmRunIds": [
+    "setfarmRunIds": [
       "0d136479-ac4a-46d5-8e38-af9636cd1048"
     ],
     "updatedAt": "2026-02-16T22:58:43.832Z",
     "completedAt": "2026-02-16 00:02:30",
     "buildStartedAt": "2026-02-16T11:07:44+03:00",
     "buildCompletedAt": "2026-02-16T15:27:50+03:00",
-    "duration": "24s 2dk"
+    "duration": "24s 2dk",
+    "manuallyDisabled": false
   },
   {
     "id": "expense-tracker",
@@ -838,7 +836,7 @@
     ],
     "service": "expense-tracker.service",
     "serviceStatus": "unknown",
-    "createdBy": "antfarm-workflow",
+    "createdBy": "setfarm-workflow",
     "createdAt": "2026-02-16",
     "stories": {
       "total": 0,
@@ -890,7 +888,7 @@
         "completed": false
       }
     ],
-    "antfarmRunIds": [
+    "setfarmRunIds": [
       "2c42101d-4567-4f09-840b-f9e9e964d159"
     ],
     "completedAt": "2026-02-17 00:30:00",
@@ -914,7 +912,7 @@
     ],
     "service": "unit-converter.service",
     "serviceStatus": "inactive",
-    "createdBy": "antfarm-workflow",
+    "createdBy": "setfarm-workflow",
     "createdAt": "2026-02-17",
     "stories": {
       "total": 10,
@@ -966,7 +964,7 @@
         "completed": false
       }
     ],
-    "antfarmRunIds": [
+    "setfarmRunIds": [
       "b76f308c-c0ee-4abd-8f4c-f7f5e98bb33c"
     ],
     "updatedAt": "2026-02-19T15:57:34.801Z",
@@ -991,7 +989,7 @@
     ],
     "service": "agentviz.service",
     "serviceStatus": "inactive",
-    "createdBy": "antfarm-workflow",
+    "createdBy": "setfarm-workflow",
     "createdAt": "2026-02-17",
     "stories": {
       "total": 16,
@@ -1043,7 +1041,7 @@
         "completed": false
       }
     ],
-    "antfarmRunIds": [
+    "setfarmRunIds": [
       "e271378f-3db6-4e1b-8fca-f77112d74fef"
     ],
     "updatedAt": "2026-02-19T15:57:34.796Z",
@@ -1068,7 +1066,7 @@
     ],
     "service": "recipe-book.service",
     "serviceStatus": "unknown",
-    "createdBy": "antfarm-workflow",
+    "createdBy": "setfarm-workflow",
     "createdAt": "2026-02-17",
     "stories": {
       "total": 12,
@@ -1120,7 +1118,7 @@
         "completed": false
       }
     ],
-    "antfarmRunIds": [
+    "setfarmRunIds": [
       "b8a06a6e-4ed2-4afd-b56f-feb167e686cd"
     ],
     "completedAt": "2026-02-18 17:59:43",
@@ -1144,7 +1142,7 @@
     ],
     "service": "markdown-notepad.service",
     "serviceStatus": "inactive",
-    "createdBy": "antfarm-workflow",
+    "createdBy": "setfarm-workflow",
     "createdAt": "2026-02-17",
     "stories": {
       "total": 11,
@@ -1196,7 +1194,7 @@
         "completed": false
       }
     ],
-    "antfarmRunIds": [
+    "setfarmRunIds": [
       "6aad034b-f7b6-4007-95bc-6fb52a829c5a"
     ],
     "updatedAt": "2026-02-19T15:57:34.789Z",
@@ -1221,7 +1219,7 @@
     ],
     "service": "hizliokuma.service",
     "serviceStatus": "inactive",
-    "createdBy": "antfarm-workflow",
+    "createdBy": "setfarm-workflow",
     "createdAt": "2026-02-19",
     "stories": {
       "total": 5,
@@ -1273,7 +1271,7 @@
         "completed": false
       }
     ],
-    "antfarmRunIds": [
+    "setfarmRunIds": [
       "1967cd0a-08de-4380-ae60-cf3e2cd27216",
       "f66686d3-8990-4475-8e4c-9146a9853cc6"
     ],
@@ -1299,7 +1297,7 @@
     ],
     "service": "task-queue.service",
     "serviceStatus": "inactive",
-    "createdBy": "antfarm-workflow",
+    "createdBy": "setfarm-workflow",
     "createdAt": "2026-02-19",
     "stories": {
       "total": 0,
@@ -1351,10 +1349,11 @@
         "completed": false
       }
     ],
-    "antfarmRunIds": [
+    "setfarmRunIds": [
       "d05ac578-cbcc-48eb-973c-2da2bc7fd742"
     ],
-    "updatedAt": "2026-02-19T22:19:54.322Z"
+    "updatedAt": "2026-02-19T22:19:54.322Z",
+    "manuallyDisabled": true
   },
   {
     "id": "autopress",
@@ -1376,7 +1375,7 @@
     ],
     "service": "autopress.service",
     "serviceStatus": "inactive",
-    "createdBy": "antfarm-workflow",
+    "createdBy": "setfarm-workflow",
     "createdAt": "2026-02-20",
     "stories": {
       "total": 18,
@@ -1428,12 +1427,9 @@
         "completed": false
       }
     ],
-    "antfarmRunIds": [
-      "c7e4e5dc-8898-4b32-ab35-9cf9ab8af24e"
-    ],
+    "setfarmRunIds": [],
     "updatedAt": "2026-02-26T16:56:49.484Z",
     "completedAt": "2026-02-20 13:51:59",
-    "setfarmRunIds": [],
     "manuallyDisabled": true
   },
   {
@@ -1513,7 +1509,8 @@
     "updatedAt": "2026-03-08T12:29:37.163Z",
     "completedAt": "2026-02-22 10:39:10",
     "buildStartedAt": "2026-02-21T21:03:03.975Z",
-    "buildCompletedAt": "2026-02-22 10:39:10"
+    "buildCompletedAt": "2026-02-22 10:39:10",
+    "manuallyDisabled": true
   },
   {
     "id": "snippetbox",
@@ -1592,7 +1589,8 @@
     "updatedAt": "2026-02-26T16:56:49.463Z",
     "completedAt": "2026-02-23 07:43:31",
     "buildStartedAt": "2026-02-22T16:47:17.811Z",
-    "buildCompletedAt": "2026-02-23 07:43:31"
+    "buildCompletedAt": "2026-02-23 07:43:31",
+    "manuallyDisabled": true
   },
   {
     "id": "sosyal-medya-ai-panel",
@@ -1681,7 +1679,8 @@
     "updatedAt": "2026-02-26T23:10:11.393Z",
     "buildStartedAt": "2026-02-26T11:18:53",
     "buildCompletedAt": "2026-02-26 16:55:44",
-    "completedAt": "2026-02-26 16:55:44"
+    "completedAt": "2026-02-26 16:55:44",
+    "manuallyDisabled": true
   },
   {
     "id": "ai-journal",
@@ -1744,7 +1743,7 @@
     "setfarmRunIds": [
       "05c28921-3666-4aab-b629-b5d8c31a5df1"
     ],
-    "updatedAt": "2026-03-08T03:58:02.740Z",
+    "updatedAt": "2026-03-08T21:58:50.257Z",
     "completedAt": "2026-02-25 15:02:22",
     "type": "mobile",
     "buildStartedAt": "2026-02-24T09:42:26.825Z",
@@ -1987,7 +1986,8 @@
     ],
     "completedAt": "2026-03-02T13:32:13",
     "buildStartedAt": "2026-03-02T08:57:53",
-    "buildCompletedAt": "2026-03-02T13:32:13"
+    "buildCompletedAt": "2026-03-02T13:32:13",
+    "manuallyDisabled": true
   },
   {
     "id": "dogvscat",
@@ -2361,8 +2361,9 @@
         "completed": true
       }
     ],
-    "updatedAt": "2026-03-08T03:58:02.727Z",
-    "completedAt": "2026-03-05T04:53:52.327Z"
+    "updatedAt": "2026-03-08T21:58:50.244Z",
+    "completedAt": "2026-03-05T04:53:52.327Z",
+    "manuallyDisabled": false
   },
   {
     "id": "3d-tetris",
@@ -2441,7 +2442,7 @@
         "completed": true
       }
     ],
-    "updatedAt": "2026-03-08T03:58:02.721Z",
+    "updatedAt": "2026-03-08T21:58:50.238Z",
     "completedAt": "2026-03-05T13:37:20.718Z",
     "manuallyDisabled": true
   },
@@ -2516,7 +2517,7 @@
         "completed": true
       }
     ],
-    "updatedAt": "2026-03-08T03:58:02.708Z",
+    "updatedAt": "2026-03-08T21:58:50.227Z",
     "completedAt": "2026-03-06T08:41:10.488Z",
     "manuallyDisabled": true
   },
@@ -2596,7 +2597,7 @@
         "completed": true
       }
     ],
-    "updatedAt": "2026-03-08T03:58:02.715Z",
+    "updatedAt": "2026-03-08T21:58:50.233Z",
     "completedAt": "2026-03-06T10:47:15.676Z"
   },
   {
@@ -2670,36 +2671,38 @@
     "setfarmRunIds": [
       "e3ed6963-b829-4687-bb24-b12192d18343"
     ],
-    "updatedAt": "2026-03-08T03:58:02.702Z",
-    "completedAt": "2026-03-06T18:39:50.252Z"
+    "updatedAt": "2026-03-08T21:58:50.221Z",
+    "completedAt": "2026-03-06T18:39:50.252Z",
+    "manuallyDisabled": true
   },
   {
-    "id": "screenmap-test",
-    "name": "screenmap-test",
+    "id": "memory-card",
+    "name": "memory-card",
     "emoji": "📦",
     "status": "active",
-    "description": "Simple counter page with increment/decrement buttons and settings page. Vanilla HTML/CSS/JS.",
+    "description": "Memory Card Game - Kartlari cevirerek eslerini bulan hafiza oyunu. Next.js 15, React 19, TypeScript. 4 ekran: Ana Menu, Oyun Ekrani, Pause Overlay, Victory. 3 zorluk: Easy 4x3, Medium 4x4, Hard 6x4.",
     "ports": {
-      "frontend": 3536
+      "frontend": 3538
     },
-    "domain": "screenmap-test.setrox.com.tr",
-    "repo": "/home/setrox/projects/screenmap-test",
+    "domain": "memory-card.setrox.com.tr",
+    "repo": "/home/setrox/projects/memory-card",
     "stack": [
-      "HTML",
-      "CSS",
-      "JavaScript"
+      "React",
+      "Next.js",
+      "TypeScript",
+      "Tailwind CSS"
     ],
-    "service": "screenmap-test",
+    "service": "memory-card",
     "serviceStatus": "running",
     "createdBy": "dashboard",
     "createdAt": "2026-03-07",
     "stories": {
-      "total": 0,
+      "total": 12,
       "done": 0
     },
     "features": [],
     "tasks": [],
-    "github": "hikmetgulsesli/screenmap-test",
+    "github": "hikmetgulsesli/memory-card",
     "category": "own",
     "checklist": [
       {
@@ -2743,7 +2746,83 @@
         "completed": true
       }
     ],
-    "updatedAt": "2026-03-07T02:25:16.834Z"
+    "updatedAt": "2026-03-08T21:58:50.179Z",
+    "completedAt": "2026-03-07T13:20:07.974Z"
+  },
+  {
+    "id": "brick-breaker",
+    "name": "brick-breaker",
+    "emoji": "📦",
+    "status": "active",
+    "description": "Proje: Retro Brick Breaker (brick-breaker). Klasik tugla kirma oyunu, modern web teknolojileriyle. Next.js 15, React 19, TypeScript. Ozellikler: mouse/touch ile platform kontrolu, tugla desenleri (3 seviye), top fizigi (aci hesabi, hiz artisi), power-uplar (genis platform, multi-top, laser), can sistemi (3 hak), skor tablosu (localStorage), responsive tasarim (375-1440px), retro neon estetigi (koyu arka plan, parlak neon tuglalar, glow efektleri), ses efektleri. Ekranlar: (1) Ana Menu - baslik, baslat, seviye secici, skor tablosu, (2) Oyun Alani - tuglalar, top, platform, skor/can gostergesi, (3) Pause Overlay - devam/yeniden-basla/menu, (4) Game Over/Victory - skor ozeti, yildiz puanlama, tekrar oyna. Port: 3540",
+    "ports": {
+      "frontend": 3540
+    },
+    "domain": "brick-breaker.setrox.com.tr",
+    "repo": "/home/setrox/projects/brick-breaker",
+    "stack": [
+      "React",
+      "Next.js",
+      "TypeScript",
+      "Tailwind CSS"
+    ],
+    "service": "brick-breaker",
+    "serviceStatus": "running",
+    "createdBy": "dashboard",
+    "createdAt": "2026-03-07",
+    "stories": {
+      "total": 23,
+      "done": 23
+    },
+    "features": [],
+    "tasks": [],
+    "github": "hikmetgulsesli/brick-breaker",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": true
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": true
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": true
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": true
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": true
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": true
+      }
+    ],
+    "updatedAt": "2026-03-08T21:58:50.078Z",
+    "completedAt": "2026-03-07T23:31:16.705Z",
+    "manuallyDisabled": true
   },
   {
     "id": "2048-oyunu",
@@ -2821,106 +2900,32 @@
     "setfarmRunIds": [
       "1efc03b7-80d9-44f0-823d-51b6a5707cfc"
     ],
-    "updatedAt": "2026-03-08T03:58:02.695Z",
+    "updatedAt": "2026-03-08T21:58:50.215Z",
     "completedAt": "2026-03-07T03:04:40.649Z"
   },
   {
-    "id": "memory-card",
-    "name": "memory-card",
-    "emoji": "📦",
+    "id": "task-flappybird-flappy-bird-klonu-ca",
+    "name": "--task FlappyBird: Flappy Bird klonu. Ca",
+    "emoji": "🚀",
     "status": "active",
-    "description": "Memory Card Game - Kartlari cevirerek eslerini bulan hafiza oyunu. Next.js 15, React 19, TypeScript. 4 ekran: Ana Menu, Oyun Ekrani, Pause Overlay, Victory. 3 zorluk: Easy 4x3, Medium 4x4, Hard 6x4.",
+    "description": "--task FlappyBird: Flappy Bird klonu. Canvas tabanlı, yerçekimi fiziği, boru engelleri, skor sayacı, en yüksek skor kayıt (localStorage), ölüm animasyonu, restart mekanizması, mobil dokunmatik destek.",
     "ports": {
-      "frontend": 3538
+      "frontend": 3536
     },
-    "domain": "memory-card.setrox.com.tr",
-    "repo": "/home/setrox/projects/memory-card",
+    "domain": "task-flappybird-flappy-bird-kl.setrox.com.tr",
+    "repo": "/home/setrox/projects/flappy-bird",
     "stack": [
       "React",
-      "Next.js",
+      "Vite",
       "TypeScript",
       "Tailwind CSS"
     ],
-    "service": "memory-card",
-    "serviceStatus": "running",
-    "createdBy": "dashboard",
-    "createdAt": "2026-03-07",
-    "stories": {
-      "total": 12,
-      "done": 0
-    },
-    "features": [],
-    "tasks": [],
-    "github": "hikmetgulsesli/memory-card",
-    "category": "own",
-    "checklist": [
-      {
-        "id": "task-received",
-        "label": "Gorev iletildi",
-        "completed": true
-      },
-      {
-        "id": "github-repo",
-        "label": "GitHub repo olusturuldu",
-        "completed": true
-      },
-      {
-        "id": "dns-setup",
-        "label": "Cloudflare DNS ve subdomain olusturuldu",
-        "completed": true
-      },
-      {
-        "id": "added-to-projects",
-        "label": "Projeler bolumune eklendi",
-        "completed": true
-      },
-      {
-        "id": "ports-assigned",
-        "label": "Portlar belirlendi",
-        "completed": true
-      },
-      {
-        "id": "setup-run",
-        "label": "Setup calistirildi",
-        "completed": true
-      },
-      {
-        "id": "dev-started",
-        "label": "Gelistirici calismaya basladi",
-        "completed": true
-      },
-      {
-        "id": "test-review",
-        "label": "Test ve review tamamlandi",
-        "completed": true
-      }
-    ],
-    "updatedAt": "2026-03-08T03:58:02.657Z",
-    "completedAt": "2026-03-07T13:20:07.974Z"
-  },
-  {
-    "id": "google-stitch-ai-taraf-ndan-olu-turulaca",
-    "name": "Google Stitch AI tarafından oluşturulaca",
-    "emoji": "🏗",
-    "status": "active",
-    "description": "Google Stitch AI tarafından oluşturulacak bir UI design'ı implemente eden küçük test projesi. REPO: ~/projects/stitch-design-test. Frontend port: 3539. Tech stack: Next.js 14 + React + TypeScript + Ta",
-    "ports": {
-      "frontend": 3539
-    },
-    "domain": "",
-    "repo": "",
-    "stack": [
-      "React",
-      "Next.js",
-      "TypeScript",
-      "Tailwind CSS"
-    ],
-    "service": "",
-    "serviceStatus": "unknown",
+    "service": "task-flappybird-flappy-bird-kl.service",
+    "serviceStatus": "active",
     "createdBy": "setfarm-workflow",
-    "createdAt": "2026-03-07",
+    "createdAt": "2026-03-08",
     "stories": {
-      "total": 12,
+      "total": 0,
       "done": 0
     },
     "features": [],
@@ -2931,8 +2936,7 @@
       {
         "id": "task-received",
         "label": "Gorev iletildi",
-        "completed": true,
-        "completedAt": "2026-03-07T23:31:27.155Z"
+        "completed": false
       },
       {
         "id": "github-repo",
@@ -2947,20 +2951,17 @@
       {
         "id": "added-to-projects",
         "label": "Projeler bolumune eklendi",
-        "completed": true,
-        "completedAt": "2026-03-07T23:31:27.155Z"
+        "completed": false
       },
       {
         "id": "ports-assigned",
         "label": "Portlar belirlendi",
-        "completed": true,
-        "completedAt": "2026-03-07T23:31:27.155Z"
+        "completed": false
       },
       {
         "id": "setup-run",
         "label": "Setup calistirildi",
-        "completed": true,
-        "completedAt": "2026-03-07T23:31:27.155Z"
+        "completed": false
       },
       {
         "id": "dev-started",
@@ -2974,156 +2975,8 @@
       }
     ],
     "setfarmRunIds": [
-      "b9fe96d1-221c-412e-b85f-117fbb7e8edd"
+      "169b1203-f010-4b8b-943d-3439c0131751"
     ],
-    "updatedAt": "2026-03-08T03:58:02.628Z",
-    "completedAt": "2026-03-07 22:26:46"
-  },
-  {
-    "id": "brick-breaker",
-    "name": "brick-breaker",
-    "emoji": "📦",
-    "status": "active",
-    "description": "Proje: Retro Brick Breaker (brick-breaker). Klasik tugla kirma oyunu, modern web teknolojileriyle. Next.js 15, React 19, TypeScript. Ozellikler: mouse/touch ile platform kontrolu, tugla desenleri (3 seviye), top fizigi (aci hesabi, hiz artisi), power-uplar (genis platform, multi-top, laser), can sistemi (3 hak), skor tablosu (localStorage), responsive tasarim (375-1440px), retro neon estetigi (koyu arka plan, parlak neon tuglalar, glow efektleri), ses efektleri. Ekranlar: (1) Ana Menu - baslik, baslat, seviye secici, skor tablosu, (2) Oyun Alani - tuglalar, top, platform, skor/can gostergesi, (3) Pause Overlay - devam/yeniden-basla/menu, (4) Game Over/Victory - skor ozeti, yildiz puanlama, tekrar oyna. Port: 3540",
-    "ports": {
-      "frontend": 3540
-    },
-    "domain": "brick-breaker.setrox.com.tr",
-    "repo": "/home/setrox/projects/brick-breaker",
-    "stack": [
-      "React",
-      "Next.js",
-      "TypeScript",
-      "Tailwind CSS"
-    ],
-    "service": "brick-breaker",
-    "serviceStatus": "running",
-    "createdBy": "dashboard",
-    "createdAt": "2026-03-07",
-    "stories": {
-      "total": 23,
-      "done": 23
-    },
-    "features": [],
-    "tasks": [],
-    "github": "hikmetgulsesli/brick-breaker",
-    "category": "own",
-    "checklist": [
-      {
-        "id": "task-received",
-        "label": "Gorev iletildi",
-        "completed": true
-      },
-      {
-        "id": "github-repo",
-        "label": "GitHub repo olusturuldu",
-        "completed": true
-      },
-      {
-        "id": "dns-setup",
-        "label": "Cloudflare DNS ve subdomain olusturuldu",
-        "completed": true
-      },
-      {
-        "id": "added-to-projects",
-        "label": "Projeler bolumune eklendi",
-        "completed": true
-      },
-      {
-        "id": "ports-assigned",
-        "label": "Portlar belirlendi",
-        "completed": true
-      },
-      {
-        "id": "setup-run",
-        "label": "Setup calistirildi",
-        "completed": true
-      },
-      {
-        "id": "dev-started",
-        "label": "Gelistirici calismaya basladi",
-        "completed": true
-      },
-      {
-        "id": "test-review",
-        "label": "Test ve review tamamlandi",
-        "completed": true
-      }
-    ],
-    "updatedAt": "2026-03-08T03:58:02.640Z",
-    "completedAt": "2026-03-07T23:31:16.705Z",
-    "manuallyDisabled": true
-  },
-  {
-    "id": "pipeline-test",
-    "name": "pipeline-test",
-    "emoji": "📦",
-    "status": "active",
-    "description": "Tek sayfalı HTML counter app - Pipeline Test v3",
-    "ports": {
-      "frontend": 3599
-    },
-    "domain": "pipeline-test.setrox.com.tr",
-    "repo": "/home/setrox/projects/pipeline-test",
-    "stack": [
-      "HTML",
-      "Static"
-    ],
-    "service": "pipeline-test",
-    "serviceStatus": "running",
-    "createdBy": "dashboard",
-    "createdAt": "2026-03-08",
-    "stories": {
-      "total": 7,
-      "done": 7
-    },
-    "features": [],
-    "tasks": [],
-    "github": "hikmetgulsesli/pipeline-test",
-    "category": "own",
-    "checklist": [
-      {
-        "id": "task-received",
-        "label": "Gorev iletildi",
-        "completed": true
-      },
-      {
-        "id": "github-repo",
-        "label": "GitHub repo olusturuldu",
-        "completed": true
-      },
-      {
-        "id": "dns-setup",
-        "label": "Cloudflare DNS ve subdomain olusturuldu",
-        "completed": true
-      },
-      {
-        "id": "added-to-projects",
-        "label": "Projeler bolumune eklendi",
-        "completed": true
-      },
-      {
-        "id": "ports-assigned",
-        "label": "Portlar belirlendi",
-        "completed": true
-      },
-      {
-        "id": "setup-run",
-        "label": "Setup calistirildi",
-        "completed": true
-      },
-      {
-        "id": "dev-started",
-        "label": "Gelistirici calismaya basladi",
-        "completed": true
-      },
-      {
-        "id": "test-review",
-        "label": "Test ve review tamamlandi",
-        "completed": true
-      }
-    ],
-    "updatedAt": "2026-03-08T03:58:02.621Z",
-    "completedAt": "2026-03-08T03:58:00.922Z"
+    "updatedAt": "2026-03-08T21:58:50.037Z"
   }
 ]

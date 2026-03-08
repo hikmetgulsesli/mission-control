@@ -17,7 +17,7 @@ function isMobileProject(task, repo) {
     return mobileKeywords.some(kw => lower.includes(kw));
 }
 import { getRuns, getRunStories, getSetfarmActivity, getSetfarmAgentStats, getSetfarmAlerts } from '../utils/setfarm.js';
-import { ensureAgentFeedTable, insertFeedEntry, getAgentFeed, pruneAgentFeed } from "../utils/setfarm-db.js";
+import { ensureAgentFeedTable, insertFeedEntry, getAgentFeed, pruneAgentFeed, clearAgentFeed } from "../utils/setfarm-db.js";
 let syncInProgress = false;
 const router = Router();
 // Recent activity events (last 50, reverse chronological)
@@ -60,7 +60,7 @@ router.get('/setfarm/pipeline', async (_req, res) => {
             const recent = allRuns
                 .filter((r) => r.status !== 'running' && r.workflow_id !== 'daily-standup')
                 .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-                .slice(0, 3);
+                .slice(0, 20);
             // Auto-sync: check for newly finished runs (completed, failed, cancelled)
             const finishedIds = new Set(allRuns.filter((r) => r.status !== 'running' && r.status !== 'pending').map((r) => r.id));
             const newlyFinished = [...finishedIds].filter(id => !lastSeenFinishedIds.has(id));
@@ -1208,6 +1208,27 @@ router.get("/setfarm/agent-feed", async (req, res) => {
     }
     catch (err) {
         res.status(500).json({ error: err.message || "Agent feed failed" });
+    }
+});
+// DELETE /setfarm/agent-feed — Clear all agent feed entries
+router.delete("/setfarm/agent-feed", async (_req, res) => {
+    try {
+        await clearAgentFeed();
+        res.json({ success: true });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message || "Clear agent feed failed" });
+    }
+});
+// DELETE /setfarm/activity — Clear activity events file
+router.delete("/setfarm/activity", async (_req, res) => {
+    try {
+        const { writeFile } = await import("fs/promises");
+        await writeFile("/home/setrox/.openclaw/setfarm/events.jsonl", "", "utf-8");
+        res.json({ success: true });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message || "Clear activity failed" });
     }
 });
 export default router;

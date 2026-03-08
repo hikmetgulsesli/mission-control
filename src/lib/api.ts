@@ -33,8 +33,8 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ workflow, task }),
     }),
-  deleteRun: (id: string) =>
-    fetchApi<any>(`/api/runs/${id}`, { method: 'DELETE' }),
+  deleteRun: (id: string, cleanupProject = false) =>
+    fetchApi<any>(`/api/runs/${id}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cleanupProject }) }),
   stopRun: (id: string) =>
     fetchApi<any>(`/api/runs/${id}/stop`, { method: 'POST' }),
   resumeRun: (id: string) =>
@@ -78,6 +78,8 @@ export const api = {
   setfarmAlerts: () => fetchApi<any>('/api/setfarm/alerts'),
   setfarmPipeline: () => fetchApi<any[]>('/api/setfarm/pipeline'),
   setfarmAgentFeed: (limit = 100) => fetchApi<any[]>("/api/setfarm/agent-feed?limit=" + limit),
+  clearAgentFeed: () => fetchApi<any>("/api/setfarm/agent-feed", { method: "DELETE" }),
+  clearActivity: () => fetchApi<any>("/api/setfarm/activity", { method: "DELETE" }),
   // New: Stories + Plan for runs
   runStories: (id: string) => fetchApi<any[]>(`/api/setfarm/runs/${id}/stories`),
   runPlan: (id: string) => fetchApi<any>(`/api/setfarm/runs/${id}/plan`),

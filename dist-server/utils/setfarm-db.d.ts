@@ -98,3 +98,9 @@ export declare function ensureAgentFeedTable(): Promise<void>;
 export declare function insertFeedEntry(agentId: string, agentName: string, message: string, sessionId?: string): Promise<boolean>;
 export declare function getAgentFeed(limit?: number): Promise<any[]>;
 export declare function pruneAgentFeed(keep?: number): Promise<void>;
+export declare function clearAgentFeed(): Promise<void>;
+export declare function deleteRun(runId: string, cleanupProject?: boolean): Promise<{
+    deleted: boolean;
+    runId: string;
+    log: string[];
+}>;

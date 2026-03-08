@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Counter App - Dark Mode Card</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&amp;family=DM+Sans:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#0f3460",
+                        "background-light": "#f6f7f8",
+                        "background-dark": "#1a1a2e",
+                        "card-dark": "#16213e",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "sans-serif"],
+                        "body": ["DM Sans", "sans-serif"],
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display min-h-screen flex items-center justify-center p-4">
+<div class="bg-white dark:bg-card-dark rounded-xl shadow-2xl overflow-hidden w-full max-w-md flex flex-col border border-slate-200 dark:border-slate-800">
+<!-- Header -->
+<header class="flex items-center justify-between px-6 py-5 border-b border-slate-200 dark:border-slate-800">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary dark:text-white/90">calculate</span>
+<h1 class="text-xl font-bold tracking-tight">Counter App</h1>
+</div>
+<button aria-label="Toggle Theme" class="flex items-center justify-center rounded-lg h-9 px-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-sm font-medium font-body">
+<span class="material-symbols-outlined text-lg mr-1.5">light_mode</span>
+<span>Açık Tema</span>
+</button>
+</header>
+<!-- Main Content -->
+<main class="flex-1 flex flex-col p-6 items-center justify-center gap-8">
+<!-- Counter Display -->
+<div class="w-full flex flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed border-slate-300 dark:border-slate-700 p-10 bg-slate-50 dark:bg-slate-800/50">
+<p class="text-slate-500 dark:text-slate-400 text-sm font-medium font-body uppercase tracking-wider">Current Count</p>
+<div class="text-[4rem] leading-none font-bold text-slate-900 dark:text-white tabular-nums">
+                    0
+                </div>
+</div>
+<!-- Action Button -->
+<button class="w-full flex items-center justify-center rounded-lg h-14 px-6 bg-primary hover:bg-primary/90 text-white text-lg font-bold font-body transition-colors shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined mr-2">add</span>
+<span>Tıkla (+1)</span>
+</button>
+</main>
+</div>
+</body></html>

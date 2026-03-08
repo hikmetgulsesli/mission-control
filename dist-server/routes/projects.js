@@ -335,11 +335,8 @@ router.post("/projects/:id/toggle", async (req, res) => {
             project.manuallyDisabled = false;
             saveProjects(projects);
         }
-        // Check new status
-        const port = project.ports?.frontend || project.ports?.backend;
-        // Give service a moment to start/stop
-        await new Promise(r => setTimeout(r, 1000));
-        const serviceStatus = port ? ((await checkPort(port)) ? "active" : "inactive") : "unknown";
+        // Return expected status immediately — port may not be ready yet
+        const serviceStatus = action === "start" ? "active" : "inactive";
         res.json({ success: true, serviceStatus });
     }
     catch (err) {
@@ -446,7 +443,7 @@ router.delete("/projects/:id", async (req, res) => {
             res.status(404).json({ error: "Project not found" });
             return;
         }
-        if (confirmName !== project.name) {
+        if (confirmName?.trim() !== project.name?.trim()) {
             res.status(400).json({ error: "Name confirmation does not match", expected: project.name });
             return;
         }

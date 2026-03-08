@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useAppStore } from '../store/appStore';
 import { api } from '../lib/api';
 import { useToast } from '../components/Toast';
@@ -24,6 +24,41 @@ export function SetfarmActivity() {
   const [selectedWf, setSelectedWf] = useState('');
   const [task, setTask] = useState('');
   const [starting, setStarting] = useState(false);
+
+  const downloadJson = useCallback((data: any, filename: string) => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const handleClearAgentFeed = useCallback(async () => {
+    if (!confirm('Clear all agent output?')) return;
+    try {
+      await api.clearAgentFeed();
+      toast('Agent output cleared', 'success');
+    } catch (err: any) {
+      toast('Failed: ' + err.message, 'error');
+    }
+  }, [toast]);
+
+  const handleSaveActivity = useCallback(() => {
+    downloadJson(activity || [], `activity-feed-${new Date().toISOString().slice(0, 10)}.json`);
+  }, [activity, downloadJson]);
+
+  const handleClearActivity = useCallback(async () => {
+    if (!confirm('Clear all activity events?')) return;
+    try {
+      await api.clearActivity();
+      useAppStore.setState({ activity: [] });
+      toast('Activity feed cleared', 'success');
+    } catch (err: any) {
+      toast('Failed: ' + err.message, 'error');
+    }
+  }, [toast]);
 
   const handleStartRun = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,11 +104,24 @@ export function SetfarmActivity() {
           <PipelineView runs={pipeline || []} />
         </div>
         <div className="af-bottom__col af-bottom__col--feed">
-          <div className="af-section__title">ACTIVITY FEED</div>
+          <div className="af-section__title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            ACTIVITY FEED
+            <button className="btn btn--tiny" onClick={handleSaveActivity} title="Save as JSON">SAVE</button>
+            <button className="btn btn--tiny btn--danger" onClick={handleClearActivity} title="Clear feed">CLEAR</button>
+          </div>
           <SetfarmFeed events={activity || []} />
         </div>
         <div className="af-bottom__col af-bottom__col--stats">
-          <div className="af-section__title">AGENT OUTPUT</div>
+          <div className="af-section__title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            AGENT OUTPUT
+            <button className="btn btn--tiny" onClick={async () => {
+              try {
+                const data = await api.setfarmAgentFeed(500);
+                downloadJson(data, `agent-output-${new Date().toISOString().slice(0, 10)}.json`);
+              } catch (err: any) { toast('Failed: ' + err.message, 'error'); }
+            }} title="Save as JSON">SAVE</button>
+            <button className="btn btn--tiny btn--danger" onClick={handleClearAgentFeed} title="Clear agent output">CLEAR</button>
+          </div>
           <AgentChatFeed />
         </div>
       </section>

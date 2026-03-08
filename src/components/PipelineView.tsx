@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { StoryChecklist } from './StoryChecklist';
 import { api } from '../lib/api';
 
@@ -173,6 +174,41 @@ function InlinePlanView({ runId, onRetry }: { runId: string; onRetry?: (storyId:
           <pre className="af-inline-plan__raw">{(planData as any).projectMemory || '(no project memory yet)'}</pre>
         )}
       </div>
+      {deleteModal && createPortal(
+        <div className="modal-backdrop" onClick={() => setDeleteModal(null)}>
+          <div className="modal modal--delete" onClick={e => e.stopPropagation()}>
+            <h3 style={{ color: '#f85149', margin: '0 0 12px' }}>Run #{deleteModal.runNumber} Sil</h3>
+            <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', margin: '0 0 8px' }}>
+              {deleteModal.task.length > 120 ? deleteModal.task.slice(0, 120) + '...' : deleteModal.task}
+            </p>
+            <p style={{ fontSize: '12px', margin: '0 0 12px' }}>
+              Silmek icin run numarasini yazin: <strong style={{ color: '#f85149' }}>#{deleteModal.runNumber}</strong>
+            </p>
+            <input
+              type="text"
+              className="modal__input"
+              placeholder={`#${deleteModal.runNumber}`}
+              value={deleteInput}
+              onChange={e => setDeleteInput(e.target.value)}
+              autoFocus
+            />
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '10px 0', fontSize: '12px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={deleteCleanup} onChange={e => setDeleteCleanup(e.target.checked)} />
+              <span>Projeyi de sil <span style={{ color: 'rgba(255,255,255,0.4)' }}>(servis, repo, GitHub, tunnel)</span></span>
+            </label>
+            <div className="modal__actions">
+              <button className="btn" onClick={() => setDeleteModal(null)}>Vazgec</button>
+              <button
+                className="btn btn--danger"
+                disabled={deleteInput !== `#${deleteModal.runNumber}` || actionLoading === deleteModal.runId + ':delete'}
+                onClick={handleDeleteConfirm}
+              >
+                {actionLoading === deleteModal.runId + ':delete' ? 'Siliniyor...' : 'Kalici Sil'}
+              </button>
+            </div>
+          </div>
+        </div>
+      , document.body)}
     </div>
   );
 }
@@ -182,13 +218,35 @@ export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefre
   const [retrying, setRetrying] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [hiddenRuns, setHiddenRuns] = useState<Set<string>>(new Set());
+  const [deleteModal, setDeleteModal] = useState<{ runId: string; runNumber: number; task: string } | null>(null);
+  const [deleteInput, setDeleteInput] = useState('');
+  const [deleteCleanup, setDeleteCleanup] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
 
   const HIDDEN_WORKFLOWS = ["daily-standup"];
   const filteredRuns = (runs || [])
     .filter(r => !HIDDEN_WORKFLOWS.includes(r.workflow) && !hiddenRuns.has(r.id))
+    .filter(r => statusFilter === 'all' || r.status === statusFilter)
     .sort((a, b) => (b.runNumber || 0) - (a.runNumber || 0));
+  const filterBar = (
+    <div className="af-pipeline__filters">
+      {['all', 'running', 'completed', 'failed', 'cancelled'].map(s => (
+        <button
+          key={s}
+          className={`af-pipeline__filter-btn ${statusFilter === s ? 'af-pipeline__filter-btn--active' : ''}`}
+          onClick={() => setStatusFilter(s)}
+        >
+          {s.toUpperCase()}
+          {s !== 'all' && <span className="af-pipeline__filter-count">
+            {(runs || []).filter(r => !HIDDEN_WORKFLOWS.includes(r.workflow) && r.status === s).length}
+          </span>}
+        </button>
+      ))}
+    </div>
+  );
+
   if (filteredRuns.length === 0) {
-    return <div className="af-empty">No runs found</div>;
+    return <div className="af-pipeline">{filterBar}<div className="af-empty">No runs found</div></div>;
   }
 
   const handleRetry = async (runId: string, stepId: string) => {
@@ -217,12 +275,19 @@ export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefre
     finally { setActionLoading(null); }
   };
 
-  const handleDelete = async (runId: string) => {
-    if (!confirm('Bu run silinsin mi?')) return;
-    setActionLoading(runId + ':delete');
+  const openDeleteModal = (run: PipelineRun) => {
+    setDeleteModal({ runId: run.id, runNumber: run.runNumber || 0, task: run.task });
+    setDeleteInput('');
+    setDeleteCleanup(false);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteModal) return;
+    setActionLoading(deleteModal.runId + ':delete');
     try {
-      await api.deleteRun(runId);
-      setHiddenRuns(prev => new Set([...prev, runId]));
+      await api.deleteRun(deleteModal.runId, deleteCleanup);
+      setHiddenRuns(prev => new Set([...prev, deleteModal.runId]));
+      setDeleteModal(null);
       if (onRefresh) onRefresh();
     } catch (err: any) { console.error('Delete failed:', err); }
     finally { setActionLoading(null); }
@@ -236,6 +301,7 @@ export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefre
 
   return (
     <div className="af-pipeline">
+      {filterBar}
       {filteredRuns.map((run) => {
         const steps = run.steps.sort((a, b) => {
           const ai = STEP_ORDER.indexOf(a.stepId);
@@ -275,17 +341,16 @@ export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefre
               <span className="af-pipeline__wf">{run.workflow}</span>
               <span className="af-pipeline__task">{truncate(run.task, 60)}</span>
               <span className="af-pipeline__run-actions" onClick={(e) => e.stopPropagation()}>
-                {run.status === 'running' && (
+                {run.status === 'running' ? (
                   <button className="af-run-btn af-run-btn--stop" onClick={() => handleStop(run.id)} disabled={actionLoading === run.id + ':stop'} title="Durdur">
-                    {actionLoading === run.id + ':stop' ? '...' : '\u25A0'}
+                    {actionLoading === run.id + ':stop' ? '...' : '\u23F8'}
                   </button>
-                )}
-                {(run.status === 'failed' || run.status === 'cancelled') && (
-                  <button className="af-run-btn af-run-btn--resume" onClick={() => handleResume(run.id)} disabled={actionLoading === run.id + ':resume'} title="Resume">
+                ) : (run.status === 'failed' || run.status === 'cancelled') ? (
+                  <button className="af-run-btn af-run-btn--resume" onClick={() => handleResume(run.id)} disabled={actionLoading === run.id + ':resume'} title="Devam Et">
                     {actionLoading === run.id + ':resume' ? '...' : '\u25B6'}
                   </button>
-                )}
-                <button className="af-run-btn af-run-btn--delete" onClick={() => handleDelete(run.id)} disabled={actionLoading === run.id + ':delete'} title="Sil">
+                ) : null}
+                <button className="af-run-btn af-run-btn--delete" onClick={() => openDeleteModal(run)} disabled={actionLoading === run.id + ':delete'} title="Sil">
                   {actionLoading === run.id + ':delete' ? '...' : '\u2715'}
                 </button>
               </span>
@@ -355,6 +420,41 @@ export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefre
           </div>
         );
       })}
+      {deleteModal && createPortal(
+        <div className="modal-backdrop" onClick={() => setDeleteModal(null)}>
+          <div className="modal modal--delete" onClick={e => e.stopPropagation()}>
+            <h3 style={{ color: '#f85149', margin: '0 0 12px' }}>Run #{deleteModal.runNumber} Sil</h3>
+            <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', margin: '0 0 8px' }}>
+              {deleteModal.task.length > 120 ? deleteModal.task.slice(0, 120) + '...' : deleteModal.task}
+            </p>
+            <p style={{ fontSize: '12px', margin: '0 0 12px' }}>
+              Silmek icin run numarasini yazin: <strong style={{ color: '#f85149' }}>#{deleteModal.runNumber}</strong>
+            </p>
+            <input
+              type="text"
+              className="modal__input"
+              placeholder={'#' + deleteModal.runNumber}
+              value={deleteInput}
+              onChange={e => setDeleteInput(e.target.value)}
+              autoFocus
+            />
+            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '10px 0', fontSize: '12px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={deleteCleanup} onChange={e => setDeleteCleanup(e.target.checked)} />
+              <span>Projeyi de sil (servis, repo, GitHub, tunnel)</span>
+            </label>
+            <div className="modal__actions">
+              <button className="btn" onClick={() => setDeleteModal(null)}>Vazgec</button>
+              <button
+                className="btn btn--danger"
+                disabled={deleteInput !== '#' + deleteModal.runNumber || actionLoading === deleteModal.runId + ':delete'}
+                onClick={handleDeleteConfirm}
+              >
+                {actionLoading === deleteModal.runId + ':delete' ? 'Siliniyor...' : 'Kalici Sil'}
+              </button>
+            </div>
+          </div>
+        </div>
+      , document.body)}
     </div>
   );
 }
