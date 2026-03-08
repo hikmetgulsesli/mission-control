@@ -7,6 +7,20 @@ import { config } from "../config.js";
 const router = Router();
 const PROJECTS_FILE = config.projectsJson || join(import.meta.dirname, "../../projects.json");
 const DISABLED_DIR = join(process.env.HOME || "/home/setrox", ".openclaw/disabled-services");
+const DELETED_FILE = join(import.meta.dirname || __dirname, "../../deleted-projects.json");
+function loadDeletedIds() {
+    try {
+        return new Set(JSON.parse(readFileSync(DELETED_FILE, "utf-8")));
+    }
+    catch {
+        return new Set();
+    }
+}
+function addDeletedId(id) {
+    const ids = loadDeletedIds();
+    ids.add(id);
+    writeFileSync(DELETED_FILE, JSON.stringify([...ids], null, 2));
+}
 const DEFAULT_CHECKLIST = [
     { id: "task-received", label: "Gorev iletildi", completed: false },
     { id: "github-repo", label: "GitHub repo olusturuldu", completed: false },
@@ -468,6 +482,7 @@ router.delete("/projects/:id", async (req, res) => {
         }
         const updated = projects.filter((p) => p.id !== id);
         saveProjects(updated);
+        addDeletedId(id);
         log.push("Removed from projects.json");
         res.json({ success: true, deleted: project.name, log });
     }
@@ -514,6 +529,11 @@ export function createProjectProgrammatic(data) {
     const projects = loadProjects();
     const id = data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
     const normalizedId = normalizeProjectId(id);
+    // CHECK 0: Was this project manually deleted? Never re-create it.
+    const deletedIds = loadDeletedIds();
+    if (deletedIds.has(id) || deletedIds.has(normalizedId)) {
+        return { created: false, project: { id, name: data.name }, reason: "deleted" };
+    }
     // CHECK 1 (PRIMARY): Repo path match — most reliable dedup signal
     if (data.repo) {
         const repoNorm = data.repo.replace(/\/+$/, '');

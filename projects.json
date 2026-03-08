@@ -305,7 +305,8 @@
     ],
     "github": "https://github.com/hikmetgulsesli/clawdocs",
     "category": "own",
-    "updatedAt": "2026-02-26T23:16:43.336Z"
+    "updatedAt": "2026-02-26T23:16:43.336Z",
+    "manuallyDisabled": true
   },
   {
     "id": "url-shortener",
@@ -735,7 +736,8 @@
     "completedAt": "2026-02-15 18:00:00",
     "buildStartedAt": "2026-02-15T05:13:35+03:00",
     "buildCompletedAt": "2026-02-15T05:34:46+03:00",
-    "duration": "18s 0dk"
+    "duration": "18s 0dk",
+    "manuallyDisabled": true
   },
   {
     "id": "setrox-com-portfolio",
@@ -1045,7 +1047,8 @@
       "e271378f-3db6-4e1b-8fca-f77112d74fef"
     ],
     "updatedAt": "2026-02-19T15:57:34.796Z",
-    "completedAt": "2026-02-17 23:33:06"
+    "completedAt": "2026-02-17 23:33:06",
+    "manuallyDisabled": true
   },
   {
     "id": "recipe-book",
@@ -1430,7 +1433,8 @@
     ],
     "updatedAt": "2026-02-26T16:56:49.484Z",
     "completedAt": "2026-02-20 13:51:59",
-    "setfarmRunIds": []
+    "setfarmRunIds": [],
+    "manuallyDisabled": true
   },
   {
     "id": "ivf-asistan",
@@ -1449,7 +1453,7 @@
       "PostgreSQL",
       "React"
     ],
-    "service": "ivf-asistan.service + ivf-asistan-frontend.service",
+    "service": "ivf-asistan.service",
     "serviceStatus": "inactive",
     "createdBy": "setfarm-workflow",
     "createdAt": "2026-02-21",
@@ -1506,7 +1510,7 @@
     "setfarmRunIds": [
       "f9d0776f-8776-4d86-bb18-f7d38bec03cb"
     ],
-    "updatedAt": "2026-02-26T23:16:43.314Z",
+    "updatedAt": "2026-03-08T12:29:37.163Z",
     "completedAt": "2026-02-22 10:39:10",
     "buildStartedAt": "2026-02-21T21:03:03.975Z",
     "buildCompletedAt": "2026-02-22 10:39:10"
@@ -1905,7 +1909,8 @@
     "updatedAt": "2026-03-01T11:17:33.960Z",
     "completedAt": "2026-03-01T14:14:13+03:00",
     "buildStartedAt": "2026-03-01T05:35:32.989Z",
-    "buildCompletedAt": "2026-03-01T11:14:19.114Z"
+    "buildCompletedAt": "2026-03-01T11:14:19.114Z",
+    "manuallyDisabled": true
   },
   {
     "id": "weather-dashboard",
@@ -2058,7 +2063,8 @@
     "updatedAt": "2026-03-03T23:11:19.955Z",
     "completedAt": "2026-03-02T22:54:28",
     "buildStartedAt": "2026-03-02T16:43:07",
-    "buildCompletedAt": "2026-03-02T22:54:28"
+    "buildCompletedAt": "2026-03-02T22:54:28",
+    "manuallyDisabled": true
   },
   {
     "id": "kanban-board",
@@ -2436,7 +2442,8 @@
       }
     ],
     "updatedAt": "2026-03-08T03:58:02.721Z",
-    "completedAt": "2026-03-05T13:37:20.718Z"
+    "completedAt": "2026-03-05T13:37:20.718Z",
+    "manuallyDisabled": true
   },
   {
     "id": "chess-ai",
@@ -2510,7 +2517,8 @@
       }
     ],
     "updatedAt": "2026-03-08T03:58:02.708Z",
-    "completedAt": "2026-03-06T08:41:10.488Z"
+    "completedAt": "2026-03-06T08:41:10.488Z",
+    "manuallyDisabled": true
   },
   {
     "id": "nakliye-crm",
@@ -2664,82 +2672,6 @@
     ],
     "updatedAt": "2026-03-08T03:58:02.702Z",
     "completedAt": "2026-03-06T18:39:50.252Z"
-  },
-  {
-    "id": "hello-world",
-    "name": "Hello World",
-    "emoji": "❌",
-    "status": "failed",
-    "description": "Hello World — Single HTML page with centered heading \"Hello World\" in blue color. No frameworks, no build tools. Just ONE index.html file. Tech: plain HTML/CSS only.",
-    "ports": {},
-    "domain": "",
-    "repo": "/home/setrox/projects/hello-world",
-    "stack": [],
-    "service": "",
-    "serviceStatus": "unknown",
-    "createdBy": "setfarm-workflow",
-    "createdAt": "2026-03-06",
-    "stories": {
-      "total": 1,
-      "done": 1
-    },
-    "features": [],
-    "tasks": [],
-    "github": "",
-    "category": "own",
-    "checklist": [
-      {
-        "id": "task-received",
-        "label": "Gorev iletildi",
-        "completed": true,
-        "completedAt": "2026-03-06T19:23:52.003Z"
-      },
-      {
-        "id": "github-repo",
-        "label": "GitHub repo olusturuldu",
-        "completed": true,
-        "completedAt": "2026-03-06T19:23:52.003Z"
-      },
-      {
-        "id": "dns-setup",
-        "label": "Cloudflare DNS ve subdomain olusturuldu",
-        "completed": false
-      },
-      {
-        "id": "added-to-projects",
-        "label": "Projeler bolumune eklendi",
-        "completed": true,
-        "completedAt": "2026-03-06T19:23:52.003Z"
-      },
-      {
-        "id": "ports-assigned",
-        "label": "Portlar belirlendi",
-        "completed": false
-      },
-      {
-        "id": "setup-run",
-        "label": "Setup calistirildi",
-        "completed": true,
-        "completedAt": "2026-03-06T19:23:52.003Z"
-      },
-      {
-        "id": "dev-started",
-        "label": "Gelistirici calismaya basladi",
-        "completed": true,
-        "completedAt": "2026-03-06T19:33:51.741Z"
-      },
-      {
-        "id": "test-review",
-        "label": "Test ve review tamamlandi",
-        "completed": true,
-        "completedAt": "2026-03-06T19:33:51.741Z"
-      }
-    ],
-    "setfarmRunIds": [
-      "05f7bc9c-de31-49f4-9a79-3d0252d060b9"
-    ],
-    "updatedAt": "2026-03-07T02:26:04.415Z",
-    "completedAt": "2026-03-03T07:10:45.381Z"
   },
   {
     "id": "screenmap-test",
@@ -3119,7 +3051,8 @@
       }
     ],
     "updatedAt": "2026-03-08T03:58:02.640Z",
-    "completedAt": "2026-03-07T23:31:16.705Z"
+    "completedAt": "2026-03-07T23:31:16.705Z",
+    "manuallyDisabled": true
   },
   {
     "id": "pipeline-test",
