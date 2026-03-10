@@ -162,3 +162,21 @@ setInterval(async () => {
     console.error('[MEDIC] Stuck check failed:', err.message);
   }
 }, MEDIC_INTERVAL_MS);
+
+
+
+// Graceful shutdown — release port on SIGTERM/SIGINT
+function shutdown(signal: string) {
+  console.log(`[${signal}] Shutting down gracefully...`);
+  server.close(() => {
+    console.log('Server closed');
+    process.exit(0);
+  });
+  // Force exit after 5s if connections hang
+  setTimeout(() => {
+    console.warn('Forced exit after timeout');
+    process.exit(1);
+  }, 5000).unref();
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
