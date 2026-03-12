@@ -234,61 +234,29 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
 
     const STITCH_SCRIPT = join(process.env.HOME || '/home/setrox', '.openclaw/setfarm-repo/scripts/stitch-api.mjs');
 
-    const screens = await Promise.all(screenMap.map(async (screen: any) => {
-      const screenshotPath = join(cacheDir, `${screen.screenId}.png`);
-      const htmlPath = join(cacheDir, `${screen.screenId}.html`);
-      const screenshotExists = existsSync(screenshotPath);
-      const htmlExists = existsSync(htmlPath);
-
-      if (!screenshotExists || !htmlExists) {
-        try {
-          // Fetch screen details from Stitch API
-          const result = execSync(
-            `node ${STITCH_SCRIPT} get-screen ${projectId} ${screen.screenId}`,
-            { timeout: 30_000, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
-          );
-          const data = JSON.parse(result);
-
-          // Download screenshot
-          if (!screenshotExists && data.screenshot?.downloadUrl) {
-            try {
-              execSync(
-                `node ${STITCH_SCRIPT} download "${data.screenshot.downloadUrl}" "${screenshotPath}"`,
-                { timeout: 60_000, stdio: ['pipe', 'pipe', 'pipe'] }
-              );
-            } catch {}
-          }
-
-          // Download HTML
-          if (!htmlExists && data.htmlCode?.downloadUrl) {
-            try {
-              execSync(
-                `node ${STITCH_SCRIPT} download "${data.htmlCode.downloadUrl}" "${htmlPath}"`,
-                { timeout: 60_000, stdio: ['pipe', 'pipe', 'pipe'] }
-              );
-            } catch {}
-          }
-
-          return {
-            ...screen,
-            title: data.title || screen.name,
-            screenshotUrl: existsSync(screenshotPath) ? `/stitch-cache/${projectId}/${screen.screenId}.png` : null,
-            htmlUrl: existsSync(htmlPath) ? `/stitch-cache/${projectId}/${screen.screenId}.html` : null,
-            width: data.width ? parseInt(data.width) : null,
-            height: data.height ? parseInt(data.height) : null,
-            deviceType: data.deviceType || 'DESKTOP',
-          };
-        } catch {
-          return { ...screen, screenshotUrl: null, htmlUrl: null };
+    // Populate cache from repo's stitch/ dir (eager-downloaded during design step)
+    // Stitch API deletes screens after hours, so repo-local files are the only reliable source
+    try {
+      const ctx = JSON.parse(run.context || '{}');
+      const repo = ctx.repo || '';
+      if (repo) {
+        const repoStitchDir = join(repo, 'stitch');
+        if (existsSync(repoStitchDir)) {
+          execFileSync('node', [STITCH_SCRIPT, 'populate-cache', repoStitchDir, cacheDir], { timeout: 15_000, stdio: 'pipe' });
         }
       }
+    } catch { /* best effort */ }
+
+    const screens = screenMap.map((screen: any) => {
+      const screenshotPath = join(cacheDir, `${screen.screenId}.png`);
+      const htmlPath = join(cacheDir, `${screen.screenId}.html`);
 
       return {
         ...screen,
-        screenshotUrl: `/stitch-cache/${projectId}/${screen.screenId}.png`,
-        htmlUrl: `/stitch-cache/${projectId}/${screen.screenId}.html`,
+        screenshotUrl: existsSync(screenshotPath) ? `/stitch-cache/${projectId}/${screen.screenId}.png` : null,
+        htmlUrl: existsSync(htmlPath) ? `/stitch-cache/${projectId}/${screen.screenId}.html` : null,
       };
-    }));
+    });
 
     res.json({ screens, projectId, designSystem, designNotes });
   } catch (err: any) {
@@ -916,7 +884,13 @@ function autoUpdateChecklist(project: any) {
     'ports-assigned': !!(project.ports?.frontend || project.ports?.backend),
     'setup-run': (project.setfarmRunIds?.length || 0) > 0,
     'dev-started': (project.stories?.done || 0) > 0,
-    'dns-setup': !!project.domain,
+    'dns-setup': (() => {
+      if (!project.domain) return false;
+      try {
+        const cfg = readFileSync('/etc/cloudflared/config.yml', 'utf-8');
+        return cfg.includes(project.domain);
+      } catch { return false; }
+    })(),
     'test-review': (project.stories?.done === project.stories?.total && project.stories?.total > 0),
   };
   for (const [itemId, completed] of Object.entries(checks)) {
@@ -1047,6 +1021,8 @@ async function syncProjectsFromRuns(): Promise<{ synced: any[]; skipped: string[
             updateProjectById(result.project.id, {
               stories: { total: stories.length, done },
               completedAt: run.updated_at || new Date().toISOString(),
+              workflowRunId: run.id,
+              runNumber: run.run_number,
             });
           }
         } catch {}
@@ -1076,7 +1052,9 @@ async function syncProjectsFromRuns(): Promise<{ synced: any[]; skipped: string[
                 execSync('sudo cloudflared tunnel route dns ' + TUNNEL_ID + ' ' + domain, { timeout: 15000 });
               }
             }
-          } catch {}
+          } catch (err: any) {
+            console.error('[dns-ensure] Failed for', result.project?.domain, ':', err.message);
+          }
         }
 
     if (result.created) {
@@ -1090,6 +1068,8 @@ async function syncProjectsFromRuns(): Promise<{ synced: any[]; skipped: string[
           updateProjectById(result.project.id, {
             stories: { total: stories.length, done },
             completedAt: (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') ? (run.updated_at || new Date().toISOString()) : undefined,
+            workflowRunId: run.id,
+            runNumber: run.run_number,
           });
         }
       } catch {}
