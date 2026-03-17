@@ -4,6 +4,7 @@ import { join } from "path";
 import { createConnection } from "net";
 import { execSync, execFileSync } from "child_process";
 import { config } from "../config.js";
+import { deleteRunsByProject } from "../utils/setfarm-db.js";
 
 const router = Router();
 const PROJECTS_FILE = (config as any).projectsJson || join(import.meta.dirname, "../../projects.json");
@@ -109,7 +110,7 @@ router.get("/projects/next-port", async (_req, res) => {
 router.get("/projects/:id", async (req, res) => {
   try {
     const projects = loadProjects();
-    const project = projects.find((p: any) => p.id === req.params.id);
+    const project = findProjectByIdOrRepo(projects, req.params.id);
     if (!project) { res.status(404).json({ error: "Project not found" }); return; }
     res.json(project);
   } catch (err: any) {
@@ -147,7 +148,7 @@ router.post("/projects", async (req, res) => {
       stories: { total: 0, done: 0 },
       features: [],
       tasks: [],
-      github: github || "",
+      github: normalizeGithub(github),
       category: category || "own",
       checklist: DEFAULT_CHECKLIST.map(c => ({ ...c })),
     };
@@ -163,7 +164,7 @@ router.post("/projects", async (req, res) => {
 router.patch("/projects/:id", async (req, res) => {
   try {
     const projects = loadProjects();
-    const idx = projects.findIndex((p: any) => p.id === req.params.id);
+    const _match = findProjectByIdOrRepo(projects, req.params.id); const idx = _match ? projects.findIndex((p: any) => p.id === _match.id) : -1;
     if (idx === -1) { res.status(404).json({ error: "Project not found" }); return; }
 
     const updates = req.body;
@@ -182,7 +183,7 @@ router.patch("/projects/:id", async (req, res) => {
     }
 
     for (const [key, val] of Object.entries(updates)) {
-      if (key !== "id") projects[idx][key] = val;
+      if (key !== "id") projects[idx][key] = key === "github" ? normalizeGithub(val) : val;
     }
 
     projects[idx].updatedAt = new Date().toISOString();
@@ -196,7 +197,7 @@ router.patch("/projects/:id", async (req, res) => {
 router.get("/projects/:id/export", async (req, res) => {
   try {
     const projects = loadProjects();
-    const project = projects.find((p: any) => p.id === req.params.id);
+    const project = findProjectByIdOrRepo(projects, req.params.id);
     if (!project) { res.status(404).json({ error: "Project not found" }); return; }
 
     let runs: any[] = [];
@@ -432,20 +433,11 @@ router.delete("/projects/:id", async (req, res) => {
 
     if (project.domain) {
       try {
-        const cfgPath = "/etc/cloudflared/config.yml";
-        const cfg = readFileSync(cfgPath, "utf-8");
-        const lines = cfg.split("\n");
-        const newLines: string[] = [];
-        let skip = false;
-        for (let i = 0; i < lines.length; i++) {
-          if (lines[i].includes(project.domain)) { skip = true; continue; }
-          if (skip && lines[i].trimStart().startsWith("service:")) { skip = false; continue; }
-          skip = false;
-          newLines.push(lines[i]);
-        }
-        writeFileSync(cfgPath, newLines.join("\n"));
-        execSync("sudo systemctl restart cloudflared", { timeout: 15000 });
-        log.push("Tunnel entry " + project.domain + " removed");
+        // Domain from projects.json — sanitize for sed pattern safety
+        const safeDomain = project.domain.replace(/[^a-zA-Z0-9._-]/g, "");
+        execFileSync("sudo", ["sed", "-i", "/" + safeDomain + "/{N;d;}", "/etc/cloudflared/config.yml"], { timeout: 10000 });
+        // cloudflared restart skipped — kills all tunnels including MC. Config change takes effect on next natural restart.
+        log.push("Tunnel: " + project.domain + " removed");
       } catch (err: any) { log.push("Tunnel removal failed: " + err.message); }
     }
 
@@ -456,10 +448,32 @@ router.delete("/projects/:id", async (req, res) => {
       } catch (err: any) { log.push("Repo deletion failed: " + err.message); }
     }
 
+    // Delete GitHub repo if exists
+    if (project.github) {
+      try {
+        const repoSlug = project.github.replace("https://github.com/", "");
+        if (/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(repoSlug)) {
+          execFileSync("gh", ["repo", "delete", repoSlug, "--yes"], { timeout: 15000, stdio: "pipe" });
+          log.push("GitHub repo deleted: " + repoSlug);
+        }
+      } catch (err: any) { log.push("GitHub delete failed: " + (err.stderr?.toString() || err.message)); }
+    }
+
     const updated = projects.filter((p: any) => p.id !== id);
     saveProjects(updated);
     addDeletedId(id);
     log.push("Removed from projects.json");
+
+    // Clean setfarm DB records (runs, steps, stories, claim_log) for this project
+    try {
+      const dbResult = await deleteRunsByProject(id);
+      if (dbResult.deleted > 0) {
+        log.push(...dbResult.log);
+        log.push(`Setfarm: ${dbResult.deleted} run(s) cleaned`);
+      }
+    } catch (err: any) {
+      log.push('Setfarm DB cleanup failed: ' + err.message);
+    }
 
     res.json({ success: true, deleted: project.name, log });
   } catch (err: any) {
@@ -468,6 +482,17 @@ router.delete("/projects/:id", async (req, res) => {
 });
 
 
+/** Normalize github field: ensure full URL or empty string */
+function normalizeGithub(val: any): string {
+  if (!val || typeof val !== "string") return "";
+  const trimmed = val.trim();
+  if (!trimmed) return "";
+  if (trimmed.startsWith("https://github.com/")) return trimmed;
+  // Looks like a slug (user/repo)
+  if (/^[\w.-]+\/[\w.-]+$/.test(trimmed)) return "https://github.com/" + trimmed;
+  return trimmed;
+}
+
 export function updateProjectById(id: string, fields: Record<string, any>): any | null {
   const deletedIds = loadDeletedIds();
   if (deletedIds.has(id)) return null;
@@ -475,7 +500,7 @@ export function updateProjectById(id: string, fields: Record<string, any>): any 
   const idx = projects.findIndex((p: any) => p.id === id);
   if (idx === -1) return null;
   for (const [key, val] of Object.entries(fields)) {
-    if (key !== "id") projects[idx][key] = val;
+    if (key !== "id") projects[idx][key] = key === "github" ? normalizeGithub(val) : val;
   }
   projects[idx].updatedAt = new Date().toISOString();
   saveProjects(projects);
@@ -485,6 +510,25 @@ export function updateProjectById(id: string, fields: Record<string, any>): any 
 /** Normalize ID for duplicate detection: strip articles, common suffixes */
 function normalizeProjectId(id: string): string {
   return id.replace(/^(?:a-|an-|the-)/, '').replace(/-(app|project|service|tool|system)$/, '');
+}
+
+
+/** Find project by ID, repo basename, or repo path fallback */
+function findProjectByIdOrRepo(projects: any[], id: string): any | undefined {
+  // 1. Exact ID match
+  let p = projects.find((p: any) => p.id === id);
+  if (p) return p;
+  // 2. Repo basename match (e.g. 'nakliye-crm' matches repo '/home/setrox/projects/nakliye-crm')
+  p = projects.find((p: any) => {
+    if (!p.repo) return false;
+    const basename = p.repo.replace(/\/+$/, '').split('/').pop();
+    return basename === id;
+  });
+  if (p) return p;
+  // 3. Normalized ID match
+  const normalizedId = normalizeProjectId(id);
+  p = projects.find((p: any) => normalizeProjectId(p.id) === normalizedId);
+  return p;
 }
 
 /** Check if newId is an extension of an existing project (prefix match).
