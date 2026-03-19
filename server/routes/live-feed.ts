@@ -286,6 +286,8 @@ router.get('/live-feed', async (req, res) => {
 
 function filterAndRespond(events: LiveEvent[], req: any, res: any) {
   let filtered = events;
+  // Filter out step peek polling noise (runs every ~7s per agent, floods the feed)
+  filtered = filtered.filter(e => !(e.summary && e.summary.includes("step peek")));
 
   const since = req.query.since as string;
   if (since) {
