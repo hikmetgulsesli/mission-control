@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Pomodoro Timer</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#5d6d7e",
+                        "background-light": "#f7f7f7",
+                        "background-dark": "#17191b",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background-light dark:bg-background-dark min-h-screen flex flex-col items-center justify-center font-display text-slate-900 dark:text-slate-100 antialiased selection:bg-primary/30">
+<main class="w-full max-w-lg flex flex-col items-center justify-center p-8 gap-10">
+<!-- Header -->
+<header>
+<h1 class="text-3xl font-bold tracking-tight text-slate-800 dark:text-slate-200">Pomodoro Timer</h1>
+</header>
+<!-- Phase Indicator -->
+<div class="flex items-center justify-center">
+<span class="bg-[#E74C3C] text-white px-6 py-2 rounded-full text-sm font-bold tracking-widest shadow-sm">
+                WORK
+            </span>
+</div>
+<!-- Timer -->
+<div class="flex flex-col items-center justify-center gap-4 py-4">
+<div class="text-[80px] sm:text-[100px] leading-none font-bold tabular-nums tracking-tighter text-slate-900 dark:text-slate-50">
+                25:00
+            </div>
+<p class="text-slate-500 dark:text-slate-400 font-medium text-lg">
+                Session 1 of 4
+            </p>
+</div>
+<!-- Controls -->
+<div class="flex w-full max-w-[320px] gap-4 justify-center mt-4">
+<button class="flex-1 bg-primary hover:bg-primary/90 text-white h-14 rounded-xl font-bold text-lg tracking-wide transition-all duration-200 shadow-sm active:scale-[0.98]">
+                START
+            </button>
+<button class="flex-1 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 h-14 rounded-xl font-bold text-lg tracking-wide transition-all duration-200 shadow-sm active:scale-[0.98]">
+                RESET
+            </button>
+</div>
+</main>
+</body></html>

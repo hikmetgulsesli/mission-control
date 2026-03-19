@@ -5,8 +5,8 @@ function normalizeModel(raw: string): string {
   const map: Record<string, string> = {
     'anthropic/claude-sonnet-4-5-20250929': 'sonnet-4.5',
     'anthropic/claude-opus-4-6': 'opus-4.6',
-    'minimax/MiniMax-M2.5': 'minimax-m2.5',
-    'minimax-coding/MiniMax-M2.5': 'minimax-m2.5',
+    'minimax/MiniMax-M2.7': 'minimax-m2.7',
+    'minimax-coding/MiniMax-M2.7': 'minimax-m2.7',
     'kimi-coding/k2p5': 'kimi-k2p5',
   };
   if (map[raw]) return map[raw];

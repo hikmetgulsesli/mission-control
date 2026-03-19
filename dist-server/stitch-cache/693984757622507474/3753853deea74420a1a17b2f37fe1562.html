@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+
+<html lang="tr"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Nakliye CRM Aktivite Takibi</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Work+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#2463eb",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#111621",
+                    },
+                    fontFamily: {
+                        "display": ["Work Sans", "sans-serif"],
+                        "heading": ["Plus Jakarta Sans", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Work Sans', sans-serif; }
+        h1, h2, h3, h4, h5, h6, .font-heading { font-family: 'Plus Jakarta Sans', sans-serif; }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex flex-col font-display">
+<!-- Top Navigation Bar -->
+<header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-10 py-3">
+<div class="flex items-center gap-4 text-slate-900 dark:text-slate-100">
+<div class="size-6 text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-2xl">local_shipping</span>
+</div>
+<h2 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-[-0.015em] font-heading">Nakliye CRM Aktivite Takibi</h2>
+</div>
+<div class="flex flex-1 justify-end gap-8">
+<div class="flex items-center gap-9">
+<a class="text-slate-900 dark:text-slate-100 text-sm font-medium leading-normal hover:text-primary transition-colors" href="#">Gösterge Paneli</a>
+<a class="text-primary text-sm font-medium leading-normal border-b-2 border-primary py-4 -mb-[18px]" href="#">Aktivite Takibi</a>
+<a class="text-slate-900 dark:text-slate-100 text-sm font-medium leading-normal hover:text-primary transition-colors" href="#">Müşteriler</a>
+<a class="text-slate-900 dark:text-slate-100 text-sm font-medium leading-normal hover:text-primary transition-colors" href="#">Raporlar</a>
+</div>
+<div class="flex items-center gap-4 border-l border-slate-200 dark:border-slate-800 pl-6">
+<button class="text-slate-600 dark:text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
+                    AT
+                </div>
+</div>
+</div>
+</header>
+<main class="flex-1 max-w-[1200px] w-full mx-auto p-6 md:p-8 flex flex-col gap-6">
+<!-- Page Header & Actions -->
+<div class="flex flex-wrap items-center justify-between gap-4">
+<div>
+<h1 class="text-slate-900 dark:text-slate-100 text-3xl font-bold leading-tight font-heading">Aktivite Takibi</h1>
+<p class="text-slate-500 dark:text-slate-400 mt-1">Müşteri etkileşimlerinizi ve süreçlerinizi yönetin.</p>
+</div>
+<button class="flex min-w-[120px] cursor-pointer items-center justify-center gap-2 rounded-lg h-10 px-5 bg-primary text-white text-sm font-bold leading-normal tracking-wide shadow-sm hover:bg-primary/90 transition-colors">
+<span class="material-symbols-outlined text-sm">add</span>
+<span>Yeni Aktivite</span>
+</button>
+</div>
+<!-- Filters Bar -->
+<div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-4 flex flex-wrap gap-4 items-center">
+<div class="flex-1 min-w-[200px]">
+<label class="sr-only">Tarih Aralığı</label>
+<div class="relative flex items-center h-10 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 focus-within:ring-2 focus-within:ring-primary/50">
+<span class="material-symbols-outlined text-slate-500 mr-2 text-xl">calendar_month</span>
+<input class="w-full bg-transparent border-none p-0 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-500 focus:ring-0" placeholder="Tarih Aralığı Seçin" readonly="" type="text" value="01 Eki 2023 - 31 Eki 2023"/>
+</div>
+</div>
+<div class="flex-1 min-w-[180px]">
+<label class="sr-only">Tür</label>
+<div class="relative flex items-center h-10 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 focus-within:ring-2 focus-within:ring-primary/50">
+<span class="material-symbols-outlined text-slate-500 mr-2 text-xl">filter_list</span>
+<select class="w-full bg-transparent border-none p-0 text-sm text-slate-900 dark:text-slate-100 focus:ring-0 appearance-none pr-6">
+<option value="">Tüm Türler</option>
+<option value="arama">Arama</option>
+<option value="ziyaret">Ziyaret</option>
+<option value="eposta">E-posta</option>
+<option value="toplanti">Toplantı</option>
+<option value="teklif">Teklif</option>
+</select>
+<span class="material-symbols-outlined text-slate-500 absolute right-3 pointer-events-none text-lg">expand_more</span>
+</div>
+</div>
+<div class="flex-[2] min-w-[250px]">
+<label class="sr-only">Müşteri</label>
+<div class="relative flex items-center h-10 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 focus-within:ring-2 focus-within:ring-primary/50">
+<span class="material-symbols-outlined text-slate-500 mr-2 text-xl">search</span>
+<input class="w-full bg-transparent border-none p-0 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-500 focus:ring-0" placeholder="Müşteri, konu veya açıklama ara..." type="text"/>
+</div>
+</div>
+<button class="h-10 px-4 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors border border-slate-200 dark:border-slate-700">
+                Filtreleri Temizle
+            </button>
+</div>
+<div class="flex flex-col lg:flex-row gap-8 mt-2">
+<!-- Timeline Area -->
+<div class="flex-1 bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-6">
+<h3 class="text-lg font-bold font-heading mb-6 pb-2 border-b border-slate-100 dark:border-slate-800 text-slate-800 dark:text-slate-200">Ekim 2023 Aktiviteleri</h3>
+<div class="relative pl-8 space-y-8 before:absolute before:inset-0 before:ml-4 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-slate-200 dark:before:bg-slate-700">
+<!-- Activity Item 1 -->
+<div class="relative flex items-start gap-4 md:gap-6 group">
+<div class="absolute -left-8 md:left-1/2 md:-ml-4 flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 border-4 border-white dark:border-slate-900 shadow-sm z-10">
+<span class="material-symbols-outlined text-sm">call</span>
+</div>
+<div class="flex-1 md:w-1/2 md:pr-12 md:text-right">
+<!-- Desktop date display (right side for alternating layout if needed, but linear is better for CRM logs. Sticking to linear left-aligned for clarity) -->
+<span class="block md:hidden text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1">Bugün, 10:30 (15 dk)</span>
+</div>
+<div class="flex-1 md:w-1/2 md:pl-12 pb-1 absolute left-0 md:static md:block hidden opacity-0 pointer-events-none">Spacer</div>
+<div class="w-full relative">
+<!-- Mobile hack to override the weird layout above for standard timeline -->
+</div>
+</div>
+<!-- Refactored standard timeline layout -->
+<div class="relative pl-6 sm:pl-8 py-2 w-full group">
+<!-- Timeline line handled by parent -->
+<!-- Icon -->
+<div class="absolute left-[-2rem] sm:left-[-2.5rem] mt-1 w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 border-4 border-white dark:border-slate-900 shadow-sm flex items-center justify-center z-10 transition-transform group-hover:scale-110">
+<span class="material-symbols-outlined text-[16px]">call</span>
+</div>
+<!-- Content Card -->
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow group-hover:border-emerald-300 dark:group-hover:border-emerald-700">
+<div class="flex flex-wrap justify-between items-start gap-2 mb-2">
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800">Arama</span>
+<span class="text-sm font-bold text-slate-800 dark:text-slate-200">Borusan Lojistik</span>
+</div>
+<div class="flex items-center text-xs text-slate-500 dark:text-slate-400 gap-2">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">calendar_today</span> Bugün, 10:30</span>
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">timer</span> 15 dk</span>
+</div>
+</div>
+<h4 class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Haftalık Sevkiyat Planlaması</h4>
+<p class="text-sm text-slate-600 dark:text-slate-400 line-clamp-2">Ahmet Bey ile önümüzdeki haftanın İzmir-İstanbul hattı araç planlaması hakkında görüşüldü. 3 tır ihtiyacı teyit edildi.</p>
+</div>
+</div>
+<!-- Activity Item 2 -->
+<div class="relative pl-6 sm:pl-8 py-2 w-full group">
+<div class="absolute left-[-2rem] sm:left-[-2.5rem] mt-1 w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 border-4 border-white dark:border-slate-900 shadow-sm flex items-center justify-center z-10 transition-transform group-hover:scale-110">
+<span class="material-symbols-outlined text-[16px]">apartment</span>
+</div>
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow group-hover:border-purple-300 dark:group-hover:border-purple-700">
+<div class="flex flex-wrap justify-between items-start gap-2 mb-2">
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded text-xs font-semibold bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 border border-purple-100 dark:border-purple-800">Ziyaret</span>
+<span class="text-sm font-bold text-slate-800 dark:text-slate-200">Ekol Lojistik</span>
+</div>
+<div class="flex items-center text-xs text-slate-500 dark:text-slate-400 gap-2">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">calendar_today</span> Dün, 14:00</span>
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">timer</span> 1 saat 30 dk</span>
+</div>
+</div>
+<h4 class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Tesis İncelemesi ve Sözleşme Yenileme</h4>
+<p class="text-sm text-slate-600 dark:text-slate-400 line-clamp-2">Yeni depo alanı incelendi. 2024 yılı taşıma sözleşmesi taslağı üzerinden geçildi. Fiyatlarda %15'lik revizyon talebi alındı.</p>
+</div>
+</div>
+<!-- Activity Item 3 -->
+<div class="relative pl-6 sm:pl-8 py-2 w-full group">
+<div class="absolute left-[-2rem] sm:left-[-2.5rem] mt-1 w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 border-4 border-white dark:border-slate-900 shadow-sm flex items-center justify-center z-10 transition-transform group-hover:scale-110">
+<span class="material-symbols-outlined text-[16px]">mail</span>
+</div>
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow group-hover:border-blue-300 dark:group-hover:border-blue-700">
+<div class="flex flex-wrap justify-between items-start gap-2 mb-2">
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded text-xs font-semibold bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border border-blue-100 dark:border-blue-800">E-posta</span>
+<span class="text-sm font-bold text-slate-800 dark:text-slate-200">Omsan Lojistik</span>
+</div>
+<div class="flex items-center text-xs text-slate-500 dark:text-slate-400 gap-2">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">calendar_today</span> 12 Eki, 09:15</span>
+</div>
+</div>
+<h4 class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Gümrük Belgeleri Talebi</h4>
+<p class="text-sm text-slate-600 dark:text-slate-400 line-clamp-2">Almanya sevkiyatı için eksik olan T1 belgelerinin acil olarak iletilmesi istendi.</p>
+</div>
+</div>
+<!-- Activity Item 4 -->
+<div class="relative pl-6 sm:pl-8 py-2 w-full group">
+<div class="absolute left-[-2rem] sm:left-[-2.5rem] mt-1 w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 border-4 border-white dark:border-slate-900 shadow-sm flex items-center justify-center z-10 transition-transform group-hover:scale-110">
+<span class="material-symbols-outlined text-[16px]">description</span>
+</div>
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow group-hover:border-amber-300 dark:group-hover:border-amber-700">
+<div class="flex flex-wrap justify-between items-start gap-2 mb-2">
+<div class="flex items-center gap-2">
+<span class="px-2 py-0.5 rounded text-xs font-semibold bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-100 dark:border-amber-800">Teklif</span>
+<span class="text-sm font-bold text-slate-800 dark:text-slate-200">Netlog Lojistik</span>
+</div>
+<div class="flex items-center text-xs text-slate-500 dark:text-slate-400 gap-2">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">calendar_today</span> 10 Eki, 16:45</span>
+</div>
+</div>
+<h4 class="font-semibold text-slate-900 dark:text-slate-100 mb-1">Soğuk Zincir Taşıma Teklifi İletildi</h4>
+<p class="text-sm text-slate-600 dark:text-slate-400 line-clamp-2">Q4 dönemi için frigo araç filosu kiralama teklifi sisteme yüklenip müşteriye iletildi. Toplam tutar: 450.000 TL.</p>
+</div>
+</div>
+</div>
+<div class="mt-8 text-center">
+<button class="text-primary font-medium text-sm hover:underline px-4 py-2 rounded-lg hover:bg-primary/5 transition-colors">
+                        Daha Fazla Göster
+                    </button>
+</div>
+</div>
+<!-- Right Sidebar - Quick Filters -->
+<div class="w-full lg:w-64 shrink-0 flex flex-col gap-4">
+<div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-4">
+<h3 class="font-bold text-slate-800 dark:text-slate-200 mb-3 font-heading text-sm uppercase tracking-wider">Hızlı Filtreler</h3>
+<div class="flex flex-col gap-1">
+<button class="flex items-center justify-between px-3 py-2 rounded-lg bg-primary/10 text-primary font-medium text-sm text-left transition-colors">
+<span>Tümü</span>
+<span class="bg-primary text-white text-[10px] px-2 py-0.5 rounded-full">124</span>
+</button>
+<button class="flex items-center justify-between px-3 py-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium text-sm text-left transition-colors">
+<span>Bugün</span>
+<span class="bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400 text-[10px] px-2 py-0.5 rounded-full">5</span>
+</button>
+<button class="flex items-center justify-between px-3 py-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium text-sm text-left transition-colors">
+<span>Bu Hafta</span>
+<span class="bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400 text-[10px] px-2 py-0.5 rounded-full">28</span>
+</button>
+<button class="flex items-center justify-between px-3 py-2 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 font-medium text-sm text-left transition-colors">
+<span>Bu Ay</span>
+<span class="bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400 text-[10px] px-2 py-0.5 rounded-full">86</span>
+</button>
+</div>
+</div>
+<!-- Mini Calendar Component from example -->
+<div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-4">
+<div class="flex min-w-[200px] flex-col gap-1">
+<div class="flex items-center p-1 justify-between mb-2">
+<button class="text-slate-500 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[18px]">chevron_left</span>
+</button>
+<p class="text-slate-800 dark:text-slate-200 text-sm font-bold leading-tight flex-1 text-center font-heading">Ekim 2023</p>
+<button class="text-slate-500 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</button>
+</div>
+<div class="grid grid-cols-7 gap-y-1">
+<p class="text-slate-500 dark:text-slate-400 text-[11px] font-bold leading-normal text-center pb-1">Pt</p>
+<p class="text-slate-500 dark:text-slate-400 text-[11px] font-bold leading-normal text-center pb-1">Sa</p>
+<p class="text-slate-500 dark:text-slate-400 text-[11px] font-bold leading-normal text-center pb-1">Ça</p>
+<p class="text-slate-500 dark:text-slate-400 text-[11px] font-bold leading-normal text-center pb-1">Pe</p>
+<p class="text-slate-500 dark:text-slate-400 text-[11px] font-bold leading-normal text-center pb-1">Cu</p>
+<p class="text-slate-500 dark:text-slate-400 text-[11px] font-bold leading-normal text-center pb-1">Ct</p>
+<p class="text-slate-500 dark:text-slate-400 text-[11px] font-bold leading-normal text-center pb-1">Pz</p>
+<!-- Dummy days for visual -->
+<div class="col-start-6"></div>
+<button class="h-8 w-full text-slate-700 dark:text-slate-300 text-xs hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full flex items-center justify-center">1</button>
+<button class="h-8 w-full text-slate-700 dark:text-slate-300 text-xs hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full flex items-center justify-center">2</button>
+<button class="h-8 w-full text-slate-700 dark:text-slate-300 text-xs hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full flex items-center justify-center">3</button>
+<button class="h-8 w-full text-slate-700 dark:text-slate-300 text-xs hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full flex items-center justify-center font-bold bg-primary/10 text-primary">4</button>
+<button class="h-8 w-full text-slate-700 dark:text-slate-300 text-xs hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full flex items-center justify-center">5</button>
+<button class="h-8 w-full text-slate-700 dark:text-slate-300 text-xs hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full flex items-center justify-center">6</button>
+<button class="h-8 w-full text-slate-700 dark:text-slate-300 text-xs hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full flex items-center justify-center">7</button>
+<button class="h-8 w-full text-slate-700 dark:text-slate-300 text-xs hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full flex items-center justify-center">8</button>
+<button class="h-8 w-full text-slate-700 dark:text-slate-300 text-xs hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full flex items-center justify-center">9</button>
+<button class="h-8 w-full text-slate-700 dark:text-slate-300 text-xs hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full flex items-center justify-center font-bold bg-primary/10 text-primary">10</button>
+<button class="h-8 w-full text-white bg-primary shadow-sm text-xs rounded-full flex items-center justify-center font-bold">11</button>
+<button class="h-8 w-full text-slate-700 dark:text-slate-300 text-xs hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full flex items-center justify-center font-bold bg-primary/10 text-primary">12</button>
+<button class="h-8 w-full text-slate-700 dark:text-slate-300 text-xs hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full flex items-center justify-center">13</button>
+<button class="h-8 w-full text-slate-700 dark:text-slate-300 text-xs hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full flex items-center justify-center">14</button>
+<button class="h-8 w-full text-slate-700 dark:text-slate-300 text-xs hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full flex items-center justify-center">15</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

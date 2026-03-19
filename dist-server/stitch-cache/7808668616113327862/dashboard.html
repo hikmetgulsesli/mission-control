@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Logistics CRM - Admin Portal</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "primary": "#3db8f5",
+            "background-light": "#f5f7f8",
+            "background-dark": "#101c22",
+            "primary-dark": "#2a82ad",
+            "primary-light": "#e0f2fe",
+            "neutral-50": "#f8fafc",
+            "neutral-100": "#f1f5f9",
+            "neutral-200": "#e2e8f0",
+            "neutral-300": "#cbd5e1",
+            "neutral-400": "#94a3b8",
+            "neutral-500": "#64748b",
+            "neutral-600": "#475569",
+            "neutral-700": "#334155",
+            "neutral-800": "#1e293b",
+            "neutral-900": "#0f172a",
+          },
+          fontFamily: {
+            "display": ["Plus Jakarta Sans", "sans-serif"],
+            "body": ["Plus Jakarta Sans", "sans-serif"]
+          },
+          borderRadius: {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "2xl": "1rem",
+            "full": "9999px"
+          },
+        },
+      },
+    }
+  </script>
+<style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+  </style>
+</head>
+<body class="bg-background-light text-neutral-900 font-body antialiased">
+<div class="flex h-screen w-full overflow-hidden">
+<!-- Sidebar -->
+<aside class="flex w-64 flex-col border-r border-neutral-200 bg-white">
+<div class="flex items-center gap-3 p-6 border-b border-neutral-100">
+<div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-white shadow-sm">
+<span class="material-symbols-outlined text-2xl">local_shipping</span>
+</div>
+<div class="flex flex-col">
+<h1 class="text-base font-bold text-neutral-900 leading-tight">Logistics CRM</h1>
+<p class="text-xs font-medium text-neutral-500">Admin Portal</p>
+</div>
+</div>
+<div class="flex-1 overflow-y-auto py-4 px-3">
+<nav class="flex flex-col gap-1">
+<a class="flex items-center gap-3 rounded-lg bg-primary-light/50 px-3 py-2.5 text-primary transition-colors hover:bg-primary-light" href="#">
+<span class="material-symbols-outlined text-[20px]">dashboard</span>
+<span class="text-sm font-semibold">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-neutral-600 transition-colors hover:bg-neutral-50 hover:text-neutral-900" href="#">
+<span class="material-symbols-outlined text-[20px]">route</span>
+<span class="text-sm font-medium">Shipments</span>
+</a>
+<a class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-neutral-600 transition-colors hover:bg-neutral-50 hover:text-neutral-900" href="#">
+<span class="material-symbols-outlined text-[20px]">request_quote</span>
+<span class="text-sm font-medium">Quotes</span>
+</a>
+<a class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-neutral-600 transition-colors hover:bg-neutral-50 hover:text-neutral-900" href="#">
+<span class="material-symbols-outlined text-[20px]">group</span>
+<span class="text-sm font-medium">Customers</span>
+</a>
+<a class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-neutral-600 transition-colors hover:bg-neutral-50 hover:text-neutral-900" href="#">
+<span class="material-symbols-outlined text-[20px]">inventory_2</span>
+<span class="text-sm font-medium">Inventory</span>
+</a>
+<a class="flex items-center gap-3 rounded-lg px-3 py-2.5 text-neutral-600 transition-colors hover:bg-neutral-50 hover:text-neutral-900" href="#">
+<span class="material-symbols-outlined text-[20px]">bar_chart</span>
+<span class="text-sm font-medium">Reports</span>
+</a>
+</nav>
+</div>
+<div class="border-t border-neutral-200 p-4">
+<a class="flex items-center gap-3 rounded-lg px-3 py-2 text-neutral-600 transition-colors hover:bg-neutral-50 hover:text-neutral-900" href="#">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+<span class="text-sm font-medium">Settings</span>
+</a>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="flex flex-1 flex-col overflow-hidden bg-background-light">
+<!-- Header -->
+<header class="flex h-16 items-center justify-between border-b border-neutral-200 bg-white px-8 shadow-sm z-10">
+<div class="flex items-center gap-2">
+<h2 class="text-xl font-bold text-neutral-900">Dashboard</h2>
+</div>
+<div class="flex items-center gap-6">
+<div class="relative flex w-80 items-center">
+<span class="material-symbols-outlined absolute left-3 text-neutral-400 text-[20px]">search</span>
+<input class="w-full rounded-full border border-neutral-200 bg-neutral-50 py-2 pl-10 pr-4 text-sm text-neutral-900 outline-none transition-all focus:border-primary focus:bg-white focus:ring-1 focus:ring-primary placeholder:text-neutral-400" placeholder="Search shipments, quotes..." type="text"/>
+</div>
+<div class="flex items-center gap-4 border-l border-neutral-200 pl-6">
+<button class="relative text-neutral-500 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-0 right-0 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white"></span>
+</button>
+<div class="h-8 w-8 cursor-pointer overflow-hidden rounded-full border border-neutral-200 bg-neutral-100" data-alt="User Avatar Profile Picture" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAMq6WbDOxBsCGTZXPlHDCyWtW7Un1IwdGV52m62wAVrh_2oj-L8lv_MUE3yLfRIgIP32IdnKRf-PxkXAMX2Eo2JLaWIDcvlm-3Xh80p_YIa3PE7pQJlXy65McephMBEpcpdDq6v9rS2qiM26kf6WJgJXuVBB01o2ldgQW7UBEYQD-iFg-6r3xgYqwIiSvoWnxqagIXLbOFs5msoSrw3qMsDRRGPt1PTxfw-OWwU-OeMwni2iG2n_mheiYLOjVKTTHSdIBG-oYUt4Y");'></div>
+</div>
+</div>
+</header>
+<!-- Content Area -->
+<div class="flex-1 overflow-y-auto p-8">
+<div class="mx-auto max-w-7xl flex flex-col gap-8">
+<!-- Summary Cards -->
+<div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+<!-- Card 1 -->
+<div class="flex flex-col gap-2 rounded-2xl bg-white p-6 shadow-sm border border-neutral-100 hover:border-primary/30 transition-colors group">
+<div class="flex items-center justify-between">
+<p class="text-sm font-semibold text-neutral-500">In Transit</p>
+<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[18px]">local_shipping</span>
+</div>
+</div>
+<div class="flex items-end gap-3 mt-1">
+<p class="text-3xl font-bold text-neutral-900">1,245</p>
+<div class="flex items-center text-emerald-600 mb-1 bg-emerald-50 px-1.5 py-0.5 rounded text-xs font-semibold">
+<span class="material-symbols-outlined text-[14px]">trending_up</span>
+<span>12%</span>
+</div>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="flex flex-col gap-2 rounded-2xl bg-white p-6 shadow-sm border border-neutral-100 hover:border-primary/30 transition-colors group">
+<div class="flex items-center justify-between">
+<p class="text-sm font-semibold text-neutral-500">Pending Pick-up</p>
+<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600 group-hover:bg-amber-100 transition-colors">
+<span class="material-symbols-outlined text-[18px]">package_2</span>
+</div>
+</div>
+<div class="flex items-end gap-3 mt-1">
+<p class="text-3xl font-bold text-neutral-900">432</p>
+<div class="flex items-center text-emerald-600 mb-1 bg-emerald-50 px-1.5 py-0.5 rounded text-xs font-semibold">
+<span class="material-symbols-outlined text-[14px]">trending_up</span>
+<span>5%</span>
+</div>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="flex flex-col gap-2 rounded-2xl bg-white p-6 shadow-sm border border-neutral-100 hover:border-primary/30 transition-colors group">
+<div class="flex items-center justify-between">
+<p class="text-sm font-semibold text-neutral-500">Delivered</p>
+<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100 transition-colors">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+</div>
+</div>
+<div class="flex items-end gap-3 mt-1">
+<p class="text-3xl font-bold text-neutral-900">8,901</p>
+<div class="flex items-center text-emerald-600 mb-1 bg-emerald-50 px-1.5 py-0.5 rounded text-xs font-semibold">
+<span class="material-symbols-outlined text-[14px]">trending_up</span>
+<span>24%</span>
+</div>
+</div>
+</div>
+<!-- Card 4 -->
+<div class="flex flex-col gap-2 rounded-2xl bg-white p-6 shadow-sm border border-neutral-100 hover:border-primary/30 transition-colors group">
+<div class="flex items-center justify-between">
+<p class="text-sm font-semibold text-neutral-500">At Customs</p>
+<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-red-50 text-red-600 group-hover:bg-red-100 transition-colors">
+<span class="material-symbols-outlined text-[18px]">gavel</span>
+</div>
+</div>
+<div class="flex items-end gap-3 mt-1">
+<p class="text-3xl font-bold text-neutral-900">156</p>
+<div class="flex items-center text-red-600 mb-1 bg-red-50 px-1.5 py-0.5 rounded text-xs font-semibold">
+<span class="material-symbols-outlined text-[14px]">trending_down</span>
+<span>3%</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Main Layout Grid -->
+<div class="grid grid-cols-1 gap-8 lg:grid-cols-3">
+<!-- Revenue Chart -->
+<div class="lg:col-span-2 flex flex-col rounded-2xl bg-white p-6 shadow-sm border border-neutral-100">
+<div class="flex items-center justify-between mb-6">
+<div>
+<h3 class="text-lg font-bold text-neutral-900">Monthly Revenue</h3>
+<p class="text-sm text-neutral-500 mt-1">Income trends over the last 6 months</p>
+</div>
+<div class="text-right">
+<p class="text-2xl font-bold text-neutral-900">$45,600</p>
+<div class="flex items-center justify-end text-emerald-600 text-sm font-medium">
+<span class="material-symbols-outlined text-[16px] mr-1">arrow_upward</span>
+<span>15% vs last period</span>
+</div>
+</div>
+</div>
+<div class="relative w-full flex-1 min-h-[250px] mt-4">
+<!-- Decorative Chart Placeholder -->
+<svg class="w-full h-full" fill="none" height="100%" preserveaspectratio="none" viewbox="-3 0 478 150" width="100%" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<lineargradient gradientunits="userSpaceOnUse" id="paint0_linear_1131_5935" x1="236" x2="236" y1="1" y2="149">
+<stop stop-color="#3db8f5" stop-opacity="0.2"></stop>
+<stop offset="1" stop-color="#3db8f5" stop-opacity="0"></stop>
+</lineargradient>
+</defs>
+<!-- Background Grid Lines -->
+<path d="M0 25H472 M0 75H472 M0 125H472" stroke="#f1f5f9" stroke-dasharray="4 4" stroke-width="1"></path>
+<!-- Area Fill -->
+<path d="M0 109C18.1538 109 18.1538 21 36.3077 21C54.4615 21 54.4615 41 72.6154 41C90.7692 41 90.7692 93 108.923 93C127.077 93 127.077 33 145.231 33C163.385 33 163.385 101 181.538 101C199.692 101 199.692 61 217.846 61C236 61 236 45 254.154 45C272.308 45 272.308 121 290.462 121C308.615 121 308.615 149 326.769 149C344.923 149 344.923 1 363.077 1C381.231 1 381.231 81 399.385 81C417.538 81 417.538 129 435.692 129C453.846 129 453.846 25 472 25V149H0V109Z" fill="url(#paint0_linear_1131_5935)"></path>
+<!-- Line -->
+<path d="M0 109C18.1538 109 18.1538 21 36.3077 21C54.4615 21 54.4615 41 72.6154 41C90.7692 41 90.7692 93 108.923 93C127.077 93 127.077 33 145.231 33C163.385 33 163.385 101 181.538 101C199.692 101 199.692 61 217.846 61C236 61 236 45 254.154 45C272.308 45 272.308 121 290.462 121C308.615 121 308.615 149 326.769 149C344.923 149 344.923 1 363.077 1C381.231 1 381.231 81 399.385 81C417.538 81 417.538 129 435.692 129C453.846 129 453.846 25 472 25" stroke="#3db8f5" stroke-linecap="round" stroke-linejoin="round" stroke-width="3"></path>
+</svg>
+</div>
+<div class="flex justify-between mt-4 px-2 text-xs font-semibold text-neutral-400">
+<span>Jan</span>
+<span>Feb</span>
+<span>Mar</span>
+<span>Apr</span>
+<span>May</span>
+<span>Jun</span>
+</div>
+</div>
+<!-- Recent Activities Sidebar -->
+<div class="flex flex-col rounded-2xl bg-white shadow-sm border border-neutral-100 overflow-hidden">
+<div class="flex items-center justify-between p-5 border-b border-neutral-100 bg-neutral-50/50">
+<h3 class="text-base font-bold text-neutral-900">Recent Activities</h3>
+<button class="text-sm text-primary font-medium hover:text-primary-dark transition-colors">View All</button>
+</div>
+<div class="flex-1 overflow-y-auto p-5">
+<div class="relative before:absolute before:inset-y-0 before:left-[19px] before:w-px before:bg-neutral-200">
+<!-- Activity 1 -->
+<div class="relative flex gap-4 pb-6 last:pb-0">
+<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-light text-primary z-10 border-4 border-white">
+<span class="material-symbols-outlined text-[18px]">receipt_long</span>
+</div>
+<div class="flex flex-col pt-1">
+<p class="text-sm font-medium text-neutral-900">New Quote Created</p>
+<p class="text-xs text-neutral-500 mt-0.5">Quote #QT-8932 for Global Tech Inc.</p>
+<span class="text-[11px] font-semibold text-neutral-400 mt-2">10 mins ago</span>
+</div>
+</div>
+<!-- Activity 2 -->
+<div class="relative flex gap-4 pb-6 last:pb-0">
+<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-500 z-10 border-4 border-white">
+<span class="material-symbols-outlined text-[18px]">local_shipping</span>
+</div>
+<div class="flex flex-col pt-1">
+<p class="text-sm font-medium text-neutral-900">Shipment Status Updated</p>
+<p class="text-xs text-neutral-500 mt-0.5">Shipment #SH-4021 is now In Transit.</p>
+<span class="text-[11px] font-semibold text-neutral-400 mt-2">1 hour ago</span>
+</div>
+</div>
+<!-- Activity 3 -->
+<div class="relative flex gap-4 pb-6 last:pb-0">
+<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-500 z-10 border-4 border-white">
+<span class="material-symbols-outlined text-[18px]">check_circle</span>
+</div>
+<div class="flex flex-col pt-1">
+<p class="text-sm font-medium text-neutral-900">Shipment Delivered</p>
+<p class="text-xs text-neutral-500 mt-0.5">Shipment #SH-3990 delivered to warehouse.</p>
+<span class="text-[11px] font-semibold text-neutral-400 mt-2">3 hours ago</span>
+</div>
+</div>
+<!-- Activity 4 -->
+<div class="relative flex gap-4 pb-6 last:pb-0">
+<div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-500 z-10 border-4 border-white">
+<span class="material-symbols-outlined text-[18px]">error</span>
+</div>
+<div class="flex flex-col pt-1">
+<p class="text-sm font-medium text-neutral-900">Customs Delay</p>
+<p class="text-xs text-neutral-500 mt-0.5">Shipment #SH-4050 held at Port Customs.</p>
+<span class="text-[11px] font-semibold text-neutral-400 mt-2">5 hours ago</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { api } from '../lib/api';
 
 interface Story {
@@ -13,11 +13,17 @@ export function StoryChecklist({ runId, onRetry }: { runId: string; onRetry?: (s
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchStories = useCallback(() => {
     api.runStories(runId)
       .then((data) => { setStories(data || []); setLoading(false); })
       .catch(() => setLoading(false));
   }, [runId]);
+
+  useEffect(() => {
+    fetchStories();
+    const id = setInterval(fetchStories, 10_000);
+    return () => clearInterval(id);
+  }, [fetchStories]);
 
   if (loading) return <div className="story-checklist__loading">Loading stories...</div>;
   if (stories.length === 0) return <div className="story-checklist__empty">No stories found</div>;

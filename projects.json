@@ -223,7 +223,8 @@
       "Analitik dashboard"
     ],
     "github": "https://github.com/hikmetgulsesli/restmenu",
-    "category": "own"
+    "category": "own",
+    "manuallyDisabled": true
   },
   {
     "id": "logpulse",
@@ -265,7 +266,9 @@
       "CLI komutları (scan/report)"
     ],
     "prd": "OpenClaw ajanlarının session loglarını analiz ederek performans metrikleri, anomali tespiti ve maliyet optimizasyonu sağlayan bir araç. Her session için token kullanımı, süre, hata sayısı, araç çağrıları gibi verileri toplar ve görselleştirir.",
-    "category": "own"
+    "category": "own",
+    "github": "",
+    "manuallyDisabled": true
   },
   {
     "id": "clawdocs",
@@ -336,7 +339,19 @@
     ],
     "tasks": [],
     "category": "own",
-    "updatedAt": "2026-02-26T23:16:43.366Z"
+    "updatedAt": "2026-02-26T23:16:43.366Z",
+    "github": "https://github.com/hikmetgulsesli/url-shortener",
+    "runNumber": 37,
+    "stories": {
+      "total": 7,
+      "done": 7
+    },
+    "completedAt": "2026-02-28",
+    "workflowRunId": "0c9c27fc-e8de-481a-95c1-e69ab9120f90",
+    "setfarmRunIds": [
+      "0c9c27fc-e8de-481a-95c1-e69ab9120f90"
+    ],
+    "manuallyDisabled": true
   },
   {
     "id": "pomodoro-timer",
@@ -365,7 +380,7 @@
     },
     "features": [],
     "tasks": [],
-    "github": "",
+    "github": "https://github.com/hikmetgulsesli/pomodoro-timer",
     "category": "own",
     "checklist": [
       {
@@ -421,11 +436,14 @@
       "e9da9f08-981c-487d-9791-b19ecd7f4300",
       "4c73e3fd-109f-4c1f-b101-690f6fbc358e"
     ],
-    "updatedAt": "2026-03-08T21:58:50.251Z",
+    "updatedAt": "2026-03-19T02:47:04.905Z",
     "completedAt": "2026-03-03 06:20:50",
     "buildStartedAt": "2026-02-14T18:39:00+03:00",
     "buildCompletedAt": "2026-02-15T05:26:47+03:00",
-    "duration": "2s 26dk"
+    "duration": "2s 26dk",
+    "workflowRunId": "e9da9f08-981c-487d-9791-b19ecd7f4300",
+    "runNumber": 50,
+    "manuallyDisabled": true
   },
   {
     "id": "qr-code-generator",
@@ -453,7 +471,7 @@
     },
     "features": [],
     "tasks": [],
-    "github": "",
+    "github": "https://github.com/hikmetgulsesli/qr-code-generator",
     "category": "own",
     "checklist": [
       {
@@ -504,7 +522,10 @@
     "completedAt": "2026-02-15 06:38:26",
     "buildStartedAt": "2026-02-15T06:40:35+03:00",
     "buildCompletedAt": "2026-02-15T09:38:26+03:00",
-    "duration": "6s 38dk"
+    "duration": "6s 38dk",
+    "runNumber": 37,
+    "workflowRunId": "0c9c27fc-e8de-481a-95c1-e69ab9120f90",
+    "manuallyDisabled": true
   },
   {
     "id": "color-palette-generator",
@@ -532,7 +553,7 @@
     },
     "features": [],
     "tasks": [],
-    "github": "",
+    "github": "https://github.com/hikmetgulsesli/color-palette-generator",
     "category": "own",
     "checklist": [
       {
@@ -581,7 +602,8 @@
     ],
     "updatedAt": "2026-02-16T22:58:43.839Z",
     "completedAt": "2026-02-15 05:33:33",
-    "duration": "5s 33dk"
+    "duration": "5s 33dk",
+    "manuallyDisabled": true
   },
   {
     "id": "typing-speed-test",
@@ -609,7 +631,7 @@
     },
     "features": [],
     "tasks": [],
-    "github": "",
+    "github": "https://github.com/hikmetgulsesli/typing-speed-test",
     "category": "own",
     "checklist": [
       {
@@ -658,7 +680,8 @@
     ],
     "updatedAt": "2026-02-16T22:58:43.844Z",
     "completedAt": "2026-02-15 03:33:59",
-    "duration": "3s 33dk"
+    "duration": "3s 33dk",
+    "manuallyDisabled": true
   },
   {
     "id": "habit-tracker",
@@ -671,7 +694,11 @@
     },
     "domain": "habit-tracker.setrox.com.tr",
     "repo": "/home/setrox/projects/habit-tracker",
-    "stack": [],
+    "stack": [
+      "React",
+      "Express",
+      "Vite"
+    ],
     "service": "habit-tracker.service",
     "serviceStatus": "inactive",
     "createdBy": "setfarm-workflow",
@@ -682,7 +709,7 @@
     },
     "features": [],
     "tasks": [],
-    "github": "",
+    "github": "https://github.com/hikmetgulsesli/habit-tracker",
     "category": "own",
     "checklist": [
       {
@@ -844,7 +871,7 @@
     },
     "features": [],
     "tasks": [],
-    "github": "hikmetgulsesli/expense-tracker",
+    "github": "https://github.com/hikmetgulsesli/expense-tracker",
     "category": "own",
     "checklist": [
       {
@@ -892,7 +919,8 @@
       "2c42101d-4567-4f09-840b-f9e9e964d159"
     ],
     "completedAt": "2026-02-17 00:30:00",
-    "duration": "8s 30dk"
+    "duration": "8s 30dk",
+    "manuallyDisabled": true
   },
   {
     "id": "unit-converter",
@@ -920,7 +948,7 @@
     },
     "features": [],
     "tasks": [],
-    "github": "",
+    "github": "https://github.com/hikmetgulsesli/unit-converter",
     "category": "own",
     "checklist": [
       {
@@ -968,7 +996,8 @@
       "b76f308c-c0ee-4abd-8f4c-f7f5e98bb33c"
     ],
     "updatedAt": "2026-02-19T15:57:34.801Z",
-    "completedAt": "2026-02-17 03:15:03"
+    "completedAt": "2026-02-17 03:15:03",
+    "manuallyDisabled": true
   },
   {
     "id": "agentviz",
@@ -979,7 +1008,7 @@
     "ports": {
       "frontend": 3503
     },
-    "domain": "agentviz.setrox.com.tr",
+    "domain": "agent-viz.setrox.com.tr",
     "repo": "/home/setrox/.openclaw/agent-viz-v2",
     "stack": [
       "React",
@@ -1044,7 +1073,7 @@
     "setfarmRunIds": [
       "e271378f-3db6-4e1b-8fca-f77112d74fef"
     ],
-    "updatedAt": "2026-02-19T15:57:34.796Z",
+    "updatedAt": "2026-03-14T00:22:09.498Z",
     "completedAt": "2026-02-17 23:33:06",
     "manuallyDisabled": true
   },
@@ -1074,7 +1103,7 @@
     },
     "features": [],
     "tasks": [],
-    "github": "",
+    "github": "https://github.com/hikmetgulsesli/recipe-book",
     "category": "own",
     "checklist": [
       {
@@ -1122,7 +1151,8 @@
       "b8a06a6e-4ed2-4afd-b56f-feb167e686cd"
     ],
     "completedAt": "2026-02-18 17:59:43",
-    "updatedAt": "2026-02-19T15:57:34.786Z"
+    "updatedAt": "2026-02-19T15:57:34.786Z",
+    "manuallyDisabled": true
   },
   {
     "id": "markdown-notepad",
@@ -1150,7 +1180,7 @@
     },
     "features": [],
     "tasks": [],
-    "github": "",
+    "github": "https://github.com/hikmetgulsesli/markdown-notepad",
     "category": "own",
     "checklist": [
       {
@@ -1198,7 +1228,8 @@
       "6aad034b-f7b6-4007-95bc-6fb52a829c5a"
     ],
     "updatedAt": "2026-02-19T15:57:34.789Z",
-    "completedAt": "2026-02-18 05:29:03"
+    "completedAt": "2026-02-18 05:29:03",
+    "manuallyDisabled": true
   },
   {
     "id": "hizliokuma",
@@ -1227,7 +1258,7 @@
     },
     "features": [],
     "tasks": [],
-    "github": "",
+    "github": "https://github.com/hikmetgulsesli/hizliokuma",
     "category": "own",
     "checklist": [
       {
@@ -1276,7 +1307,8 @@
       "f66686d3-8990-4475-8e4c-9146a9853cc6"
     ],
     "updatedAt": "2026-02-21T00:31:49.782Z",
-    "completedAt": "2026-02-19 17:51:26"
+    "completedAt": "2026-02-19 17:51:26",
+    "manuallyDisabled": true
   },
   {
     "id": "task-queue",
@@ -1305,7 +1337,7 @@
     },
     "features": [],
     "tasks": [],
-    "github": "",
+    "github": "https://github.com/hikmetgulsesli/task-queue",
     "category": "own",
     "checklist": [
       {
@@ -1383,7 +1415,7 @@
     },
     "features": [],
     "tasks": [],
-    "github": "",
+    "github": "https://github.com/hikmetgulsesli/autopress",
     "category": "own",
     "checklist": [
       {
@@ -1427,10 +1459,14 @@
         "completed": false
       }
     ],
-    "setfarmRunIds": [],
+    "setfarmRunIds": [
+      "249621bf-91f5-4775-8d84-6999b67428bf"
+    ],
     "updatedAt": "2026-02-26T16:56:49.484Z",
     "completedAt": "2026-02-20 13:51:59",
-    "manuallyDisabled": true
+    "manuallyDisabled": true,
+    "runNumber": 15,
+    "workflowRunId": "249621bf-91f5-4775-8d84-6999b67428bf"
   },
   {
     "id": "ivf-asistan",
@@ -1459,7 +1495,7 @@
     },
     "features": [],
     "tasks": [],
-    "github": "",
+    "github": "https://github.com/hikmetgulsesli/ivf-asistan",
     "category": "own",
     "checklist": [
       {
@@ -1510,7 +1546,9 @@
     "completedAt": "2026-02-22 10:39:10",
     "buildStartedAt": "2026-02-21T21:03:03.975Z",
     "buildCompletedAt": "2026-02-22 10:39:10",
-    "manuallyDisabled": true
+    "manuallyDisabled": true,
+    "runNumber": 16,
+    "workflowRunId": "f9d0776f-8776-4d86-bb18-f7d38bec03cb"
   },
   {
     "id": "snippetbox",
@@ -1590,7 +1628,9 @@
     "completedAt": "2026-02-23 07:43:31",
     "buildStartedAt": "2026-02-22T16:47:17.811Z",
     "buildCompletedAt": "2026-02-23 07:43:31",
-    "manuallyDisabled": true
+    "manuallyDisabled": true,
+    "runNumber": 22,
+    "workflowRunId": "6aa03647-7c0e-4814-ace0-8e72f5b0d47e"
   },
   {
     "id": "sosyal-medya-ai-panel",
@@ -1680,7 +1720,9 @@
     "buildStartedAt": "2026-02-26T11:18:53",
     "buildCompletedAt": "2026-02-26 16:55:44",
     "completedAt": "2026-02-26 16:55:44",
-    "manuallyDisabled": true
+    "manuallyDisabled": true,
+    "runNumber": 30,
+    "workflowRunId": "0766a64d-4d5a-4e42-8009-787ce2155a4b"
   },
   {
     "id": "ai-journal",
@@ -1743,11 +1785,13 @@
     "setfarmRunIds": [
       "05c28921-3666-4aab-b629-b5d8c31a5df1"
     ],
-    "updatedAt": "2026-03-08T21:58:50.257Z",
+    "updatedAt": "2026-03-19T02:47:04.912Z",
     "completedAt": "2026-02-25 15:02:22",
     "type": "mobile",
     "buildStartedAt": "2026-02-24T09:42:26.825Z",
-    "buildCompletedAt": "2026-02-25 15:02:22"
+    "buildCompletedAt": "2026-02-25 15:02:22",
+    "workflowRunId": "05c28921-3666-4aab-b629-b5d8c31a5df1",
+    "runNumber": 27
   },
   {
     "id": "online-tools",
@@ -1771,8 +1815,8 @@
     "createdBy": "setfarm/feature-dev",
     "createdAt": "2026-02-28",
     "stories": {
-      "total": 0,
-      "done": 0
+      "total": 7,
+      "done": 7
     },
     "features": [
       "QR Code Generator",
@@ -1829,7 +1873,9 @@
     "workflowRunId": "0c9c27fc-e8de-481a-95c1-e69ab9120f90",
     "updatedAt": "2026-02-28T14:30:13.204Z",
     "buildStartedAt": "2026-02-28T00:11:18.460Z",
-    "buildCompletedAt": "2026-02-28 09:36:04"
+    "buildCompletedAt": "2026-02-28 09:36:04",
+    "runNumber": 37,
+    "completedAt": "2026-02-28"
   },
   {
     "id": "aitoolpeak",
@@ -1935,8 +1981,8 @@
     "createdBy": "dashboard",
     "createdAt": "2026-03-02",
     "stories": {
-      "total": 0,
-      "done": 0
+      "total": 7,
+      "done": 7
     },
     "features": [],
     "tasks": [],
@@ -1987,7 +2033,12 @@
     "completedAt": "2026-03-02T13:32:13",
     "buildStartedAt": "2026-03-02T08:57:53",
     "buildCompletedAt": "2026-03-02T13:32:13",
-    "manuallyDisabled": true
+    "manuallyDisabled": true,
+    "runNumber": 48,
+    "workflowRunId": "e20da17d-1886-432a-ac8a-7fb1ad8fe35e",
+    "setfarmRunIds": [
+      "e20da17d-1886-432a-ac8a-7fb1ad8fe35e"
+    ]
   },
   {
     "id": "dogvscat",
@@ -2010,12 +2061,12 @@
     "createdBy": "dashboard",
     "createdAt": "2026-03-03",
     "stories": {
-      "total": 0,
-      "done": 0
+      "total": 4,
+      "done": 4
     },
     "features": [],
     "tasks": [],
-    "github": "hikmetgulsesli/dogvscat",
+    "github": "https://github.com/hikmetgulsesli/dogvscat",
     "category": "own",
     "checklist": [
       {
@@ -2064,7 +2115,12 @@
     "completedAt": "2026-03-02T22:54:28",
     "buildStartedAt": "2026-03-02T16:43:07",
     "buildCompletedAt": "2026-03-02T22:54:28",
-    "manuallyDisabled": true
+    "manuallyDisabled": true,
+    "runNumber": 49,
+    "workflowRunId": "d7211624-dd3d-420d-a6f9-69862ec9ba87",
+    "setfarmRunIds": [
+      "d7211624-dd3d-420d-a6f9-69862ec9ba87"
+    ]
   },
   {
     "id": "kanban-board",
@@ -2088,8 +2144,8 @@
     "createdBy": "setfarm",
     "createdAt": "2026-03-03",
     "stories": {
-      "total": 0,
-      "done": 0
+      "total": 7,
+      "done": 7
     },
     "features": [],
     "tasks": [],
@@ -2141,7 +2197,8 @@
     "completedAt": "2026-03-03T18:11:17+03:00",
     "updatedAt": "2026-03-03T15:11:17.119Z",
     "buildStartedAt": "2026-03-03T11:36:16.352Z",
-    "buildCompletedAt": "2026-03-03T15:11:23.262Z"
+    "buildCompletedAt": "2026-03-03T15:11:23.262Z",
+    "runNumber": 58
   },
   {
     "id": "pomodoro-timer-2",
@@ -2209,7 +2266,9 @@
         "label": "Test ve review tamamlandi",
         "completed": true
       }
-    ]
+    ],
+    "runNumber": 62,
+    "completedAt": "2026-03-03"
   },
   {
     "id": "minesweeper",
@@ -2240,7 +2299,7 @@
     },
     "features": [],
     "tasks": [],
-    "github": "hikmetgulsesli/minesweeper",
+    "github": "https://github.com/hikmetgulsesli/minesweeper",
     "category": "own",
     "checklist": [
       {
@@ -2287,7 +2346,12 @@
     "updatedAt": "2026-03-05T00:01:45.019Z",
     "completedAt": "2026-03-04T23:57:54",
     "buildStartedAt": "2026-03-04T22:37:30",
-    "buildCompletedAt": "2026-03-04T23:57:54"
+    "buildCompletedAt": "2026-03-04T23:57:54",
+    "runNumber": 119,
+    "workflowRunId": "d0964999-5654-48e8-b47d-422164a8c0f0",
+    "setfarmRunIds": [
+      "d0964999-5654-48e8-b47d-422164a8c0f0"
+    ]
   },
   {
     "id": "snake-game",
@@ -2317,7 +2381,7 @@
     },
     "features": [],
     "tasks": [],
-    "github": "hikmetgulsesli/snake-game",
+    "github": "https://github.com/hikmetgulsesli/snake-game",
     "category": "own",
     "checklist": [
       {
@@ -2361,9 +2425,11 @@
         "completed": true
       }
     ],
-    "updatedAt": "2026-03-08T21:58:50.244Z",
+    "updatedAt": "2026-03-19T02:47:04.892Z",
     "completedAt": "2026-03-05T04:53:52.327Z",
-    "manuallyDisabled": false
+    "manuallyDisabled": false,
+    "workflowRunId": "dea2b907-457a-4375-b82d-321383bb4f6b",
+    "runNumber": 78
   },
   {
     "id": "3d-tetris",
@@ -2393,7 +2459,7 @@
     },
     "features": [],
     "tasks": [],
-    "github": "hikmetgulsesli/3d-tetris",
+    "github": "https://github.com/hikmetgulsesli/3d-tetris",
     "category": "own",
     "checklist": [
       {
@@ -2442,9 +2508,11 @@
         "completed": true
       }
     ],
-    "updatedAt": "2026-03-08T21:58:50.238Z",
+    "updatedAt": "2026-03-19T02:47:04.819Z",
     "completedAt": "2026-03-05T13:37:20.718Z",
-    "manuallyDisabled": true
+    "manuallyDisabled": true,
+    "workflowRunId": "13b947c6-7f93-4288-9618-29dc5b41cbc1",
+    "runNumber": 80
   },
   {
     "id": "chess-ai",
@@ -2473,7 +2541,7 @@
     },
     "features": [],
     "tasks": [],
-    "github": "hikmetgulsesli/chess-ai",
+    "github": "https://github.com/hikmetgulsesli/chess-ai",
     "category": "own",
     "checklist": [
       {
@@ -2517,88 +2585,11 @@
         "completed": true
       }
     ],
-    "updatedAt": "2026-03-08T21:58:50.227Z",
+    "updatedAt": "2026-03-19T02:47:04.792Z",
     "completedAt": "2026-03-06T08:41:10.488Z",
-    "manuallyDisabled": true
-  },
-  {
-    "id": "nakliye-crm",
-    "name": "nakliye-crm",
-    "emoji": "📦",
-    "status": "active",
-    "description": "Uluslararasi Nakliye CRM - Hakan Gulsesli",
-    "ports": {
-      "frontend": 3535
-    },
-    "domain": "nakliye-crm.setrox.com.tr",
-    "repo": "/home/setrox/projects/nakliye-crm",
-    "stack": [
-      "React",
-      "Next.js",
-      "TypeScript",
-      "Tailwind CSS"
-    ],
-    "service": "nakliye-crm",
-    "serviceStatus": "running",
-    "createdBy": "dashboard",
-    "createdAt": "2026-03-06",
-    "stories": {
-      "total": 17,
-      "done": 17
-    },
-    "features": [],
-    "tasks": [],
-    "github": "hikmetgulsesli/nakliye-crm",
-    "category": "own",
-    "checklist": [
-      {
-        "id": "task-received",
-        "label": "Gorev iletildi",
-        "completed": true
-      },
-      {
-        "id": "github-repo",
-        "label": "GitHub repo olusturuldu",
-        "completed": true
-      },
-      {
-        "id": "dns-setup",
-        "label": "Cloudflare DNS ve subdomain olusturuldu",
-        "completed": true
-      },
-      {
-        "id": "added-to-projects",
-        "label": "Projeler bolumune eklendi",
-        "completed": true
-      },
-      {
-        "id": "ports-assigned",
-        "label": "Portlar belirlendi",
-        "completed": true
-      },
-      {
-        "id": "setup-run",
-        "label": "Setup calistirildi",
-        "completed": true
-      },
-      {
-        "id": "dev-started",
-        "label": "Gelistirici calismaya basladi",
-        "completed": true
-      },
-      {
-        "id": "test-review",
-        "label": "Test ve review tamamlandi",
-        "completed": true
-      },
-      {
-        "id": "deployed",
-        "label": "Deployed",
-        "completed": true
-      }
-    ],
-    "updatedAt": "2026-03-08T21:58:50.233Z",
-    "completedAt": "2026-03-06T10:47:15.676Z"
+    "manuallyDisabled": true,
+    "workflowRunId": "80dd00a0-ec7d-4848-9125-8a598b9d7992",
+    "runNumber": 84
   },
   {
     "id": "repo-projects-space-shooter-fronten",
@@ -2624,7 +2615,7 @@
     },
     "features": [],
     "tasks": [],
-    "github": "hikmetgulsesli/space-shooter",
+    "github": "https://github.com/hikmetgulsesli/space-shooter",
     "category": "own",
     "checklist": [
       {
@@ -2671,9 +2662,11 @@
     "setfarmRunIds": [
       "e3ed6963-b829-4687-bb24-b12192d18343"
     ],
-    "updatedAt": "2026-03-08T21:58:50.221Z",
+    "updatedAt": "2026-03-19T02:47:04.785Z",
     "completedAt": "2026-03-06T18:39:50.252Z",
-    "manuallyDisabled": true
+    "manuallyDisabled": true,
+    "workflowRunId": "e3ed6963-b829-4687-bb24-b12192d18343",
+    "runNumber": 87
   },
   {
     "id": "memory-card",
@@ -2702,7 +2695,7 @@
     },
     "features": [],
     "tasks": [],
-    "github": "hikmetgulsesli/memory-card",
+    "github": "https://github.com/hikmetgulsesli/memory-card",
     "category": "own",
     "checklist": [
       {
@@ -2746,8 +2739,10 @@
         "completed": true
       }
     ],
-    "updatedAt": "2026-03-08T21:58:50.179Z",
-    "completedAt": "2026-03-07T13:20:07.974Z"
+    "updatedAt": "2026-03-19T02:47:04.704Z",
+    "completedAt": "2026-03-07T13:20:07.974Z",
+    "workflowRunId": "3d015068-2265-42ef-991c-cb4e577f8caa",
+    "runNumber": 102
   },
   {
     "id": "brick-breaker",
@@ -2776,7 +2771,7 @@
     },
     "features": [],
     "tasks": [],
-    "github": "hikmetgulsesli/brick-breaker",
+    "github": "https://github.com/hikmetgulsesli/brick-breaker",
     "category": "own",
     "checklist": [
       {
@@ -2820,9 +2815,11 @@
         "completed": true
       }
     ],
-    "updatedAt": "2026-03-08T21:58:50.078Z",
+    "updatedAt": "2026-03-19T02:47:04.666Z",
     "completedAt": "2026-03-07T23:31:16.705Z",
-    "manuallyDisabled": true
+    "manuallyDisabled": true,
+    "workflowRunId": "8fad9b28-1e86-4d28-881a-a2619c1c372d",
+    "runNumber": 105
   },
   {
     "id": "2048-oyunu",
@@ -2835,7 +2832,11 @@
     },
     "domain": "game2048.setrox.com.tr",
     "repo": "/home/setrox/projects/2048-game",
-    "stack": [],
+    "stack": [
+      "TypeScript",
+      "HTML",
+      "CSS"
+    ],
     "service": "2048-oyunu.service",
     "serviceStatus": "active",
     "createdBy": "setfarm-workflow",
@@ -2846,7 +2847,7 @@
     },
     "features": [],
     "tasks": [],
-    "github": "",
+    "github": "https://github.com/hikmetgulsesli/2048-game",
     "category": "own",
     "checklist": [
       {
@@ -2900,19 +2901,22 @@
     "setfarmRunIds": [
       "1efc03b7-80d9-44f0-823d-51b6a5707cfc"
     ],
-    "updatedAt": "2026-03-08T21:58:50.215Z",
-    "completedAt": "2026-03-07T03:04:40.649Z"
+    "updatedAt": "2026-03-19T02:47:04.777Z",
+    "completedAt": "2026-03-07T03:04:40.649Z",
+    "workflowRunId": "1efc03b7-80d9-44f0-823d-51b6a5707cfc",
+    "runNumber": 92,
+    "manuallyDisabled": true
   },
   {
-    "id": "task-flappybird-flappy-bird-klonu-ca",
-    "name": "--task FlappyBird: Flappy Bird klonu. Ca",
-    "emoji": "🚀",
+    "id": "flappy-bird",
+    "name": "flappy-bird",
+    "emoji": "📦",
     "status": "active",
-    "description": "--task FlappyBird: Flappy Bird klonu. Canvas tabanlı, yerçekimi fiziği, boru engelleri, skor sayacı, en yüksek skor kayıt (localStorage), ölüm animasyonu, restart mekanizması, mobil dokunmatik destek.",
+    "description": "Flappy Bird klonu. Canvas tabanlı, yerçekimi fiziği, boru engelleri, skor sayacı, en yüksek skor kayıt (localStorage), ölüm animasyonu, restart mekanizması, mobil dokunmatik destek. Pixel-art retro stil. React + Vite + TypeScript + Tailwind CSS.",
     "ports": {
-      "frontend": 3536
+      "frontend": 3539
     },
-    "domain": "task-flappybird-flappy-bird-kl.setrox.com.tr",
+    "domain": "flappy-bird.setrox.com.tr",
     "repo": "/home/setrox/projects/flappy-bird",
     "stack": [
       "React",
@@ -2920,10 +2924,943 @@
       "TypeScript",
       "Tailwind CSS"
     ],
-    "service": "task-flappybird-flappy-bird-kl.service",
+    "service": "flappy-bird",
+    "serviceStatus": "running",
+    "createdBy": "dashboard",
+    "createdAt": "2026-03-09",
+    "stories": {
+      "total": 15,
+      "done": 0
+    },
+    "features": [],
+    "tasks": [],
+    "github": "https://github.com/hikmetgulsesli/flappy-bird",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": true
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": true
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": true
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": true
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": true
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": true
+      }
+    ],
+    "setfarmRunIds": [
+      "169b1203-f010-4b8b-943d-3439c0131751"
+    ],
+    "updatedAt": "2026-03-19T02:47:04.632Z",
+    "completedAt": "2026-03-08T22:04:49.015Z",
+    "manuallyDisabled": true,
+    "workflowRunId": "169b1203-f010-4b8b-943d-3439c0131751",
+    "runNumber": 120
+  },
+  {
+    "id": "reelforge",
+    "name": "reelforge",
+    "emoji": "📦",
+    "status": "active",
+    "description": "ReelForge: AI Faceless Video Generator platformu. Next.js 15 + Tailwind CSS + shadcn/ui frontend, Hono backend + PostgreSQL + BullMQ + Redis. YouTube Shorts, TikTok, Instagram Reels için tam otonom video fabrikası.",
+    "ports": {
+      "frontend": 3523
+    },
+    "domain": "reelforge.setrox.com.tr",
+    "repo": "/home/setrox/projects/reelforge",
+    "stack": [
+      "React",
+      "Next.js",
+      "TypeScript",
+      "Tailwind CSS"
+    ],
+    "service": "reelforge",
+    "serviceStatus": "running",
+    "createdBy": "dashboard",
+    "createdAt": "2026-03-10",
+    "stories": {
+      "total": 30,
+      "done": 30
+    },
+    "features": [],
+    "tasks": [],
+    "github": "https://github.com/hikmetgulsesli/reelforge",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": true
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": true
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": true
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": true
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": true
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": true
+      }
+    ],
+    "updatedAt": "2026-03-19T02:47:04.574Z",
+    "completedAt": "2026-03-10T01:29:04.519Z",
+    "workflowRunId": "06694d7c-9538-4638-b2c9-b37ce8f440cb",
+    "runNumber": 125,
+    "manuallyDisabled": true
+  },
+  {
+    "id": "diag-test-counter",
+    "name": "diag-test-counter",
+    "emoji": "📦",
+    "status": "active",
+    "description": "DiagTest Counter v3: Simple React counter app. React + Vite, no database, no backend. Two features only: (1) Counter with increment/decrement/reset buttons, (2) Dark/light theme toggle.",
+    "ports": {
+      "frontend": 35270
+    },
+    "domain": "diag-test-counter.setrox.com.tr",
+    "repo": "/home/setrox/projects/diag-test-counter",
+    "stack": [
+      "React",
+      "Vite",
+      "TypeScript"
+    ],
+    "service": "diag-test-counter",
+    "serviceStatus": "running",
+    "createdBy": "dashboard",
+    "createdAt": "2026-03-10",
+    "stories": {
+      "total": 4,
+      "done": 0
+    },
+    "features": [],
+    "tasks": [],
+    "github": "https://github.com/hikmetgulsesli/diag-test-counter",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": true
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": true
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": true
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": true
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": true
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": true
+      }
+    ],
+    "updatedAt": "2026-03-10T11:04:14.356Z",
+    "runNumber": 131,
+    "completedAt": "2026-03-10",
+    "workflowRunId": "89f7e974-5b47-4b89-b567-b8cdc25f01a0",
+    "setfarmRunIds": [
+      "89f7e974-5b47-4b89-b567-b8cdc25f01a0"
+    ]
+  },
+  {
+    "id": "diag-counter-v5",
+    "name": "diag-counter-v5",
+    "emoji": "📦",
+    "status": "active",
+    "description": "Create a simple React counter app with increment/decrement buttons and a reset button. Use Vite as bundler.",
+    "ports": {
+      "frontend": 3536
+    },
+    "domain": "diag-counter-v5.setrox.com.tr",
+    "repo": "/home/setrox/projects/diag-counter-v5",
+    "stack": [
+      "React",
+      "Vite",
+      "TypeScript"
+    ],
+    "service": "diag-counter-v5",
+    "serviceStatus": "running",
+    "createdBy": "dashboard",
+    "createdAt": "2026-03-10",
+    "stories": {
+      "total": 7,
+      "done": 7
+    },
+    "features": [],
+    "tasks": [],
+    "github": "https://github.com/hikmetgulsesli/diag-counter-v5",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": true
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": true
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": true
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": true
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": true
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": true
+      }
+    ],
+    "updatedAt": "2026-03-14T21:17:22.337Z",
+    "workflowRunId": "0fa7bbfb-0fed-40c4-8911-6d65ec0e2f3d",
+    "completedAt": "2026-03-10T16:46:43.859Z",
+    "runNumber": 135,
+    "manuallyDisabled": true
+  },
+  {
+    "id": "simon-says-haf-za-oyunu-yap-repo-pro",
+    "name": "Simon Says hafıza oyunu yap: REPO: ~/pro",
+    "emoji": "🚀",
+    "status": "active",
+    "description": "Simon Says hafıza oyunu yap: REPO: ~/projects/simon-says Özellikler: 4 renkli buton (kırmızı, mavi, yeşil, sarı), sırayla yanıp sönen diziyi takip et, her turda diziye bir adım daha eklenir, yanlış ya",
+    "ports": {
+      "frontend": 3545
+    },
+    "domain": "simon-says.setrox.com.tr",
+    "repo": "/home/setrox/projects/simon-says",
+    "stack": [
+      "React",
+      "Next.js",
+      "TypeScript"
+    ],
+    "service": "simon-says-haf-za-oyunu-yap-re.service",
     "serviceStatus": "active",
     "createdBy": "setfarm-workflow",
-    "createdAt": "2026-03-08",
+    "createdAt": "2026-03-11",
+    "stories": {
+      "total": 11,
+      "done": 11
+    },
+    "features": [],
+    "tasks": [],
+    "github": "https://github.com/hikmetgulsesli/simon-says",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": true,
+        "completedAt": "2026-03-12T03:39:18.395Z"
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": true,
+        "completedAt": "2026-03-12T04:10:58.064Z"
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": true,
+        "completedAt": "2026-03-12T03:39:18.395Z"
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": true,
+        "completedAt": "2026-03-12T03:39:18.395Z"
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": true,
+        "completedAt": "2026-03-12T03:39:18.395Z"
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": true,
+        "completedAt": "2026-03-12T03:39:18.395Z"
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": true,
+        "completedAt": "2026-03-12T04:10:58.064Z"
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": true,
+        "completedAt": "2026-03-12T04:10:58.064Z"
+      }
+    ],
+    "setfarmRunIds": [
+      "62888921-dbe8-49c2-b58a-0b4ed0544614"
+    ],
+    "updatedAt": "2026-03-19T02:47:04.547Z",
+    "completedAt": "2026-03-12T03:38:54.385Z",
+    "workflowRunId": "62888921-dbe8-49c2-b58a-0b4ed0544614",
+    "runNumber": 140,
+    "manuallyDisabled": true
+  },
+  {
+    "id": "battleship",
+    "name": "battleship",
+    "emoji": "📦",
+    "status": "active",
+    "description": "Savaş Gemileri (Battleship) oyunu - 10x10 grid, 5 gemi, tek player vs bilgisayar",
+    "ports": {
+      "frontend": 3543
+    },
+    "domain": "battleship.setrox.com.tr",
+    "repo": "/home/setrox/projects/battleship",
+    "stack": [
+      "JavaScript",
+      "HTML",
+      "CSS"
+    ],
+    "service": "battleship",
+    "serviceStatus": "running",
+    "createdBy": "dashboard",
+    "createdAt": "2026-03-11",
+    "stories": {
+      "total": 16,
+      "done": 16
+    },
+    "features": [],
+    "tasks": [],
+    "github": "https://github.com/hikmetgulsesli/battleship",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": true
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": true
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": true
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": true
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": true
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": true
+      }
+    ],
+    "updatedAt": "2026-03-11T21:08:58.361Z",
+    "completedAt": "2026-03-11T21:08:29.249Z",
+    "workflowRunId": "704aa121-12a1-4ee9-8aca-4e4360144c31",
+    "runNumber": 139,
+    "manuallyDisabled": true
+  },
+  {
+    "id": "test-todo1",
+    "name": "test-todo1",
+    "emoji": "📝",
+    "status": "active",
+    "description": "Simple todo list app. Add, check off, and delete todos. Pure HTML/CSS/JS, no frameworks. Max 2 stories.",
+    "ports": {
+      "frontend": 3548
+    },
+    "domain": "todo1.setrox.com.tr",
+    "repo": "/home/setrox/projects/test-todo1",
+    "stack": [
+      "Vanilla JS",
+      "HTML",
+      "CSS"
+    ],
+    "service": "test-todo1",
+    "serviceStatus": "running",
+    "createdBy": "dashboard",
+    "createdAt": "2026-03-13",
+    "stories": {
+      "total": 2,
+      "done": 2
+    },
+    "features": [],
+    "tasks": [],
+    "github": "https://github.com/hikmetgulsesli/test-todo1",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": true,
+        "completedAt": "2026-03-13T17:40:22.189Z"
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": true,
+        "completedAt": "2026-03-13T17:40:22.189Z"
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": true,
+        "completedAt": "2026-03-13T17:40:22.189Z"
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": true,
+        "completedAt": "2026-03-13T17:40:22.189Z"
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": true,
+        "completedAt": "2026-03-13T17:40:22.189Z"
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": false
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": true,
+        "completedAt": "2026-03-14T03:06:22.401Z"
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": true,
+        "completedAt": "2026-03-14T03:06:22.401Z"
+      }
+    ],
+    "updatedAt": "2026-03-19T02:47:04.535Z",
+    "completedAt": "2026-03-13T17:40:13.111Z",
+    "workflowRunId": "1365518c-ee4c-4042-b129-64866f11f57b",
+    "runNumber": 150,
+    "manuallyDisabled": true
+  },
+  {
+    "id": "vibe-breaker",
+    "name": "vibe-breaker",
+    "emoji": "🎮",
+    "status": "active",
+    "description": "Vibe-Breaker: Endless Runner oyunu. Vanilla JS + Canvas",
+    "ports": {
+      "frontend": 3550
+    },
+    "domain": "vibe-breaker.setrox.com.tr",
+    "repo": "/home/setrox/projects/vibe-breaker",
+    "stack": [],
+    "service": "vibe-breaker",
+    "serviceStatus": "running",
+    "createdBy": "dashboard",
+    "createdAt": "2026-03-14",
+    "stories": {
+      "total": 10,
+      "done": 10
+    },
+    "features": [],
+    "tasks": [],
+    "github": "https://github.com/hikmetgulsesli/vibe-breaker",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": true,
+        "completedAt": "2026-03-14T07:52:37.344Z"
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": true,
+        "completedAt": "2026-03-14T07:52:37.344Z"
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": true,
+        "completedAt": "2026-03-14T07:52:37.344Z"
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": true,
+        "completedAt": "2026-03-14T07:52:37.344Z"
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": true,
+        "completedAt": "2026-03-14T07:52:37.344Z"
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": false
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": true,
+        "completedAt": "2026-03-14T12:41:22.104Z"
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": true,
+        "completedAt": "2026-03-14T12:41:22.104Z"
+      }
+    ],
+    "updatedAt": "2026-03-19T02:47:04.508Z",
+    "completedAt": "2026-03-14T07:52:34.595Z",
+    "workflowRunId": "ea1b64bf-1e1a-40b2-9943-98558e7a1c6d",
+    "runNumber": 153,
+    "manuallyDisabled": true
+  },
+  {
+    "id": "dvd-bounce",
+    "name": "dvd-bounce",
+    "emoji": "📦",
+    "status": "active",
+    "description": "Canvas üzerinde sürekli seken bir DVD logosu yap. Space tuşuna basıldığında logonun rengi değişsin.",
+    "ports": {
+      "frontend": 3551
+    },
+    "domain": "dvd-bounce.setrox.com.tr",
+    "repo": "/home/setrox/projects/dvd-bounce",
+    "stack": [
+      "Vanilla JS"
+    ],
+    "service": "dvd-bounce",
+    "serviceStatus": "running",
+    "createdBy": "dashboard",
+    "createdAt": "2026-03-14",
+    "stories": {
+      "total": 6,
+      "done": 6
+    },
+    "features": [],
+    "tasks": [],
+    "github": "https://github.com/hikmetgulsesli/dvd-bounce",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": true
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": true
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": true
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": true
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": true
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": true
+      }
+    ],
+    "updatedAt": "2026-03-19T02:47:04.496Z",
+    "completedAt": "2026-03-14T12:41:13.312Z",
+    "workflowRunId": "a7da0247-78a2-4dfb-b91e-83e9018cd1e7",
+    "runNumber": 155,
+    "manuallyDisabled": true
+  },
+  {
+    "id": "pomodoro-timer-v2-2",
+    "name": "pomodoro-timer-v2-2",
+    "emoji": "📦",
+    "status": "active",
+    "description": "Pomodoro timer uygulaması yap. 25 dakika çalışma, 5 dakika mola döngüsü olsun. Başlat/Durdur/Sıfırla butonları olsun. Timer sıfıra ulaşınca sesli bildirim versin.",
+    "ports": {
+      "frontend": 3552
+    },
+    "domain": "pomodoro-timer-v2-2.setrox.com.tr",
+    "repo": "/home/setrox/projects/pomodoro-timer-v2-2",
+    "stack": [
+      "TypeScript",
+      "Vite"
+    ],
+    "service": "pomodoro-timer-v2-2.service",
+    "serviceStatus": "running",
+    "createdBy": "dashboard",
+    "createdAt": "2026-03-14",
+    "stories": {
+      "total": 10,
+      "done": 10
+    },
+    "features": [],
+    "tasks": [],
+    "github": "https://github.com/hikmetgulsesli/pomodoro-timer-v2-2",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": true
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": true
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": true
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": true
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": true
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": true
+      }
+    ],
+    "updatedAt": "2026-03-19T02:47:04.476Z",
+    "completedAt": "2026-03-14T21:17:14.495Z",
+    "workflowRunId": "546dec46-c55a-4cfe-95f4-fc923c29db6b",
+    "runNumber": 156,
+    "manuallyDisabled": true
+  },
+  {
+    "id": "test-pomodoro-v2",
+    "name": "test-pomodoro-v2",
+    "emoji": "📦",
+    "status": "active",
+    "description": "Basit pomodoro timer. Vanilla HTML/CSS/JS, tek sayfa, başlat/durdur/sıfırla butonları, 25dk çalışma 5dk mola.",
+    "ports": {
+      "frontend": 3541
+    },
+    "domain": "test-pomodoro-v2.setrox.com.tr",
+    "repo": "/home/setrox/projects/test-pomodoro-v2",
+    "stack": [],
+    "service": "test-pomodoro-v2.service",
+    "serviceStatus": "running",
+    "createdBy": "dashboard",
+    "createdAt": "2026-03-16",
+    "stories": {
+      "total": 7,
+      "done": 7
+    },
+    "features": [],
+    "tasks": [],
+    "github": "https://github.com/hikmetgulsesli/test-pomodoro-v2",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": true
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": true
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": true
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": true
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": true
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": true
+      }
+    ],
+    "updatedAt": "2026-03-19T02:47:04.454Z",
+    "completedAt": "2026-03-16T13:52:25.177Z",
+    "workflowRunId": "a6a1de40-f7c4-41d6-839b-98ef1e12a527",
+    "runNumber": 184
+  },
+  {
+    "id": "task-uluslararas-nakliye-crm",
+    "name": "Nakliye CRM",
+    "emoji": "📱",
+    "status": "active",
+    "description": "Uluslararası Nakliye CRM — Müşteri yönetimi, teklif takibi, aktivite loglama, raporlama, audit log. Next.js 16 + Prisma + PostgreSQL + Tailwind + shadcn/ui.",
+    "ports": {
+      "frontend": 3535
+    },
+    "domain": "nakliye-crm.setrox.com.tr",
+    "repo": "/home/setrox/projects/nakliye-crm",
+    "stack": [
+      "React",
+      "Next.js",
+      "TypeScript",
+      "Tailwind CSS",
+      "Prisma",
+      "PostgreSQL",
+      "shadcn/ui"
+    ],
+    "service": "nakliye-crm.service",
+    "serviceStatus": "running",
+    "createdBy": "setfarm-workflow",
+    "createdAt": "2026-03-17",
+    "stories": {
+      "total": 16,
+      "done": 16
+    },
+    "features": [],
+    "tasks": [],
+    "github": "https://github.com/hikmetgulsesli/nakliye-crm",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": true
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": true
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": true
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": true
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": true
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": true
+      }
+    ],
+    "setfarmRunIds": [
+      "8c3ba605-03ce-437d-9ecd-8cc5bbc18313"
+    ],
+    "completedAt": "2026-03-17T09:08:47.735Z",
+    "workflowRunId": "8c3ba605-03ce-437d-9ecd-8cc5bbc18313",
+    "runNumber": 186,
+    "updatedAt": "2026-03-19T02:47:04.440Z"
+  },
+  {
+    "id": "basit-hesap-makinesi-vanilla-html-css-j",
+    "name": "Basit hesap makinesi. Vanilla HTML/CSS/J",
+    "emoji": "🏗",
+    "status": "active",
+    "description": "Basit hesap makinesi. Vanilla HTML/CSS/JS, tek sayfa. Toplama, cikarma, carpma, bolme islemleri. Koyu tema, modern gorunum. --force",
+    "ports": {
+      "frontend": 3542
+    },
+    "domain": "",
+    "repo": "",
+    "stack": [],
+    "service": "",
+    "serviceStatus": "unknown",
+    "createdBy": "setfarm-workflow",
+    "createdAt": "2026-03-18",
     "stories": {
       "total": 0,
       "done": 0
@@ -2975,8 +3912,155 @@
       }
     ],
     "setfarmRunIds": [
-      "169b1203-f010-4b8b-943d-3439c0131751"
+      "b164c3a8-f938-4965-a106-c1c5de98464c"
+    ]
+  },
+  {
+    "id": "retro-dijital-saat-kronometre",
+    "name": "retro-dijital-saat-kronometre",
+    "emoji": "📦",
+    "status": "active",
+    "description": "Retro dijital saat ve kronometre. Vanilla HTML/CSS/JS, tek sayfa. Dijital saat gorunumu, kronometre, geri sayim zamanlayici. Koyu tema, neon renkli retro gorunum, 7-segment font.",
+    "ports": {
+      "frontend": 3546
+    },
+    "domain": "retro-dijital-saat-kronometre.setrox.com.tr",
+    "repo": "/home/setrox/projects/retro-dijital-saat-kronometre",
+    "stack": [
+      "Vanilla JS"
     ],
-    "updatedAt": "2026-03-08T21:58:50.037Z"
+    "service": "retro-dijital-saat-kronometre.service",
+    "serviceStatus": "running",
+    "createdBy": "dashboard",
+    "createdAt": "2026-03-18",
+    "stories": {
+      "total": 8,
+      "done": 8
+    },
+    "features": [],
+    "tasks": [],
+    "github": "https://github.com/hikmetgulsesli/retro-dijital-saat-kronometre",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": true
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": true
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": true
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": true
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": true
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": true
+      }
+    ],
+    "updatedAt": "2026-03-19T02:47:04.420Z",
+    "completedAt": "2026-03-18T18:09:15.224Z",
+    "workflowRunId": "351fd5a4-b1c8-455f-9bdd-bff610fa110c",
+    "runNumber": 195
+  },
+  {
+    "id": "cizim-uygulamasi",
+    "name": "cizim-uygulamasi",
+    "emoji": "📦",
+    "status": "active",
+    "description": "Tarayıcı tabanlı, modern bir çizim/boyama uygulaması. Kullanıcılar serbest çizim yapabilir, farklı fırça boyutları ve renkler seçebilir, silgi kullanabilir, canvas üzerinde şekiller (dikdörtgen, daire, çizgi) çizebilir. Undo/redo desteği, canvas temizleme, çalışmayı PNG olarak indirme özellikleri olacak.",
+    "ports": {
+      "frontend": 3547
+    },
+    "domain": "cizim-uygulamasi.setrox.com.tr",
+    "repo": "/home/setrox/projects/cizim-uygulamasi",
+    "stack": [
+      "Vite",
+      "TypeScript",
+      "Tailwind CSS"
+    ],
+    "service": "cizim-uygulamasi",
+    "serviceStatus": "active",
+    "createdBy": "dashboard",
+    "createdAt": "2026-03-19",
+    "stories": {
+      "total": 9,
+      "done": 9
+    },
+    "features": [],
+    "tasks": [],
+    "github": "https://github.com/hikmetgulsesli/cizim-uygulamasi",
+    "category": "own",
+    "checklist": [
+      {
+        "id": "task-received",
+        "label": "Gorev iletildi",
+        "completed": true
+      },
+      {
+        "id": "github-repo",
+        "label": "GitHub repo olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "dns-setup",
+        "label": "Cloudflare DNS ve subdomain olusturuldu",
+        "completed": true
+      },
+      {
+        "id": "added-to-projects",
+        "label": "Projeler bolumune eklendi",
+        "completed": true
+      },
+      {
+        "id": "ports-assigned",
+        "label": "Portlar belirlendi",
+        "completed": true
+      },
+      {
+        "id": "setup-run",
+        "label": "Setup calistirildi",
+        "completed": true
+      },
+      {
+        "id": "dev-started",
+        "label": "Gelistirici calismaya basladi",
+        "completed": true
+      },
+      {
+        "id": "test-review",
+        "label": "Test ve review tamamlandi",
+        "completed": true
+      }
+    ],
+    "updatedAt": "2026-03-19T02:47:04.394Z",
+    "completedAt": "2026-03-19T02:46:57.998Z",
+    "workflowRunId": "f5feb649-0662-489e-b5ce-9fa5388fca9d",
+    "runNumber": 196
   }
 ]

@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Quotation Detail &amp; Revisions</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1258e2",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100">
+<div class="relative flex min-h-screen w-full flex-col group/design-root overflow-x-hidden">
+<header class="flex items-center justify-between whitespace-nowrap border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-10 py-3 sticky top-0 z-10">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-4 text-slate-900 dark:text-slate-100">
+<span class="material-symbols-outlined text-primary text-3xl">local_shipping</span>
+<h2 class="text-lg font-bold leading-tight tracking-[-0.015em]">Shipping CRM</h2>
+</div>
+<label class="flex flex-col min-w-40 !h-10 max-w-64">
+<div class="flex w-full flex-1 items-stretch rounded-lg h-full">
+<div class="text-slate-500 dark:text-slate-400 flex border-none bg-slate-100 dark:bg-slate-800 items-center justify-center pl-4 rounded-l-lg border-r-0">
+<span class="material-symbols-outlined">search</span>
+</div>
+<input class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-slate-900 dark:text-slate-100 focus:outline-0 focus:ring-0 border-none bg-slate-100 dark:bg-slate-800 focus:border-none h-full placeholder:text-slate-500 dark:placeholder:text-slate-400 px-4 rounded-l-none border-l-0 pl-2 text-sm font-normal leading-normal" placeholder="Search..." value=""/>
+</div>
+</label>
+</div>
+<div class="flex flex-1 justify-end gap-8">
+<nav class="flex items-center gap-9">
+<a class="text-slate-600 dark:text-slate-300 hover:text-primary dark:hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">Dashboard</a>
+<a class="text-primary text-sm font-bold leading-normal border-b-2 border-primary pb-1" href="#">Quotations</a>
+<a class="text-slate-600 dark:text-slate-300 hover:text-primary dark:hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">Shipments</a>
+<a class="text-slate-600 dark:text-slate-300 hover:text-primary dark:hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">Customers</a>
+</nav>
+<button class="flex min-w-[84px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-primary hover:bg-primary/90 text-white text-sm font-bold leading-normal transition-colors">
+<span>Create New</span>
+</button>
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 bg-slate-200 dark:bg-slate-700" data-alt="User profile avatar placeholder" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDshmmChKek-CtgnUfG1KytikjHtFphwiFMgcYZAcJkFBY7_66U2P2rDHmW2RkhL9clwiDe1C4zu9Pt_6Iv25o699Y8o6MWya7PL9HTphuevdB9ZV9jxve2q2Segy49Grb7xc127dge2scLlUYBFu3iQKDcOD9CTnqjfdNTvxx__YFfMeIcWxj0jMJ_hvqlhVJv-7F6NkPLPfH1zm-AQ5ucRAJRZ92fS82PrmLwsfyHAKjgJrYhg24HAdHH_SLB_gUGE6CD928r9s5-");'></div>
+</div>
+</header>
+<main class="flex-1 w-full max-w-7xl mx-auto px-6 py-8 flex flex-col gap-6">
+<div class="flex flex-wrap items-start justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+<div class="flex flex-col gap-2">
+<div class="flex items-center gap-4">
+<h1 class="text-3xl font-black leading-tight tracking-tight text-slate-900 dark:text-white">Quotation TKF-2026-XXXX</h1>
+<span class="px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 text-sm font-bold tracking-wide uppercase">Won</span>
+</div>
+<p class="text-slate-500 dark:text-slate-400 text-sm flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">history</span> Last updated 2 hours ago by Sarah Jenkins
+                    </p>
+</div>
+<div class="flex items-center gap-3">
+<button class="flex cursor-pointer items-center justify-center gap-2 rounded-lg h-10 px-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-bold transition-colors">
+<span class="material-symbols-outlined text-[20px]">edit</span>
+<span>Edit</span>
+</button>
+<button class="flex cursor-pointer items-center justify-center gap-2 rounded-lg h-10 px-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-bold transition-colors">
+<span class="material-symbols-outlined text-[20px]">mail</span>
+<span>Create Email</span>
+</button>
+<button class="flex cursor-pointer items-center justify-center gap-2 rounded-lg h-10 px-4 bg-primary hover:bg-primary/90 text-white text-sm font-bold transition-colors shadow-sm shadow-primary/20">
+<span class="material-symbols-outlined text-[20px]">update</span>
+<span>Revise</span>
+</button>
+</div>
+</div>
+<div class="flex flex-col lg:flex-row gap-6 items-start">
+<div class="w-full lg:w-[70%] flex flex-col gap-6">
+<section class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+<div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+<h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">info</span> Basic Info
+                            </h2>
+</div>
+<div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-8">
+<div class="flex flex-col gap-1">
+<p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Customer</p>
+<p class="text-slate-900 dark:text-white font-medium flex items-center gap-2">
+<span class="material-symbols-outlined text-slate-400 text-[18px]">business</span> Acme Corp
+                                </p>
+</div>
+<div class="flex flex-col gap-1">
+<p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Contact Person</p>
+<p class="text-slate-900 dark:text-white font-medium flex items-center gap-2">
+<span class="material-symbols-outlined text-slate-400 text-[18px]">person</span> Jane Doe (jane@acmecorp.com)
+                                </p>
+</div>
+<div class="flex flex-col gap-1">
+<p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Date Created</p>
+<p class="text-slate-900 dark:text-white font-medium">Oct 12, 2026</p>
+</div>
+<div class="flex flex-col gap-1">
+<p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Valid Until</p>
+<p class="text-slate-900 dark:text-white font-medium text-amber-600 dark:text-amber-400">Nov 12, 2026 (14 days left)</p>
+</div>
+</div>
+</section>
+<section class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+<div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+<h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">route</span> Route Details
+                            </h2>
+</div>
+<div class="p-6 grid grid-cols-1 md:grid-cols-2 gap-y-6 gap-x-8">
+<div class="flex flex-col gap-1">
+<p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Origin / POL</p>
+<p class="text-slate-900 dark:text-white font-medium flex items-center gap-2">
+<span class="material-symbols-outlined text-slate-400 text-[18px]">flight_takeoff</span> Shanghai, China (CNSHA)
+                                </p>
+</div>
+<div class="flex flex-col gap-1">
+<p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Destination / POD</p>
+<p class="text-slate-900 dark:text-white font-medium flex items-center gap-2">
+<span class="material-symbols-outlined text-slate-400 text-[18px]">flight_land</span> Los Angeles, USA (USLAX)
+                                </p>
+</div>
+<div class="flex flex-col gap-1">
+<p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Transport Mode</p>
+<p class="text-slate-900 dark:text-white font-medium flex items-center gap-2">
+<span class="material-symbols-outlined text-slate-400 text-[18px]">directions_boat</span> Ocean Freight (FCL)
+                                </p>
+</div>
+<div class="flex flex-col gap-1">
+<p class="text-slate-500 dark:text-slate-400 text-sm font-medium">Incoterms</p>
+<p class="text-slate-900 dark:text-white font-medium">FOB - Free On Board</p>
+</div>
+</div>
+</section>
+</div>
+<aside class="w-full lg:w-[30%] flex flex-col gap-6">
+<section class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm flex-1">
+<div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex justify-between items-center">
+<h2 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">manage_history</span> Revision History
+                            </h2>
+<span class="bg-primary/10 text-primary text-xs font-bold px-2 py-1 rounded">3 Revisions</span>
+</div>
+<div class="p-6 relative">
+<div class="absolute left-[39px] top-6 bottom-6 w-0.5 bg-slate-200 dark:bg-slate-700"></div>
+<div class="flex flex-col gap-6 relative z-0">
+<div class="flex gap-4 items-start">
+<div class="w-8 h-8 rounded-full bg-white dark:bg-slate-900 border-2 border-primary flex items-center justify-center shrink-0 z-10 text-primary font-bold text-xs">
+                                        R3
+                                    </div>
+<div class="flex-1 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-slate-100 dark:border-slate-700">
+<div class="flex justify-between items-start mb-1">
+<span class="font-bold text-sm text-slate-900 dark:text-white">Current Version</span>
+<span class="text-xs text-slate-500 dark:text-slate-400">Today, 10:30 AM</span>
+</div>
+<p class="text-sm text-slate-600 dark:text-slate-300">Status changed to <span class="text-emerald-600 dark:text-emerald-400 font-medium">Won</span></p>
+<p class="text-xs text-slate-400 mt-2 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">person</span> Sarah Jenkins
+                                        </p>
+</div>
+</div>
+<div class="flex gap-4 items-start opacity-70 hover:opacity-100 transition-opacity">
+<div class="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 flex items-center justify-center shrink-0 z-10 text-slate-600 dark:text-slate-300 font-bold text-xs">
+                                        R2
+                                    </div>
+<div class="flex-1 bg-slate-50 dark:bg-slate-800/30 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
+<div class="flex justify-between items-start mb-1">
+<span class="font-bold text-sm text-slate-700 dark:text-slate-300">Price Negotiation</span>
+<span class="text-xs text-slate-500 dark:text-slate-400">Oct 14, 2026</span>
+</div>
+<p class="text-sm text-slate-600 dark:text-slate-400">Price changed from <span class="line-through">$4,500</span> to <span class="font-medium text-slate-800 dark:text-slate-200">$4,250</span></p>
+<p class="text-xs text-slate-400 mt-2 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">person</span> Sarah Jenkins
+                                        </p>
+</div>
+</div>
+<div class="flex gap-4 items-start opacity-60 hover:opacity-100 transition-opacity">
+<div class="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600 flex items-center justify-center shrink-0 z-10 text-slate-600 dark:text-slate-300 font-bold text-xs">
+                                        R1
+                                    </div>
+<div class="flex-1 bg-slate-50 dark:bg-slate-800/30 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
+<div class="flex justify-between items-start mb-1">
+<span class="font-bold text-sm text-slate-700 dark:text-slate-300">Initial Quote</span>
+<span class="text-xs text-slate-500 dark:text-slate-400">Oct 12, 2026</span>
+</div>
+<p class="text-sm text-slate-600 dark:text-slate-400">Quotation created</p>
+<p class="text-xs text-slate-400 mt-2 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">person</span> Mike Ross
+                                        </p>
+</div>
+</div>
+</div>
+</div>
+</section>
+</aside>
+</div>
+</main>
+</div>
+</body></html>

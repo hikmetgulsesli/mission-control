@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Activity Management List View</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#135bec",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display">
+<div class="relative flex min-h-screen w-full flex-col group/design-root overflow-x-hidden">
+<div class="layout-container flex h-full grow flex-col">
+<div class="px-4 md:px-10 lg:px-20 xl:px-40 flex flex-1 justify-center py-5">
+<div class="layout-content-container flex flex-col w-full max-w-[1200px] flex-1">
+<header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-slate-200 dark:border-slate-800 px-4 md:px-10 py-3 mb-6">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-4 text-slate-900 dark:text-slate-100">
+<div class="size-6 text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-2xl">event_note</span>
+</div>
+<h2 class="text-slate-900 dark:text-slate-100 text-xl font-bold leading-tight tracking-[-0.015em]">Activity Management</h2>
+</div>
+<label class="hidden md:flex flex-col min-w-40 !h-10 max-w-64">
+<div class="flex w-full flex-1 items-stretch rounded-lg h-full">
+<div class="text-slate-500 dark:text-slate-400 flex border-none bg-slate-100 dark:bg-slate-800 items-center justify-center pl-4 rounded-l-lg border-r-0">
+<span class="material-symbols-outlined text-xl">search</span>
+</div>
+<input class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-slate-900 dark:text-slate-100 focus:outline-0 focus:ring-0 border-none bg-slate-100 dark:bg-slate-800 focus:border-none h-full placeholder:text-slate-500 dark:placeholder:text-slate-400 px-4 rounded-l-none border-l-0 pl-2 text-sm font-normal leading-normal" placeholder="Search across app..." value=""/>
+</div>
+</label>
+</div>
+<div class="flex flex-1 justify-end gap-8">
+<div class="hidden lg:flex items-center gap-9">
+<a class="text-slate-600 dark:text-slate-300 hover:text-primary dark:hover:text-primary transition-colors text-sm font-medium leading-normal" href="#">Dashboard</a>
+<a class="text-primary text-sm font-bold leading-normal border-b-2 border-primary py-1" href="#">Activities</a>
+<a class="text-slate-600 dark:text-slate-300 hover:text-primary dark:hover:text-primary transition-colors text-sm font-medium leading-normal" href="#">Customers</a>
+<a class="text-slate-600 dark:text-slate-300 hover:text-primary dark:hover:text-primary transition-colors text-sm font-medium leading-normal" href="#">Settings</a>
+</div>
+<div class="flex gap-2">
+<button class="flex items-center justify-center overflow-hidden rounded-lg size-10 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+<span class="material-symbols-outlined text-xl">notifications</span>
+</button>
+<button class="flex items-center justify-center overflow-hidden rounded-lg size-10 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+<span class="material-symbols-outlined text-xl">account_circle</span>
+</button>
+</div>
+</div>
+</header>
+<div class="flex flex-wrap items-center justify-between gap-4 p-4">
+<h1 class="text-slate-900 dark:text-slate-100 tracking-tight text-3xl font-bold leading-tight min-w-72">Activities</h1>
+<button class="flex items-center justify-center gap-2 overflow-hidden rounded-lg h-10 px-5 bg-primary hover:bg-primary/90 text-white text-sm font-semibold leading-normal transition-colors shadow-sm">
+<span class="material-symbols-outlined text-sm">add</span>
+<span class="truncate">New Activity</span>
+</button>
+</div>
+<div class="px-4 py-4 flex flex-col sm:flex-row gap-4">
+<label class="flex flex-col flex-1 h-10 w-full sm:max-w-md">
+<div class="flex w-full flex-1 items-stretch rounded-lg h-full border border-slate-200 dark:border-slate-700 focus-within:border-primary dark:focus-within:border-primary transition-colors bg-white dark:bg-slate-900">
+<div class="text-slate-400 flex items-center justify-center pl-3">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</div>
+<input class="form-input flex w-full min-w-0 flex-1 bg-transparent text-slate-900 dark:text-slate-100 focus:outline-0 focus:ring-0 border-none h-full placeholder:text-slate-400 px-3 text-sm font-normal leading-normal" placeholder="Search activities, subjects, or customers..." value=""/>
+</div>
+</label>
+<div class="flex gap-3 flex-wrap items-center">
+<div class="relative group">
+<button class="flex h-10 items-center justify-center gap-x-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-slate-500 text-[18px]">filter_list</span>
+<p class="text-slate-700 dark:text-slate-300 text-sm font-medium">Activity Type</p>
+<span class="material-symbols-outlined text-slate-500 text-[18px]">expand_more</span>
+</button>
+</div>
+<div class="relative group">
+<button class="flex h-10 items-center justify-center gap-x-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-slate-500 text-[18px]">calendar_today</span>
+<p class="text-slate-700 dark:text-slate-300 text-sm font-medium">Date Range</p>
+<span class="material-symbols-outlined text-slate-500 text-[18px]">expand_more</span>
+</button>
+</div>
+<div class="relative group">
+<button class="flex h-10 items-center justify-center gap-x-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-slate-500 text-[18px]">person</span>
+<p class="text-slate-700 dark:text-slate-300 text-sm font-medium">Customer</p>
+<span class="material-symbols-outlined text-slate-500 text-[18px]">expand_more</span>
+</button>
+</div>
+<button class="flex h-10 items-center justify-center rounded-lg text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 text-sm font-medium px-2 transition-colors">
+                                Clear Filters
+                            </button>
+</div>
+</div>
+<div class="px-4 py-2 flex-1 flex flex-col min-h-0 @container">
+<div class="flex flex-col overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm flex-1">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+<th class="px-6 py-4 text-slate-600 dark:text-slate-300 text-xs font-semibold uppercase tracking-wider whitespace-nowrap cursor-pointer hover:text-slate-900 dark:hover:text-slate-100 group">
+<div class="flex items-center gap-1">
+                                                    Activity Type
+                                                    <span class="material-symbols-outlined text-[16px] text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity">arrow_downward</span>
+</div>
+</th>
+<th class="px-6 py-4 text-slate-600 dark:text-slate-300 text-xs font-semibold uppercase tracking-wider whitespace-nowrap cursor-pointer hover:text-slate-900 dark:hover:text-slate-100 group">
+<div class="flex items-center gap-1">
+                                                    Date
+                                                    <span class="material-symbols-outlined text-[16px] text-slate-400">arrow_downward</span>
+</div>
+</th>
+<th class="px-6 py-4 text-slate-600 dark:text-slate-300 text-xs font-semibold uppercase tracking-wider whitespace-nowrap cursor-pointer hover:text-slate-900 dark:hover:text-slate-100 group">
+<div class="flex items-center gap-1">
+                                                    Related Customer
+                                                    <span class="material-symbols-outlined text-[16px] text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity">arrow_downward</span>
+</div>
+</th>
+<th class="px-6 py-4 text-slate-600 dark:text-slate-300 text-xs font-semibold uppercase tracking-wider whitespace-nowrap cursor-pointer hover:text-slate-900 dark:hover:text-slate-100 group">
+<div class="flex items-center gap-1">
+                                                    Subject
+                                                    <span class="material-symbols-outlined text-[16px] text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity">arrow_downward</span>
+</div>
+</th>
+<th class="px-6 py-4 text-slate-600 dark:text-slate-300 text-xs font-semibold uppercase tracking-wider whitespace-nowrap cursor-pointer hover:text-slate-900 dark:hover:text-slate-100 group">
+<div class="flex items-center gap-1">
+                                                    Assigned To
+                                                    <span class="material-symbols-outlined text-[16px] text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity">arrow_downward</span>
+</div>
+</th>
+<th class="px-6 py-4 w-10"></th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors group">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-2">
+<div class="size-8 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">call</span>
+</div>
+<span class="text-slate-900 dark:text-slate-100 text-sm font-medium">Call</span>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="text-slate-600 dark:text-slate-400 text-sm">Oct 24, 2023</div>
+<div class="text-slate-400 dark:text-slate-500 text-xs">10:30 AM</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-400 font-bold text-xs">AC</div>
+<span class="text-slate-900 dark:text-slate-100 text-sm font-medium">Acme Corp</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="text-slate-700 dark:text-slate-300 text-sm line-clamp-1">Follow up on Q4 proposal and discuss next steps.</span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-2">
+<div class="size-6 rounded-full bg-cover bg-center" data-alt="User avatar placeholder" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCiF9zLTH2eKImRttrqco0yzWk3RCgdqDa3jBAaUTwZhNO43Rs-XsjJ3pwMsbn82ISaEVPpY_OgTitDfVfVQ9SE39-1Hap0YhRVWLZSZ0JXfEBenhe25JG_gKLVyJyBF7nFJ3ijqidN6XHOpaHs0ueZQGe5avR6uEP28iyk-1KgJNcCA1u796YQRbT0CIL6iSzLFJWC0SPeYZ4ZFHA2rGW_Ff-x-KAFgYUl9L-tQryMjpLvG6_K_2hKisHzk1e-Tf9mRNDaIR3hy-A')"></div>
+<span class="text-slate-600 dark:text-slate-400 text-sm">Sarah J.</span>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-right">
+<button class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 opacity-0 group-hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors group">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-2">
+<div class="size-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">mail</span>
+</div>
+<span class="text-slate-900 dark:text-slate-100 text-sm font-medium">Email</span>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="text-slate-600 dark:text-slate-400 text-sm">Oct 23, 2023</div>
+<div class="text-slate-400 dark:text-slate-500 text-xs">2:15 PM</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-400 font-bold text-xs">GL</div>
+<span class="text-slate-900 dark:text-slate-100 text-sm font-medium">Globex</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="text-slate-700 dark:text-slate-300 text-sm line-clamp-1">Sent revised enterprise contract for review.</span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-2">
+<div class="size-6 rounded-full bg-cover bg-center" data-alt="User avatar placeholder" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuC1gqkeWqBGrC1jguG1C9P1NcnijiRpkjNq0ED6r09G9VMmeUOg_hUXzqBDwnN9dshpIoIXK32gWTwNm08RigWYXM0unjtur_3EOt_VVtGOKiDuhmk7z7Z4hhT9ntRcQEUwG5HOQ3ZKdn7L1ggtBaXIf0ZwvXBJoH9ZHHodmkKKiEPU8P4kgmghU49Krzt-xq1QRQiNmVE5rnTbw9Esxi8VXxoHbD2cn-PbAe_gKVhOgBDUZPQ6ZCH13mLwAsZ6mya87guqEJNW3io')"></div>
+<span class="text-slate-600 dark:text-slate-400 text-sm">Mike T.</span>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-right">
+<button class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 opacity-0 group-hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors group">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-2">
+<div class="size-8 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">groups</span>
+</div>
+<span class="text-slate-900 dark:text-slate-100 text-sm font-medium">Meeting</span>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="text-slate-600 dark:text-slate-400 text-sm">Oct 22, 2023</div>
+<div class="text-slate-400 dark:text-slate-500 text-xs">11:00 AM</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-400 font-bold text-xs">IN</div>
+<span class="text-slate-900 dark:text-slate-100 text-sm font-medium">Initech</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="text-slate-700 dark:text-slate-300 text-sm line-clamp-1">Initial consultation and requirement gathering.</span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-2">
+<div class="size-6 rounded-full bg-cover bg-center" data-alt="User avatar placeholder" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCv63zMuG4V5O6k4PZVWstJVq-xuTEw7zD1lFRKVxaHIsrhGxqiHzvbp5NF-XiQMg1X28mk-6bA4EGpBgWxaInOZgxMCbeDxPDdpcccnol6IBwAhTMmxGqXnIQ0sdMCPFYUKO1Sgxw07TRXk_61e3obkK9UwHHgZCph1tn-2r7keQff44nnRUdPLQf8QfEvPAOUEpgdJ7q9Oor_EXMOvymwsncgzet7DEfMlTsuOpUnKqHK-X0_ZNRTQO7ctnblL_If__xy2MFyJnw')"></div>
+<span class="text-slate-600 dark:text-slate-400 text-sm">Sarah J.</span>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-right">
+<button class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 opacity-0 group-hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors group">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-2">
+<div class="size-8 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px]">task_alt</span>
+</div>
+<span class="text-slate-900 dark:text-slate-100 text-sm font-medium">Task</span>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="text-slate-600 dark:text-slate-400 text-sm">Oct 21, 2023</div>
+<div class="text-slate-400 dark:text-slate-500 text-xs">4:00 PM</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-400 font-bold text-xs">SY</div>
+<span class="text-slate-900 dark:text-slate-100 text-sm font-medium">Soylent</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="text-slate-700 dark:text-slate-300 text-sm line-clamp-1">Prepare implementation presentation deck.</span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-2">
+<div class="size-6 rounded-full bg-cover bg-center" data-alt="User avatar placeholder" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCtuBDdQrE0lfK7GGH2JYp6TetCtPZwN-7Pg8h9jmmyJcsv6jw49HLdbJTr2nG8teCkXRQpCDkg1lg1yG2s_W_U0OjfQQOsO5xK87gMwuKF5jzWlhOTdS-zF7L_ycunbbDvrE7lUGpTmf02WCA4rGkTaikRgwQW7SysDxEVPKhORKyKwXajUxgq5pqeDm7XZnNc7nzpUPMB6DRS70bXWPfxSoGXZzZBq5QRLQElhneKcr7yece-Zzy1kiY8QJT7fwPnJyMVc7ibadY')"></div>
+<span class="text-slate-600 dark:text-slate-400 text-sm">Alex D.</span>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-right">
+<button class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 opacity-0 group-hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="flex items-center justify-between border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-6 py-4">
+<div class="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+<div>
+<p class="text-sm text-slate-700 dark:text-slate-300">
+                                            Showing <span class="font-medium">1</span> to <span class="font-medium">4</span> of <span class="font-medium">97</span> results
+                                        </p>
+</div>
+<div>
+<nav aria-label="Pagination" class="isolate inline-flex -space-x-px rounded-md shadow-sm">
+<a class="relative inline-flex items-center rounded-l-md px-2 py-2 text-slate-400 ring-1 ring-inset ring-slate-300 dark:ring-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 focus:z-20 focus:outline-offset-0" href="#">
+<span class="sr-only">Previous</span>
+<span class="material-symbols-outlined text-[20px]">chevron_left</span>
+</a>
+<a aria-current="page" class="relative z-10 inline-flex items-center bg-primary px-4 py-2 text-sm font-semibold text-white focus:z-20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" href="#">1</a>
+<a class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-slate-900 dark:text-slate-100 ring-1 ring-inset ring-slate-300 dark:ring-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 focus:z-20 focus:outline-offset-0" href="#">2</a>
+<a class="relative hidden items-center px-4 py-2 text-sm font-semibold text-slate-900 dark:text-slate-100 ring-1 ring-inset ring-slate-300 dark:ring-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 focus:z-20 focus:outline-offset-0 md:inline-flex" href="#">3</a>
+<span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-300 ring-1 ring-inset ring-slate-300 dark:ring-slate-700">...</span>
+<a class="relative hidden items-center px-4 py-2 text-sm font-semibold text-slate-900 dark:text-slate-100 ring-1 ring-inset ring-slate-300 dark:ring-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 focus:z-20 focus:outline-offset-0 md:inline-flex" href="#">10</a>
+<a class="relative inline-flex items-center rounded-r-md px-2 py-2 text-slate-400 ring-1 ring-inset ring-slate-300 dark:ring-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 focus:z-20 focus:outline-offset-0" href="#">
+<span class="sr-only">Next</span>
+<span class="material-symbols-outlined text-[20px]">chevron_right</span>
+</a>
+</nav>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</body></html>

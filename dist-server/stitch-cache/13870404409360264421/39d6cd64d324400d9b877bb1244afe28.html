@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>NeonTime - Retro-Futuristic Stopwatch</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Sora:wght@400;600;700&amp;family=Nunito+Sans:wght@300;400;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#3cff14",
+                        "background-light": "#f6f8f5",
+                        "background-dark": "#0a0f08",
+                        "grid-line": "rgba(60, 255, 20, 0.05)",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "sans-serif"],
+                        "sora": ["Sora", "sans-serif"],
+                        "nunito": ["Nunito Sans", "sans-serif"],
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        .grid-bg {
+            background-image: linear-gradient(var(--tw-colors-grid-line) 1px, transparent 1px),
+                              linear-gradient(90deg, var(--tw-colors-grid-line) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+        .scanline {
+            background: linear-gradient(to bottom, transparent 50%, rgba(60, 255, 20, 0.02) 50%);
+            background-size: 100% 4px;
+            pointer-events: none;
+        }
+        .glow-border {
+            box-shadow: 0 0 15px rgba(60, 255, 20, 0.2), inset 0 0 10px rgba(60, 255, 20, 0.1);
+        }
+        .seven-segment {
+            font-family: 'Space Grotesk', monospace;
+            letter-spacing: 0.05em;
+            text-shadow: 0 0 20px rgba(60, 255, 20, 0.6);
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen selection:bg-primary selection:text-background-dark overflow-x-hidden">
+<div class="relative min-h-screen flex flex-col grid-bg">
+<!-- Scanline Overlay -->
+<div class="absolute inset-0 scanline z-50"></div>
+<div class="layout-container flex h-full grow flex-col z-10">
+<!-- Top Navigation Bar -->
+<header class="flex items-center justify-between border-b border-primary/20 px-6 md:px-20 py-4 bg-background-dark/80 backdrop-blur-md">
+<div class="flex items-center gap-3 text-primary">
+<div class="size-6">
+<span class="material-symbols-outlined text-3xl">fluid</span>
+</div>
+<h2 class="font-sora text-xl font-bold tracking-tight uppercase">NeonTime</h2>
+</div>
+<nav class="hidden md:flex flex-1 justify-center gap-12">
+<a class="text-slate-400 hover:text-primary transition-colors text-sm font-semibold uppercase tracking-widest font-nunito" href="#">Clock</a>
+<a class="text-primary border-b-2 border-primary transition-colors text-sm font-semibold uppercase tracking-widest font-nunito pb-1" href="#">Stopwatch</a>
+<a class="text-slate-400 hover:text-primary transition-colors text-sm font-semibold uppercase tracking-widest font-nunito" href="#">Timer</a>
+</nav>
+<div class="flex items-center gap-4">
+<button class="flex items-center justify-center rounded-lg h-10 w-10 bg-primary/10 border border-primary/30 text-primary hover:bg-primary hover:text-background-dark transition-all">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+</button>
+</div>
+</header>
+<main class="flex-1 flex flex-col items-center justify-center p-6 md:p-12">
+<!-- Main Stopwatch Display -->
+<div class="w-full max-w-2xl bg-black/40 border-2 border-primary/30 rounded-xl p-10 glow-border relative overflow-hidden">
+<div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary to-transparent opacity-50"></div>
+<div class="flex flex-col items-center gap-2 mb-8">
+<span class="text-primary/60 text-xs font-nunito uppercase tracking-[0.4em]">Chronometer Mode</span>
+<div class="flex items-baseline gap-2 seven-segment text-primary">
+<span class="text-7xl md:text-9xl font-bold">00:42</span>
+<span class="text-3xl md:text-5xl font-medium opacity-80">:85</span>
+</div>
+</div>
+<!-- Action Buttons -->
+<div class="flex justify-center items-center gap-8 md:gap-12 mt-10">
+<!-- Reset Button -->
+<div class="flex flex-col items-center gap-3">
+<button class="flex size-14 md:size-16 items-center justify-center rounded-full border-2 border-primary/40 bg-background-dark text-primary hover:bg-primary/20 transition-all group">
+<span class="material-symbols-outlined text-2xl group-hover:rotate-[-45deg] transition-transform">refresh</span>
+</button>
+<span class="text-[10px] uppercase font-nunito tracking-widest text-primary/60">Reset</span>
+</div>
+<!-- Start Button -->
+<div class="flex flex-col items-center gap-3">
+<button class="flex size-20 md:size-24 items-center justify-center rounded-full bg-primary text-background-dark hover:scale-105 active:scale-95 transition-all shadow-[0_0_30px_rgba(60,255,20,0.4)]">
+<span class="material-symbols-outlined text-4xl fill-1">play_arrow</span>
+</button>
+<span class="text-xs font-bold uppercase font-sora tracking-[0.2em] text-primary">Start</span>
+</div>
+<!-- Stop Button -->
+<div class="flex flex-col items-center gap-3">
+<button class="flex size-14 md:size-16 items-center justify-center rounded-full border-2 border-primary/40 bg-background-dark text-primary hover:bg-primary/20 transition-all">
+<span class="material-symbols-outlined text-2xl">pause</span>
+</button>
+<span class="text-[10px] uppercase font-nunito tracking-widest text-primary/60">Stop</span>
+</div>
+</div>
+</div>
+<!-- Lap Times Section -->
+<div class="w-full max-w-2xl mt-12">
+<div class="flex items-center justify-between mb-6 px-2">
+<h3 class="text-primary font-sora font-bold text-lg uppercase tracking-wider flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">list_alt</span>
+                            Lap Times <span class="text-primary/40 text-sm ml-2">(Tur Süreleri)</span>
+</h3>
+<span class="text-xs text-primary/50 font-nunito uppercase tracking-tighter">Current Session</span>
+</div>
+<div class="space-y-3 font-nunito">
+<!-- Lap Item -->
+<div class="flex items-center justify-between p-4 bg-primary/5 border-l-4 border-primary/60 rounded-r-lg hover:bg-primary/10 transition-colors">
+<div class="flex items-center gap-4">
+<span class="text-primary font-bold text-sm">04</span>
+<span class="text-slate-100 font-semibold">Lap 4</span>
+</div>
+<div class="flex items-center gap-6">
+<span class="text-primary/60 text-xs">+00:12.42</span>
+<span class="text-primary font-display font-bold">00:10:42</span>
+</div>
+</div>
+<!-- Lap Item -->
+<div class="flex items-center justify-between p-4 bg-primary/5 border-l-4 border-primary/30 rounded-r-lg hover:bg-primary/10 transition-colors">
+<div class="flex items-center gap-4">
+<span class="text-primary/60 font-bold text-sm">03</span>
+<span class="text-slate-100/80 font-semibold">Lap 3</span>
+</div>
+<div class="flex items-center gap-6">
+<span class="text-primary/40 text-xs">+00:10.15</span>
+<span class="text-primary/80 font-display font-bold">00:10:18</span>
+</div>
+</div>
+<!-- Lap Item -->
+<div class="flex items-center justify-between p-4 bg-primary/5 border-l-4 border-primary/20 rounded-r-lg hover:bg-primary/10 transition-colors">
+<div class="flex items-center gap-4">
+<span class="text-primary/40 font-bold text-sm">02</span>
+<span class="text-slate-100/60 font-semibold">Lap 2</span>
+</div>
+<div class="flex items-center gap-6">
+<span class="text-primary/30 text-xs">+00:11.88</span>
+<span class="text-primary/60 font-display font-bold">00:11:32</span>
+</div>
+</div>
+</div>
+<div class="mt-8 flex justify-center">
+<button class="flex items-center gap-2 px-6 py-2 rounded-full border border-primary/20 text-primary/60 hover:text-primary hover:border-primary/50 transition-all text-sm font-nunito uppercase tracking-widest">
+<span class="material-symbols-outlined text-sm">download</span>
+                            Export Data
+                        </button>
+</div>
+</div>
+</main>
+<!-- Bottom Stats Bar -->
+<footer class="mt-auto border-t border-primary/10 py-4 px-10 bg-background-dark/90 backdrop-blur-sm flex justify-between items-center text-[10px] text-primary/40 uppercase tracking-[0.3em] font-nunito">
+<div class="flex gap-6">
+<span>Precision: 0.01ms</span>
+<span>Status: Ready</span>
+</div>
+<div class="flex gap-2 items-center">
+<div class="size-1.5 rounded-full bg-primary animate-pulse"></div>
+<span>System Online</span>
+</div>
+</footer>
+</div>
+</div>
+</body></html>

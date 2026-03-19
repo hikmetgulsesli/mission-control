@@ -28,6 +28,8 @@ import terminalRouter from "./routes/terminal.js";
 import filesRouter from "./routes/files.js";
 import discordNotifyRouter from "./routes/discord-notify.js";
 import scrapeRouter from "./routes/scrape.js";
+import rulesRouter from "./routes/rules.js";
+import liveFeedRouter from "./routes/live-feed.js";
 const app = express();
 app.use(express.json({ limit: "2mb" }));
 app.use(helmet({ contentSecurityPolicy: false }));
@@ -53,6 +55,8 @@ app.use("/api", terminalRouter);
 app.use("/api", filesRouter);
 app.use("/api", discordNotifyRouter);
 app.use("/api", scrapeRouter);
+app.use("/api", rulesRouter);
+app.use("/api", liveFeedRouter);
 // Serve avatars
 if (existsSync(config.avatarsDir)) {
     app.use('/avatars', express.static(config.avatarsDir));
@@ -148,3 +152,18 @@ setInterval(async () => {
         console.error('[MEDIC] Stuck check failed:', err.message);
     }
 }, MEDIC_INTERVAL_MS);
+// Graceful shutdown — release port on SIGTERM/SIGINT
+function shutdown(signal) {
+    console.log(`[${signal}] Shutting down gracefully...`);
+    server.close(() => {
+        console.log('Server closed');
+        process.exit(0);
+    });
+    // Force exit after 5s if connections hang
+    setTimeout(() => {
+        console.warn('Forced exit after timeout');
+        process.exit(1);
+    }, 5000).unref();
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

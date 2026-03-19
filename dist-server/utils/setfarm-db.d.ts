@@ -104,3 +104,7 @@ export declare function deleteRun(runId: string, cleanupProject?: boolean): Prom
     runId: string;
     log: string[];
 }>;
+export declare function deleteRunsByProject(projectName: string): Promise<{
+    deleted: number;
+    log: string[];
+}>;

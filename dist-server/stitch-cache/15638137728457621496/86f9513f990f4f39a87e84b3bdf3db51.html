@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Vibe-Breaker Start Screen</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "primary": "#f43325",
+          "background-light": "#f8f6f5",
+          "background-dark": "#0f172a", // Dark navy blue as requested
+        },
+        fontFamily: {
+          "display": ["Space Grotesk", "monospace"]
+        },
+        borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+      },
+    },
+  }
+</script>
+<style>
+  .neon-text {
+    text-shadow: 0 0 5px rgba(244, 51, 37, 0.5), 0 0 20px rgba(244, 51, 37, 0.3);
+  }
+</style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display min-h-screen text-slate-900 dark:text-slate-100 selection:bg-primary/30">
+<div class="relative flex h-screen w-full flex-col overflow-x-hidden bg-gradient-to-b from-background-dark to-slate-900">
+<div class="layout-container flex h-full grow flex-col justify-center items-center">
+<div class="w-full max-w-[960px] flex flex-col items-center justify-center px-4 py-10 flex-1">
+<div class="flex items-center gap-3 mb-16 text-primary">
+<span class="material-symbols-outlined text-4xl">sports_esports</span>
+</div>
+<div class="flex flex-col items-center justify-center space-y-8 w-full">
+<h1 class="text-primary neon-text tracking-widest text-5xl md:text-7xl font-bold leading-tight px-4 text-center uppercase">
+          VIBE-BREAKER
+        </h1>
+<div class="bg-primary/10 border border-primary/20 rounded-lg px-6 py-3 shadow-[0_0_15px_rgba(244,51,37,0.1)]">
+<p class="text-slate-300 text-lg md:text-xl font-bold leading-normal text-center tracking-widest">
+            HIGH SCORE: <span class="text-primary ml-2">012450</span>
+</p>
+</div>
+<div class="mt-20 py-12">
+<h2 class="text-slate-100 text-2xl md:text-3xl font-bold leading-tight tracking-widest px-4 text-center animate-pulse">
+            PRESS <span class="text-primary border-b-2 border-primary pb-1 mx-2">SPACE</span> TO START
+          </h2>
+</div>
+</div>
+</div>
+<footer class="w-full flex justify-center py-6 border-t border-slate-800/50 mt-auto">
+<p class="text-slate-500 text-sm font-normal leading-normal tracking-wider">© 2024 VIBE-BREAKER STUDIOS</p>
+</footer>
+</div>
+</div>
+</body></html>

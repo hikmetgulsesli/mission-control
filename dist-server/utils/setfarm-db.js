@@ -530,15 +530,15 @@ export async function clearAgentFeed() {
 }
 export async function deleteRun(runId, cleanupProject = false) {
     const safeId = validateId(runId, 'runId');
-    // Get run info before deleting
+    // Get run info before deleting (need task text for cleanup)
     const runs = await querySetfarmDb(`SELECT * FROM runs WHERE id = '${safeId}';`);
     const run = runs[0];
-    // Delete from DB
+    // Delete from DB (including claim_log)
     await execSetfarmDb(`
     BEGIN;
+    DELETE FROM claim_log WHERE run_id = '${safeId}';
     DELETE FROM stories WHERE run_id = '${safeId}';
     DELETE FROM steps WHERE run_id = '${safeId}';
-    
     DELETE FROM runs WHERE id = '${safeId}';
     COMMIT;
   `);
@@ -546,14 +546,19 @@ export async function deleteRun(runId, cleanupProject = false) {
     const log = ['DB records deleted'];
     // If cleanupProject requested, parse task for repo/path info and cleanup
     if (cleanupProject && run?.task) {
-        const repoMatch = run.task.match(/Repo:\s*(https:\/\/github\.com\/[^\s|]+)/);
-        const localMatch = run.task.match(/Lokal:\s*(\/[^\s|]+)/);
-        const ghRepo = repoMatch?.[1];
-        const localPath = localMatch?.[1];
+        const ghMatch = run.task.match(/(?:REPO|Repo):\s*(https:\/\/github\.com\/[^\s|]+)/i);
+        const localMatch = run.task.match(/(?:REPO|Lokal):\s*((?:~\/|\/)[^\s|]+)/i);
+        const ghRepo = ghMatch?.[1];
+        let localPath = localMatch?.[1];
+        // Expand ~ to home directory
+        if (localPath?.startsWith('~/')) {
+            localPath = homedir() + localPath.slice(1);
+        }
         // Guard: if another run uses the same repo, skip project cleanup
         if (localPath) {
-            const otherRuns = await querySetfarmDb(`SELECT id, run_number, status FROM runs WHERE id != '${safeId}';`);
-            const sameRepoRun = otherRuns.find((r) => r.task?.includes(localPath));
+            const otherRuns = await querySetfarmDb(`SELECT id, run_number, status, task FROM runs WHERE id != '${safeId}';`);
+            const projectName = localPath.split('/').pop() || '';
+            const sameRepoRun = otherRuns.find((r) => r.task?.includes(projectName));
             if (sameRepoRun) {
                 log.push(`Skipped project cleanup: run #${sameRepoRun.run_number} (${sameRepoRun.status}) uses same repo`);
                 return { deleted: true, runId, log };
@@ -601,7 +606,7 @@ export async function deleteRun(runId, cleanupProject = false) {
         if (localPath) {
             try {
                 const { readFileSync, writeFileSync } = await import('fs');
-                const pjPath = '/home/setrox/projects/mission-control/projects.json';
+                const pjPath = homedir() + '/projects/mission-control/projects.json';
                 const projects = JSON.parse(readFileSync(pjPath, 'utf-8'));
                 const name = localPath.split('/').pop() || '';
                 const filtered = projects.filter((p) => p.id !== name && !p.repo?.includes(name));
@@ -629,4 +634,29 @@ export async function deleteRun(runId, cleanupProject = false) {
         }
     }
     return { deleted: true, runId, log };
+}
+export async function deleteRunsByProject(projectName) {
+    const safeName = projectName.replace(/[^a-zA-Z0-9_\-]/g, '');
+    if (!safeName)
+        return { deleted: 0, log: ['Invalid project name'] };
+    // Find all runs that reference this project
+    const allRuns = await querySetfarmDb(`SELECT id, run_number, task FROM runs;`);
+    const matchingRuns = allRuns.filter((r) => r.task?.includes('/' + safeName + ' ') || r.task?.includes('/' + safeName + '|') || r.task?.endsWith('/' + safeName));
+    if (matchingRuns.length === 0)
+        return { deleted: 0, log: ['No matching runs found for ' + safeName] };
+    const log = [];
+    for (const run of matchingRuns) {
+        const safeId = validateId(run.id, 'runId');
+        await execSetfarmDb(`
+      BEGIN;
+      DELETE FROM claim_log WHERE run_id = '${safeId}';
+      DELETE FROM stories WHERE run_id = '${safeId}';
+      DELETE FROM steps WHERE run_id = '${safeId}';
+      DELETE FROM runs WHERE id = '${safeId}';
+      COMMIT;
+    `);
+        log.push(`Run #${run.run_number} DB records deleted`);
+    }
+    await execSetfarmDb('PRAGMA wal_checkpoint(TRUNCATE);');
+    return { deleted: matchingRuns.length, log };
 }

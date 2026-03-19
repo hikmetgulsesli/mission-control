@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>NeonTime - Retro Digital</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Sora:wght@400;600;700&amp;family=Nunito+Sans:wght@300;400;600&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#10b77f",
+                        "secondary": "#f43f5e",
+                        "background-light": "#f6f8f7",
+                        "background-dark": "#10221c",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "sans-serif"],
+                        "header": ["Sora", "sans-serif"],
+                        "body": ["Nunito Sans", "sans-serif"],
+                        "digital": ["monospace"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .neon-glow-green {
+            text-shadow: 0 0 10px rgba(16, 183, 127, 0.8), 0 0 20px rgba(16, 183, 127, 0.4);
+        }
+        .neon-glow-pink {
+            text-shadow: 0 0 10px rgba(244, 63, 94, 0.8), 0 0 20px rgba(244, 63, 94, 0.4);
+        }
+        .digital-bg {
+            background: linear-gradient(180deg, rgba(16, 183, 127, 0.05) 0%, rgba(16, 34, 28, 0) 100%);
+            border: 1px solid rgba(16, 183, 127, 0.2);
+        }
+        .seven-segment {
+            font-family: 'monospace';
+            letter-spacing: 0.05em;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-body text-slate-900 dark:text-slate-100 min-h-screen flex flex-col">
+<!-- Top Navigation Bar -->
+<header class="w-full border-b border-primary/20 bg-background-dark/80 backdrop-blur-md sticky top-0 z-50">
+<div class="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="p-2 rounded-lg bg-primary/20 text-primary">
+<span class="material-symbols-outlined">shutter_speed</span>
+</div>
+<h1 class="font-header font-bold text-xl tracking-tight text-slate-100">NEON<span class="text-primary neon-glow-green">TIME</span></h1>
+</div>
+<nav class="hidden md:flex items-center gap-8">
+<a class="text-primary font-header text-sm font-semibold tracking-wide border-b-2 border-primary pb-1" href="#">CLOCK</a>
+<a class="text-slate-400 hover:text-slate-100 font-header text-sm font-semibold tracking-wide transition-colors" href="#">STOPWATCH</a>
+<a class="text-slate-400 hover:text-slate-100 font-header text-sm font-semibold tracking-wide transition-colors" href="#">COUNTDOWN</a>
+</nav>
+<div class="flex items-center gap-3">
+<button class="p-2 rounded-full hover:bg-white/5 text-slate-400 transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</div>
+</div>
+</header>
+<!-- Mobile Tabs (Visible only on small screens) -->
+<div class="md:hidden w-full border-b border-primary/10 bg-background-dark">
+<div class="flex justify-around">
+<button class="flex-1 py-4 text-primary border-b-2 border-primary font-header text-xs font-bold">CLOCK</button>
+<button class="flex-1 py-4 text-slate-500 font-header text-xs font-bold">STOPWATCH</button>
+<button class="flex-1 py-4 text-slate-500 font-header text-xs font-bold">COUNTDOWN</button>
+</div>
+</div>
+<!-- Main Content Area -->
+<main class="flex-1 flex flex-col items-center justify-center p-6 gap-12">
+<!-- Central Digital Display -->
+<div class="w-full max-w-2xl aspect-[16/9] digital-bg rounded-3xl relative overflow-hidden flex flex-col items-center justify-center shadow-[0_0_50px_rgba(16,183,127,0.1)]">
+<!-- Scanline Effect Overlay -->
+<div class="absolute inset-0 pointer-events-none opacity-10 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] z-10" style="background-size: 100% 4px, 3px 100%;"></div>
+<!-- Date Display -->
+<div class="mb-6 z-20">
+<p class="font-header text-primary/60 text-sm tracking-[0.3em] font-bold uppercase">Monday, October 23</p>
+</div>
+<!-- Time Display (7-segment vibe) -->
+<div class="flex items-baseline gap-4 z-20">
+<div class="flex flex-col items-center">
+<span class="seven-segment text-8xl md:text-9xl font-bold text-primary neon-glow-green">12</span>
+<span class="text-[10px] font-header font-black text-primary/40 tracking-widest mt-2">HOURS</span>
+</div>
+<span class="text-7xl md:text-8xl font-bold text-primary neon-glow-green mb-8">:</span>
+<div class="flex flex-col items-center">
+<span class="seven-segment text-8xl md:text-9xl font-bold text-primary neon-glow-green">45</span>
+<span class="text-[10px] font-header font-black text-primary/40 tracking-widest mt-2">MINUTES</span>
+</div>
+<div class="ml-4 self-end mb-10">
+<span class="seven-segment text-4xl md:text-5xl font-bold text-secondary neon-glow-pink">07</span>
+<span class="block text-[10px] font-header font-black text-secondary/40 tracking-widest mt-1">SEC</span>
+</div>
+</div>
+<!-- Bottom Status bar within screen -->
+<div class="absolute bottom-6 w-full px-10 flex justify-between items-center z-20 border-t border-primary/10 pt-4">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-primary animate-pulse shadow-[0_0_8px_rgba(16,183,127,1)]"></div>
+<span class="text-[10px] font-bold text-primary/60 tracking-widest">LIVE SYNC</span>
+</div>
+<div class="flex gap-4">
+<span class="text-[10px] font-bold text-slate-500 tracking-widest">GMT +2</span>
+<span class="text-[10px] font-bold text-slate-500 tracking-widest">BERLIN</span>
+</div>
+</div>
+</div>
+<!-- Controls Area -->
+<div class="flex flex-wrap items-center justify-center gap-6 w-full max-w-xl">
+<!-- Reset/Lap Button -->
+<button class="w-16 h-16 rounded-full border-2 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200 transition-all flex items-center justify-center group">
+<span class="material-symbols-outlined text-3xl group-active:rotate-[-45deg] transition-transform">replay</span>
+</button>
+<!-- Main Action (Play/Pause) -->
+<button class="w-24 h-24 rounded-full bg-primary text-background-dark shadow-[0_0_30px_rgba(16,183,127,0.4)] hover:shadow-[0_0_45px_rgba(16,183,127,0.6)] hover:scale-105 active:scale-95 transition-all flex items-center justify-center">
+<span class="material-symbols-outlined text-5xl fill-current">play_arrow</span>
+</button>
+<!-- Mode Switch / Extra Button -->
+<button class="w-16 h-16 rounded-full border-2 border-secondary/40 text-secondary hover:border-secondary hover:bg-secondary/10 transition-all flex items-center justify-center group shadow-[0_0_15px_rgba(244,63,94,0.1)]">
+<span class="material-symbols-outlined text-3xl">alarm_add</span>
+</button>
+</div>
+</main>
+<!-- Footer Information -->
+<footer class="p-8 w-full border-t border-primary/5">
+<div class="max-w-5xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+<div class="flex gap-8">
+<div class="flex flex-col">
+<span class="text-[10px] font-black text-slate-600 tracking-widest uppercase mb-1">Upcoming</span>
+<span class="text-sm font-header text-slate-300">Morning Workout • 07:00</span>
+</div>
+<div class="flex flex-col">
+<span class="text-[10px] font-black text-slate-600 tracking-widest uppercase mb-1">World Time</span>
+<span class="text-sm font-header text-slate-300">New York • 06:45 AM</span>
+</div>
+</div>
+<div class="flex items-center gap-4 bg-primary/5 px-4 py-2 rounded-full border border-primary/10">
+<span class="material-symbols-outlined text-primary text-sm">battery_charging_full</span>
+<span class="text-xs font-bold text-slate-400">98% POWER</span>
+</div>
+</div>
+</footer>
+<!-- Ambient Glow Backgrounds -->
+<div class="fixed top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/5 rounded-full blur-[120px] pointer-events-none -z-10"></div>
+<div class="fixed bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-secondary/5 rounded-full blur-[120px] pointer-events-none -z-10"></div>
+</body></html>

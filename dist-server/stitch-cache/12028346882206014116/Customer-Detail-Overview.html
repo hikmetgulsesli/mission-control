@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Customer Detail Overview</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1258e2",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" },
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display min-h-screen">
+<div class="flex h-full min-h-screen w-full flex-col overflow-x-hidden">
+<header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-slate-200 dark:border-slate-800 px-10 py-3 bg-white dark:bg-slate-900">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-4 text-slate-900 dark:text-slate-100">
+<div class="size-6 text-primary">
+<span class="material-symbols-outlined" style="font-size: 24px;">directions_boat</span>
+</div>
+<h2 class="text-lg font-bold leading-tight tracking-[-0.015em]">Shipping CRM</h2>
+</div>
+<nav class="flex items-center gap-9">
+<a class="text-slate-600 dark:text-slate-400 text-sm font-medium leading-normal hover:text-slate-900 dark:hover:text-slate-100" href="#">Dashboard</a>
+<a class="text-primary text-sm font-medium leading-normal border-b-2 border-primary py-1" href="#">Customers</a>
+<a class="text-slate-600 dark:text-slate-400 text-sm font-medium leading-normal hover:text-slate-900 dark:hover:text-slate-100" href="#">Quotations</a>
+<a class="text-slate-600 dark:text-slate-400 text-sm font-medium leading-normal hover:text-slate-900 dark:hover:text-slate-100" href="#">Settings</a>
+</nav>
+</div>
+<div class="flex flex-1 justify-end gap-8">
+<label class="flex flex-col min-w-40 !h-10 max-w-64">
+<div class="flex w-full flex-1 items-stretch rounded-lg h-full bg-slate-100 dark:bg-slate-800">
+<div class="text-slate-500 flex border-none items-center justify-center pl-4 pr-2">
+<span class="material-symbols-outlined" style="font-size: 20px;">search</span>
+</div>
+<input class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-slate-900 dark:text-slate-100 focus:outline-0 focus:ring-0 border-none bg-transparent h-full placeholder:text-slate-500 px-2 text-sm font-normal leading-normal" placeholder="Search customers..." value=""/>
+</div>
+</label>
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 border border-slate-200 dark:border-slate-700" data-alt="User profile picture" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBdm9za1bxtxnN0DfxCD0laY3O1kqb7f9EmXyRVZL5Fu1sr5-GCPyeDnn9cIEgy75xkjzD9Zkej1jkLGfWe2JUvusO0GwUUnCftzuhLbxrQY3UbBNgVXqOj7EaWyBFXh5oQRXSO79BldcdJNr20rY_tyMmF15D4fypAKv3T3cTH-JMVT53s4T7p9KkZSzTipv17u0GGTWQWmFSJFMN9YvwKdvUt_C21wgouG4yWl1UT5WwXhngBSSerA3GT6oj0KlXJw7mGyRhqoh-s");'></div>
+</div>
+</header>
+<main class="flex-1 flex flex-col md:flex-row max-w-7xl mx-auto w-full px-6 py-8 gap-8">
+<div class="flex-1 flex flex-col gap-8">
+<div class="flex flex-col gap-6">
+<div class="flex flex-wrap justify-between items-start gap-4">
+<div class="flex flex-col gap-2">
+<div class="flex items-center gap-4">
+<h1 class="text-4xl font-black leading-tight tracking-[-0.033em] text-slate-900 dark:text-slate-100">Global Logistics Corp.</h1>
+<span class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900/30 px-2.5 py-0.5 text-xs font-semibold text-green-800 dark:text-green-300">
+                                    Active
+                                </span>
+</div>
+<p class="text-slate-500 dark:text-slate-400 text-sm">Customer ID: CUS-849201 • Since Jan 2023</p>
+</div>
+<button class="flex items-center justify-center gap-2 rounded-lg h-10 px-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+<span class="material-symbols-outlined" style="font-size: 18px;">edit</span>
+<span>Edit Details</span>
+</button>
+</div>
+<div class="border-b border-slate-200 dark:border-slate-800">
+<nav class="-mb-px flex gap-8">
+<a class="flex items-center border-b-2 border-primary text-primary pb-3 pt-2 text-sm font-semibold" href="#">
+                                Overview
+                            </a>
+<a class="flex items-center border-b-2 border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 dark:hover:text-slate-300 dark:hover:border-slate-600 pb-3 pt-2 text-sm font-medium" href="#">
+                                Quotations
+                                <span class="ml-2 rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs">12</span>
+</a>
+<a class="flex items-center border-b-2 border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 dark:hover:text-slate-300 dark:hover:border-slate-600 pb-3 pt-2 text-sm font-medium" href="#">
+                                Activities
+                            </a>
+<a class="flex items-center border-b-2 border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 dark:hover:text-slate-300 dark:hover:border-slate-600 pb-3 pt-2 text-sm font-medium" href="#">
+                                History
+                            </a>
+</nav>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<div class="flex gap-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 flex-col shadow-sm">
+<div class="flex items-center gap-3">
+<div class="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary dark:bg-primary/20">
+<span class="material-symbols-outlined">person</span>
+</div>
+<h2 class="text-lg font-bold text-slate-900 dark:text-slate-100">Basic Information</h2>
+</div>
+<div class="flex flex-col gap-3 mt-2">
+<div>
+<p class="text-xs font-medium text-slate-500 uppercase tracking-wider">Primary Contact</p>
+<p class="text-sm text-slate-900 dark:text-slate-200 mt-1">Sarah Jenkins</p>
+</div>
+<div>
+<p class="text-xs font-medium text-slate-500 uppercase tracking-wider">Email</p>
+<a class="text-sm text-primary hover:underline mt-1 block" href="mailto:s.jenkins@globallogistics.com">s.jenkins@globallogistics.com</a>
+</div>
+<div>
+<p class="text-xs font-medium text-slate-500 uppercase tracking-wider">Phone</p>
+<p class="text-sm text-slate-900 dark:text-slate-200 mt-1">+1 (555) 123-4567</p>
+</div>
+</div>
+</div>
+<div class="flex gap-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 flex-col shadow-sm">
+<div class="flex items-center gap-3">
+<div class="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary dark:bg-primary/20">
+<span class="material-symbols-outlined">sailing</span>
+</div>
+<h2 class="text-lg font-bold text-slate-900 dark:text-slate-100">Shipping Preferences</h2>
+</div>
+<div class="flex flex-col gap-4 mt-2">
+<div>
+<p class="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">Primary Modes</p>
+<div class="flex gap-2">
+<span class="inline-flex items-center gap-1.5 rounded-md bg-slate-100 dark:bg-slate-800 px-2.5 py-1 text-sm font-medium text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+<span class="material-symbols-outlined" style="font-size: 16px;">directions_boat</span>
+                                        Sea Freight
+                                    </span>
+<span class="inline-flex items-center gap-1.5 rounded-md bg-slate-100 dark:bg-slate-800 px-2.5 py-1 text-sm font-medium text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+<span class="material-symbols-outlined" style="font-size: 16px;">flight</span>
+                                        Air Freight
+                                    </span>
+</div>
+</div>
+<div>
+<p class="text-xs font-medium text-slate-500 uppercase tracking-wider">Incoterms</p>
+<p class="text-sm text-slate-900 dark:text-slate-200 mt-1">FOB, CIF</p>
+</div>
+</div>
+</div>
+<div class="flex gap-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 flex-col shadow-sm">
+<div class="flex items-center gap-3">
+<div class="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary dark:bg-primary/20">
+<span class="material-symbols-outlined">public</span>
+</div>
+<h2 class="text-lg font-bold text-slate-900 dark:text-slate-100">Location Info</h2>
+</div>
+<div class="flex flex-col gap-3 mt-2">
+<div>
+<p class="text-xs font-medium text-slate-500 uppercase tracking-wider">Headquarters</p>
+<p class="text-sm text-slate-900 dark:text-slate-200 mt-1">123 Logistics Way, Suite 100<br/>New York, NY 10001, USA</p>
+</div>
+<div class="grid grid-cols-2 gap-4 mt-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+<div>
+<p class="text-xs font-medium text-slate-500 uppercase tracking-wider">Frequent Origins</p>
+<p class="text-sm text-slate-900 dark:text-slate-200 mt-1">US, CN, DE</p>
+</div>
+<div>
+<p class="text-xs font-medium text-slate-500 uppercase tracking-wider">Frequent Dest.</p>
+<p class="text-sm text-slate-900 dark:text-slate-200 mt-1">UK, FR, IT</p>
+</div>
+</div>
+</div>
+</div>
+<div class="flex gap-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 flex-col shadow-sm">
+<div class="flex items-center gap-3">
+<div class="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary dark:bg-primary/20">
+<span class="material-symbols-outlined">work</span>
+</div>
+<h2 class="text-lg font-bold text-slate-900 dark:text-slate-100">CRM Info</h2>
+</div>
+<div class="flex flex-col gap-3 mt-2">
+<div>
+<p class="text-xs font-medium text-slate-500 uppercase tracking-wider">Account Executive</p>
+<div class="flex items-center gap-2 mt-1">
+<div class="size-6 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-300">JD</div>
+<p class="text-sm text-slate-900 dark:text-slate-200">Jane Doe</p>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4 mt-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+<div>
+<p class="text-xs font-medium text-slate-500 uppercase tracking-wider">Stage</p>
+<p class="text-sm text-slate-900 dark:text-slate-200 mt-1">Qualified</p>
+</div>
+<div>
+<p class="text-xs font-medium text-slate-500 uppercase tracking-wider">Annual Value</p>
+<p class="text-sm text-slate-900 dark:text-slate-200 mt-1 font-semibold">$1.2M</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="w-full md:w-80 flex flex-col gap-4 shrink-0">
+<div class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm sticky top-8">
+<h3 class="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider mb-4">Quick Actions</h3>
+<div class="flex flex-col gap-3">
+<button class="flex items-center justify-center gap-2 w-full rounded-lg h-10 px-4 bg-primary text-white text-sm font-semibold hover:bg-primary/90 transition-colors shadow-sm">
+<span class="material-symbols-outlined" style="font-size: 18px;">add_box</span>
+                            New Quotation
+                        </button>
+<button class="flex items-center justify-center gap-2 w-full rounded-lg h-10 px-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+<span class="material-symbols-outlined" style="font-size: 18px;">event_note</span>
+                            Log Activity
+                        </button>
+<button class="flex items-center justify-center gap-2 w-full rounded-lg h-10 px-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+<span class="material-symbols-outlined" style="font-size: 18px;">swap_horiz</span>
+                            Transfer Rep
+                        </button>
+</div>
+<div class="mt-8 pt-6 border-t border-slate-100 dark:border-slate-800">
+<h3 class="text-sm font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider mb-4">Recent Activity</h3>
+<div class="flex flex-col gap-4 relative before:absolute before:inset-y-0 before:left-[11px] before:w-px before:bg-slate-200 dark:before:bg-slate-700">
+<div class="flex gap-3 relative z-10">
+<div class="size-6 rounded-full bg-slate-100 dark:bg-slate-800 border-2 border-white dark:border-slate-900 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-slate-500" style="font-size: 14px;">call</span>
+</div>
+<div class="flex flex-col">
+<p class="text-sm text-slate-900 dark:text-slate-200 font-medium">Call with Sarah</p>
+<p class="text-xs text-slate-500">Today, 10:30 AM</p>
+</div>
+</div>
+<div class="flex gap-3 relative z-10">
+<div class="size-6 rounded-full bg-primary/10 border-2 border-white dark:border-slate-900 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary" style="font-size: 14px;">description</span>
+</div>
+<div class="flex flex-col">
+<p class="text-sm text-slate-900 dark:text-slate-200 font-medium">Quote #Q-1042 Sent</p>
+<p class="text-xs text-slate-500">Yesterday, 2:15 PM</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

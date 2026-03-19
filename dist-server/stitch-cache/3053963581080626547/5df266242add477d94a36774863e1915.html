@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+
+<html class="dark"><head>
+<meta charset="utf-8"/>
+<title>Savaş Gemileri Victory Screen</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "primary": "#f4c025",
+            "background-light": "#f8f8f5",
+            "background-dark": "#0B1D2E", 
+          },
+          fontFamily: {
+            "display": ["Space Grotesk"]
+          },
+          borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+        },
+      },
+    }
+  </script>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display">
+<div class="relative flex min-h-screen w-full flex-col group/design-root overflow-x-hidden">
+<div class="layout-container flex h-full grow flex-col">
+<div class="px-8 md:px-20 lg:px-40 flex flex-1 justify-center py-5">
+<div class="layout-content-container flex flex-col max-w-[1200px] flex-1">
+<header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-primary/20 px-10 py-4 mb-6">
+<div class="flex items-center gap-4 text-slate-900 dark:text-slate-100">
+<span class="material-symbols-outlined text-primary text-3xl">directions_boat</span>
+<h2 class="text-xl font-bold leading-tight tracking-[-0.015em]">Savaş Gemileri</h2>
+</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-slate-500 dark:text-slate-400 cursor-pointer hover:text-primary transition-colors">settings</span>
+</div>
+</header>
+<div class="@container w-full">
+<div class="@[480px]:p-4 w-full">
+<div class="flex min-h-[400px] flex-col gap-6 bg-cover bg-center bg-no-repeat @[480px]:gap-8 @[480px]:rounded-xl items-center justify-center p-8 relative overflow-hidden shadow-2xl" data-alt="Deep ocean background with subtle lighting" style='background-image: linear-gradient(to bottom, rgba(11, 29, 46, 0.8), rgba(11, 29, 46, 0.95)), url("https://lh3.googleusercontent.com/aida-public/AB6AXuCRVKmpixwwEZ1Fzg-KSm27jhgr7Ao7Ix91-q5sO-KMujoDWWN2_kprd1MweFS6nw4L3ouomOWU6yYfR6wDN1MGSAfzAfzwQdyH6UlNHd0XpNLmY9-apYs3PyzMNPfzSAD18AvrES1IwdIJsHEsQaoA0eIXeiPToltxdfREA958otj2hD67SlAVYMAYvCjWn0adrEs4VOlkEgP7BC45eO_5uUm9_wzSDBVnhzKwIWihx3DIx2zIZ2UXKci7f6-jOdZ4sFNThcpolo4");'>
+<div class="absolute inset-0 bg-primary/10 mix-blend-overlay"></div>
+<div class="absolute inset-0 opacity-30" style="background-image: radial-gradient(circle at center, #f4c025 0%, transparent 60%);"></div>
+<div class="flex flex-col gap-3 text-center z-10 relative">
+<div class="mx-auto mb-2 text-primary">
+<span class="material-symbols-outlined text-6xl" style="font-variation-settings: 'FILL' 1;">emoji_events</span>
+</div>
+<h1 class="text-primary text-5xl font-black leading-tight tracking-tight drop-shadow-lg @[480px]:text-7xl uppercase">
+                    Zafer!
+                  </h1>
+<h2 class="text-slate-200 text-lg font-medium leading-normal @[480px]:text-xl uppercase tracking-widest mt-2">Düşman Filosu Yok Edildi</h2>
+</div>
+</div>
+</div>
+</div>
+<div class="flex flex-wrap gap-4 p-4 mt-4">
+<div class="flex min-w-[158px] flex-1 flex-col gap-2 rounded-xl p-6 bg-slate-800/50 border border-primary/20 shadow-sm backdrop-blur-sm">
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-slate-400">my_location</span>
+<p class="text-slate-400 text-sm font-medium leading-normal uppercase tracking-wider">Atış Sayısı</p>
+</div>
+<p class="text-primary tracking-tight text-3xl font-bold leading-tight">45</p>
+</div>
+<div class="flex min-w-[158px] flex-1 flex-col gap-2 rounded-xl p-6 bg-slate-800/50 border border-primary/20 shadow-sm backdrop-blur-sm">
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-green-400">crisis_alert</span>
+<p class="text-slate-400 text-sm font-medium leading-normal uppercase tracking-wider">İsabet</p>
+</div>
+<p class="text-slate-100 tracking-tight text-3xl font-bold leading-tight">17</p>
+</div>
+<div class="flex min-w-[158px] flex-1 flex-col gap-2 rounded-xl p-6 bg-slate-800/50 border border-primary/20 shadow-sm backdrop-blur-sm">
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-red-400">water_drop</span>
+<p class="text-slate-400 text-sm font-medium leading-normal uppercase tracking-wider">Karavana</p>
+</div>
+<p class="text-slate-100 tracking-tight text-3xl font-bold leading-tight">28</p>
+</div>
+<div class="flex min-w-[158px] flex-1 flex-col gap-2 rounded-xl p-6 bg-slate-800/50 border border-primary/20 shadow-sm backdrop-blur-sm relative overflow-hidden">
+<div class="flex items-center gap-2 mb-1 z-10 relative">
+<span class="material-symbols-outlined text-primary">percent</span>
+<p class="text-slate-400 text-sm font-medium leading-normal uppercase tracking-wider">İsabet Oranı</p>
+</div>
+<p class="text-primary tracking-tight text-3xl font-bold leading-tight z-10 relative">38%</p>
+<div class="absolute right-[-20px] bottom-[-20px] w-32 h-32 rounded-full border-8 border-primary/20 z-0"></div>
+<div class="absolute right-[-20px] bottom-[-20px] w-32 h-32 rounded-full border-8 border-primary border-t-transparent border-l-transparent z-0 transform rotate-45"></div>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-8 p-4 mt-6">
+<div class="flex flex-col gap-4">
+<div class="flex items-center justify-between">
+<h3 class="text-xl font-bold leading-tight tracking-tight text-slate-100 flex items-center gap-2">
+<span class="material-symbols-outlined text-primary">anchor</span> Senin Filon
+                </h3>
+</div>
+<div class="w-full aspect-square bg-slate-800/80 rounded-xl border-2 border-slate-700 p-2 grid grid-cols-10 grid-rows-10 gap-1 shadow-inner relative">
+<!-- Decorative Grid Overlay -->
+<div class="absolute inset-0 pointer-events-none opacity-20" style="background-image: linear-gradient(#f4c025 1px, transparent 1px), linear-gradient(90deg, #f4c025 1px, transparent 1px); background-size: 10% 10%;"></div>
+<!-- Sample Grid Cells (Simplified for visual representation) -->
+<div class="bg-blue-900/40 rounded-sm flex items-center justify-center"><span class="text-white text-xs opacity-50">O</span></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-slate-600 rounded-sm border border-slate-500 shadow-sm relative overflow-hidden">
+<div class="absolute inset-0 bg-red-500/80 flex items-center justify-center"><span class="text-white font-bold text-xs">X</span></div>
+</div>
+<div class="bg-slate-600 rounded-sm border border-slate-500 shadow-sm"></div>
+<div class="bg-slate-600 rounded-sm border border-slate-500 shadow-sm relative overflow-hidden">
+<div class="absolute inset-0 bg-red-500/80 flex items-center justify-center"><span class="text-white font-bold text-xs">X</span></div>
+</div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm flex items-center justify-center"><span class="text-white text-xs opacity-50">O</span></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-slate-600 rounded-sm border border-slate-500 shadow-sm relative overflow-hidden">
+<div class="absolute inset-0 bg-red-500/80 flex items-center justify-center"><span class="text-white font-bold text-xs">X</span></div>
+</div>
+<div class="bg-blue-900/40 rounded-sm flex items-center justify-center"><span class="text-white text-xs opacity-50">O</span></div>
+<div class="bg-blue-900/40 rounded-sm flex items-center justify-center"><span class="text-white text-xs opacity-50">O</span></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-slate-600 rounded-sm border border-slate-500 shadow-sm relative overflow-hidden">
+<div class="absolute inset-0 bg-red-500/80 flex items-center justify-center"><span class="text-white font-bold text-xs">X</span></div>
+</div>
+<div class="bg-slate-600 rounded-sm border border-slate-500 shadow-sm relative overflow-hidden">
+<div class="absolute inset-0 bg-red-500/80 flex items-center justify-center"><span class="text-white font-bold text-xs">X</span></div>
+</div>
+<div class="bg-slate-600 rounded-sm border border-slate-500 shadow-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-slate-600 rounded-sm border border-slate-500 shadow-sm relative overflow-hidden">
+<div class="absolute inset-0 bg-red-500/80 flex items-center justify-center"><span class="text-white font-bold text-xs">X</span></div>
+</div>
+<div class="bg-blue-900/40 rounded-sm flex items-center justify-center"><span class="text-white text-xs opacity-50">O</span></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm flex items-center justify-center"><span class="text-white text-xs opacity-50">O</span></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-slate-600 rounded-sm border border-slate-500 shadow-sm relative overflow-hidden">
+<div class="absolute inset-0 bg-red-500/80 flex items-center justify-center"><span class="text-white font-bold text-xs">X</span></div>
+</div>
+<div class="col-span-10 row-span-6 bg-blue-900/20 rounded-sm border border-blue-800/30 flex items-center justify-center">
+<span class="text-slate-500 text-sm italic">Grid Devamı...</span>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-4">
+<div class="flex items-center justify-between">
+<h3 class="text-xl font-bold leading-tight tracking-tight text-slate-100 flex items-center gap-2">
+<span class="material-symbols-outlined text-red-400">skull</span> Düşman Filosu (Yok Edildi)
+                </h3>
+</div>
+<div class="w-full aspect-square bg-slate-800/80 rounded-xl border-2 border-primary/50 p-2 grid grid-cols-10 grid-rows-10 gap-1 shadow-[0_0_15px_rgba(244,192,37,0.2)] relative">
+<div class="absolute inset-0 pointer-events-none opacity-20" style="background-image: linear-gradient(#f4c025 1px, transparent 1px), linear-gradient(90deg, #f4c025 1px, transparent 1px); background-size: 10% 10%;"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm flex items-center justify-center"><span class="text-white text-xs opacity-50">O</span></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm flex items-center justify-center"><span class="text-white text-xs opacity-50">O</span></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-slate-600 rounded-sm border border-slate-500 shadow-sm relative overflow-hidden">
+<div class="absolute inset-0 bg-red-500 flex items-center justify-center"><span class="text-white font-bold text-xs">X</span></div>
+</div>
+<div class="bg-slate-600 rounded-sm border border-slate-500 shadow-sm relative overflow-hidden">
+<div class="absolute inset-0 bg-red-500 flex items-center justify-center"><span class="text-white font-bold text-xs">X</span></div>
+</div>
+<div class="bg-blue-900/40 rounded-sm flex items-center justify-center"><span class="text-white text-xs opacity-50">O</span></div>
+<div class="bg-slate-600 rounded-sm border border-slate-500 shadow-sm relative overflow-hidden">
+<div class="absolute inset-0 bg-red-500 flex items-center justify-center"><span class="text-white font-bold text-xs">X</span></div>
+</div>
+<div class="bg-slate-600 rounded-sm border border-slate-500 shadow-sm relative overflow-hidden">
+<div class="absolute inset-0 bg-red-500 flex items-center justify-center"><span class="text-white font-bold text-xs">X</span></div>
+</div>
+<div class="bg-slate-600 rounded-sm border border-slate-500 shadow-sm relative overflow-hidden">
+<div class="absolute inset-0 bg-red-500 flex items-center justify-center"><span class="text-white font-bold text-xs">X</span></div>
+</div>
+<div class="bg-blue-900/40 rounded-sm flex items-center justify-center"><span class="text-white text-xs opacity-50">O</span></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm flex items-center justify-center"><span class="text-white text-xs opacity-50">O</span></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm flex items-center justify-center"><span class="text-white text-xs opacity-50">O</span></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm flex items-center justify-center"><span class="text-white text-xs opacity-50">O</span></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm flex items-center justify-center"><span class="text-white text-xs opacity-50">O</span></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-slate-600 rounded-sm border border-slate-500 shadow-sm relative overflow-hidden">
+<div class="absolute inset-0 bg-red-500 flex items-center justify-center"><span class="text-white font-bold text-xs">X</span></div>
+</div>
+<div class="bg-blue-900/40 rounded-sm flex items-center justify-center"><span class="text-white text-xs opacity-50">O</span></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm flex items-center justify-center"><span class="text-white text-xs opacity-50">O</span></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-slate-600 rounded-sm border border-slate-500 shadow-sm relative overflow-hidden">
+<div class="absolute inset-0 bg-red-500 flex items-center justify-center"><span class="text-white font-bold text-xs">X</span></div>
+</div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="bg-slate-600 rounded-sm border border-slate-500 shadow-sm relative overflow-hidden">
+<div class="absolute inset-0 bg-red-500 flex items-center justify-center"><span class="text-white font-bold text-xs">X</span></div>
+</div>
+<div class="bg-blue-900/40 rounded-sm"></div>
+<div class="col-span-10 row-span-6 bg-blue-900/20 rounded-sm border border-blue-800/30 flex items-center justify-center">
+<span class="text-slate-500 text-sm italic">Grid Devamı...</span>
+</div>
+</div>
+</div>
+</div>
+<div class="flex-wrap gap-4 flex justify-center p-8 mt-4 border-t border-primary/10">
+<button class="flex min-w-[180px] cursor-pointer items-center justify-center overflow-hidden rounded-xl h-14 px-8 bg-primary text-background-dark text-lg font-bold leading-normal tracking-wide shadow-lg hover:bg-primary/90 transition-all hover:scale-105">
+<span class="material-symbols-outlined mr-2">replay</span>
+<span class="truncate">Tekrar Oyna</span>
+</button>
+<button class="flex min-w-[180px] cursor-pointer items-center justify-center overflow-hidden rounded-xl h-14 px-8 bg-slate-800 text-white border-2 border-slate-700 text-lg font-bold leading-normal tracking-wide hover:bg-slate-700 hover:border-slate-600 transition-all">
+<span class="material-symbols-outlined mr-2">home</span>
+<span class="truncate">Ana Menü</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</body></html>

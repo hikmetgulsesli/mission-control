@@ -14,6 +14,8 @@ import { Tasks } from './pages/Tasks';
 import { RunDetail } from './pages/RunDetail';
 import { NotFound } from "./pages/NotFound";
 import { Scrape } from "./pages/Scrape";
+import { Rules } from "./pages/Rules";
+import { Live } from "./pages/Live";
 
 function RunDetailRoute() {
   const { id } = useParams<{ id: string }>();
@@ -41,6 +43,8 @@ export default function App() {
           <Route path="projects" element={<Projects />} />
           <Route path="files" element={<Files />} />
           <Route path="scrape" element={<Scrape />} />
+          <Route path="rules" element={<Rules />} />
+          <Route path="live" element={<Live />} />
           <Route path="workflows" element={<Workflows />} />
           <Route path="tasks" element={<Tasks />} />
           <Route path="*" element={<NotFound />} />

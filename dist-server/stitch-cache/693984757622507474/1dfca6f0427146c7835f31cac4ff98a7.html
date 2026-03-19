@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Logistica System Audit Log Viewer</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#2463eb",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#111621",
+                        "slate-50": "#f8fafc",
+                        "slate-100": "#f1f5f9",
+                        "slate-200": "#e2e8f0",
+                        "slate-300": "#cbd5e1",
+                        "slate-400": "#94a3b8",
+                        "slate-500": "#64748b",
+                        "slate-600": "#475569",
+                        "slate-700": "#334155",
+                        "slate-800": "#1e293b",
+                        "slate-900": "#0f172a",
+                    },
+                    fontFamily: {
+                        "display": ["Plus Jakarta Sans", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display font-display antialiased">
+<div class="relative flex h-auto min-h-screen w-full flex-col group/design-root overflow-x-hidden">
+<header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-10 py-3 sticky top-0 z-10">
+<div class="flex items-center gap-4 text-slate-900 dark:text-slate-100">
+<div class="size-6 text-primary">
+<svg fill="none" viewbox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+<path clip-rule="evenodd" d="M12.0799 24L4 19.2479L9.95537 8.75216L18.04 13.4961L18.0446 4H29.9554L29.96 13.4961L38.0446 8.75216L44 19.2479L35.92 24L44 28.7521L38.0446 39.2479L29.96 34.5039L29.9554 44H18.0446L18.04 34.5039L9.95537 39.2479L4 28.7521L12.0799 24Z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+<h2 class="text-slate-900 dark:text-slate-100 text-xl font-bold leading-tight tracking-[-0.015em]">Logistica</h2>
+</div>
+<div class="flex flex-1 justify-end gap-8">
+<nav class="flex items-center gap-9">
+<a class="text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-primary transition-colors text-sm font-medium leading-normal" href="#">Dashboard</a>
+<a class="text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-primary transition-colors text-sm font-medium leading-normal" href="#">Shipments</a>
+<a class="text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-primary transition-colors text-sm font-medium leading-normal" href="#">Quotes</a>
+<a class="text-primary dark:text-primary text-sm font-bold leading-normal border-b-2 border-primary pb-1" href="#">Audit Log</a>
+</nav>
+<div class="flex items-center gap-4 border-l border-slate-200 dark:border-slate-800 pl-8">
+<button class="flex items-center justify-center p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors">
+<span class="material-symbols-outlined text-xl">notifications</span>
+</button>
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 border border-slate-200 dark:border-slate-700 cursor-pointer" data-alt="User profile picture placeholder" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDLxFqcJgMeOUZ_cknFgjn9S3eARCJWkQarFSAPZ8_HMdmk9hPfeDfYmuFQArjMPvEU6SUFACPtu_TioB7txaC3xRIc2jR6NycIykZ1RNwGIs3qqD7h69UJJDbXXysAi-G-z8dIJ4t32-z33CXJw-gqJNYvcLXAWldGuOIG_1X05qCvqBVGQxXXMlyrpJxCic5cXkL9V3qoYGylqvWA1RGlHZtDFNy_ihQvxP0VNEjcJjaTFSDD4U9NXujvQsEXikEsObqmmQRDBCo");'></div>
+</div>
+</div>
+</header>
+<main class="flex-1 w-full max-w-[1440px] mx-auto px-10 py-8 flex flex-col gap-6">
+<div class="flex flex-wrap justify-between items-end gap-4">
+<div class="flex flex-col gap-1">
+<h1 class="text-slate-900 dark:text-slate-100 text-3xl font-bold leading-tight tracking-[-0.02em]">System Audit Log</h1>
+<p class="text-slate-500 dark:text-slate-400 text-base font-normal leading-normal">View, filter, and track system activities and user actions.</p>
+</div>
+<button class="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-sm font-medium shadow-sm">
+<span class="material-symbols-outlined text-lg">download</span>
+                    Export CSV
+                </button>
+</div>
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-4 flex flex-wrap gap-4 items-end">
+<div class="flex flex-col flex-1 min-w-[250px]">
+<label class="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Search</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+<input class="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm placeholder:text-slate-400 transition-shadow" placeholder="Search Entity ID or User..." type="text"/>
+</div>
+</div>
+<div class="flex flex-col w-[200px]">
+<label class="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">User</label>
+<div class="relative">
+<select class="w-full pl-3 pr-10 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm appearance-none cursor-pointer">
+<option value="">All Users</option>
+<option value="1">Jane Doe</option>
+<option value="2">John Smith</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">expand_more</span>
+</div>
+</div>
+<div class="flex flex-col w-[200px]">
+<label class="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Action Type</label>
+<div class="relative">
+<select class="w-full pl-3 pr-10 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm appearance-none cursor-pointer">
+<option value="">All Actions</option>
+<option value="create">Created</option>
+<option value="update">Updated</option>
+<option value="delete">Deleted</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">expand_more</span>
+</div>
+</div>
+<div class="flex flex-col w-[200px]">
+<label class="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider">Date Range</label>
+<div class="relative">
+<input class="w-full pl-3 pr-10 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-sm placeholder:text-slate-400 cursor-pointer" placeholder="Last 7 Days" readonly="" type="text"/>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">calendar_today</span>
+</div>
+</div>
+<button class="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-sm font-medium flex items-center gap-2 h-[42px]">
+<span class="material-symbols-outlined text-base">filter_list_off</span>
+                     Clear
+                </button>
+</div>
+<div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm overflow-hidden flex flex-col">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse min-w-[1000px]">
+<thead>
+<tr class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+<th class="py-3 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">Date/Time</th>
+<th class="py-3 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">User</th>
+<th class="py-3 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Action</th>
+<th class="py-3 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Entity Type</th>
+<th class="py-3 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Entity ID</th>
+<th class="py-3 px-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right w-[150px]">Changes</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors group">
+<td class="py-4 px-4 text-sm text-slate-600 dark:text-slate-400 whitespace-nowrap">
+<div class="flex flex-col">
+<span class="font-medium text-slate-900 dark:text-slate-200">Oct 24, 2023</span>
+<span class="text-xs">14:32:01 UTC</span>
+</div>
+</td>
+<td class="py-4 px-4">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-300 overflow-hidden">
+<img alt="JD" class="w-full h-full object-cover" data-alt="Avatar Jane Doe" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBLPf2d339PtV9LGjFF301VdQM7k37dvTWjUy05VNUTe-QgPIdqvy6jPpvR7Z0N2MYal1o0WV5f_sRw4B7WKPe8xHpnvw0Kb14ZuJS-k6QIBial3iOomkjouTqNRPxfd24Xw9OC0sjCvqzRxJD7YOUk8GGLOIHDnOmQ8KZMOHvRMypGbxnDCIJOBcJ2PUEhjtVU_GM3hS7X_fMDOV8mWjmvynKW-fnTKQLbi3-vddjPTcVIN38zv-0Hx2BgjMi5WS_bzrKCdIr9Xso"/>
+</div>
+<div class="flex flex-col">
+<span class="text-sm font-medium text-slate-900 dark:text-slate-200">Jane Doe</span>
+<span class="text-xs text-slate-500 dark:text-slate-400">jane@logistica.com</span>
+</div>
+</div>
+</td>
+<td class="py-4 px-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-xs font-medium border border-blue-100 dark:border-blue-800/50">
+<span class="size-1.5 rounded-full bg-blue-500"></span>
+                                        Updated
+                                    </span>
+</td>
+<td class="py-4 px-4 text-sm font-medium text-slate-700 dark:text-slate-300">Shipment</td>
+<td class="py-4 px-4">
+<a class="text-sm font-medium text-primary hover:underline font-mono" href="#">SHP-90210</a>
+</td>
+<td class="py-4 px-4 text-right">
+<button class="text-xs font-medium text-primary hover:text-blue-700 dark:hover:text-blue-400 bg-blue-50 dark:bg-blue-900/10 hover:bg-blue-100 dark:hover:bg-blue-900/30 px-3 py-1.5 rounded-md transition-colors">
+                                        View Details
+                                    </button>
+</td>
+</tr>
+<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors group">
+<td class="py-4 px-4 text-sm text-slate-600 dark:text-slate-400 whitespace-nowrap">
+<div class="flex flex-col">
+<span class="font-medium text-slate-900 dark:text-slate-200">Oct 24, 2023</span>
+<span class="text-xs">11:15:44 UTC</span>
+</div>
+</td>
+<td class="py-4 px-4">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-300 overflow-hidden">
+<img alt="JS" class="w-full h-full object-cover" data-alt="Avatar John Smith" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDfhpRTEXjxXu8qZq4xRFEqctD4AYn_L5rlof7jWXv7ipT0v2xmg2BOHwlaX1iogCrJoD_2RYIo9WuFSO4V_qHMCB5NHCeya_1sSN9QpcfNPClEFbKqRrMFg3Y8SMPzSs7mjgAQF_YErwoY2HeDbXJxCMlWxrq4H0DSb4gdDT48zxgf2BXr6PBayd5itUcIqx6BS3AuixhTQuYuEM4DK-XW4391UGFLIc6POaAv6jQL8zNU2WyTZV0nLSEGxUkhQebU5KYhsbc_p2M"/>
+</div>
+<div class="flex flex-col">
+<span class="text-sm font-medium text-slate-900 dark:text-slate-200">John Smith</span>
+<span class="text-xs text-slate-500 dark:text-slate-400">john.s@logistica.com</span>
+</div>
+</div>
+</td>
+<td class="py-4 px-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 text-xs font-medium border border-green-100 dark:border-green-800/50">
+<span class="size-1.5 rounded-full bg-green-500"></span>
+                                        Created
+                                    </span>
+</td>
+<td class="py-4 px-4 text-sm font-medium text-slate-700 dark:text-slate-300">Quote</td>
+<td class="py-4 px-4">
+<a class="text-sm font-medium text-primary hover:underline font-mono" href="#">QT-44512</a>
+</td>
+<td class="py-4 px-4 text-right text-sm text-slate-500 dark:text-slate-400">
+                                    New record
+                                </td>
+</tr>
+<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors group">
+<td class="py-4 px-4 text-sm text-slate-600 dark:text-slate-400 whitespace-nowrap">
+<div class="flex flex-col">
+<span class="font-medium text-slate-900 dark:text-slate-200">Oct 23, 2023</span>
+<span class="text-xs">09:05:12 UTC</span>
+</div>
+</td>
+<td class="py-4 px-4">
+<div class="flex items-center gap-3">
+<div class="size-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-300 overflow-hidden">
+<span class="material-symbols-outlined text-sm">robot_2</span>
+</div>
+<div class="flex flex-col">
+<span class="text-sm font-medium text-slate-900 dark:text-slate-200">System Admin</span>
+<span class="text-xs text-slate-500 dark:text-slate-400">Automated Job</span>
+</div>
+</div>
+</td>
+<td class="py-4 px-4">
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-xs font-medium border border-red-100 dark:border-red-800/50">
+<span class="size-1.5 rounded-full bg-red-500"></span>
+                                        Deleted
+                                    </span>
+</td>
+<td class="py-4 px-4 text-sm font-medium text-slate-700 dark:text-slate-300">Document</td>
+<td class="py-4 px-4">
+<span class="text-sm font-medium text-slate-500 dark:text-slate-500 font-mono">DOC-1120</span>
+</td>
+<td class="py-4 px-4 text-right">
+<button class="text-xs font-medium text-primary hover:text-blue-700 dark:hover:text-blue-400 bg-blue-50 dark:bg-blue-900/10 hover:bg-blue-100 dark:hover:bg-blue-900/30 px-3 py-1.5 rounded-md transition-colors">
+                                        View Details
+                                    </button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-800 px-4 py-3 flex items-center justify-between">
+<span class="text-sm text-slate-500 dark:text-slate-400">Showing <span class="font-medium text-slate-900 dark:text-slate-200">1</span> to <span class="font-medium text-slate-900 dark:text-slate-200">3</span> of <span class="font-medium text-slate-900 dark:text-slate-200">1,240</span> results</span>
+<div class="flex items-center gap-2">
+<button class="p-1 rounded bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 disabled:opacity-50" disabled="">
+<span class="material-symbols-outlined text-sm">chevron_left</span>
+</button>
+<button class="px-2.5 py-1 rounded bg-primary text-white text-sm font-medium">1</button>
+<button class="px-2.5 py-1 rounded bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600 text-sm font-medium transition-colors">2</button>
+<button class="px-2.5 py-1 rounded bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600 text-sm font-medium transition-colors">3</button>
+<span class="text-slate-400 px-1">...</span>
+<button class="p-1 rounded bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors">
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

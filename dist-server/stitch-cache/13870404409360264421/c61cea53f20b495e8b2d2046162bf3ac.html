@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>CyberTimer - Neon Countdown</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Sora:wght@300;400;600;800&amp;family=Nunito+Sans:wght@300;400;600;700&amp;family=VT323&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#0d93f2",
+                        "background-light": "#f5f7f8",
+                        "background-dark": "#0a0f14",
+                        "neon-blue": "#0d93f2",
+                        "neon-dark": "#062d47",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "sans-serif"],
+                        "cyber": ["VT323", "monospace"],
+                        "ui": ["Sora", "sans-serif"],
+                        "body": ["Nunito Sans", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                    boxShadow: {
+                        'neon': '0 0 5px #0d93f2, 0 0 20px rgba(13, 147, 242, 0.4)',
+                        'neon-strong': '0 0 10px #0d93f2, 0 0 40px rgba(13, 147, 242, 0.6)',
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .cyber-grid {
+            background-image: linear-gradient(rgba(13, 147, 242, 0.05) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(13, 147, 242, 0.05) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+        .glitch-border {
+            position: relative;
+            border: 1px solid #0d93f2;
+        }
+        .glitch-border::before {
+            content: '';
+            position: absolute;
+            top: -2px; left: -2px; right: -2px; bottom: -2px;
+            border: 1px solid rgba(13, 147, 242, 0.3);
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-body text-slate-900 dark:text-slate-100 min-h-screen selection:bg-primary/30">
+<div class="relative flex min-h-screen w-full flex-col cyber-grid overflow-x-hidden">
+<div class="layout-container flex h-full grow flex-col">
+<!-- Top Navigation Bar -->
+<header class="flex items-center justify-between whitespace-nowrap border-b border-primary/20 bg-background-dark/80 backdrop-blur-md px-6 md:px-20 py-4 sticky top-0 z-50">
+<div class="flex items-center gap-3">
+<div class="size-8 text-primary drop-shadow-[0_0_8px_rgba(13,147,242,0.8)]">
+<span class="material-symbols-outlined text-4xl">
+                            timer
+                        </span>
+</div>
+<h1 class="text-primary font-display text-2xl font-bold tracking-tighter uppercase italic">
+                        Cyber<span class="text-slate-100">Timer</span>
+</h1>
+</div>
+<div class="flex gap-4">
+<button class="flex items-center justify-center rounded-lg h-10 w-10 bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 transition-all">
+<span class="material-symbols-outlined">notifications_active</span>
+</button>
+<button class="flex items-center justify-center rounded-lg h-10 w-10 bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 transition-all">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</div>
+</header>
+<main class="flex flex-1 flex-col items-center justify-center p-4 md:p-10 max-w-5xl mx-auto w-full">
+<!-- Large Central Countdown Display -->
+<div class="relative w-full mb-12 flex flex-col items-center">
+<div class="absolute -top-10 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-1 bg-primary/20 border border-primary/40 rounded-full">
+<span class="flex h-2 w-2 rounded-full bg-primary animate-pulse"></span>
+<span class="text-[10px] uppercase font-bold tracking-widest text-primary">System Online: Ready</span>
+</div>
+<div class="w-full max-w-3xl aspect-[21/9] bg-slate-900/40 border-2 border-primary/50 rounded-2xl flex items-center justify-center shadow-neon overflow-hidden relative group">
+<div class="absolute inset-0 bg-gradient-to-t from-primary/10 to-transparent pointer-events-none"></div>
+<!-- 7-Segment Style Numbers -->
+<div class="flex items-baseline gap-2 md:gap-6 font-cyber text-primary text-8xl md:text-[10rem] leading-none select-none drop-shadow-[0_0_15px_rgba(13,147,242,0.8)]">
+<div class="flex flex-col items-center">
+<span>00</span>
+<span class="text-xs font-ui tracking-[0.4em] uppercase opacity-50 -mt-2">Hrs</span>
+</div>
+<span class="animate-pulse opacity-50">:</span>
+<div class="flex flex-col items-center">
+<span>05</span>
+<span class="text-xs font-ui tracking-[0.4em] uppercase opacity-50 -mt-2">Min</span>
+</div>
+<span class="animate-pulse opacity-50">:</span>
+<div class="flex flex-col items-center">
+<span>00</span>
+<span class="text-xs font-ui tracking-[0.4em] uppercase opacity-50 -mt-2">Sec</span>
+</div>
+</div>
+</div>
+<div class="mt-6 flex gap-8 items-center justify-center text-primary/60">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">volume_up</span>
+<span class="text-xs font-ui uppercase font-semibold">Alarm: Neon Pulse</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-sm">repeat</span>
+<span class="text-xs font-ui uppercase font-semibold">Loop: Off</span>
+</div>
+</div>
+</div>
+<!-- Input Controls -->
+<div class="w-full max-w-2xl bg-slate-900/60 backdrop-blur-sm border border-slate-800 rounded-xl p-8 mb-8">
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+<div class="space-y-3">
+<label class="block text-xs font-ui font-bold text-primary uppercase tracking-widest">Hours</label>
+<input class="w-full bg-background-dark border-primary/20 border-2 rounded-lg py-4 text-center text-2xl font-cyber text-primary focus:border-primary focus:ring-0 transition-all outline-none placeholder:text-primary/20" placeholder="00" type="number"/>
+</div>
+<div class="space-y-3">
+<label class="block text-xs font-ui font-bold text-primary uppercase tracking-widest">Minutes</label>
+<input class="w-full bg-background-dark border-primary/20 border-2 rounded-lg py-4 text-center text-2xl font-cyber text-primary focus:border-primary focus:ring-0 transition-all outline-none placeholder:text-primary/20" placeholder="00" type="number"/>
+</div>
+<div class="space-y-3">
+<label class="block text-xs font-ui font-bold text-primary uppercase tracking-widest">Seconds</label>
+<input class="w-full bg-background-dark border-primary/20 border-2 rounded-lg py-4 text-center text-2xl font-cyber text-primary focus:border-primary focus:ring-0 transition-all outline-none placeholder:text-primary/20" placeholder="00" type="number"/>
+</div>
+</div>
+<!-- Action Buttons -->
+<div class="flex flex-wrap items-center justify-center gap-4">
+<button class="flex-1 min-w-[140px] group relative px-8 py-4 bg-primary text-slate-100 font-ui font-bold uppercase tracking-widest rounded-lg shadow-neon hover:shadow-neon-strong transition-all overflow-hidden">
+<span class="relative z-10 flex items-center justify-center gap-2">
+<span class="material-symbols-outlined">play_arrow</span>
+                                Start
+                            </span>
+<div class="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+</button>
+<button class="flex-1 min-w-[140px] px-8 py-4 bg-transparent border-2 border-slate-700 text-slate-400 font-ui font-bold uppercase tracking-widest rounded-lg hover:border-red-500 hover:text-red-500 hover:bg-red-500/10 transition-all flex items-center justify-center gap-2">
+<span class="material-symbols-outlined">pause</span>
+                            Stop
+                        </button>
+<button class="flex-1 min-w-[140px] px-8 py-4 bg-transparent border-2 border-slate-700 text-slate-400 font-ui font-bold uppercase tracking-widest rounded-lg hover:border-primary hover:text-primary hover:bg-primary/10 transition-all flex items-center justify-center gap-2">
+<span class="material-symbols-outlined">refresh</span>
+                            Reset
+                        </button>
+</div>
+</div>
+<!-- Presets & Quick Select -->
+<div class="w-full max-w-2xl grid grid-cols-2 sm:grid-cols-4 gap-3">
+<button class="py-2 px-4 rounded-lg bg-slate-800/50 border border-slate-700 text-slate-400 hover:text-primary hover:border-primary/50 text-sm font-ui transition-all">5 MIN</button>
+<button class="py-2 px-4 rounded-lg bg-slate-800/50 border border-slate-700 text-slate-400 hover:text-primary hover:border-primary/50 text-sm font-ui transition-all">15 MIN</button>
+<button class="py-2 px-4 rounded-lg bg-slate-800/50 border border-slate-700 text-slate-400 hover:text-primary hover:border-primary/50 text-sm font-ui transition-all">30 MIN</button>
+<button class="py-2 px-4 rounded-lg bg-slate-800/50 border border-slate-700 text-slate-400 hover:text-primary hover:border-primary/50 text-sm font-ui transition-all">1 HOUR</button>
+</div>
+</main>
+<!-- Status Indicator Bar -->
+<footer class="mt-auto border-t border-primary/10 bg-background-dark/80 px-10 py-3">
+<div class="flex items-center justify-between text-[10px] text-primary/40 font-cyber tracking-widest uppercase">
+<div class="flex items-center gap-4">
+<span>CPU_LOAD: 12%</span>
+<span>MEM_ALLOC: 44.1GB</span>
+<span>SIGNAL: STABLE</span>
+</div>
+<div class="hidden sm:block">
+                        CYBER_OS v4.2.0 // EST. 2077
+                    </div>
+</div>
+</footer>
+</div>
+</div>
+<!-- Alert State Modal (Hidden by Default) -->
+<div class="fixed inset-0 z-[100] bg-red-900/20 backdrop-blur-md hidden items-center justify-center p-6">
+<div class="max-w-md w-full bg-background-dark border-4 border-red-500 rounded-xl p-10 flex flex-col items-center text-center shadow-[0_0_100px_rgba(239,68,68,0.5)]">
+<div class="size-24 bg-red-500/20 rounded-full flex items-center justify-center text-red-500 mb-6 animate-ping">
+<span class="material-symbols-outlined text-6xl">priority_high</span>
+</div>
+<h2 class="text-4xl font-cyber text-red-500 mb-2 uppercase tracking-tighter">TIME EXPIRED</h2>
+<p class="text-slate-400 font-ui mb-8 tracking-wide">The countdown has reached zero. Operation complete.</p>
+<button class="w-full py-4 bg-red-500 text-white font-ui font-bold uppercase rounded-lg shadow-[0_0_20px_rgba(239,68,68,0.6)]">Silence Alarm</button>
+</div>
+</div>
+</body></html>

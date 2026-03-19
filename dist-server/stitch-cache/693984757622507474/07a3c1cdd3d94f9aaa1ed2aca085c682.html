@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+
+<html lang="tr"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Mobil Yapılacaklar Listesi</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#2463eb",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#111621",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="max-w-md mx-auto min-h-screen flex flex-col relative bg-white dark:bg-slate-900 shadow-xl overflow-x-hidden" style="--checkbox-tick-svg: url('data:image/svg+xml,%3csvg viewBox=%270 0 16 16%27 fill=%27rgb(255,255,255)%27 xmlns=%27http://www.w3.org/2000/svg%27%3e%3cpath d=%27M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z%27/%3e%3c/svg%3e');">
+<!-- Header -->
+<div class="flex items-center justify-center p-4 pt-8 pb-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-10">
+<h2 class="text-2xl font-semibold tracking-tight text-slate-800 dark:text-slate-100 text-center">Yapılacaklar Listesi</h2>
+</div>
+<!-- Input Section -->
+<div class="px-4 py-4 space-y-3 bg-slate-50 dark:bg-slate-800/50">
+<label class="flex flex-col w-full">
+<input class="form-input w-full rounded-xl text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary/50 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 h-14 placeholder:text-slate-400 dark:placeholder:text-slate-500 px-4 text-base transition-shadow" placeholder="Görev girin..." value=""/>
+</label>
+<button class="flex w-full items-center justify-center rounded-xl h-14 bg-primary text-white gap-2 font-semibold text-base transition-colors hover:bg-primary/90 active:bg-primary/80">
+<span class="material-symbols-outlined text-[20px]">add</span>
+<span>Ekle</span>
+</button>
+</div>
+<!-- Filters -->
+<div class="px-4 py-3">
+<div class="flex h-12 w-full items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 p-1">
+<label class="flex cursor-pointer h-full grow items-center justify-center rounded-lg px-2 has-[:checked]:bg-white dark:has-[:checked]:bg-slate-700 has-[:checked]:shadow-sm has-[:checked]:text-slate-900 dark:has-[:checked]:text-white text-slate-500 dark:text-slate-400 text-sm font-medium transition-all">
+<span>Tümü</span>
+<input checked="" class="invisible w-0 absolute" name="filter" type="radio" value="Tümü"/>
+</label>
+<label class="flex cursor-pointer h-full grow items-center justify-center rounded-lg px-2 has-[:checked]:bg-white dark:has-[:checked]:bg-slate-700 has-[:checked]:shadow-sm has-[:checked]:text-slate-900 dark:has-[:checked]:text-white text-slate-500 dark:text-slate-400 text-sm font-medium transition-all">
+<span>Aktif</span>
+<input class="invisible w-0 absolute" name="filter" type="radio" value="Aktif"/>
+</label>
+<label class="flex cursor-pointer h-full grow items-center justify-center rounded-lg px-2 has-[:checked]:bg-white dark:has-[:checked]:bg-slate-700 has-[:checked]:shadow-sm has-[:checked]:text-slate-900 dark:has-[:checked]:text-white text-slate-500 dark:text-slate-400 text-sm font-medium transition-all">
+<span>Tamamlanan</span>
+<input class="invisible w-0 absolute" name="filter" type="radio" value="Tamamlanan"/>
+</label>
+</div>
+</div>
+<!-- List -->
+<div class="flex-1 overflow-y-auto pb-6">
+<ul class="divide-y divide-slate-100 dark:divide-slate-800">
+<!-- Active Task -->
+<li class="flex items-center gap-3 px-4 py-4 min-h-[44px] hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
+<div class="flex items-center justify-center">
+<input class="h-6 w-6 rounded-md border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-primary checked:bg-primary checked:border-primary checked:bg-[image:--checkbox-tick-svg] focus:ring-2 focus:ring-primary/30 focus:ring-offset-0 focus:outline-none transition-all cursor-pointer" type="checkbox"/>
+</div>
+<p class="text-slate-800 dark:text-slate-200 text-base font-normal flex-1 line-clamp-2">Tasarım toplantısı yap</p>
+<button class="flex items-center justify-center h-10 w-10 text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 transition-colors rounded-full focus:outline-none focus:ring-2 focus:ring-red-500/30">
+<span class="material-symbols-outlined text-[24px]">close</span>
+</button>
+</li>
+<!-- Active Task -->
+<li class="flex items-center gap-3 px-4 py-4 min-h-[44px] hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
+<div class="flex items-center justify-center">
+<input class="h-6 w-6 rounded-md border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-primary checked:bg-primary checked:border-primary checked:bg-[image:--checkbox-tick-svg] focus:ring-2 focus:ring-primary/30 focus:ring-offset-0 focus:outline-none transition-all cursor-pointer" type="checkbox"/>
+</div>
+<p class="text-slate-800 dark:text-slate-200 text-base font-normal flex-1 line-clamp-2">Market alışverişini tamamla ve faturaları öde</p>
+<button class="flex items-center justify-center h-10 w-10 text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 transition-colors rounded-full focus:outline-none focus:ring-2 focus:ring-red-500/30">
+<span class="material-symbols-outlined text-[24px]">close</span>
+</button>
+</li>
+<!-- Completed Task -->
+<li class="flex items-center gap-3 px-4 py-4 min-h-[44px] bg-slate-50/50 dark:bg-slate-900/50 transition-colors group">
+<div class="flex items-center justify-center">
+<input checked="" class="h-6 w-6 rounded-md border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-primary checked:bg-primary checked:border-primary checked:bg-[image:--checkbox-tick-svg] focus:ring-2 focus:ring-primary/30 focus:ring-offset-0 focus:outline-none transition-all cursor-pointer" type="checkbox"/>
+</div>
+<p class="text-slate-400 dark:text-slate-500 text-base font-normal flex-1 line-through line-clamp-2">Projeyi gözden geçir</p>
+<button class="flex items-center justify-center h-10 w-10 text-slate-400 hover:text-red-500 dark:text-slate-500 dark:hover:text-red-400 transition-colors rounded-full focus:outline-none focus:ring-2 focus:ring-red-500/30">
+<span class="material-symbols-outlined text-[24px]">close</span>
+</button>
+</li>
+</ul>
+<!-- Empty State (Hidden in this view, shown for completeness) -->
+<!--
+            <div class="flex flex-col items-center justify-center py-16 px-4 text-center">
+                <span class="material-symbols-outlined text-[48px] text-slate-300 dark:text-slate-600 mb-4">task</span>
+                <p class="text-slate-500 dark:text-slate-400 text-base">Henüz görev yok. Yukarıdan ekleyin!</p>
+            </div>
+            -->
+</div>
+</div>
+</body></html>

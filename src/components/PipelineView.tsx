@@ -1,12 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { StoryChecklist } from './StoryChecklist';
 import { api } from '../lib/api';
 
-const STEP_ORDER = ['plan', 'design', 'stories', 'setup', 'implement', 'verify', 'security-gate', 'final-test', 'deploy'];
+const STEP_ORDER = ['plan', 'design', 'stories', 'setup-repo', 'setup-build', 'implement', 'verify', 'security-gate', 'qa-test', 'final-test', 'deploy'];
 const STEP_LABELS: Record<string, string> = {
-  plan: 'PLAN', design: 'DESIGN', stories: 'STORIES', setup: 'SETUP', implement: 'IMPL', deploy: 'DEPLOY',
-  verify: 'VERIFY', 'security-gate': 'SEC GATE', 'final-test': 'FINAL TEST',
+  plan: 'PLAN', design: 'DESIGN', stories: 'STORIES', 'setup-repo': 'SETUP', 'setup-build': 'BUILD', implement: 'IMPL', deploy: 'DEPLOY',
+  verify: 'VERIFY', 'security-gate': 'SEC GATE', 'qa-test': 'QA TEST', 'final-test': 'FINAL TEST',
   test: 'TEST', pr: 'PR', review: 'REVIEW',
   triage: 'TRIAGE', investigate: 'INVEST', fix: 'FIX',
   collect: 'COLLECT', report: 'REPORT',
@@ -14,7 +14,7 @@ const STEP_LABELS: Record<string, string> = {
 };
 
 const WORKFLOW_STEPS: Record<string, string[]> = {
-  'feature-dev': ['plan', 'design', 'stories', 'setup', 'implement', 'verify', 'security-gate', 'final-test', 'deploy'],
+  'feature-dev': ['plan', 'design', 'stories', 'setup-repo', 'setup-build', 'implement', 'verify', 'security-gate', 'qa-test', 'final-test', 'deploy'],
   'bug-fix': ['triage', 'investigate', 'fix', 'verify', 'test', 'pr', 'review'],
   'security-audit': ['collect', 'plan', 'fix', 'verify', 'test', 'report', 'review'],
   'daily-standup': ['collect', 'report'],
@@ -55,7 +55,7 @@ function InlinePlanView({ runId, onRetry }: { runId: string; onRetry?: (storyId:
   const [designData, setDesignData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const fetchData = useCallback(() => {
     Promise.all([
       api.runPlan(runId),
       api.runDesign(runId).catch(() => null),
@@ -65,6 +65,12 @@ function InlinePlanView({ runId, onRetry }: { runId: string; onRetry?: (storyId:
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [runId]);
+
+  useEffect(() => {
+    fetchData();
+    const id = setInterval(fetchData, 10_000);
+    return () => clearInterval(id);
+  }, [fetchData]);
 
   if (loading) return <div className="af-inline-plan__loading">Loading plan data...</div>;
   if (!planData || (!planData.prd && planData.stories.length === 0)) {
@@ -174,41 +180,6 @@ function InlinePlanView({ runId, onRetry }: { runId: string; onRetry?: (storyId:
           <pre className="af-inline-plan__raw">{(planData as any).projectMemory || '(no project memory yet)'}</pre>
         )}
       </div>
-      {deleteModal && createPortal(
-        <div className="modal-backdrop" onClick={() => setDeleteModal(null)}>
-          <div className="modal modal--delete" onClick={e => e.stopPropagation()}>
-            <h3 style={{ color: '#f85149', margin: '0 0 12px' }}>Run #{deleteModal.runNumber} Sil</h3>
-            <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', margin: '0 0 8px' }}>
-              {deleteModal.task.length > 120 ? deleteModal.task.slice(0, 120) + '...' : deleteModal.task}
-            </p>
-            <p style={{ fontSize: '12px', margin: '0 0 12px' }}>
-              Silmek icin run numarasini yazin: <strong style={{ color: '#f85149' }}>#{deleteModal.runNumber}</strong>
-            </p>
-            <input
-              type="text"
-              className="modal__input"
-              placeholder={`#${deleteModal.runNumber}`}
-              value={deleteInput}
-              onChange={e => setDeleteInput(e.target.value)}
-              autoFocus
-            />
-            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '10px 0', fontSize: '12px', cursor: 'pointer' }}>
-              <input type="checkbox" checked={deleteCleanup} onChange={e => setDeleteCleanup(e.target.checked)} />
-              <span>Projeyi de sil <span style={{ color: 'rgba(255,255,255,0.4)' }}>(servis, repo, GitHub, tunnel)</span></span>
-            </label>
-            <div className="modal__actions">
-              <button className="btn" onClick={() => setDeleteModal(null)}>Vazgec</button>
-              <button
-                className="btn btn--danger"
-                disabled={deleteInput !== `#${deleteModal.runNumber}` || actionLoading === deleteModal.runId + ':delete'}
-                onClick={handleDeleteConfirm}
-              >
-                {actionLoading === deleteModal.runId + ':delete' ? 'Siliniyor...' : 'Kalici Sil'}
-              </button>
-            </div>
-          </div>
-        </div>
-      , document.body)}
     </div>
   );
 }
@@ -279,17 +250,76 @@ export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefre
     setDeleteModal({ runId: run.id, runNumber: run.runNumber || 0, task: run.task });
     setDeleteInput('');
     setDeleteCleanup(false);
+    setDeleteSteps([]);
+    setDeleteResult(null);
   };
 
   const handleDeleteConfirm = async () => {
     if (!deleteModal) return;
     setActionLoading(deleteModal.runId + ':delete');
+    setDeleteResult(null);
+
+    // Build checklist
+    const steps: { id: string; label: string; status: 'waiting' | 'done' | 'fail' | 'skip'; detail?: string }[] = [
+      { id: 'db', label: 'DB kayitlari', status: 'waiting', detail: 'runs, steps, stories' },
+    ];
+    if (deleteCleanup) {
+      steps.push(
+        { id: 'github', label: 'GitHub repo', status: 'waiting' },
+        { id: 'files', label: 'Yerel dosyalar', status: 'waiting' },
+        { id: 'service', label: 'Systemd servisi', status: 'waiting' },
+        { id: 'json', label: 'projects.json', status: 'waiting' },
+        { id: 'tunnel', label: 'Cloudflare tunnel', status: 'waiting' },
+      );
+    }
+    setDeleteSteps(steps);
+
     try {
-      await api.deleteRun(deleteModal.runId, deleteCleanup);
+      const result = await api.deleteRun(deleteModal.runId, deleteCleanup);
+      const log = ((result as any).log || []).join('\n');
+
+      const updates = steps.map(s => {
+        if (s.id === 'db') return { ...s, status: 'done' as const };
+        if (s.id === 'github') {
+          if (log.includes('GitHub repo deleted')) return { ...s, status: 'done' as const };
+          if (log.includes('GitHub delete failed')) return { ...s, status: 'fail' as const };
+          return { ...s, status: 'skip' as const, detail: 'repo bulunamadi' };
+        }
+        if (s.id === 'files') {
+          if (log.includes('Local repo deleted') || (log.includes('Repo') && log.includes('deleted'))) return { ...s, status: 'done' as const };
+          if (log.includes('delete failed') || log.includes('deletion failed')) return { ...s, status: 'fail' as const };
+          return { ...s, status: 'skip' as const, detail: 'dosya bulunamadi' };
+        }
+        if (s.id === 'service') {
+          if (log.includes('Service stopped')) return { ...s, status: 'done' as const };
+          return { ...s, status: 'skip' as const, detail: 'servis yok' };
+        }
+        if (s.id === 'json') {
+          if (log.includes('Removed from projects.json')) return { ...s, status: 'done' as const };
+          return { ...s, status: 'skip' as const };
+        }
+        if (s.id === 'tunnel') {
+          if (log.includes('Tunnel:') || log.includes('Tunnel entry')) return { ...s, status: 'done' as const };
+          if (log.includes('Tunnel cleanup failed')) return { ...s, status: 'fail' as const };
+          return { ...s, status: 'skip' as const, detail: 'tunnel yok' };
+        }
+        return s;
+      });
+
+      // Stagger reveal
+      for (let i = 0; i < updates.length; i++) {
+        await new Promise(r => setTimeout(r, 200));
+        setDeleteSteps(prev => prev.map((s, j) => j <= i ? updates[j] : s));
+      }
+
+      setDeleteResult({ success: true });
       setHiddenRuns(prev => new Set([...prev, deleteModal.runId]));
-      setDeleteModal(null);
       if (onRefresh) onRefresh();
-    } catch (err: any) { console.error('Delete failed:', err); }
+    } catch (err: any) {
+      console.error('Delete failed:', err);
+      setDeleteResult({ error: err.message });
+      setDeleteSteps(prev => prev.map(s => s.status === 'waiting' ? { ...s, status: 'fail' as const } : s));
+    }
     finally { setActionLoading(null); }
   };
 
@@ -421,36 +451,72 @@ export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefre
         );
       })}
       {deleteModal && createPortal(
-        <div className="modal-backdrop" onClick={() => setDeleteModal(null)}>
+        <div className="modal-backdrop" onClick={() => !actionLoading && setDeleteModal(null)}>
           <div className="modal modal--delete" onClick={e => e.stopPropagation()}>
             <h3 style={{ color: '#f85149', margin: '0 0 12px' }}>Run #{deleteModal.runNumber} Sil</h3>
             <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', margin: '0 0 8px' }}>
               {deleteModal.task.length > 120 ? deleteModal.task.slice(0, 120) + '...' : deleteModal.task}
             </p>
-            <p style={{ fontSize: '12px', margin: '0 0 12px' }}>
-              Silmek icin run numarasini yazin: <strong style={{ color: '#f85149' }}>#{deleteModal.runNumber}</strong>
-            </p>
-            <input
-              type="text"
-              className="modal__input"
-              placeholder={'#' + deleteModal.runNumber}
-              value={deleteInput}
-              onChange={e => setDeleteInput(e.target.value)}
-              autoFocus
-            />
-            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '10px 0', fontSize: '12px', cursor: 'pointer' }}>
-              <input type="checkbox" checked={deleteCleanup} onChange={e => setDeleteCleanup(e.target.checked)} />
-              <span>Projeyi de sil (servis, repo, GitHub, tunnel)</span>
-            </label>
+
+            {/* Checklist */}
+            {deleteSteps.length > 0 && (
+              <div style={{ margin: '8px 0 12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                {deleteSteps.map((step) => (
+                  <div key={step.id} style={{
+                    display: 'flex', alignItems: 'center', gap: '8px', padding: '5px 8px',
+                    background: step.status === 'done' ? 'rgba(63, 185, 80, 0.08)' : step.status === 'fail' ? 'rgba(248, 81, 73, 0.08)' : 'rgba(255,255,255,0.03)',
+                    borderRadius: '5px', fontSize: '12px', transition: 'all 0.3s ease',
+                    borderLeft: `3px solid ${step.status === 'done' ? '#3fb950' : step.status === 'fail' ? '#f85149' : step.status === 'skip' ? '#484f58' : '#30363d'}`
+                  }}>
+                    <span style={{ fontSize: '14px', width: '18px', textAlign: 'center', flexShrink: 0 }}>
+                      {step.status === 'done' ? '✅' : step.status === 'fail' ? '❌' : step.status === 'skip' ? '➖' : '⬜'}
+                    </span>
+                    <span style={{ color: step.status === 'skip' ? '#484f58' : '#e6edf3', fontWeight: 500 }}>{step.label}</span>
+                    {step.detail && <span style={{ color: '#484f58', fontSize: '10px', marginLeft: 'auto', fontFamily: 'monospace' }}>{step.detail}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!deleteResult && (
+              <>
+                <p style={{ fontSize: '12px', margin: '0 0 8px' }}>
+                  Silmek icin run numarasini yazin: <strong style={{ color: '#f85149' }}>#{deleteModal.runNumber}</strong>
+                </p>
+                <input
+                  type="text"
+                  className="modal__input"
+                  placeholder={'#' + deleteModal.runNumber}
+                  value={deleteInput}
+                  onChange={e => setDeleteInput(e.target.value)}
+                  autoFocus
+                />
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '10px 0', fontSize: '12px', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={deleteCleanup} onChange={e => setDeleteCleanup(e.target.checked)} />
+                  <span>Projeyi de sil (servis, dosyalar, GitHub, tunnel)</span>
+                </label>
+              </>
+            )}
+            {deleteResult?.error && (
+              <div style={{ padding: '8px', background: 'rgba(248, 81, 73, 0.1)', borderRadius: '6px', fontSize: '12px', color: '#f85149', margin: '8px 0' }}>
+                Hata: {deleteResult.error}
+              </div>
+            )}
             <div className="modal__actions">
-              <button className="btn" onClick={() => setDeleteModal(null)}>Vazgec</button>
-              <button
-                className="btn btn--danger"
-                disabled={deleteInput !== '#' + deleteModal.runNumber || actionLoading === deleteModal.runId + ':delete'}
-                onClick={handleDeleteConfirm}
-              >
-                {actionLoading === deleteModal.runId + ':delete' ? 'Siliniyor...' : 'Kalici Sil'}
-              </button>
+              {deleteResult?.success ? (
+                <button className="btn" onClick={() => setDeleteModal(null)}>Kapat</button>
+              ) : (
+                <>
+                  <button className="btn" onClick={() => setDeleteModal(null)}>Vazgec</button>
+                  <button
+                    className="btn btn--danger"
+                    disabled={deleteInput !== '#' + deleteModal.runNumber || actionLoading === deleteModal.runId + ':delete'}
+                    onClick={handleDeleteConfirm}
+                  >
+                    {actionLoading === deleteModal.runId + ':delete' ? 'Siliniyor...' : 'Kalici Sil'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Country Volume Report Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#135bec",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings:
+            'FILL' 0,
+            'wght' 400,
+            'GRAD' 0,
+            'opsz' 24
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen antialiased">
+<div class="relative flex min-h-screen w-full flex-col group/design-root overflow-x-hidden">
+<div class="layout-container flex h-full grow flex-col">
+<header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-6 lg:px-10 py-3 sticky top-0 z-10">
+<div class="flex items-center gap-4 text-slate-900 dark:text-white">
+<div class="size-6 text-primary">
+<svg fill="none" viewbox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+<g clip-path="url(#clip0_6_330)">
+<path clip-rule="evenodd" d="M24 0.757355L47.2426 24L24 47.2426L0.757355 24L24 0.757355ZM21 35.7574V12.2426L9.24264 24L21 35.7574Z" fill="currentColor" fill-rule="evenodd"></path>
+</g>
+<defs>
+<clippath id="clip0_6_330"><rect fill="white" height="48" width="48"></rect></clippath>
+</defs>
+</svg>
+</div>
+<h2 class="text-lg font-bold leading-tight tracking-[-0.015em]">Logisys Analytics</h2>
+</div>
+<div class="flex flex-1 justify-end gap-8">
+<nav class="hidden md:flex items-center gap-9">
+<a class="text-slate-600 dark:text-slate-300 hover:text-primary dark:hover:text-primary transition-colors text-sm font-medium leading-normal" href="#">Dashboard</a>
+<a class="text-primary text-sm font-medium leading-normal border-b-2 border-primary pb-1" href="#">Reports</a>
+<a class="text-slate-600 dark:text-slate-300 hover:text-primary dark:hover:text-primary transition-colors text-sm font-medium leading-normal" href="#">Analytics</a>
+<a class="text-slate-600 dark:text-slate-300 hover:text-primary dark:hover:text-primary transition-colors text-sm font-medium leading-normal" href="#">Settings</a>
+</nav>
+<div class="flex items-center gap-4">
+<button class="text-slate-500 hover:text-primary transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 border-2 border-slate-200 dark:border-slate-700" data-alt="User profile avatar placeholder" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuABo7Q1jzI5yimv6KcE7zIutNJolyDi0otNNH2Nt-9ZcRf7ANmMRXFBeaHfTTB8rpM0ONRuJGkyEe3930qyu8UUGrnFaYvGs7vEJVO8e16nvXuqMq3Xamuk70Tcq8hGEWsosKQq8jdcCB3I9RnBPJiwiTGYYfDp71MPmme7eMlhq9yEJVMII4Pp1Dq8ZfpC-1bzqz48vviUXljiI5GgHrIN0bR6Q_IW0FL_9WBaCWxm6kj8s545smqQLA7NuLvKl-Gg4GO5nGgHNMg");'></div>
+</div>
+</div>
+</header>
+<main class="flex-1 w-full max-w-[1440px] mx-auto p-4 md:p-6 lg:p-8 flex flex-col gap-6">
+<!-- Header & Filters -->
+<div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+<div class="flex flex-col gap-1">
+<h1 class="text-slate-900 dark:text-white tracking-tight text-2xl md:text-[32px] font-bold leading-tight">Country Volume Report</h1>
+<p class="text-slate-500 dark:text-slate-400 text-sm font-normal leading-normal">Track global trade volumes, imports, and exports by region</p>
+</div>
+<div class="flex flex-wrap gap-3">
+<button class="flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors px-4 shadow-sm">
+<span class="material-symbols-outlined text-[20px] text-slate-500">calendar_today</span>
+<span class="text-sm font-medium">Date Range: YTD</span>
+<span class="material-symbols-outlined text-[20px] text-slate-500">expand_more</span>
+</button>
+<button class="flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors px-4 shadow-sm">
+<span class="material-symbols-outlined text-[20px] text-slate-500">public</span>
+<span class="text-sm font-medium">Region: All</span>
+<span class="material-symbols-outlined text-[20px] text-slate-500">expand_more</span>
+</button>
+<button class="flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors px-4 shadow-sm">
+<span class="material-symbols-outlined text-[20px] text-slate-500">directions_boat</span>
+<span class="text-sm font-medium">Transport: All</span>
+<span class="material-symbols-outlined text-[20px] text-slate-500">expand_more</span>
+</button>
+<button class="flex h-10 shrink-0 items-center justify-center gap-x-2 rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors px-4 shadow-sm">
+<span class="material-symbols-outlined text-[20px]">download</span>
+<span class="text-sm font-medium">Export</span>
+</button>
+</div>
+</div>
+<!-- KPI Cards -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+<div class="flex flex-col gap-2 rounded-xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-slate-200 dark:border-slate-700 relative overflow-hidden">
+<div class="absolute top-0 left-0 w-1 h-full bg-primary"></div>
+<div class="flex justify-between items-start">
+<p class="text-slate-500 dark:text-slate-400 text-sm font-medium leading-normal">Total Volume</p>
+<span class="material-symbols-outlined text-slate-400">inventory_2</span>
+</div>
+<div class="flex items-baseline gap-2 mt-1">
+<p class="text-slate-900 dark:text-white tracking-tight text-3xl font-bold leading-tight">1.2M <span class="text-lg font-normal text-slate-500">TEU</span></p>
+</div>
+<div class="flex items-center gap-1 mt-2">
+<span class="material-symbols-outlined text-[16px] text-emerald-500">trending_up</span>
+<p class="text-emerald-600 dark:text-emerald-400 text-sm font-medium leading-normal">+5.2% <span class="text-slate-500 font-normal">vs last year</span></p>
+</div>
+</div>
+<div class="flex flex-col gap-2 rounded-xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-slate-200 dark:border-slate-700 relative overflow-hidden">
+<div class="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
+<div class="flex justify-between items-start">
+<p class="text-slate-500 dark:text-slate-400 text-sm font-medium leading-normal">Import Volume</p>
+<span class="material-symbols-outlined text-slate-400">flight_land</span>
+</div>
+<div class="flex items-baseline gap-2 mt-1">
+<p class="text-slate-900 dark:text-white tracking-tight text-3xl font-bold leading-tight">650K <span class="text-lg font-normal text-slate-500">TEU</span></p>
+</div>
+<div class="flex items-center gap-1 mt-2">
+<span class="material-symbols-outlined text-[16px] text-emerald-500">trending_up</span>
+<p class="text-emerald-600 dark:text-emerald-400 text-sm font-medium leading-normal">+3.1% <span class="text-slate-500 font-normal">vs last year</span></p>
+</div>
+</div>
+<div class="flex flex-col gap-2 rounded-xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-slate-200 dark:border-slate-700 relative overflow-hidden">
+<div class="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
+<div class="flex justify-between items-start">
+<p class="text-slate-500 dark:text-slate-400 text-sm font-medium leading-normal">Export Volume</p>
+<span class="material-symbols-outlined text-slate-400">flight_takeoff</span>
+</div>
+<div class="flex items-baseline gap-2 mt-1">
+<p class="text-slate-900 dark:text-white tracking-tight text-3xl font-bold leading-tight">550K <span class="text-lg font-normal text-slate-500">TEU</span></p>
+</div>
+<div class="flex items-center gap-1 mt-2">
+<span class="material-symbols-outlined text-[16px] text-rose-500">trending_down</span>
+<p class="text-rose-600 dark:text-rose-400 text-sm font-medium leading-normal">-1.2% <span class="text-slate-500 font-normal">vs last year</span></p>
+</div>
+</div>
+</div>
+<!-- Main Chart Area -->
+<div class="flex flex-col gap-4 rounded-xl bg-white dark:bg-slate-800 p-6 shadow-sm border border-slate-200 dark:border-slate-700">
+<div class="flex justify-between items-center mb-4">
+<h3 class="text-slate-900 dark:text-white text-lg font-bold">Trade Volume Trends by Top Countries</h3>
+<div class="flex items-center gap-4 text-sm">
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 rounded-sm bg-blue-500"></div>
+<span class="text-slate-600 dark:text-slate-300">Import</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-3 h-3 rounded-sm bg-emerald-500"></div>
+<span class="text-slate-600 dark:text-slate-300">Export</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-3 h-[2px] bg-primary"></div>
+<span class="text-slate-600 dark:text-slate-300">Total Trend</span>
+</div>
+</div>
+</div>
+<!-- Abstract Chart Representation -->
+<div class="w-full h-[300px] relative mt-4">
+<!-- Y-Axis Lines -->
+<div class="absolute inset-0 flex flex-col justify-between">
+<div class="border-t border-slate-100 dark:border-slate-700 w-full flex items-center"><span class="absolute -left-8 text-xs text-slate-400">400k</span></div>
+<div class="border-t border-slate-100 dark:border-slate-700 w-full flex items-center"><span class="absolute -left-8 text-xs text-slate-400">300k</span></div>
+<div class="border-t border-slate-100 dark:border-slate-700 w-full flex items-center"><span class="absolute -left-8 text-xs text-slate-400">200k</span></div>
+<div class="border-t border-slate-100 dark:border-slate-700 w-full flex items-center"><span class="absolute -left-8 text-xs text-slate-400">100k</span></div>
+<div class="border-t border-slate-300 dark:border-slate-600 w-full flex items-center"><span class="absolute -left-8 text-xs text-slate-400">0</span></div>
+</div>
+<!-- Bars -->
+<div class="absolute inset-0 pl-4 pr-2 pt-4 pb-[1px] flex justify-between items-end z-10">
+<!-- China -->
+<div class="flex flex-col items-center w-full max-w-[60px] relative group">
+<div class="flex w-full gap-1 items-end h-[250px]">
+<div class="w-1/2 bg-blue-500 rounded-t-sm" style="height: 85%;"></div>
+<div class="w-1/2 bg-emerald-500 rounded-t-sm" style="height: 95%;"></div>
+</div>
+<span class="text-xs text-slate-500 mt-2 font-medium">China</span>
+<!-- Abstract line point -->
+<div class="absolute top-[5%] w-2 h-2 rounded-full bg-primary border-2 border-white dark:border-slate-800 z-20 shadow-sm"></div>
+</div>
+<!-- USA -->
+<div class="flex flex-col items-center w-full max-w-[60px] relative">
+<div class="flex w-full gap-1 items-end h-[250px]">
+<div class="w-1/2 bg-blue-500 rounded-t-sm" style="height: 75%;"></div>
+<div class="w-1/2 bg-emerald-500 rounded-t-sm" style="height: 60%;"></div>
+</div>
+<span class="text-xs text-slate-500 mt-2 font-medium">USA</span>
+<div class="absolute top-[20%] w-2 h-2 rounded-full bg-primary border-2 border-white dark:border-slate-800 z-20 shadow-sm"></div>
+</div>
+<!-- Germany -->
+<div class="flex flex-col items-center w-full max-w-[60px] relative">
+<div class="flex w-full gap-1 items-end h-[250px]">
+<div class="w-1/2 bg-blue-500 rounded-t-sm" style="height: 55%;"></div>
+<div class="w-1/2 bg-emerald-500 rounded-t-sm" style="height: 65%;"></div>
+</div>
+<span class="text-xs text-slate-500 mt-2 font-medium">Germany</span>
+<div class="absolute top-[35%] w-2 h-2 rounded-full bg-primary border-2 border-white dark:border-slate-800 z-20 shadow-sm"></div>
+</div>
+<!-- Japan -->
+<div class="flex flex-col items-center w-full max-w-[60px] relative">
+<div class="flex w-full gap-1 items-end h-[250px]">
+<div class="w-1/2 bg-blue-500 rounded-t-sm" style="height: 45%;"></div>
+<div class="w-1/2 bg-emerald-500 rounded-t-sm" style="height: 40%;"></div>
+</div>
+<span class="text-xs text-slate-500 mt-2 font-medium">Japan</span>
+<div class="absolute top-[50%] w-2 h-2 rounded-full bg-primary border-2 border-white dark:border-slate-800 z-20 shadow-sm"></div>
+</div>
+<!-- South Korea -->
+<div class="flex flex-col items-center w-full max-w-[60px] relative">
+<div class="flex w-full gap-1 items-end h-[250px]">
+<div class="w-1/2 bg-blue-500 rounded-t-sm" style="height: 35%;"></div>
+<div class="w-1/2 bg-emerald-500 rounded-t-sm" style="height: 45%;"></div>
+</div>
+<span class="text-xs text-slate-500 mt-2 font-medium">S. Korea</span>
+<div class="absolute top-[55%] w-2 h-2 rounded-full bg-primary border-2 border-white dark:border-slate-800 z-20 shadow-sm"></div>
+</div>
+<!-- India -->
+<div class="flex flex-col items-center w-full max-w-[60px] relative">
+<div class="flex w-full gap-1 items-end h-[250px]">
+<div class="w-1/2 bg-blue-500 rounded-t-sm" style="height: 30%;"></div>
+<div class="w-1/2 bg-emerald-500 rounded-t-sm" style="height: 25%;"></div>
+</div>
+<span class="text-xs text-slate-500 mt-2 font-medium">India</span>
+<div class="absolute top-[65%] w-2 h-2 rounded-full bg-primary border-2 border-white dark:border-slate-800 z-20 shadow-sm"></div>
+</div>
+<!-- UK -->
+<div class="flex flex-col items-center w-full max-w-[60px] relative">
+<div class="flex w-full gap-1 items-end h-[250px]">
+<div class="w-1/2 bg-blue-500 rounded-t-sm" style="height: 25%;"></div>
+<div class="w-1/2 bg-emerald-500 rounded-t-sm" style="height: 20%;"></div>
+</div>
+<span class="text-xs text-slate-500 mt-2 font-medium">UK</span>
+<div class="absolute top-[70%] w-2 h-2 rounded-full bg-primary border-2 border-white dark:border-slate-800 z-20 shadow-sm"></div>
+</div>
+</div>
+<!-- Abstract Line (Connecting points visually) -->
+<svg class="absolute inset-0 h-full w-full z-15 pointer-events-none" preserveaspectratio="none">
+<path class="text-primary/50" d="M 50 40 L 220 70 L 390 100 L 560 140 L 730 150 L 900 180 L 1070 190" fill="none" stroke="currentColor" stroke-dasharray="4 4" stroke-width="2"></path>
+</svg>
+</div>
+</div>
+<!-- Detailed Data Table -->
+<div class="flex flex-col bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+<div class="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
+<h3 class="text-slate-900 dark:text-white text-lg font-bold">Volume Details by Country</h3>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">search</span>
+<input class="pl-10 pr-4 py-2 border border-slate-200 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all w-64" placeholder="Search country..." type="text"/>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
+<th class="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Country</th>
+<th class="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-1/4">Import Volume (TEU)</th>
+<th class="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider w-1/4">Export Volume (TEU)</th>
+<th class="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Total Volume</th>
+<th class="px-6 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Trend</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 dark:divide-slate-700">
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<div class="w-6 h-4 bg-slate-200 rounded-sm overflow-hidden border border-slate-300">
+<!-- Flag placeholder -->
+<div class="w-full h-full bg-red-600"></div>
+</div>
+<span class="font-medium text-slate-900 dark:text-white">China</span>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-2">
+<span class="text-sm text-slate-600 dark:text-slate-300 w-16">220,500</span>
+<div class="flex-1 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="h-full bg-blue-500 rounded-full" style="width: 85%"></div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-2">
+<span class="text-sm text-slate-600 dark:text-slate-300 w-16">250,100</span>
+<div class="flex-1 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="h-full bg-emerald-500 rounded-full" style="width: 95%"></div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold text-slate-900 dark:text-white">
+                                        470,600
+                                    </td>
+<td class="px-6 py-4 whitespace-nowrap text-right">
+<span class="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-1 rounded-md">
+<span class="material-symbols-outlined text-[14px]">arrow_upward</span> 8.4%
+                                        </span>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<div class="w-6 h-4 bg-slate-200 rounded-sm overflow-hidden border border-slate-300">
+<div class="w-full h-full flex"><div class="w-1/3 bg-blue-700"></div><div class="w-1/3 bg-white"></div><div class="w-1/3 bg-red-600"></div></div>
+</div>
+<span class="font-medium text-slate-900 dark:text-white">United States</span>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-2">
+<span class="text-sm text-slate-600 dark:text-slate-300 w-16">195,200</span>
+<div class="flex-1 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="h-full bg-blue-500 rounded-full" style="width: 75%"></div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-2">
+<span class="text-sm text-slate-600 dark:text-slate-300 w-16">145,800</span>
+<div class="flex-1 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="h-full bg-emerald-500 rounded-full" style="width: 60%"></div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold text-slate-900 dark:text-white">
+                                        341,000
+                                    </td>
+<td class="px-6 py-4 whitespace-nowrap text-right">
+<span class="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-1 rounded-md">
+<span class="material-symbols-outlined text-[14px]">arrow_upward</span> 4.2%
+                                        </span>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<div class="w-6 h-4 bg-slate-200 rounded-sm overflow-hidden border border-slate-300">
+<div class="w-full h-full flex flex-col"><div class="h-1/3 bg-black"></div><div class="h-1/3 bg-red-600"></div><div class="h-1/3 bg-yellow-400"></div></div>
+</div>
+<span class="font-medium text-slate-900 dark:text-white">Germany</span>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-2">
+<span class="text-sm text-slate-600 dark:text-slate-300 w-16">120,400</span>
+<div class="flex-1 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="h-full bg-blue-500 rounded-full" style="width: 55%"></div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-2">
+<span class="text-sm text-slate-600 dark:text-slate-300 w-16">165,300</span>
+<div class="flex-1 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="h-full bg-emerald-500 rounded-full" style="width: 65%"></div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold text-slate-900 dark:text-white">
+                                        285,700
+                                    </td>
+<td class="px-6 py-4 whitespace-nowrap text-right">
+<span class="inline-flex items-center gap-1 text-xs font-medium text-rose-600 bg-rose-50 dark:bg-rose-900/30 px-2 py-1 rounded-md">
+<span class="material-symbols-outlined text-[14px]">arrow_downward</span> 1.5%
+                                        </span>
+</td>
+</tr>
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-3">
+<div class="w-6 h-4 bg-slate-200 rounded-sm overflow-hidden border border-slate-300">
+<div class="w-full h-full bg-white relative"><div class="w-2 h-2 rounded-full bg-red-600 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"></div></div>
+</div>
+<span class="font-medium text-slate-900 dark:text-white">Japan</span>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-2">
+<span class="text-sm text-slate-600 dark:text-slate-300 w-16">95,800</span>
+<div class="flex-1 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="h-full bg-blue-500 rounded-full" style="width: 45%"></div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<div class="flex items-center gap-2">
+<span class="text-sm text-slate-600 dark:text-slate-300 w-16">110,200</span>
+<div class="flex-1 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="h-full bg-emerald-500 rounded-full" style="width: 40%"></div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-semibold text-slate-900 dark:text-white">
+                                        206,000
+                                    </td>
+<td class="px-6 py-4 whitespace-nowrap text-right">
+<span class="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-1 rounded-md">
+<span class="material-symbols-outlined text-[14px]">arrow_upward</span> 2.1%
+                                        </span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</main>
+</div>
+</div>
+</body></html>

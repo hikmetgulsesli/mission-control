@@ -129,4 +129,23 @@ export const api = {
       headers: CT_JSON,
       body: JSON.stringify({ storyId, reason }),
     }),
+  // Rules
+  rules: (params?: Record<string, string>) => {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+    return fetchApi<any[]>('/api/rules' + qs);
+  },
+  createRule: (data: any) => fetchApi<any>('/api/rules', { method: 'POST', headers: CT_JSON, body: JSON.stringify(data) }),
+  updateRule: (id: string, data: any) => fetchApi<any>(`/api/rules/${id}`, { method: 'PUT', headers: CT_JSON, body: JSON.stringify(data) }),
+  deleteRule: (id: string) => fetchApi<any>(`/api/rules/${id}`, { method: 'DELETE' }),
+  toggleRule: (id: string) => fetchApi<any>(`/api/rules/${id}/toggle`, { method: 'PUT' }),
+  exportRules: () => fetchApi<any>('/api/rules/export'),
+  // Live Feed
+  liveFeed: (since?: string, agent?: string) => {
+    const params: string[] = [];
+    if (since) params.push('since=' + encodeURIComponent(since));
+    if (agent) params.push('agent=' + agent);
+    const qs = params.length ? '?' + params.join('&') : '';
+    return fetchApi<any[]>('/api/live-feed' + qs);
+  },
+  importRules: (data: any) => fetchApi<any>('/api/rules/import', { method: 'POST', headers: CT_JSON, body: JSON.stringify(data) }),
 };

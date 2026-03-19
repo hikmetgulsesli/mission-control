@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Modern Dark Calculator</title>
+<!-- Tailwind CSS v3 CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Fonts: Manrope -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'bg-dark': '#1a1a2e',
+            'button-dark': '#16213e',
+            'accent-red': '#e94560',
+          },
+          fontFamily: {
+            manrope: ['Manrope', 'sans-serif'],
+          },
+        }
+      }
+    }
+  </script>
+<style data-purpose="custom-styling">
+    body {
+      background-color: #1a1a2e;
+      font-family: 'Manrope', sans-serif;
+    }
+    /* Subtle shadow for buttons */
+    .calc-btn {
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.1);
+      transition: transform 0.1s ease-in-out, background-color 0.2s;
+    }
+    .calc-btn:active {
+      transform: scale(0.95);
+    }
+    /* Hide scrollbar for display if content overflows */
+    #display-screen {
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+    #display-screen::-webkit-scrollbar {
+      display: none;
+    }
+  </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+<!-- BEGIN: Calculator Container -->
+<main class="w-full max-w-sm bg-bg-dark rounded-3xl p-6 shadow-2xl border border-slate-800" data-purpose="calculator-wrapper">
+<!-- BEGIN: Display Screen -->
+<section class="mb-8" data-purpose="display-container">
+<div class="w-full text-right p-4 text-white text-5xl font-light tracking-tight overflow-x-auto whitespace-nowrap min-h-[80px] flex items-end justify-end" data-purpose="result-display" id="display-screen">
+        0
+      </div>
+</section>
+<!-- END: Display Screen -->
+<!-- BEGIN: Button Grid -->
+<section class="grid grid-cols-4 gap-4" data-purpose="button-grid">
+<!-- Row 1 -->
+<button class="calc-btn bg-button-dark text-accent-red font-bold text-xl p-6 rounded-2xl hover:bg-slate-800" data-purpose="op-clear" onclick="clearDisplay()">C</button>
+<button class="calc-btn bg-button-dark text-accent-red font-bold text-xl p-6 rounded-2xl hover:bg-slate-800" data-purpose="op-backspace" onclick="deleteLast()">⌫</button>
+<button class="calc-btn bg-button-dark text-accent-red font-bold text-xl p-6 rounded-2xl hover:bg-slate-800" data-purpose="op-divide" onclick="appendOperator('/')">÷</button>
+<button class="calc-btn bg-button-dark text-accent-red font-bold text-xl p-6 rounded-2xl hover:bg-slate-800" data-purpose="op-multiply" onclick="appendOperator('*')">×</button>
+<!-- Row 2 -->
+<button class="calc-btn bg-button-dark text-white font-medium text-xl p-6 rounded-2xl hover:bg-slate-800" data-purpose="num-7" onclick="appendNumber('7')">7</button>
+<button class="calc-btn bg-button-dark text-white font-medium text-xl p-6 rounded-2xl hover:bg-slate-800" data-purpose="num-8" onclick="appendNumber('8')">8</button>
+<button class="calc-btn bg-button-dark text-white font-medium text-xl p-6 rounded-2xl hover:bg-slate-800" data-purpose="num-9" onclick="appendNumber('9')">9</button>
+<button class="calc-btn bg-button-dark text-accent-red font-bold text-xl p-6 rounded-2xl hover:bg-slate-800" data-purpose="op-subtract" onclick="appendOperator('-')">-</button>
+<!-- Row 3 -->
+<button class="calc-btn bg-button-dark text-white font-medium text-xl p-6 rounded-2xl hover:bg-slate-800" data-purpose="num-4" onclick="appendNumber('4')">4</button>
+<button class="calc-btn bg-button-dark text-white font-medium text-xl p-6 rounded-2xl hover:bg-slate-800" data-purpose="num-5" onclick="appendNumber('5')">5</button>
+<button class="calc-btn bg-button-dark text-white font-medium text-xl p-6 rounded-2xl hover:bg-slate-800" data-purpose="num-6" onclick="appendNumber('6')">6</button>
+<button class="calc-btn bg-button-dark text-accent-red font-bold text-xl p-6 rounded-2xl hover:bg-slate-800" data-purpose="op-add" onclick="appendOperator('+')">+</button>
+<!-- Row 4 -->
+<button class="calc-btn bg-button-dark text-white font-medium text-xl p-6 rounded-2xl hover:bg-slate-800" data-purpose="num-1" onclick="appendNumber('1')">1</button>
+<button class="calc-btn bg-button-dark text-white font-medium text-xl p-6 rounded-2xl hover:bg-slate-800" data-purpose="num-2" onclick="appendNumber('2')">2</button>
+<button class="calc-btn bg-button-dark text-white font-medium text-xl p-6 rounded-2xl hover:bg-slate-800" data-purpose="num-3" onclick="appendNumber('3')">3</button>
+<!-- Equals spans 2 rows visually in some designs, but we follow the requested 4x5 grid logic -->
+<button class="calc-btn bg-accent-red text-white font-bold text-xl p-6 rounded-2xl hover:opacity-90 row-span-2" data-purpose="op-equals" onclick="calculate()">=</button>
+<!-- Row 5 -->
+<button class="calc-btn bg-button-dark text-white font-medium text-xl p-6 rounded-2xl hover:bg-slate-800 col-span-2" data-purpose="num-0" onclick="appendNumber('0')">0</button>
+<button class="calc-btn bg-button-dark text-white font-medium text-xl p-6 rounded-2xl hover:bg-slate-800" data-purpose="num-decimal" onclick="appendNumber('.')">.</button>
+</section>
+<!-- END: Button Grid -->
+</main>
+<!-- END: Calculator Container -->
+<!-- BEGIN: Calculator Logic -->
+<script data-purpose="calculator-logic">
+    let currentInput = '0';
+    let shouldResetScreen = false;
+    const displayElement = document.getElementById('display-screen');
+
+    function updateDisplay() {
+      displayElement.innerText = currentInput;
+      // Scroll to the end of the display
+      displayElement.scrollLeft = displayElement.scrollWidth;
+    }
+
+    function appendNumber(number) {
+      if (currentInput === '0' || shouldResetScreen) {
+        currentInput = number;
+        shouldResetScreen = false;
+      } else {
+        currentInput += number;
+      }
+      updateDisplay();
+    }
+
+    function appendOperator(operator) {
+      if (shouldResetScreen) shouldResetScreen = false;
+      
+      // Prevent consecutive operators
+      const lastChar = currentInput.slice(-1);
+      if (['+', '-', '*', '/'].includes(lastChar)) {
+        currentInput = currentInput.slice(0, -1) + operator;
+      } else {
+        currentInput += operator;
+      }
+      updateDisplay();
+    }
+
+    function clearDisplay() {
+      currentInput = '0';
+      updateDisplay();
+    }
+
+    function deleteLast() {
+      if (currentInput.length > 1) {
+        currentInput = currentInput.slice(0, -1);
+      } else {
+        currentInput = '0';
+      }
+      updateDisplay();
+    }
+
+    function calculate() {
+      try {
+        // Sanitize input: only allow digits and operators
+        const expression = currentInput.replace(/[^-+/*0-9.]/g, '');
+        // Using Function instead of eval for a slightly safer approach in this context
+        const result = new Function(`return ${expression}`)();
+        
+        // Handle floating point precision and large numbers
+        if (Number.isFinite(result)) {
+          currentInput = Number.isInteger(result) ? result.toString() : parseFloat(result.toFixed(8)).toString();
+        } else {
+          currentInput = 'Error';
+        }
+        
+        shouldResetScreen = true;
+        updateDisplay();
+      } catch (e) {
+        currentInput = 'Error';
+        updateDisplay();
+        shouldResetScreen = true;
+      }
+    }
+  </script>
+<!-- END: Calculator Logic -->
+</body></html>

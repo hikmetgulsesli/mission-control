@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Customer List Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Work+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#0da2e7",
+                        "background-light": "#f5f7f8",
+                        "background-dark": "#101c22",
+                    },
+                    fontFamily: {
+                        "display": ["Plus Jakarta Sans", "sans-serif"],
+                        "body": ["Work Sans", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Work Sans', sans-serif; }
+        h1, h2, h3, h4, h5, h6, .font-display { font-family: 'Plus Jakarta Sans', sans-serif; }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="relative flex h-auto min-h-screen w-full flex-col group/design-root overflow-x-hidden">
+<div class="layout-container flex h-full grow flex-col">
+<div class="px-8 lg:px-20 xl:px-40 flex flex-1 justify-center py-5">
+<div class="layout-content-container flex flex-col w-full max-w-[1200px] flex-1">
+<header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-slate-200 dark:border-slate-800 px-4 py-4 mb-6 bg-white dark:bg-slate-900 rounded-xl shadow-sm">
+<div class="flex items-center gap-4 text-slate-900 dark:text-white">
+<div class="size-8 text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-3xl">group</span>
+</div>
+<h2 class="font-display text-xl font-bold leading-tight tracking-tight">CRM Dashboard</h2>
+</div>
+<div class="flex flex-1 justify-end gap-8">
+<nav class="hidden md:flex items-center gap-8">
+<a class="text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">Dashboard</a>
+<a class="text-primary text-sm font-medium leading-normal border-b-2 border-primary pb-1" href="#">Customers</a>
+<a class="text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">Reports</a>
+<a class="text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">Settings</a>
+</nav>
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 border border-slate-200 dark:border-slate-700 cursor-pointer" data-alt="User avatar placeholder" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuByapI-G01GeHZyEBG7jP1dkJ49W9lTCysRbkm1P4PzVXb5MZU58Jh4yIAy0bp4fVm6u6fpJvWRR2espiP3suRZ-qdOHW4B-i7O_OHzF3I7iWQMIt6TC62vEstxwgKhlhZJQhaueLKxYlVFU3EJ1O383nE1oblt1dh6EabYqMimByI9ekY34VBa-_GfpsOBBPse9_kdW9eqWYBdC54TA7NNq7s1W8Cy3tfgwPbPJjM2UzOvhZYdyguQQZmzDa_3v9aZYfDQ9FIRKVYX");'></div>
+</div>
+</header>
+<main class="flex-1 bg-white dark:bg-slate-900 rounded-xl shadow-sm overflow-hidden flex flex-col">
+<div class="flex flex-wrap justify-between items-center gap-4 p-6 border-b border-slate-100 dark:border-slate-800">
+<div class="flex flex-col gap-1">
+<h1 class="font-display text-2xl font-bold leading-tight text-slate-900 dark:text-white">Customer List</h1>
+<p class="text-slate-500 dark:text-slate-400 text-sm font-normal leading-normal">Manage your business clients and contact information</p>
+</div>
+<button class="flex items-center justify-center gap-2 rounded-lg h-10 px-5 bg-primary hover:bg-primary/90 text-white text-sm font-semibold leading-normal transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[20px]">add</span>
+<span>New Customer</span>
+</button>
+</div>
+<div class="p-6 flex flex-col md:flex-row gap-4 items-center justify-between bg-slate-50/50 dark:bg-slate-800/20 border-b border-slate-100 dark:border-slate-800">
+<div class="flex-1 w-full md:max-w-md">
+<label class="flex flex-col w-full">
+<div class="flex w-full items-center rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-hidden focus-within:border-primary focus-within:ring-1 focus-within:ring-primary transition-shadow">
+<div class="text-slate-400 pl-3 flex items-center justify-center">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</div>
+<input class="form-input flex w-full min-w-0 flex-1 border-none bg-transparent focus:outline-none focus:ring-0 h-10 placeholder:text-slate-400 px-3 text-sm font-normal leading-normal text-slate-900 dark:text-white" placeholder="Search customers..." value=""/>
+</div>
+</label>
+</div>
+<div class="flex gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
+<button class="flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-[18px] text-slate-500">filter_list</span>
+<span class="text-slate-700 dark:text-slate-300 text-sm font-medium leading-normal">All Status</span>
+<span class="material-symbols-outlined text-[20px] text-slate-500">expand_more</span>
+</button>
+<button class="flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+<span class="text-slate-700 dark:text-slate-300 text-sm font-medium leading-normal">Active</span>
+</button>
+<button class="flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+<span class="text-slate-700 dark:text-slate-300 text-sm font-medium leading-normal">Inactive</span>
+</button>
+</div>
+</div>
+<div class="flex-1 overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
+<th class="px-6 py-4 text-slate-600 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider whitespace-nowrap">Code</th>
+<th class="px-6 py-4 text-slate-600 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider whitespace-nowrap">Company Name</th>
+<th class="px-6 py-4 text-slate-600 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider whitespace-nowrap">Contact</th>
+<th class="px-6 py-4 text-slate-600 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider whitespace-nowrap">Phone</th>
+<th class="px-6 py-4 text-slate-600 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider whitespace-nowrap">Email</th>
+<th class="px-6 py-4 text-slate-600 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider whitespace-nowrap">Status</th>
+<th class="px-6 py-4 text-slate-600 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider whitespace-nowrap">Created Date</th>
+<th class="px-6 py-4 text-slate-600 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider whitespace-nowrap text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+<tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors group">
+<td class="px-6 py-4 text-slate-500 dark:text-slate-400 text-sm font-medium whitespace-nowrap">C-1001</td>
+<td class="px-6 py-4 text-slate-900 dark:text-slate-100 text-sm font-medium whitespace-nowrap">Acme Corp</td>
+<td class="px-6 py-4 text-slate-600 dark:text-slate-300 text-sm whitespace-nowrap">John Smith</td>
+<td class="px-6 py-4 text-slate-600 dark:text-slate-300 text-sm whitespace-nowrap">+1 (555) 123-4567</td>
+<td class="px-6 py-4 text-slate-600 dark:text-slate-300 text-sm whitespace-nowrap">john@acme.com</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800">
+                                                Active
+                                            </span>
+</td>
+<td class="px-6 py-4 text-slate-500 dark:text-slate-400 text-sm whitespace-nowrap">Oct 01, 2023</td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+<div class="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="text-slate-400 hover:text-primary transition-colors p-1" title="Edit">
+<span class="material-symbols-outlined text-[20px]">edit</span>
+</button>
+<button class="text-slate-400 hover:text-red-500 transition-colors p-1" title="Delete">
+<span class="material-symbols-outlined text-[20px]">delete</span>
+</button>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors group">
+<td class="px-6 py-4 text-slate-500 dark:text-slate-400 text-sm font-medium whitespace-nowrap">C-1002</td>
+<td class="px-6 py-4 text-slate-900 dark:text-slate-100 text-sm font-medium whitespace-nowrap">TechFlow Inc</td>
+<td class="px-6 py-4 text-slate-600 dark:text-slate-300 text-sm whitespace-nowrap">Sarah Jenkins</td>
+<td class="px-6 py-4 text-slate-600 dark:text-slate-300 text-sm whitespace-nowrap">+1 (555) 987-6543</td>
+<td class="px-6 py-4 text-slate-600 dark:text-slate-300 text-sm whitespace-nowrap">sarah@techflow.io</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800">
+                                                Active
+                                            </span>
+</td>
+<td class="px-6 py-4 text-slate-500 dark:text-slate-400 text-sm whitespace-nowrap">Oct 05, 2023</td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+<div class="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="text-slate-400 hover:text-primary transition-colors p-1" title="Edit">
+<span class="material-symbols-outlined text-[20px]">edit</span>
+</button>
+<button class="text-slate-400 hover:text-red-500 transition-colors p-1" title="Delete">
+<span class="material-symbols-outlined text-[20px]">delete</span>
+</button>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors group">
+<td class="px-6 py-4 text-slate-500 dark:text-slate-400 text-sm font-medium whitespace-nowrap">C-1003</td>
+<td class="px-6 py-4 text-slate-900 dark:text-slate-100 text-sm font-medium whitespace-nowrap">Global Logistics</td>
+<td class="px-6 py-4 text-slate-600 dark:text-slate-300 text-sm whitespace-nowrap">Mike Brown</td>
+<td class="px-6 py-4 text-slate-600 dark:text-slate-300 text-sm whitespace-nowrap">+1 (555) 456-7890</td>
+<td class="px-6 py-4 text-slate-600 dark:text-slate-300 text-sm whitespace-nowrap">mike@globallogistics.com</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                                                Inactive
+                                            </span>
+</td>
+<td class="px-6 py-4 text-slate-500 dark:text-slate-400 text-sm whitespace-nowrap">Oct 10, 2023</td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+<div class="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="text-slate-400 hover:text-primary transition-colors p-1" title="Edit">
+<span class="material-symbols-outlined text-[20px]">edit</span>
+</button>
+<button class="text-slate-400 hover:text-red-500 transition-colors p-1" title="Delete">
+<span class="material-symbols-outlined text-[20px]">delete</span>
+</button>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors group">
+<td class="px-6 py-4 text-slate-500 dark:text-slate-400 text-sm font-medium whitespace-nowrap">C-1004</td>
+<td class="px-6 py-4 text-slate-900 dark:text-slate-100 text-sm font-medium whitespace-nowrap">Nexus Industries</td>
+<td class="px-6 py-4 text-slate-600 dark:text-slate-300 text-sm whitespace-nowrap">Emily Davis</td>
+<td class="px-6 py-4 text-slate-600 dark:text-slate-300 text-sm whitespace-nowrap">+1 (555) 321-0987</td>
+<td class="px-6 py-4 text-slate-600 dark:text-slate-300 text-sm whitespace-nowrap">emily@nexusind.com</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800">
+                                                Active
+                                            </span>
+</td>
+<td class="px-6 py-4 text-slate-500 dark:text-slate-400 text-sm whitespace-nowrap">Oct 12, 2023</td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+<div class="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="text-slate-400 hover:text-primary transition-colors p-1" title="Edit">
+<span class="material-symbols-outlined text-[20px]">edit</span>
+</button>
+<button class="text-slate-400 hover:text-red-500 transition-colors p-1" title="Delete">
+<span class="material-symbols-outlined text-[20px]">delete</span>
+</button>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors group">
+<td class="px-6 py-4 text-slate-500 dark:text-slate-400 text-sm font-medium whitespace-nowrap">C-1005</td>
+<td class="px-6 py-4 text-slate-900 dark:text-slate-100 text-sm font-medium whitespace-nowrap">Pioneer Solutions</td>
+<td class="px-6 py-4 text-slate-600 dark:text-slate-300 text-sm whitespace-nowrap">Robert Wilson</td>
+<td class="px-6 py-4 text-slate-600 dark:text-slate-300 text-sm whitespace-nowrap">+1 (555) 654-3210</td>
+<td class="px-6 py-4 text-slate-600 dark:text-slate-300 text-sm whitespace-nowrap">robert@pioneer.net</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800">
+                                                Active
+                                            </span>
+</td>
+<td class="px-6 py-4 text-slate-500 dark:text-slate-400 text-sm whitespace-nowrap">Oct 15, 2023</td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+<div class="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="text-slate-400 hover:text-primary transition-colors p-1" title="Edit">
+<span class="material-symbols-outlined text-[20px]">edit</span>
+</button>
+<button class="text-slate-400 hover:text-red-500 transition-colors p-1" title="Delete">
+<span class="material-symbols-outlined text-[20px]">delete</span>
+</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="flex items-center justify-between px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900">
+<div class="flex flex-1 justify-between sm:hidden">
+<a class="relative inline-flex items-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" href="#">Previous</a>
+<a class="relative ml-3 inline-flex items-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50" href="#">Next</a>
+</div>
+<div class="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+<div>
+<p class="text-sm text-slate-700 dark:text-slate-400">
+                                        Showing <span class="font-medium">1</span> to <span class="font-medium">5</span> of <span class="font-medium">97</span> results
+                                    </p>
+</div>
+<div>
+<nav aria-label="Pagination" class="isolate inline-flex -space-x-px rounded-md shadow-sm">
+<a class="relative inline-flex items-center rounded-l-md px-2 py-2 text-slate-400 ring-1 ring-inset ring-slate-300 dark:ring-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 focus:z-20 focus:outline-offset-0" href="#">
+<span class="sr-only">Previous</span>
+<span class="material-symbols-outlined text-[20px]">chevron_left</span>
+</a>
+<a aria-current="page" class="relative z-10 inline-flex items-center bg-primary px-4 py-2 text-sm font-semibold text-white focus:z-20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" href="#">1</a>
+<a class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-slate-900 dark:text-slate-300 ring-1 ring-inset ring-slate-300 dark:ring-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 focus:z-20 focus:outline-offset-0" href="#">2</a>
+<a class="relative hidden items-center px-4 py-2 text-sm font-semibold text-slate-900 dark:text-slate-300 ring-1 ring-inset ring-slate-300 dark:ring-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 focus:z-20 focus:outline-offset-0 md:inline-flex" href="#">3</a>
+<span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-500 ring-1 ring-inset ring-slate-300 dark:ring-slate-700 focus:outline-offset-0">...</span>
+<a class="relative hidden items-center px-4 py-2 text-sm font-semibold text-slate-900 dark:text-slate-300 ring-1 ring-inset ring-slate-300 dark:ring-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 focus:z-20 focus:outline-offset-0 md:inline-flex" href="#">8</a>
+<a class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-slate-900 dark:text-slate-300 ring-1 ring-inset ring-slate-300 dark:ring-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 focus:z-20 focus:outline-offset-0" href="#">9</a>
+<a class="relative inline-flex items-center rounded-r-md px-2 py-2 text-slate-400 ring-1 ring-inset ring-slate-300 dark:ring-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 focus:z-20 focus:outline-offset-0" href="#">
+<span class="sr-only">Next</span>
+<span class="material-symbols-outlined text-[20px]">chevron_right</span>
+</a>
+</nav>
+</div>
+</div>
+</div>
+</main>
+</div>
+</div>
+</div>
+</div>
+</body></html>

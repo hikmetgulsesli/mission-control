@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Representative Handover Management: Shipping CRM</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Work+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#0da6f2",
+                        "background-light": "#f5f7f8",
+                        "background-dark": "#101c22",
+                    },
+                    fontFamily: {
+                        "display": ["Plus Jakarta Sans", "sans-serif"],
+                        "body": ["Work Sans", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body {
+            font-family: "Work Sans", sans-serif;
+        }
+        h1, h2, h3, h4, h5, h6, .font-display {
+            font-family: "Plus Jakarta Sans", sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex flex-col font-body">
+<div class="relative flex h-auto min-h-screen w-full flex-col group/design-root overflow-x-hidden">
+<div class="layout-container flex h-full grow flex-col">
+<div class="px-4 md:px-10 lg:px-40 flex flex-1 justify-center py-5">
+<div class="layout-content-container flex flex-col max-w-[1200px] flex-1 w-full">
+<!-- Header -->
+<header class="flex flex-col md:flex-row items-center justify-between whitespace-nowrap border-b border-slate-200 dark:border-slate-800 px-4 py-4 mb-6 bg-white dark:bg-slate-900 rounded-xl shadow-sm">
+<div class="flex items-center gap-6 w-full md:w-auto mb-4 md:mb-0">
+<div class="flex items-center gap-3 text-slate-900 dark:text-slate-100">
+<div class="size-6 text-primary">
+<span class="material-symbols-outlined text-[24px]">local_shipping</span>
+</div>
+<h2 class="text-lg font-bold leading-tight tracking-tight font-display">Shipping CRM</h2>
+</div>
+<div class="hidden md:flex flex-1 items-stretch rounded-lg h-10 w-64 bg-slate-100 dark:bg-slate-800">
+<div class="text-slate-500 flex items-center justify-center pl-4 pr-2">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</div>
+<input class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-r-lg text-slate-900 dark:text-slate-100 bg-transparent border-none focus:ring-0 placeholder:text-slate-500 px-2 text-sm" placeholder="Search transfers..." value=""/>
+</div>
+</div>
+<div class="flex flex-1 justify-end items-center gap-6 w-full md:w-auto">
+<nav class="hidden lg:flex items-center gap-6">
+<a class="text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-primary text-sm font-medium transition-colors" href="#">Dashboard</a>
+<a class="text-primary font-bold text-sm transition-colors border-b-2 border-primary pb-1" href="#">Transfers</a>
+<a class="text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-primary text-sm font-medium transition-colors" href="#">Customers</a>
+<a class="text-slate-600 dark:text-slate-400 hover:text-primary dark:hover:text-primary text-sm font-medium transition-colors" href="#">Settings</a>
+</nav>
+<div class="flex items-center gap-4">
+<button class="text-slate-500 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[24px]">notifications</span>
+</button>
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 border border-slate-200 dark:border-slate-700" data-alt="User profile avatar placeholder" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCNZcqfeamYSwTOz_SdZ6_lxFRFTcAuQtNJ2odWomJM-xYkD4qQA4xgHBwXHQWBZOUk29DDRPMWQ1QtLQW7sUyikBnoP-ulFM74AAuv3NPC_lSg1D0rurO40-6x0w05WdThmB2ZjcUQBPdERuFDBjzeYxx9HvYN4NuqJWhNIEgInR69E6yBBdL0kEYGIHJrRXafRi6FhRMSSh9A8Iz4bQb3p9e3UfHWrfmXcF822JgmHBTWtJP1-RyY7M0UJv8EZu8bnxByXUVWhLU");'></div>
+</div>
+</div>
+</header>
+<!-- Page Title & Actions -->
+<div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 px-4 mb-8">
+<div class="flex flex-col gap-1">
+<h1 class="text-slate-900 dark:text-slate-100 tracking-tight text-3xl font-bold font-display">Representative Transfers</h1>
+<p class="text-slate-500 dark:text-slate-400 text-sm">Manage lead handovers and representative assignments</p>
+</div>
+<div class="flex flex-wrap items-center gap-3">
+<button class="flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[18px]">sync_alt</span>
+                                Toplu Devir
+                            </button>
+<button class="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm shadow-primary/20">
+<span class="material-symbols-outlined text-[18px]">add</span>
+                                Yeni Devir Oluştur
+                            </button>
+</div>
+</div>
+<!-- Pending Transfers Table -->
+<div class="mb-8">
+<h2 class="text-slate-900 dark:text-slate-100 text-xl font-bold font-display px-4 mb-4">Bekleyen Devirler (Pending Transfers)</h2>
+<div class="px-4 @container">
+<div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+<th class="px-6 py-4 text-slate-700 dark:text-slate-300 text-sm font-semibold">Customer</th>
+<th class="px-6 py-4 text-slate-700 dark:text-slate-300 text-sm font-semibold hidden sm:table-cell">From Rep</th>
+<th class="px-6 py-4 text-slate-700 dark:text-slate-300 text-sm font-semibold hidden md:table-cell">To Rep</th>
+<th class="px-6 py-4 text-slate-700 dark:text-slate-300 text-sm font-semibold w-48 text-right">Action</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors group">
+<td class="px-6 py-4 text-sm">
+<div class="font-medium text-slate-900 dark:text-slate-100">Acme Corp</div>
+<div class="text-slate-500 text-xs mt-1 sm:hidden">From: John Doe → To: Jane Smith</div>
+</td>
+<td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-400 hidden sm:table-cell">
+<div class="flex items-center gap-2">
+<div class="size-6 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-300">JD</div>
+                                                    John Doe
+                                                </div>
+</td>
+<td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-400 hidden md:table-cell">
+<div class="flex items-center gap-2">
+<div class="size-6 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-300">JS</div>
+                                                    Jane Smith
+                                                </div>
+</td>
+<td class="px-6 py-4 text-sm text-right">
+<div class="flex justify-end gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+<button class="p-1.5 rounded-md text-emerald-600 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:hover:bg-emerald-900/50 transition-colors" title="Approve">
+<span class="material-symbols-outlined text-[20px]">check</span>
+</button>
+<button class="p-1.5 rounded-md text-rose-600 bg-rose-50 hover:bg-rose-100 dark:bg-rose-900/30 dark:hover:bg-rose-900/50 transition-colors" title="Reject">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+</td>
+</tr>
+<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors group">
+<td class="px-6 py-4 text-sm">
+<div class="font-medium text-slate-900 dark:text-slate-100">Global Logistics</div>
+<div class="text-slate-500 text-xs mt-1 sm:hidden">From: Mike Johnson → To: Sarah Williams</div>
+</td>
+<td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-400 hidden sm:table-cell">
+<div class="flex items-center gap-2">
+<div class="size-6 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-300">MJ</div>
+                                                    Mike Johnson
+                                                </div>
+</td>
+<td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-400 hidden md:table-cell">
+<div class="flex items-center gap-2">
+<div class="size-6 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-600 dark:text-slate-300">SW</div>
+                                                    Sarah Williams
+                                                </div>
+</td>
+<td class="px-6 py-4 text-sm text-right">
+<div class="flex justify-end gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+<button class="p-1.5 rounded-md text-emerald-600 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:hover:bg-emerald-900/50 transition-colors" title="Approve">
+<span class="material-symbols-outlined text-[20px]">check</span>
+</button>
+<button class="p-1.5 rounded-md text-rose-600 bg-rose-50 hover:bg-rose-100 dark:bg-rose-900/30 dark:hover:bg-rose-900/50 transition-colors" title="Reject">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<!-- Transfer History Table -->
+<div>
+<h2 class="text-slate-900 dark:text-slate-100 text-xl font-bold font-display px-4 mb-4">Mevcut Devirler (Transfer History)</h2>
+<div class="px-4 @container">
+<div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
+<th class="px-6 py-4 text-slate-700 dark:text-slate-300 text-sm font-semibold">Müşteri</th>
+<th class="px-6 py-4 text-slate-700 dark:text-slate-300 text-sm font-semibold hidden sm:table-cell">Eski Temsilci</th>
+<th class="px-6 py-4 text-slate-700 dark:text-slate-300 text-sm font-semibold hidden md:table-cell">Yeni Temsilci</th>
+<th class="px-6 py-4 text-slate-700 dark:text-slate-300 text-sm font-semibold">Durum</th>
+<th class="px-6 py-4 text-slate-700 dark:text-slate-300 text-sm font-semibold text-right">Tarih</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+<td class="px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">Fast Shipping Inc.</td>
+<td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-400 hidden sm:table-cell">Emily Brown</td>
+<td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-400 hidden md:table-cell">David Lee</td>
+<td class="px-6 py-4 text-sm">
+<span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+                                                    Completed
+                                                </span>
+</td>
+<td class="px-6 py-4 text-sm text-slate-500 text-right">Oct 24, 2023</td>
+</tr>
+<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+<td class="px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">Oceanic Freight</td>
+<td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-400 hidden sm:table-cell">Alex Turner</td>
+<td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-400 hidden md:table-cell">Jessica Alba</td>
+<td class="px-6 py-4 text-sm">
+<span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                                                    In Progress
+                                                </span>
+</td>
+<td class="px-6 py-4 text-sm text-slate-500 text-right">Oct 22, 2023</td>
+</tr>
+<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+<td class="px-6 py-4 text-sm font-medium text-slate-900 dark:text-slate-100">Continental Carriers</td>
+<td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-400 hidden sm:table-cell">Robert Downey</td>
+<td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-400 hidden md:table-cell">Chris Evans</td>
+<td class="px-6 py-4 text-sm">
+<span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400">
+                                                    Rejected
+                                                </span>
+</td>
+<td class="px-6 py-4 text-sm text-slate-500 text-right">Oct 20, 2023</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<!-- Footer spacing -->
+<div class="h-12"></div>
+</div>
+</div>
+</div>
+</div>
+</body></html>

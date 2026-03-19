@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Periodic Quotation Report Preview - Shipping CRM</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1258e2",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display min-h-screen flex flex-col">
+<!-- TopNavBar -->
+<header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-10 py-3 shrink-0">
+<div class="flex items-center gap-4 text-slate-900 dark:text-slate-100">
+<div class="size-6 text-primary flex items-center justify-center">
+<span class="material-symbols-outlined">sailing</span>
+</div>
+<h2 class="text-lg font-bold leading-tight tracking-[-0.015em]">Shipping CRM</h2>
+</div>
+<div class="flex flex-1 justify-end gap-8">
+<nav class="flex items-center gap-9">
+<a class="text-sm font-medium leading-normal text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors" href="#">Dashboard</a>
+<a class="text-sm font-bold leading-normal text-primary border-b-2 border-primary pb-1" href="#">Reports</a>
+<a class="text-sm font-medium leading-normal text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors" href="#">Quotes</a>
+<a class="text-sm font-medium leading-normal text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors" href="#">Customers</a>
+<a class="text-sm font-medium leading-normal text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors" href="#">Settings</a>
+</nav>
+<div class="flex items-center gap-4">
+<button class="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-lg h-10 px-4 bg-primary text-white text-sm font-bold leading-normal tracking-[0.015em] hover:bg-blue-700 transition-colors">
+<span class="truncate">Create Quote</span>
+</button>
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 bg-slate-200 dark:bg-slate-700" data-alt="User profile picture placeholder" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCiqUbBSil7jb363cf569Jaqp4tXcCpOFGADpclRoSYukQvElL9yqIpwiOihPJoKTf5tatuxXTsLAimjtXvAr76W0wlWMww7P9fDFpnjpr0nOJJroIEGmEkqqiYlAuoj7eyLvP6vmHg2sjrbHZJ4rStFpW_P8XkMNDSZpkD6eUGx9FfN6pnCz5r8mZuTkRDaVbdz2_pGEdVZE5LR2-SZWkEFCUcALPSw1S9qSmYCnXO4YzYR3SihAjRQmOHpO60ujTICe6BjjA0j86H");'></div>
+</div>
+</div>
+</header>
+<!-- Main Content Layout -->
+<main class="flex-1 flex flex-col items-center py-8 px-4 sm:px-8 lg:px-12 w-full max-w-[1400px] mx-auto overflow-hidden">
+<!-- Header Section -->
+<div class="w-full flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 mb-6">
+<div class="flex flex-col gap-2">
+<h1 class="text-3xl font-bold leading-tight text-slate-900 dark:text-white">Periodic Quotation Report Preview</h1>
+<p class="text-sm font-normal text-slate-500 dark:text-slate-400">Active Date Range: Jan 1, 2024 - Mar 31, 2024</p>
+</div>
+<div class="flex gap-3">
+<button class="flex items-center justify-center gap-2 rounded-lg h-10 px-4 bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors text-sm font-bold shadow-sm">
+<span class="material-symbols-outlined text-lg">picture_as_pdf</span>
+<span>Export PDF</span>
+</button>
+<button class="flex items-center justify-center gap-2 rounded-lg h-10 px-4 bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-white hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors text-sm font-bold shadow-sm">
+<span class="material-symbols-outlined text-lg">table_chart</span>
+<span>Export Excel</span>
+</button>
+</div>
+</div>
+<!-- Filters Section -->
+<div class="w-full flex gap-3 mb-6 flex-wrap">
+<button class="flex h-9 items-center justify-between gap-x-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors min-w-[140px]">
+<span class="text-sm font-medium text-slate-700 dark:text-slate-300">Status: All</span>
+<span class="material-symbols-outlined text-slate-500 text-sm">expand_more</span>
+</button>
+<button class="flex h-9 items-center justify-between gap-x-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors min-w-[180px]">
+<span class="text-sm font-medium text-slate-700 dark:text-slate-300">Transport Mode: All</span>
+<span class="material-symbols-outlined text-slate-500 text-sm">expand_more</span>
+</button>
+<button class="flex h-9 items-center justify-between gap-x-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors min-w-[140px]">
+<span class="text-sm font-medium text-slate-700 dark:text-slate-300">Currency: All</span>
+<span class="material-symbols-outlined text-slate-500 text-sm">expand_more</span>
+</button>
+<button class="flex h-9 items-center justify-center rounded-lg text-primary hover:bg-primary/10 px-3 py-2 transition-colors ml-auto text-sm font-medium gap-1">
+<span class="material-symbols-outlined text-sm">filter_list</span>
+                More Filters
+            </button>
+</div>
+<!-- Data Table Section -->
+<div class="w-full bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex-1 flex flex-col mb-8">
+<div class="overflow-x-auto flex-1">
+<table class="w-full text-left border-collapse">
+<thead class="bg-slate-50 dark:bg-slate-800/50 sticky top-0 z-10 border-b border-slate-200 dark:border-slate-800">
+<tr>
+<th class="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">Quote No</th>
+<th class="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">Customer</th>
+<th class="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">Mode</th>
+<th class="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">Origin</th>
+<th class="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">Destination</th>
+<th class="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap text-right">Price</th>
+<th class="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">Status</th>
+<th class="px-6 py-4 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider whitespace-nowrap">Result Date</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-200 dark:divide-slate-800">
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900 dark:text-white">Q-1001</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300">Acme Corp</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300 flex items-center gap-2">
+<span class="material-symbols-outlined text-slate-400 text-sm">flight</span> Air
+                            </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300">New York (JFK)</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300">London (LHR)</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900 dark:text-white text-right">$12,500 <span class="text-xs text-slate-500 font-normal">USD</span></td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                                    Won
+                                </span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300">Mar 15, 2024</td>
+</tr>
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900 dark:text-white">Q-1002</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300">Global Traders</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300 flex items-center gap-2">
+<span class="material-symbols-outlined text-slate-400 text-sm">directions_boat</span> Ocean
+                            </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300">Shanghai (CNSHA)</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300">Los Angeles (USLAX)</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900 dark:text-white text-right">$8,200 <span class="text-xs text-slate-500 font-normal">USD</span></td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
+                                    Pending
+                                </span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300">Mar 14, 2024</td>
+</tr>
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900 dark:text-white">Q-1003</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300">Euro Import</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300 flex items-center gap-2">
+<span class="material-symbols-outlined text-slate-400 text-sm">local_shipping</span> Road
+                            </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300">Berlin (DEBER)</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300">Paris (FRPAR)</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900 dark:text-white text-right">€3,150 <span class="text-xs text-slate-500 font-normal">EUR</span></td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">
+                                    Lost
+                                </span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300">Mar 12, 2024</td>
+</tr>
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900 dark:text-white">Q-1004</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300">Tech Logistics</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300 flex items-center gap-2">
+<span class="material-symbols-outlined text-slate-400 text-sm">flight</span> Air
+                            </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300">Tokyo (HND)</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300">San Francisco (SFO)</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900 dark:text-white text-right">$15,800 <span class="text-xs text-slate-500 font-normal">USD</span></td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                                    Won
+                                </span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300">Mar 10, 2024</td>
+</tr>
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900 dark:text-white">Q-1005</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300">Fast Track</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300 flex items-center gap-2">
+<span class="material-symbols-outlined text-slate-400 text-sm">directions_boat</span> Ocean
+                            </td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300">Mumbai (INBOM)</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300">Dubai (AEDXB)</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900 dark:text-white text-right">$6,400 <span class="text-xs text-slate-500 font-normal">USD</span></td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                                    Won
+                                </span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-300">Mar 08, 2024</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-800 px-6 py-3 flex items-center justify-between">
+<p class="text-sm text-slate-500 dark:text-slate-400">Showing 1 to 5 of 124 entries</p>
+<div class="flex gap-1">
+<button class="px-3 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-500 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50">Prev</button>
+<button class="px-3 py-1 rounded bg-primary text-white text-sm">1</button>
+<button class="px-3 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 text-sm hover:bg-slate-50 dark:hover:bg-slate-800">2</button>
+<button class="px-3 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 text-sm hover:bg-slate-50 dark:hover:bg-slate-800">3</button>
+<button class="px-3 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 text-sm hover:bg-slate-50 dark:hover:bg-slate-800">Next</button>
+</div>
+</div>
+</div>
+<!-- Summary Section -->
+<div class="w-full">
+<h3 class="text-lg font-bold text-slate-900 dark:text-white mb-4">Report Summary</h3>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<!-- Total Quotes Card -->
+<div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm flex flex-col justify-center">
+<p class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">Total Quotes Processed</p>
+<div class="flex items-end gap-3">
+<span class="text-4xl font-bold text-slate-900 dark:text-white">124</span>
+<span class="text-sm text-green-600 dark:text-green-400 flex items-center mb-1">
+<span class="material-symbols-outlined text-sm">trending_up</span> 12% vs last period
+                        </span>
+</div>
+</div>
+<!-- Total Value by Currency Card -->
+<div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
+<p class="text-sm font-medium text-slate-500 dark:text-slate-400 mb-4">Total Value by Currency</p>
+<div class="flex flex-col gap-3">
+<div class="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
+<span class="text-sm font-medium text-slate-700 dark:text-slate-300">USD</span>
+<span class="text-base font-bold text-slate-900 dark:text-white">$1,245,000</span>
+</div>
+<div class="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-2">
+<span class="text-sm font-medium text-slate-700 dark:text-slate-300">EUR</span>
+<span class="text-base font-bold text-slate-900 dark:text-white">€342,500</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-sm font-medium text-slate-700 dark:text-slate-300">GBP</span>
+<span class="text-base font-bold text-slate-900 dark:text-white">£85,200</span>
+</div>
+</div>
+</div>
+<!-- Win Rate Card -->
+<div class="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm flex flex-col justify-center">
+<div class="flex justify-between items-start mb-2">
+<p class="text-sm font-medium text-slate-500 dark:text-slate-400">Overall Win Rate</p>
+<span class="material-symbols-outlined text-primary">emoji_events</span>
+</div>
+<div class="text-3xl font-bold text-slate-900 dark:text-white mb-4">68.5%</div>
+<div class="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-2.5 mb-2 overflow-hidden">
+<div class="bg-primary h-2.5 rounded-full" style="width: 68.5%"></div>
+</div>
+<p class="text-xs text-slate-500 dark:text-slate-400 text-right">Target: 65%</p>
+</div>
+</div>
+</div>
+</main>
+</body></html>

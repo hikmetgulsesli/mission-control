@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Simon Says Game Screen</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#8b5cf6",
+                        "background-light": "#f6f5f8",
+                        "background-dark": "#0f172a",
+                        "simon-green": "#22c55e",
+                        "simon-red": "#ef4444",
+                        "simon-yellow": "#eab308",
+                        "simon-blue": "#3b82f6",
+                    },
+                    fontFamily: {
+                        "display": ["Plus Jakarta Sans"]
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .simon-btn {
+            box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.2), 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            transition: transform 0.1s, opacity 0.1s;
+            cursor: pointer;
+        }
+        .simon-btn:active {
+            transform: scale(0.95);
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display min-h-screen selection:bg-primary/30">
+<div class="relative flex h-auto min-h-screen w-full flex-col group/design-root overflow-x-hidden">
+<div class="layout-container flex h-full grow flex-col">
+<div class="px-4 flex flex-1 justify-center py-10 md:py-20">
+<div class="glass-panel flex flex-col max-w-[600px] w-full flex-1 rounded-2xl p-6 md:p-8 shadow-2xl">
+<div class="flex flex-wrap justify-center gap-3 pb-8">
+<h1 class="text-white text-5xl md:text-6xl font-black leading-tight tracking-[0.2em] text-center w-full bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500">SIMON SAYS</h1>
+</div>
+<div class="flex flex-wrap gap-4 pb-8">
+<div class="flex flex-1 flex-col gap-2 rounded-xl p-6 bg-slate-800/50 border border-slate-700/50 shadow-inner items-center text-center">
+<p class="text-slate-300 text-sm md:text-base font-bold tracking-widest uppercase">Current Score</p>
+<p class="text-white text-4xl font-black leading-tight">0</p>
+</div>
+<div class="flex flex-1 flex-col gap-2 rounded-xl p-6 bg-slate-800/50 border border-slate-700/50 shadow-inner items-center text-center">
+<p class="text-slate-300 text-sm md:text-base font-bold tracking-widest uppercase">High Score</p>
+<p class="text-primary text-4xl font-black leading-tight drop-shadow-[0_0_10px_rgba(139,92,246,0.5)]">24</p>
+</div>
+</div>
+<div class="flex justify-center pb-10">
+<div class="grid grid-cols-2 gap-4 md:gap-6 w-full max-w-[400px] aspect-square p-4 bg-slate-900/80 rounded-[2rem] shadow-2xl border border-slate-800">
+<div class="simon-btn bg-simon-green rounded-tl-full rounded-tr-xl rounded-bl-xl rounded-br-xl hover:brightness-110"></div>
+<div class="simon-btn bg-simon-red rounded-tr-full rounded-tl-xl rounded-bl-xl rounded-br-xl hover:brightness-110"></div>
+<div class="simon-btn bg-simon-yellow rounded-bl-full rounded-tl-xl rounded-tr-xl rounded-br-xl hover:brightness-110"></div>
+<div class="simon-btn bg-simon-blue rounded-br-full rounded-tl-xl rounded-tr-xl rounded-bl-xl hover:brightness-110"></div>
+</div>
+</div>
+<div class="flex flex-col gap-6 items-center">
+<button class="flex w-full max-w-[300px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-16 px-8 bg-primary hover:bg-primary/90 text-white text-xl font-black leading-normal tracking-[0.1em] shadow-[0_0_20px_rgba(139,92,246,0.4)] transition-all active:scale-95 uppercase">
+                            Start Game
+                        </button>
+<div class="flex items-center justify-center">
+<button aria-label="Toggle Sound" class="p-3 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full transition-colors">
+<span class="material-symbols-outlined text-3xl">volume_up</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</body></html>

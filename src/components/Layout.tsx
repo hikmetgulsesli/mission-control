@@ -18,6 +18,8 @@ const KEY_MAP: Record<string, string | null> = {
   '7': '/files',
   '8': null, // shell toggle
   '9': '/scrape',
+  'r': '/rules',
+  'l': '/live',
 };
 
 export function Layout() {

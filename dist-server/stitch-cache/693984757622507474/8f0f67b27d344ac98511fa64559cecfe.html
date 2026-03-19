@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Logistics CRM Dashboard - Expanded Sidebar</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#2563eb",
+                        "secondary": "#f59e0b",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#161121",
+                    },
+                    fontFamily: {
+                        "display": ["Plus Jakarta Sans", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 antialiased font-display h-screen flex overflow-hidden">
+<!-- Sidebar -->
+<aside class="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col transition-all duration-300 z-20 flex-shrink-0">
+<!-- Brand -->
+<div class="h-16 flex items-center px-6 border-b border-slate-200 dark:border-slate-800 shrink-0">
+<div class="flex items-center gap-3 w-full">
+<div class="bg-primary text-white rounded-lg p-1.5 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-xl">local_shipping</span>
+</div>
+<div class="flex flex-col overflow-hidden">
+<h1 class="text-base font-bold text-slate-900 dark:text-white truncate">LogisticsCRM</h1>
+<p class="text-xs text-slate-500 dark:text-slate-400 font-medium truncate">Pro Plan</p>
+</div>
+</div>
+</div>
+<!-- Navigation -->
+<div class="flex-1 overflow-y-auto py-4 px-3 flex flex-col gap-1">
+<!-- Active Item -->
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary-light font-medium transition-colors group" href="#">
+<span class="material-symbols-outlined shrink-0 text-xl">dashboard</span>
+<span class="text-sm">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white font-medium transition-colors group" href="#">
+<span class="material-symbols-outlined shrink-0 text-xl group-hover:text-primary transition-colors">group</span>
+<span class="text-sm">Customers</span>
+</a>
+<a class="flex items-center justify-between px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white font-medium transition-colors group" href="#">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined shrink-0 text-xl group-hover:text-primary transition-colors">description</span>
+<span class="text-sm">Quotes</span>
+</div>
+<span class="bg-secondary/20 text-secondary-dark dark:text-secondary text-xs font-bold px-2 py-0.5 rounded-full">3</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white font-medium transition-colors group" href="#">
+<span class="material-symbols-outlined shrink-0 text-xl group-hover:text-primary transition-colors">timeline</span>
+<span class="text-sm">Activities</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white font-medium transition-colors group" href="#">
+<span class="material-symbols-outlined shrink-0 text-xl group-hover:text-primary transition-colors">bar_chart</span>
+<span class="text-sm">Reports</span>
+</a>
+<div class="mt-4 mb-2 px-3">
+<p class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Settings</p>
+</div>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white font-medium transition-colors group" href="#">
+<span class="material-symbols-outlined shrink-0 text-xl group-hover:text-primary transition-colors">settings</span>
+<span class="text-sm">Admin</span>
+</a>
+</div>
+<!-- User/Bottom -->
+<div class="p-4 border-t border-slate-200 dark:border-slate-800 shrink-0">
+<button class="flex items-center gap-3 w-full hover:bg-slate-50 dark:hover:bg-slate-800 p-2 rounded-lg transition-colors text-left">
+<div class="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden shrink-0 border border-slate-300 dark:border-slate-600" data-alt="User profile picture of Sarah Connor" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCZqtNv1uB3n0uEpmHAY6PZ5IVaaeuWU5-CTqlmj9DJ97Ka_8wruEhrP2rDGvNplhC42HeSh9a408RIe-5HUKtTpcecFcrQAFBrLwaRZ18NLtg1j2YkZ5YMZ88x6ifSDk0n73DE-r5H961kAfQKhgbx1Du_5cdwP5DYhT5y6cq7A3LLDXUrDG_D5mVd1GmSeYL65ii7wjqlGbfWdhOljkuUFsCyoipcrHnBFgnlcIl366t77ht0pyKzeYOyLwOgZdd-UW1MiOATMHl6'); background-size: cover; background-position: center;"></div>
+<div class="flex-1 min-w-0">
+<p class="text-sm font-semibold text-slate-900 dark:text-white truncate">Sarah Connor</p>
+<p class="text-xs text-slate-500 dark:text-slate-400 truncate">Logistics Manager</p>
+</div>
+<span class="material-symbols-outlined text-slate-400 shrink-0">unfold_more</span>
+</button>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="flex-1 flex flex-col min-w-0 overflow-hidden">
+<!-- Header -->
+<header class="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-6 shrink-0 z-10">
+<!-- Breadcrumbs / Left side -->
+<div class="flex items-center gap-4">
+<nav aria-label="Breadcrumb" class="hidden sm:flex">
+<ol class="flex items-center space-x-2 text-sm text-slate-500 dark:text-slate-400 font-medium">
+<li>
+<a class="hover:text-slate-900 dark:hover:text-white transition-colors" href="#">Home</a>
+</li>
+<li>
+<span class="material-symbols-outlined text-sm">chevron_right</span>
+</li>
+<li>
+<span aria-current="page" class="text-slate-900 dark:text-white">Dashboard</span>
+</li>
+</ol>
+</nav>
+</div>
+<!-- Right actions -->
+<div class="flex items-center gap-3">
+<button class="w-9 h-9 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-xl">search</span>
+</button>
+<button class="w-9 h-9 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-xl">light_mode</span>
+</button>
+<div class="relative">
+<button class="w-9 h-9 rounded-full flex items-center justify-center text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-xl">notifications</span>
+<span class="absolute top-1 right-1 w-2 h-2 bg-secondary rounded-full border border-white dark:border-slate-900"></span>
+</button>
+</div>
+<div class="h-6 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>
+<button class="flex items-center gap-2 bg-primary hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm">
+<span class="material-symbols-outlined text-lg">add</span>
+<span>New Quote</span>
+</button>
+</div>
+</header>
+<!-- Page Content -->
+<div class="flex-1 overflow-y-auto p-6 lg:p-8">
+<div class="max-w-7xl mx-auto space-y-6">
+<!-- Page Title -->
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+<div>
+<h2 class="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Dashboard Overview</h2>
+<p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Welcome back, here's a summary of your logistics activities.</p>
+</div>
+<div class="flex items-center gap-2">
+<div class="relative">
+<select class="appearance-none bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-sm rounded-lg focus:ring-primary focus:border-primary block w-full py-2 pl-3 pr-10 cursor-pointer shadow-sm">
+<option>Last 30 Days</option>
+<option>This Quarter</option>
+<option>This Year</option>
+</select>
+<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+<span class="material-symbols-outlined text-sm">expand_more</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Stats Grid -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+<!-- Stat Card 1 -->
+<div class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
+<div class="flex items-center justify-between mb-3">
+<p class="text-sm font-medium text-slate-500 dark:text-slate-400">Total Customers</p>
+<div class="w-8 h-8 rounded-full bg-blue-50 dark:bg-blue-900/30 text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-sm">group</span>
+</div>
+</div>
+<div class="flex items-baseline gap-2">
+<p class="text-2xl font-bold text-slate-900 dark:text-white">1,248</p>
+<span class="flex items-center text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-1.5 py-0.5 rounded">
+<span class="material-symbols-outlined text-[10px] mr-0.5">trending_up</span>
+                                +5.2%
+                            </span>
+</div>
+</div>
+<!-- Stat Card 2 -->
+<div class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
+<div class="flex items-center justify-between mb-3">
+<p class="text-sm font-medium text-slate-500 dark:text-slate-400">Active Quotes</p>
+<div class="w-8 h-8 rounded-full bg-secondary/10 text-secondary-dark dark:text-secondary flex items-center justify-center">
+<span class="material-symbols-outlined text-sm">request_quote</span>
+</div>
+</div>
+<div class="flex items-baseline gap-2">
+<p class="text-2xl font-bold text-slate-900 dark:text-white">342</p>
+<span class="flex items-center text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-1.5 py-0.5 rounded">
+<span class="material-symbols-outlined text-[10px] mr-0.5">trending_up</span>
+                                +12.4%
+                            </span>
+</div>
+</div>
+<!-- Stat Card 3 -->
+<div class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
+<div class="flex items-center justify-between mb-3">
+<p class="text-sm font-medium text-slate-500 dark:text-slate-400">Shipments in Transit</p>
+<div class="w-8 h-8 rounded-full bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+<span class="material-symbols-outlined text-sm">flight_takeoff</span>
+</div>
+</div>
+<div class="flex items-baseline gap-2">
+<p class="text-2xl font-bold text-slate-900 dark:text-white">89</p>
+<span class="flex items-center text-xs font-medium text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/30 px-1.5 py-0.5 rounded">
+<span class="material-symbols-outlined text-[10px] mr-0.5">trending_down</span>
+                                -2.1%
+                            </span>
+</div>
+</div>
+<!-- Stat Card 4 -->
+<div class="bg-white dark:bg-slate-800 rounded-xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col">
+<div class="flex items-center justify-between mb-3">
+<p class="text-sm font-medium text-slate-500 dark:text-slate-400">Monthly Revenue</p>
+<div class="w-8 h-8 rounded-full bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+<span class="material-symbols-outlined text-sm">payments</span>
+</div>
+</div>
+<div class="flex items-baseline gap-2">
+<p class="text-2xl font-bold text-slate-900 dark:text-white">$124.5k</p>
+<span class="flex items-center text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-1.5 py-0.5 rounded">
+<span class="material-symbols-outlined text-[10px] mr-0.5">trending_up</span>
+                                +8.3%
+                            </span>
+</div>
+</div>
+</div>
+<!-- Main Content Area (Charts / Tables placeholder) -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<!-- Chart Placeholder -->
+<div class="lg:col-span-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 flex flex-col min-h-[400px]">
+<div class="flex items-center justify-between mb-6">
+<h3 class="text-lg font-bold text-slate-900 dark:text-white">Revenue vs Volume</h3>
+<button class="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors rounded">
+<span class="material-symbols-outlined text-xl">more_horiz</span>
+</button>
+</div>
+<div class="flex-1 flex items-center justify-center rounded-lg border-2 border-dashed border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+<div class="text-center text-slate-500 dark:text-slate-400">
+<span class="material-symbols-outlined text-4xl mb-2 opacity-50">bar_chart</span>
+<p class="text-sm font-medium">Chart visualization area</p>
+</div>
+</div>
+</div>
+<!-- Recent Activity Placeholder -->
+<div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6 flex flex-col min-h-[400px]">
+<div class="flex items-center justify-between mb-6">
+<h3 class="text-lg font-bold text-slate-900 dark:text-white">Recent Activity</h3>
+<a class="text-sm font-medium text-primary hover:text-blue-700 dark:hover:text-blue-400 transition-colors" href="#">View All</a>
+</div>
+<div class="space-y-6 flex-1">
+<!-- Activity Item 1 -->
+<div class="flex gap-4">
+<div class="relative mt-1">
+<div class="w-2.5 h-2.5 rounded-full bg-primary ring-4 ring-blue-50 dark:ring-blue-900/20 z-10 relative"></div>
+<div class="absolute top-2.5 bottom-[-24px] left-1/2 -ml-[1px] w-[2px] bg-slate-200 dark:bg-slate-700"></div>
+</div>
+<div>
+<p class="text-sm font-medium text-slate-900 dark:text-white">New quote created</p>
+<p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Quote #Q-8492 for Global Tech Inc.</p>
+<p class="text-xs text-slate-400 dark:text-slate-500 mt-1">2 hours ago</p>
+</div>
+</div>
+<!-- Activity Item 2 -->
+<div class="flex gap-4">
+<div class="relative mt-1">
+<div class="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-900/20 z-10 relative"></div>
+<div class="absolute top-2.5 bottom-[-24px] left-1/2 -ml-[1px] w-[2px] bg-slate-200 dark:bg-slate-700"></div>
+</div>
+<div>
+<p class="text-sm font-medium text-slate-900 dark:text-white">Shipment delivered</p>
+<p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Tracking #TRK-10294 reached destination.</p>
+<p class="text-xs text-slate-400 dark:text-slate-500 mt-1">5 hours ago</p>
+</div>
+</div>
+<!-- Activity Item 3 -->
+<div class="flex gap-4">
+<div class="relative mt-1">
+<div class="w-2.5 h-2.5 rounded-full bg-secondary ring-4 ring-amber-50 dark:ring-amber-900/20 z-10 relative"></div>
+<div class="absolute top-2.5 bottom-[-24px] left-1/2 -ml-[1px] w-[2px] bg-slate-200 dark:bg-slate-700"></div>
+</div>
+<div>
+<p class="text-sm font-medium text-slate-900 dark:text-white">Invoice pending</p>
+<p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Invoice #INV-2023 needs approval.</p>
+<p class="text-xs text-slate-400 dark:text-slate-500 mt-1">Yesterday</p>
+</div>
+</div>
+<!-- Activity Item 4 -->
+<div class="flex gap-4">
+<div class="relative mt-1">
+<div class="w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-slate-600 ring-4 ring-slate-50 dark:ring-slate-800 z-10 relative"></div>
+</div>
+<div>
+<p class="text-sm font-medium text-slate-900 dark:text-white">Customer record updated</p>
+<p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Updated billing info for Acme Corp.</p>
+<p class="text-xs text-slate-400 dark:text-slate-500 mt-1">Yesterday</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

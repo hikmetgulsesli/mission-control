@@ -39,6 +39,7 @@ interface Project {
   serviceStatus?: string;
   createdBy: string;
   workflowRunId?: string;
+  runNumber?: number;
   createdAt: string;
   completedAt?: string;
   status?: string;
@@ -71,6 +72,7 @@ export function Projects() {
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteResult, setDeleteResult] = useState<{ success: boolean; log?: string[]; error?: string } | null>(null);
+  const [deleteSteps, setDeleteSteps] = useState<Array<{ id: string; label: string; detail: string; status: "waiting" | "done" | "fail" | "skip" }>>([]);
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState({ name: "", description: "", emoji: "", category: "own", type: "web" as string });
   const [createLoading, setCreateLoading] = useState(false);
@@ -91,14 +93,39 @@ export function Projects() {
     if (!deleteTarget || deleteConfirm.trim() !== deleteTarget.name.trim()) return;
     setDeleteLoading(true);
     setDeleteResult(null);
+    const steps = [
+      { id: 'service', label: 'Systemd servisi', detail: deleteTarget.service || '-', status: 'waiting' as const },
+      { id: 'tunnel', label: 'Cloudflare tunnel', detail: deleteTarget.domain || '-', status: 'waiting' as const },
+      { id: 'files', label: 'Yerel dosyalar', detail: deleteTarget.repo || '~/projects/' + deleteTarget.id, status: 'waiting' as const },
+      { id: 'github', label: 'GitHub repo', detail: (deleteTarget as any).github?.replace('https://github.com/', '') || '-', status: 'waiting' as const },
+      { id: 'json', label: 'projects.json', detail: deleteTarget.id, status: 'waiting' as const },
+      { id: 'db', label: 'Pipeline kayitlari', detail: 'runs, steps, stories', status: 'waiting' as const },
+    ];
+    setDeleteSteps(steps);
     try {
       const result = await api.deleteProject(deleteTarget.id, deleteConfirm);
-      setDeleteResult({ success: true, log: result.log });
+      const log = result.log || [];
+      const logStr = log.join(' ');
+      const updated = steps.map(s => {
+        if (s.id === 'service') return { ...s, status: logStr.includes('stopped') ? 'done' as const : logStr.includes('Service') ? 'fail' as const : 'skip' as const };
+        if (s.id === 'tunnel') return { ...s, status: logStr.includes('Tunnel entry') || logStr.includes('Tunnel:') ? 'done' as const : logStr.includes('Tunnel') && logStr.includes('failed') ? 'fail' as const : 'skip' as const };
+        if (s.id === 'files') return { ...s, status: logStr.includes('deleted') && logStr.includes('Repo') ? 'done' as const : logStr.includes('deletion failed') ? 'fail' as const : 'skip' as const };
+        if (s.id === 'github') return { ...s, status: logStr.includes('GitHub repo deleted') ? 'done' as const : logStr.includes('GitHub delete failed') ? 'fail' as const : 'skip' as const };
+        if (s.id === 'json') return { ...s, status: logStr.includes('Removed from projects.json') ? 'done' as const : 'skip' as const };
+        if (s.id === 'db') return { ...s, status: logStr.includes('Setfarm') ? 'done' as const : 'skip' as const };
+        return s;
+      });
+      // Animate steps one by one
+      for (let i = 0; i < updated.length; i++) {
+        await new Promise(r => setTimeout(r, 200));
+        setDeleteSteps(prev => prev.map((s, idx) => idx <= i ? updated[idx] : s));
+      }
+      setDeleteResult({ success: true, log });
       setProjects((prev) => prev.filter((p) => p.id !== deleteTarget.id));
       if (selected === deleteTarget.id) setSelected(null);
-      setTimeout(() => { setDeleteTarget(null); setDeleteConfirm(""); setDeleteResult(null); }, 3000);
     } catch (err: any) {
       setDeleteResult({ success: false, error: err.message });
+      setDeleteSteps(prev => prev.map(s => s.status === 'waiting' ? { ...s, status: 'fail' as const } : s));
     } finally {
       setDeleteLoading(false);
     }
@@ -344,6 +371,12 @@ export function Projects() {
                   <span className="project-card__value">{p.stories.done}/{p.stories.total}</span>
                 </div>
               )}
+              {p.runNumber && (
+                <div className="project-card__meta-row">
+                  <span className="project-card__label">RUN</span>
+                  <span className="project-card__value">#{p.runNumber}</span>
+                </div>
+              )}
               {(p.createdAt || p.completedAt) && (
                 <div className="project-card__meta-row">
                   <span className="project-card__label">TARIH</span>
@@ -492,37 +525,69 @@ export function Projects() {
         <div className="modal-backdrop" onClick={() => !deleteLoading && setDeleteTarget(null)}>
           <div className="modal delete-modal" onClick={(e) => e.stopPropagation()}>
             <div className="delete-modal__header">
-              <h3>Projeyi Sil</h3>
-              <button className="modal__close" onClick={() => !deleteLoading && setDeleteTarget(null)}>{"\u2715"}</button>
+              <h3 style={{ color: '#f85149', margin: 0 }}>Projeyi Sil</h3>
+              <button className="modal__close" onClick={() => !deleteLoading && setDeleteTarget(null)}>{"✕"}</button>
             </div>
             <div className="delete-modal__body">
               <div className="delete-modal__warning">
                 <strong>{deleteTarget.emoji} {deleteTarget.name}</strong> projesi ve tum kaynaklari kalici olarak silinecek.
               </div>
-              <ul className="delete-modal__list">
-                <li>Proje dosyalari: <code>{deleteTarget.repo}</code></li>
-                <li>Systemd servisi: <code>{deleteTarget.service}</code></li>
-                <li>Cloudflare tunnel: <code>{deleteTarget.domain}</code></li>
-              </ul>
-              <div className="delete-modal__confirm">
-                <label>Onaylamak icin proje adini yazin: <strong>{deleteTarget.name}</strong></label>
-                <input type="text" value={deleteConfirm} onChange={(e) => setDeleteConfirm(e.target.value)} placeholder={deleteTarget.name} disabled={deleteLoading} autoFocus />
+
+              {/* Checklist — only visible during/after deletion */}
+              {(deleteLoading || deleteResult || deleteSteps.some(s => s.status !== 'waiting')) && <div style={{ margin: '12px 0', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {(deleteSteps.length > 0 ? deleteSteps : [
+                  { id: 'service', label: 'Systemd servisi', detail: deleteTarget.service || '-', status: 'waiting' as const },
+                  { id: 'tunnel', label: 'Cloudflare tunnel', detail: deleteTarget.domain || '-', status: 'waiting' as const },
+                  { id: 'files', label: 'Yerel dosyalar', detail: deleteTarget.repo || '~/projects/' + deleteTarget.id, status: 'waiting' as const },
+                  { id: 'github', label: 'GitHub repo', detail: deleteTarget.github?.replace('https://github.com/', '') || '-', status: 'waiting' as const },
+                  { id: 'json', label: 'projects.json', detail: deleteTarget.id, status: 'waiting' as const },
+                  { id: 'db', label: 'Pipeline kayitlari', detail: 'runs, steps, stories', status: 'waiting' as const },
+                ]).map((step) => (
+                  <div key={step.id} style={{
+                    display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px',
+                    background: step.status === 'done' ? 'rgba(63, 185, 80, 0.08)' : step.status === 'fail' ? 'rgba(248, 81, 73, 0.08)' : 'rgba(255,255,255,0.03)',
+                    borderRadius: '6px', fontSize: '13px', transition: 'all 0.3s ease',
+                    borderLeft: `3px solid ${step.status === 'done' ? '#3fb950' : step.status === 'fail' ? '#f85149' : step.status === 'skip' ? '#484f58' : '#30363d'}`
+                  }}>
+                    <span style={{ fontSize: '16px', width: '20px', textAlign: 'center', flexShrink: 0 }}>
+                      {step.status === 'done' ? '✅' : step.status === 'fail' ? '❌' : step.status === 'skip' ? '➖' : '⏳'}
+                    </span>
+                    <span style={{ color: step.status === 'skip' ? '#484f58' : '#e6edf3', fontWeight: 500 }}>{step.label}</span>
+                    <span style={{ color: '#484f58', fontSize: '11px', marginLeft: 'auto', fontFamily: 'monospace' }}>{step.detail}</span>
+                  </div>
+                ))}
               </div>
-              {deleteResult && (
-                <div className={`delete-modal__result delete-modal__result--${deleteResult.success ? "success" : "error"}`}>
-                  {deleteResult.success ? (
-                    <><strong>Silindi!</strong>{deleteResult.log?.map((l, i) => <div key={i}>{l}</div>)}</>
-                  ) : (
-                    <><strong>Hata:</strong> {deleteResult.error}</>
-                  )}
+}
+
+              {!deleteLoading && !deleteResult && (
+                <div style={{ margin: '12px 0', padding: '10px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', fontSize: '13px', color: '#8b949e' }}>
+                  Silinecekler: servis, tunnel, dosyalar, GitHub repo, DB kayitlari
+                </div>
+              )}
+
+              {!deleteResult && (
+                <div className="delete-modal__confirm">
+                  <label>Onaylamak icin proje adini yazin: <strong style={{ color: '#f85149' }}>{deleteTarget.name}</strong></label>
+                  <input type="text" value={deleteConfirm} onChange={(e) => setDeleteConfirm(e.target.value)} placeholder={deleteTarget.name} disabled={deleteLoading} autoFocus />
+                </div>
+              )}
+              {deleteResult && !deleteResult.success && (
+                <div className="delete-modal__result delete-modal__result--error">
+                  <strong>Hata:</strong> {deleteResult.error}
                 </div>
               )}
             </div>
             <div className="modal__actions">
-              <button className="btn" onClick={() => setDeleteTarget(null)} disabled={deleteLoading}>Vazgec</button>
-              <button className="btn btn--danger" onClick={handleDelete} disabled={deleteConfirm.trim() !== deleteTarget.name.trim() || deleteLoading}>
-                {deleteLoading ? "Siliniyor..." : "Kalici Olarak Sil"}
-              </button>
+              {deleteResult?.success ? (
+                <button className="btn" onClick={() => { setDeleteTarget(null); setDeleteConfirm(""); setDeleteResult(null); setDeleteSteps([]); }}>Kapat</button>
+              ) : (
+                <>
+                  <button className="btn" onClick={() => setDeleteTarget(null)} disabled={deleteLoading}>Vazgec</button>
+                  <button className="btn btn--danger" onClick={handleDelete} disabled={deleteConfirm.trim() !== deleteTarget.name.trim() || deleteLoading}>
+                    {deleteLoading ? "Siliniyor..." : "Kalici Olarak Sil"}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

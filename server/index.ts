@@ -29,6 +29,8 @@ import terminalRouter from "./routes/terminal.js";
 import filesRouter from "./routes/files.js";
 import discordNotifyRouter from "./routes/discord-notify.js";
 import scrapeRouter from "./routes/scrape.js";
+import rulesRouter from "./routes/rules.js";
+import liveFeedRouter from "./routes/live-feed.js";
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
@@ -56,6 +58,8 @@ app.use("/api", terminalRouter);
 app.use("/api", filesRouter);
 app.use("/api", discordNotifyRouter);
 app.use("/api", scrapeRouter);
+app.use("/api", rulesRouter);
+app.use("/api", liveFeedRouter);
 
 // Serve avatars
 if (existsSync(config.avatarsDir)) {

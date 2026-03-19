@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Game Results and Statistics Screen</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700;900&amp;family=DM+Sans:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#3b82f6",
+                        "background-light": "#f5f7f8",
+                        "background-dark": "#0f172a",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "sans-serif"],
+                        "body": ["DM Sans", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .ripple-bg {
+            background: radial-gradient(circle at center, rgba(59, 130, 246, 0.05) 0%, transparent 70%);
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-body antialiased min-h-screen flex flex-col relative overflow-x-hidden">
+<div class="absolute inset-0 ripple-bg pointer-events-none"></div>
+<div class="layout-container flex h-full grow flex-col relative z-10">
+<div class="px-4 md:px-10 lg:px-40 flex flex-1 justify-center py-10">
+<div class="layout-content-container flex flex-col max-w-[960px] w-full flex-1 gap-8">
+<div class="flex flex-col items-center justify-center text-center space-y-2 pb-6 border-b border-primary/20">
+<p class="text-primary font-bold tracking-widest uppercase text-sm font-display">Savaş Gemileri</p>
+<h1 class="text-slate-900 dark:text-slate-100 text-5xl md:text-6xl font-black leading-tight tracking-[-0.033em] font-display">Oyun Bitti</h1>
+</div>
+<div class="flex flex-col gap-6">
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+<div class="flex flex-col gap-2 rounded-xl p-6 bg-primary/10 border border-primary/20 items-center justify-center text-center">
+<p class="text-slate-600 dark:text-slate-400 text-sm font-medium uppercase tracking-wider">Total İsabet</p>
+<p class="text-primary text-4xl font-black font-display">15</p>
+</div>
+<div class="flex flex-col gap-2 rounded-xl p-6 bg-slate-200/50 dark:bg-slate-800/50 border border-slate-300 dark:border-slate-700 items-center justify-center text-center">
+<p class="text-slate-600 dark:text-slate-400 text-sm font-medium uppercase tracking-wider">Iskalama</p>
+<p class="text-slate-800 dark:text-slate-200 text-4xl font-black font-display">25</p>
+</div>
+<div class="flex flex-col gap-2 rounded-xl p-6 bg-slate-200/50 dark:bg-slate-800/50 border border-slate-300 dark:border-slate-700 items-center justify-center text-center">
+<p class="text-slate-600 dark:text-slate-400 text-sm font-medium uppercase tracking-wider">İsabet Oranı</p>
+<p class="text-slate-800 dark:text-slate-200 text-4xl font-black font-display">37.5%</p>
+</div>
+<div class="flex flex-col gap-2 rounded-xl p-6 bg-slate-200/50 dark:bg-slate-800/50 border border-slate-300 dark:border-slate-700 items-center justify-center text-center">
+<p class="text-slate-600 dark:text-slate-400 text-sm font-medium uppercase tracking-wider">Toplam Tur</p>
+<p class="text-slate-800 dark:text-slate-200 text-4xl font-black font-display">40</p>
+</div>
+</div>
+<div class="flex flex-col gap-4 mt-4">
+<h2 class="text-slate-900 dark:text-slate-100 text-2xl font-bold font-display px-2">Gemi Durumu</h2>
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+<div class="flex gap-4 rounded-xl border border-red-500/30 bg-red-500/10 p-5 items-center opacity-75">
+<div class="text-red-500 flex items-center justify-center bg-red-500/20 rounded-full p-2">
+<span class="material-symbols-outlined text-3xl">sailing</span>
+</div>
+<div class="flex flex-col">
+<h3 class="text-slate-800 dark:text-slate-200 text-lg font-bold line-through decoration-red-500/50 font-display">Uçak Gemisi</h3>
+<span class="text-red-500 text-sm font-bold uppercase tracking-wider">Battı</span>
+</div>
+</div>
+<div class="flex gap-4 rounded-xl border border-red-500/30 bg-red-500/10 p-5 items-center opacity-75">
+<div class="text-red-500 flex items-center justify-center bg-red-500/20 rounded-full p-2">
+<span class="material-symbols-outlined text-3xl">directions_boat</span>
+</div>
+<div class="flex flex-col">
+<h3 class="text-slate-800 dark:text-slate-200 text-lg font-bold line-through decoration-red-500/50 font-display">Savaş Gemisi</h3>
+<span class="text-red-500 text-sm font-bold uppercase tracking-wider">Battı</span>
+</div>
+</div>
+<div class="flex gap-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-5 items-center">
+<div class="text-emerald-500 flex items-center justify-center bg-emerald-500/20 rounded-full p-2">
+<span class="material-symbols-outlined text-3xl">directions_boat</span>
+</div>
+<div class="flex flex-col">
+<h3 class="text-slate-800 dark:text-slate-200 text-lg font-bold font-display">Kruvazör</h3>
+<span class="text-emerald-500 text-sm font-bold uppercase tracking-wider">Hayatta</span>
+</div>
+</div>
+<div class="flex gap-4 rounded-xl border border-red-500/30 bg-red-500/10 p-5 items-center opacity-75">
+<div class="text-red-500 flex items-center justify-center bg-red-500/20 rounded-full p-2">
+<span class="material-symbols-outlined text-3xl">subway</span>
+</div>
+<div class="flex flex-col">
+<h3 class="text-slate-800 dark:text-slate-200 text-lg font-bold line-through decoration-red-500/50 font-display">Denizaltı</h3>
+<span class="text-red-500 text-sm font-bold uppercase tracking-wider">Battı</span>
+</div>
+</div>
+<div class="flex gap-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-5 items-center">
+<div class="text-emerald-500 flex items-center justify-center bg-emerald-500/20 rounded-full p-2">
+<span class="material-symbols-outlined text-3xl">directions_boat</span>
+</div>
+<div class="flex flex-col">
+<h3 class="text-slate-800 dark:text-slate-200 text-lg font-bold font-display">Muhrip</h3>
+<span class="text-emerald-500 text-sm font-bold uppercase tracking-wider">Hayatta</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="flex flex-col sm:flex-row justify-center gap-4 mt-8 pt-8 border-t border-slate-300 dark:border-slate-800">
+<button class="flex items-center justify-center gap-2 rounded-lg h-14 px-8 bg-primary hover:bg-primary/90 text-white text-lg font-bold tracking-wide transition-colors sm:min-w-[200px] shadow-lg shadow-primary/20">
+<span class="material-symbols-outlined">replay</span>
+                        Tekrar Oyna
+                    </button>
+<button class="flex items-center justify-center gap-2 rounded-lg h-14 px-8 bg-transparent border-2 border-slate-300 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800/50 text-slate-800 dark:text-slate-200 text-lg font-bold tracking-wide transition-colors sm:min-w-[200px]">
+<span class="material-symbols-outlined">home</span>
+                        Ana Menü
+                    </button>
+</div>
+</div>
+</div>
+</div>
+</body></html>

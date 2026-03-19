@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="tr"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Savaş Gemileri - Savaş Ekranı</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#0d65f2",
+                        "background-light": "#f5f7f8",
+                        "background-dark": "#101722",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "sans-serif"]
+                    },
+                    borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" },
+                },
+            },
+        }
+    </script>
+<style>
+        /* Ensuring 10x10 grids stay perfectly square */
+        .battleship-grid {
+            display: grid;
+            grid-template-columns: repeat(10, minmax(0, 1fr));
+            gap: 2px;
+            width: 100%;
+            max-width: 450px;
+            margin: 0 auto;
+        }
+        .cell {
+            aspect-ratio: 1 / 1;
+            border-radius: 0.125rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+            transition: all 0.2s ease;
+        }
+        /* State Classes */
+        .cell-empty { @apply bg-slate-800 border border-slate-700/50; }
+        .cell-ship { @apply bg-slate-500 border border-slate-400 shadow-inner; }
+        .cell-hit { @apply bg-red-900/40 border border-red-500/50 text-red-500; }
+        .cell-miss { @apply bg-slate-700/60 border border-slate-500/50 text-slate-300; }
+        .cell-enemy-unrevealed { @apply bg-[#1e3a5f] hover:bg-primary/40 border border-[#2a4d7d] cursor-crosshair; }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen flex flex-col selection:bg-primary/30">
+<!-- Top Navigation -->
+<header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-slate-200 dark:border-slate-800 px-6 py-4 bg-white/5 dark:bg-black/20 backdrop-blur-sm sticky top-0 z-10">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-primary flex items-center justify-center text-white">
+<span class="material-symbols-outlined text-xl">sailing</span>
+</div>
+<h2 class="text-xl font-bold leading-tight tracking-tight">Savaş Gemileri</h2>
+</div>
+<div class="flex items-center gap-4 text-sm font-medium">
+<div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800 border border-slate-700">
+<span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+<span>Bağlı</span>
+</div>
+<button class="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center hover:bg-slate-700 transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+</div>
+</header>
+<!-- Main Content -->
+<main class="flex-1 w-full max-w-7xl mx-auto px-4 py-8 flex flex-col items-center">
+<!-- Turn Banner -->
+<div class="mb-8 w-full flex justify-center">
+<div class="inline-flex items-center gap-3 bg-primary/20 border border-primary/40 text-primary px-8 py-3 rounded-full shadow-[0_0_15px_rgba(13,101,242,0.2)]">
+<span class="material-symbols-outlined animate-bounce">radar</span>
+<h1 class="text-2xl font-bold tracking-wide uppercase">Sıra Sende!</h1>
+<span class="material-symbols-outlined animate-bounce">radar</span>
+</div>
+</div>
+<!-- Game Boards Container -->
+<div class="flex flex-col xl:flex-row w-full gap-8 xl:gap-16 justify-center">
+<!-- Left Board: Your Board -->
+<div class="flex flex-col items-center flex-1 max-w-lg w-full bg-slate-900/50 p-6 rounded-2xl border border-slate-800 shadow-xl">
+<div class="flex items-center gap-2 mb-6">
+<span class="material-symbols-outlined text-slate-400">shield</span>
+<h2 class="text-xl font-bold tracking-tight">Senin Tahtan</h2>
+</div>
+<div class="battleship-grid bg-slate-950 p-2 rounded-lg border border-slate-800">
+<!-- Row A -->
+<div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div>
+<!-- Row B -->
+<div class="cell cell-empty"></div><div class="cell cell-ship"></div><div class="cell cell-ship"></div><div class="cell cell-hit"><span class="material-symbols-outlined">close</span></div><div class="cell cell-hit"><span class="material-symbols-outlined">close</span></div><div class="cell cell-ship"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-miss"><span class="material-symbols-outlined text-sm">circle</span></div><div class="cell cell-empty"></div>
+<!-- Row C -->
+<div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div>
+<!-- Row D -->
+<div class="cell cell-miss"><span class="material-symbols-outlined text-sm">circle</span></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-ship"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-hit"><span class="material-symbols-outlined">close</span></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div>
+<!-- Row E -->
+<div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-ship"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-hit"><span class="material-symbols-outlined">close</span></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div>
+<!-- Row F -->
+<div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-ship"></div><div class="cell cell-empty"></div><div class="cell cell-miss"><span class="material-symbols-outlined text-sm">circle</span></div><div class="cell cell-empty"></div><div class="cell cell-hit"><span class="material-symbols-outlined">close</span></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div>
+<!-- Row G -->
+<div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div>
+<!-- Row H -->
+<div class="cell cell-empty"></div><div class="cell cell-ship"></div><div class="cell cell-ship"></div><div class="cell cell-ship"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-miss"><span class="material-symbols-outlined text-sm">circle</span></div><div class="cell cell-empty"></div>
+<!-- Row I -->
+<div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div>
+<!-- Row J -->
+<div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div><div class="cell cell-empty"></div>
+</div>
+</div>
+<!-- Right Board: Enemy Board -->
+<div class="flex flex-col items-center flex-1 max-w-lg w-full bg-slate-900/50 p-6 rounded-2xl border border-primary/30 shadow-[0_0_30px_rgba(13,101,242,0.1)] relative overflow-hidden">
+<!-- Targeting overlay hint -->
+<div class="absolute inset-0 pointer-events-none border-2 border-primary/20 rounded-2xl z-0"></div>
+<div class="flex items-center gap-2 mb-6 relative z-10">
+<span class="material-symbols-outlined text-red-500 animate-pulse">crisis_alert</span>
+<h2 class="text-xl font-bold tracking-tight text-white">Düşman Tahtası</h2>
+</div>
+<div class="battleship-grid bg-slate-950 p-2 rounded-lg border border-slate-800 relative z-10">
+<!-- Row A -->
+<div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-miss"><span class="material-symbols-outlined text-sm">circle</span></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div>
+<!-- Row B -->
+<div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-hit"><span class="material-symbols-outlined">close</span></div><div class="cell cell-hit"><span class="material-symbols-outlined">close</span></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div>
+<!-- Row C -->
+<div class="cell cell-miss"><span class="material-symbols-outlined text-sm">circle</span></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div>
+<!-- Row D -->
+<div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div>
+<!-- Row E -->
+<div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-miss"><span class="material-symbols-outlined text-sm">circle</span></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div>
+<!-- Row F -->
+<div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-hit"><span class="material-symbols-outlined">close</span></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div>
+<!-- Row G -->
+<div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-hit"><span class="material-symbols-outlined">close</span></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div>
+<!-- Row H -->
+<div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-hit"><span class="material-symbols-outlined">close</span></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div>
+<!-- Row I -->
+<div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-hit"><span class="material-symbols-outlined">close</span></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-miss"><span class="material-symbols-outlined text-sm">circle</span></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div>
+<!-- Row J -->
+<div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div><div class="cell cell-enemy-unrevealed"></div>
+</div>
+</div>
+</div>
+<!-- Status Panel -->
+<div class="w-full max-w-5xl mt-12 bg-slate-900 rounded-xl border border-slate-800 shadow-lg p-6">
+<h3 class="text-center text-slate-400 font-medium mb-6 uppercase tracking-wider text-sm">Filo Durumu</h3>
+<div class="flex flex-col md:flex-row gap-8 md:gap-16 justify-between">
+<!-- Your Fleet Status -->
+<div class="flex-1">
+<h4 class="text-lg font-semibold mb-4 text-slate-200 border-b border-slate-800 pb-2">Senin Filon</h4>
+<div class="space-y-3">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3 text-green-400">
+<span class="material-symbols-outlined">directions_boat</span>
+<span>Uçak Gemisi (5)</span>
+</div>
+<span class="text-xs font-bold uppercase px-2 py-1 rounded bg-green-500/10 text-green-400">Aktif</span>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3 text-green-400">
+<span class="material-symbols-outlined">directions_boat</span>
+<span>Kruvazör (4)</span>
+</div>
+<span class="text-xs font-bold uppercase px-2 py-1 rounded bg-green-500/10 text-green-400">Aktif</span>
+</div>
+<div class="flex items-center justify-between opacity-50">
+<div class="flex items-center gap-3 text-red-500 line-through decoration-red-500/50">
+<span class="material-symbols-outlined">directions_boat</span>
+<span>Denizaltı (3)</span>
+</div>
+<span class="text-xs font-bold uppercase px-2 py-1 rounded bg-red-500/10 text-red-500">Battı</span>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3 text-green-400">
+<span class="material-symbols-outlined">directions_boat</span>
+<span>Destroyer (3)</span>
+</div>
+<span class="text-xs font-bold uppercase px-2 py-1 rounded bg-green-500/10 text-green-400">Aktif</span>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3 text-green-400">
+<span class="material-symbols-outlined">directions_boat</span>
+<span>Hücumbot (2)</span>
+</div>
+<span class="text-xs font-bold uppercase px-2 py-1 rounded bg-green-500/10 text-green-400">Aktif</span>
+</div>
+</div>
+</div>
+<!-- Divider for Desktop -->
+<div class="hidden md:block w-px bg-slate-800"></div>
+<!-- Enemy Fleet Status -->
+<div class="flex-1">
+<h4 class="text-lg font-semibold mb-4 text-slate-200 border-b border-slate-800 pb-2">Düşman Filosu</h4>
+<div class="space-y-3">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3 text-green-400">
+<span class="material-symbols-outlined">directions_boat</span>
+<span>Uçak Gemisi (5)</span>
+</div>
+<span class="text-xs font-bold uppercase px-2 py-1 rounded bg-green-500/10 text-green-400">Bilinmiyor</span>
+</div>
+<div class="flex items-center justify-between opacity-50">
+<div class="flex items-center gap-3 text-red-500 line-through decoration-red-500/50">
+<span class="material-symbols-outlined">directions_boat</span>
+<span>Kruvazör (4)</span>
+</div>
+<span class="text-xs font-bold uppercase px-2 py-1 rounded bg-red-500/10 text-red-500">Yok Edildi</span>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3 text-green-400">
+<span class="material-symbols-outlined">directions_boat</span>
+<span>Denizaltı (3)</span>
+</div>
+<span class="text-xs font-bold uppercase px-2 py-1 rounded bg-green-500/10 text-green-400">Bilinmiyor</span>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3 text-green-400">
+<span class="material-symbols-outlined">directions_boat</span>
+<span>Destroyer (3)</span>
+</div>
+<span class="text-xs font-bold uppercase px-2 py-1 rounded bg-green-500/10 text-green-400">Bilinmiyor</span>
+</div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-3 text-green-400">
+<span class="material-symbols-outlined">directions_boat</span>
+<span>Hücumbot (2)</span>
+</div>
+<span class="text-xs font-bold uppercase px-2 py-1 rounded bg-green-500/10 text-green-400">Bilinmiyor</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

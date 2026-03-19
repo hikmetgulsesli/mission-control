@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Retro DVD Screensaver Interface</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "primary": "#ff0000",
+            "background-light": "#f8f5f5",
+            "background-dark": "#000000", /* Overridden to match pitch-black request while keeping the theme variable name */
+          },
+          fontFamily: {
+            "display": ["Space Grotesk"]
+          },
+          borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+        },
+      },
+    }
+  </script>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display m-0 p-0 h-screen w-screen overflow-hidden flex flex-col relative">
+<div class="flex-1 flex items-center justify-center w-full h-full">
+<div class="layout-content-container flex flex-col items-center justify-center">
+<h1 class="text-primary text-[80px] md:text-[120px] font-bold leading-none tracking-widest drop-shadow-[0_0_25px_rgba(255,0,0,0.8)] select-none cursor-default">
+        DVD
+      </h1>
+</div>
+</div>
+<div class="absolute bottom-0 w-full flex justify-center pb-8">
+<p class="text-slate-900 dark:text-slate-100 text-sm md:text-base font-normal uppercase tracking-widest opacity-80 select-none">
+      Press SPACEBAR to change color
+    </p>
+</div>
+</body></html>

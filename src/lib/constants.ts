@@ -26,6 +26,7 @@ export const WORKFLOW_AGENT_MAP: Record<string, string> = {
   "feature-dev_reviewer": "iris",
   "feature-dev_merge": "atlas",
   "feature-dev_security": "sentinel",
+  "feature-dev_qa-tester": "sentinel",
   "feature-dev_deployer": "atlas",
   // bug-fix workflow
   "bug-fix_triager": "iris",

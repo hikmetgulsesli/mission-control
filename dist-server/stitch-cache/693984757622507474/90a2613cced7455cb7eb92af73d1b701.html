@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Vibe-Breaker</title>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary": "#f43325",
+              "background-light": "#f8f6f5",
+              "background-dark": "#221110",
+            },
+            fontFamily: {
+              "display": ["Space Grotesk", "sans-serif"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen m-0 p-0 antialiased selection:bg-primary selection:text-white">
+<div class="relative flex min-h-screen w-full flex-col items-center justify-center overflow-hidden bg-cover bg-center" data-alt="Dark abstract retro grid background" style='background-image: linear-gradient(180deg, rgba(34, 17, 16, 0.8) 0%, rgba(34, 17, 16, 0.95) 100%), url("https://lh3.googleusercontent.com/aida-public/AB6AXuBqsf-_O0yWFpCarvqz_ouEkcXdP0gpfone0nrbEVezrATaChhPFBr48ORh0JP0TEqlPNmvmARk57tbYrI0o6adb3oo8o4cAsiMwtdM9deLyB1gxRM-2oZPa9RjhEA-le9obUabAWwEj7Eian8xD-c8yQE1335RYQtxAwDJnYcLWqJWFwdgNRh3qpv0WRLaQC_O8VZVaFeN6lkAjYw8JQ2uf22fJdtGQgkEZ4CHAuxVCxgrTAUX6NpCSsM6eMZhl4C5GAShdgVUKQ67");'>
+<div class="absolute inset-0 bg-[linear-gradient(to_right,#ffffff08_1px,transparent_1px),linear-gradient(to_bottom,#ffffff08_1px,transparent_1px)] bg-[size:3rem_3rem] [mask-image:linear-gradient(to_bottom,transparent_10%,black_90%)] pointer-events-none"></div>
+<div class="relative z-10 flex w-full max-w-[960px] flex-col items-center justify-center gap-16 px-6 py-12">
+<div class="flex flex-col items-center justify-center w-full">
+<h1 class="text-6xl sm:text-7xl md:text-9xl font-bold text-primary tracking-tighter uppercase drop-shadow-[0_0_30px_rgba(244,51,37,0.4)] text-center">
+                    VIBE-BREAKER
+                </h1>
+</div>
+<div class="flex flex-col items-center justify-center gap-3 rounded-xl px-12 py-6 bg-primary/5 border-2 border-primary/20 backdrop-blur-sm">
+<h2 class="text-primary/70 text-sm font-bold tracking-[0.3em] uppercase">High Score</h2>
+<p class="text-slate-100 tracking-widest text-4xl sm:text-5xl font-bold font-mono drop-shadow-md">099,420</p>
+</div>
+<div class="flex w-full justify-center pt-8">
+<button class="group relative flex cursor-pointer items-center justify-center overflow-hidden rounded-lg px-8 py-5 sm:px-12 sm:py-6 bg-primary text-white text-lg sm:text-xl font-bold tracking-[0.15em] uppercase shadow-[0_0_40px_rgba(244,51,37,0.25)] hover:bg-primary/90 hover:shadow-[0_0_60px_rgba(244,51,37,0.4)] focus:outline-none focus:ring-4 focus:ring-primary/50">
+<span class="relative z-10 flex items-center gap-3">
+<span class="material-symbols-outlined text-2xl">space_bar</span>
+                        Press Space To Start
+                    </span>
+</button>
+</div>
+</div>
+<div class="absolute bottom-6 text-center w-full">
+<p class="text-slate-500 text-xs font-medium tracking-widest uppercase">Version 1.0.4</p>
+</div>
+</div>
+</body></html>

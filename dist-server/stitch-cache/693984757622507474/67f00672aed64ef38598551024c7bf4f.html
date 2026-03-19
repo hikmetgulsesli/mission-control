@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>System Audit Log Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Work+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#07a5ed",
+                        "background-light": "#f5f7f8",
+                        "background-dark": "#0f1d23",
+                        "surface": "#fafafa",
+                        "text-primary": "#111827",
+                        "text-secondary": "#4b5563",
+                        "border-color": "#e5e7eb",
+                        "action-create": "#10b981",
+                        "action-update": "#0ea5e9",
+                        "action-delete": "#ef4444",
+                    },
+                    fontFamily: {
+                        "display": ["Work Sans", "sans-serif"],
+                        "heading": ["Plus Jakarta Sans", "sans-serif"],
+                        "mono": ["ui-monospace", "SFMono-Regular", "Menlo", "Monaco", "Consolas", "Liberation Mono", "Courier New", "monospace"],
+                    },
+                    borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+                },
+            },
+        }
+    </script>
+</head>
+<body class="font-display bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="relative flex h-auto min-h-screen w-full flex-col group/design-root overflow-x-hidden">
+<div class="layout-container flex h-full grow flex-col">
+<div class="px-4 sm:px-6 md:px-10 lg:px-20 xl:px-40 flex flex-1 justify-center py-8">
+<div class="layout-content-container flex flex-col max-w-[1200px] flex-1">
+<!-- Header Section -->
+<div class="flex flex-wrap items-center justify-between gap-4 p-4 mb-4">
+<div class="flex min-w-72 flex-col gap-1">
+<h1 class="font-heading text-text-primary dark:text-slate-100 tracking-tight text-3xl font-bold leading-tight">System Audit Log</h1>
+<p class="text-text-secondary dark:text-slate-400 text-sm font-normal leading-normal">Track system-wide changes for administrative compliance and security.</p>
+</div>
+<button class="flex items-center justify-center gap-2 rounded-lg h-10 px-4 bg-white dark:bg-slate-800 border border-border-color dark:border-slate-700 text-text-primary dark:text-slate-200 text-sm font-medium hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[20px]">download</span>
+<span class="truncate">Export to CSV</span>
+</button>
+</div>
+<!-- Filters Section -->
+<div class="flex gap-3 p-4 flex-wrap bg-white dark:bg-slate-800 rounded-t-xl border border-border-color dark:border-slate-700 border-b-0 shadow-sm">
+<button class="flex h-9 shrink-0 items-center justify-between gap-x-2 rounded-lg bg-gray-50 dark:bg-slate-700 px-3 border border-border-color dark:border-slate-600 hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors min-w-[140px]">
+<span class="text-text-secondary dark:text-slate-300 text-sm font-medium">Entity Type</span>
+<span class="material-symbols-outlined text-[18px] text-text-secondary dark:text-slate-400">arrow_drop_down</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-between gap-x-2 rounded-lg bg-gray-50 dark:bg-slate-700 px-3 border border-border-color dark:border-slate-600 hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors min-w-[120px]">
+<span class="text-text-secondary dark:text-slate-300 text-sm font-medium">Action</span>
+<span class="material-symbols-outlined text-[18px] text-text-secondary dark:text-slate-400">arrow_drop_down</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-between gap-x-2 rounded-lg bg-gray-50 dark:bg-slate-700 px-3 border border-border-color dark:border-slate-600 hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors min-w-[120px]">
+<span class="text-text-secondary dark:text-slate-300 text-sm font-medium">User</span>
+<span class="material-symbols-outlined text-[18px] text-text-secondary dark:text-slate-400">arrow_drop_down</span>
+</button>
+<button class="flex h-9 shrink-0 items-center justify-between gap-x-2 rounded-lg bg-gray-50 dark:bg-slate-700 px-3 border border-border-color dark:border-slate-600 hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors min-w-[160px]">
+<span class="material-symbols-outlined text-[18px] text-text-secondary dark:text-slate-400">calendar_today</span>
+<span class="text-text-secondary dark:text-slate-300 text-sm font-medium">Date Range</span>
+<span class="material-symbols-outlined text-[18px] text-text-secondary dark:text-slate-400">arrow_drop_down</span>
+</button>
+<div class="flex-grow"></div>
+<div class="relative flex items-center min-w-[200px]">
+<span class="material-symbols-outlined absolute left-3 text-text-secondary dark:text-slate-400 text-[18px]">search</span>
+<input class="h-9 w-full rounded-lg bg-gray-50 dark:bg-slate-700 border border-border-color dark:border-slate-600 pl-9 pr-3 text-sm text-text-primary dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary" placeholder="Search logs..." type="text"/>
+</div>
+</div>
+<!-- Data Table Section -->
+<div class="px-0 @container">
+<div class="flex overflow-hidden rounded-b-xl border border-border-color dark:border-slate-700 bg-surface dark:bg-slate-800 shadow-sm overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-gray-50 dark:bg-slate-800/50 border-b border-border-color dark:border-slate-700">
+<th class="px-4 py-3 text-text-secondary dark:text-slate-300 text-xs font-semibold tracking-wider uppercase whitespace-nowrap">Timestamp</th>
+<th class="px-4 py-3 text-text-secondary dark:text-slate-300 text-xs font-semibold tracking-wider uppercase whitespace-nowrap">User</th>
+<th class="px-4 py-3 text-text-secondary dark:text-slate-300 text-xs font-semibold tracking-wider uppercase whitespace-nowrap">Entity Type</th>
+<th class="px-4 py-3 text-text-secondary dark:text-slate-300 text-xs font-semibold tracking-wider uppercase whitespace-nowrap">Entity ID</th>
+<th class="px-4 py-3 text-text-secondary dark:text-slate-300 text-xs font-semibold tracking-wider uppercase whitespace-nowrap">Action</th>
+<th class="px-4 py-3 text-text-secondary dark:text-slate-300 text-xs font-semibold tracking-wider uppercase min-w-[200px]">Old Values</th>
+<th class="px-4 py-3 text-text-secondary dark:text-slate-300 text-xs font-semibold tracking-wider uppercase min-w-[200px]">New Values</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-border-color dark:divide-slate-700">
+<!-- Row 1 -->
+<tr class="hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors">
+<td class="px-4 py-3 text-text-secondary dark:text-slate-400 text-sm whitespace-nowrap">
+                                            2023-10-27 14:32:01
+                                        </td>
+<td class="px-4 py-3 whitespace-nowrap">
+<div class="flex items-center gap-2">
+<div class="h-8 w-8 rounded-full bg-cover bg-center border border-border-color dark:border-slate-600" data-alt="User Avatar John Doe" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCweFrNwaZ20RvbIUD3q9KUIWu1RPLqF5ZewnPBK8t0m9AotkweDnoHZmZRqp_1T7ITgPAfdWTzvWKzrHLnzqDZNQ2o80WA-kNfLIhqB99fahbCo8YJtXd8Vmhhh7EG5yqxg-5zYKkItqPa_WmvELGFEpR13_bRZXhrLC22cTxW5Ftg-23xiIhEMmB8zyjv6_8CoelFYEZdwd-FHPxW-8cJ0IZjhuQ-5NUZGSrDEdpouhZKGDgLdCzgVAWsQlaJJtntpouQKEwXJbw7');"></div>
+<span class="text-sm font-medium text-text-primary dark:text-slate-200 hidden md:inline">J. Doe</span>
+</div>
+</td>
+<td class="px-4 py-3 text-text-primary dark:text-slate-200 text-sm font-medium whitespace-nowrap">Order</td>
+<td class="px-4 py-3 text-text-secondary dark:text-slate-400 text-sm font-mono whitespace-nowrap">ORD-1093</td>
+<td class="px-4 py-3 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-action-update/10 text-action-update border border-action-update/20">
+                                                Update
+                                            </span>
+</td>
+<td class="px-4 py-3 text-text-secondary dark:text-slate-400 text-sm">
+<div class="bg-gray-50 dark:bg-slate-900 p-2 rounded text-xs font-mono break-all line-clamp-2">
+                                                {"status": "Pending", "priority": "Normal"}
+                                            </div>
+</td>
+<td class="px-4 py-3 text-text-secondary dark:text-slate-400 text-sm">
+<div class="bg-gray-50 dark:bg-slate-900 p-2 rounded text-xs font-mono break-all line-clamp-2">
+                                                {"status": "Shipped", "priority": "High"}
+                                            </div>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors">
+<td class="px-4 py-3 text-text-secondary dark:text-slate-400 text-sm whitespace-nowrap">
+                                            2023-10-27 14:15:22
+                                        </td>
+<td class="px-4 py-3 whitespace-nowrap">
+<div class="flex items-center gap-2">
+<div class="h-8 w-8 rounded-full bg-cover bg-center border border-border-color dark:border-slate-600" data-alt="User Avatar Sarah Smith" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBmlB24OY8gDweF_G3yK4VkfO4cPphpJq_4P5i4PkUeoGA9c94GHnSWFxPXdmpJI9E16oEG04Ys9N4pnRiufQ2QbjdWbTXh45tqbpQQFjUWi2UxL0C57UMPfPrLZjYZZqYSI-4zD7PR4CUK98EmVe4uLVVUUrYXL7slwy3BgirOc1rATg_jaIaAnItYiAqAe5q3__Y8g2oWMAJx3H5h1wNU6hjYIBmt684pa9Zz5VuAY4Fc4ROXcxs4Yw7pdSVsDb6vJKpJ9cff1n1e');"></div>
+<span class="text-sm font-medium text-text-primary dark:text-slate-200 hidden md:inline">S. Smith</span>
+</div>
+</td>
+<td class="px-4 py-3 text-text-primary dark:text-slate-200 text-sm font-medium whitespace-nowrap">Customer</td>
+<td class="px-4 py-3 text-text-secondary dark:text-slate-400 text-sm font-mono whitespace-nowrap">CUST-8842</td>
+<td class="px-4 py-3 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-action-create/10 text-action-create border border-action-create/20">
+                                                Create
+                                            </span>
+</td>
+<td class="px-4 py-3 text-text-secondary dark:text-slate-400 text-sm">
+<span class="text-slate-400 dark:text-slate-500 italic">-</span>
+</td>
+<td class="px-4 py-3 text-text-secondary dark:text-slate-400 text-sm">
+<div class="bg-gray-50 dark:bg-slate-900 p-2 rounded text-xs font-mono break-all line-clamp-2">
+                                                {"name": "Acme Corp", "tier": "Enterprise"}
+                                            </div>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors">
+<td class="px-4 py-3 text-text-secondary dark:text-slate-400 text-sm whitespace-nowrap">
+                                            2023-10-27 13:50:05
+                                        </td>
+<td class="px-4 py-3 whitespace-nowrap">
+<div class="flex items-center gap-2">
+<div class="h-8 w-8 rounded-full bg-cover bg-center border border-border-color dark:border-slate-600 bg-primary/20 flex items-center justify-center text-primary font-bold text-xs">
+                                                    SYS
+                                                </div>
+<span class="text-sm font-medium text-text-primary dark:text-slate-200 hidden md:inline">System</span>
+</div>
+</td>
+<td class="px-4 py-3 text-text-primary dark:text-slate-200 text-sm font-medium whitespace-nowrap">User</td>
+<td class="px-4 py-3 text-text-secondary dark:text-slate-400 text-sm font-mono whitespace-nowrap">USR-9921</td>
+<td class="px-4 py-3 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-action-delete/10 text-action-delete border border-action-delete/20">
+                                                Delete
+                                            </span>
+</td>
+<td class="px-4 py-3 text-text-secondary dark:text-slate-400 text-sm">
+<div class="bg-gray-50 dark:bg-slate-900 p-2 rounded text-xs font-mono break-all line-clamp-2">
+                                                {"email": "temp@example.com", "role": "Viewer"}
+                                            </div>
+</td>
+<td class="px-4 py-3 text-text-secondary dark:text-slate-400 text-sm">
+<span class="text-slate-400 dark:text-slate-500 italic">-</span>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors">
+<td class="px-4 py-3 text-text-secondary dark:text-slate-400 text-sm whitespace-nowrap">
+                                            2023-10-27 12:10:44
+                                        </td>
+<td class="px-4 py-3 whitespace-nowrap">
+<div class="flex items-center gap-2">
+<div class="h-8 w-8 rounded-full bg-cover bg-center border border-border-color dark:border-slate-600" data-alt="User Avatar Michael Chang" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCoFtAOVpwB5kw26S6WukpuyjwbN6Gtbs_zxoh-FB1bJL6r6cyp95yNN5n0WTQe7fFZ9DkXPTZXN6FuK30zsbGsnnBFB0COKukShBUeVFh03Wl_ftYXGiS8YDW5aFAv2BO9-afsW8uPPl2y-C6L-OSo9zi2UiPLdma6DFyIpY_qtVZWJyxOCvavJ2fZ6WjQjQfTFC38dBlEcePJd0wnilEeQJSp0mTEo2uWuqtvADJ90Ngi73_U5HkMfEOy2PEd9gUsgHxW0OjgR9eH');"></div>
+<span class="text-sm font-medium text-text-primary dark:text-slate-200 hidden md:inline">M. Chang</span>
+</div>
+</td>
+<td class="px-4 py-3 text-text-primary dark:text-slate-200 text-sm font-medium whitespace-nowrap">Shipment</td>
+<td class="px-4 py-3 text-text-secondary dark:text-slate-400 text-sm font-mono whitespace-nowrap">SHP-5520</td>
+<td class="px-4 py-3 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-action-update/10 text-action-update border border-action-update/20">
+                                                Update
+                                            </span>
+</td>
+<td class="px-4 py-3 text-text-secondary dark:text-slate-400 text-sm">
+<div class="bg-gray-50 dark:bg-slate-900 p-2 rounded text-xs font-mono break-all line-clamp-2">
+                                                {"carrier": "UPS", "eta": "2023-10-30"}
+                                            </div>
+</td>
+<td class="px-4 py-3 text-text-secondary dark:text-slate-400 text-sm">
+<div class="bg-gray-50 dark:bg-slate-900 p-2 rounded text-xs font-mono break-all line-clamp-2">
+                                                {"carrier": "FedEx", "eta": "2023-10-29"}
+                                            </div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<!-- Pagination Section -->
+<div class="flex items-center justify-between p-4 border-t border-border-color dark:border-slate-700 mt-4 bg-white dark:bg-slate-800 rounded-xl shadow-sm">
+<div class="hidden sm:block">
+<p class="text-sm text-text-secondary dark:text-slate-400">
+                                Showing <span class="font-medium text-text-primary dark:text-slate-200">1</span> to <span class="font-medium text-text-primary dark:text-slate-200">4</span> of <span class="font-medium text-text-primary dark:text-slate-200">97</span> results
+                            </p>
+</div>
+<div class="flex items-center justify-center gap-1">
+<button class="flex size-9 items-center justify-center rounded-md border border-border-color dark:border-slate-600 bg-white dark:bg-slate-700 text-text-secondary dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-600 disabled:opacity-50">
+<span class="material-symbols-outlined text-[18px]">chevron_left</span>
+</button>
+<button class="text-sm font-medium flex size-9 items-center justify-center text-white bg-primary rounded-md shadow-sm">1</button>
+<button class="text-sm font-medium flex size-9 items-center justify-center text-text-secondary dark:text-slate-300 rounded-md hover:bg-gray-50 dark:hover:bg-slate-700">2</button>
+<button class="text-sm font-medium flex size-9 items-center justify-center text-text-secondary dark:text-slate-300 rounded-md hover:bg-gray-50 dark:hover:bg-slate-700">3</button>
+<span class="flex size-9 items-center justify-center text-text-secondary dark:text-slate-400">...</span>
+<button class="text-sm font-medium flex size-9 items-center justify-center text-text-secondary dark:text-slate-300 rounded-md hover:bg-gray-50 dark:hover:bg-slate-700">10</button>
+<button class="flex size-9 items-center justify-center rounded-md border border-border-color dark:border-slate-600 bg-white dark:bg-slate-700 text-text-secondary dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-600">
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</body></html>

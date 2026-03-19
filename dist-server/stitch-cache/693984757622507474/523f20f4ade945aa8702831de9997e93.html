@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+
+<html lang="tr"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Nakliye CRM Temsilci Devir Formu</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Work+Sans:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary": "#2463eb",
+              "background-light": "#f6f6f8",
+              "background-dark": "#111621",
+            },
+            fontFamily: {
+              "display": ["Plus Jakarta Sans", "sans-serif"],
+              "body": ["Work Sans", "sans-serif"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-body text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="relative flex h-auto min-h-screen w-full flex-col group/design-root overflow-x-hidden font-display" style="--select-button-svg: url('data:image/svg+xml,%3csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2724px%27 height=%2724px%27 fill=%27rgb(100,116,139)%27 viewBox=%270 0 256 256%27%3e%3cpath d=%27M181.66,170.34a8,8,0,0,1,0,11.32l-48,48a8,8,0,0,1-11.32,0l-48-48a8,8,0,0,1,11.32-11.32L128,212.69l42.34-42.35A8,8,0,0,1,181.66,170.34Zm-96-84.68L128,43.31l42.34,42.35a8,8,0,0,0,11.32-11.32l-48-48a8,8,0,0,0-11.32,0l-48,48A8,8,0,0,0,85.66,85.66Z%27%3e%3c/path%3e%3c/svg%3e');">
+<div class="layout-container flex h-full grow flex-col">
+<div class="px-4 md:px-10 lg:px-40 flex flex-1 justify-center py-5">
+<div class="layout-content-container flex flex-col w-full max-w-[1024px] flex-1">
+<header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-slate-200 dark:border-slate-800 px-4 md:px-10 py-3 bg-white dark:bg-slate-900 rounded-t-xl shadow-sm">
+<div class="flex items-center gap-4">
+<div class="size-8 rounded bg-primary flex items-center justify-center text-white">
+<span class="material-symbols-outlined text-[20px]">local_shipping</span>
+</div>
+<h2 class="text-lg font-bold leading-tight tracking-[-0.015em] text-primary">Nakliye CRM</h2>
+</div>
+<div class="flex flex-1 justify-end gap-8">
+<div class="flex items-center gap-9 hidden sm:flex">
+<a class="text-sm font-medium leading-normal hover:text-primary transition-colors" href="#">Temsilci Devir İşlemleri</a>
+</div>
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 border-2 border-primary/20" data-alt="User Avatar Profile" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBjyPkz22iOmSnjIm3r0FRKrkV_LfNXA25OOhIG2q4Dtah7AGpJjzwncxp_O51dejJNpDPqq-iaPFYxtuswUSzCF3IWMGC2mWFN_VCAABnUBWvZ-LXFqKmA_T0yB7xtfhRJJMzx6C1REm8QD9Hhvo04Tm_-1BS2k6UsIzghM0I9hvcWSjK-KF9EfPDNi6iw37I-kjJROhlZJgYf1mcoWKhaHPWkf_Qd20nCOwS7RVbvs3F-pidi7h-OrVmvF775kHrEPKN_omhZOVCf");'></div>
+</div>
+</header>
+<main class="bg-white dark:bg-slate-900 shadow-sm rounded-b-xl border-x border-b border-slate-200 dark:border-slate-800 p-4 md:p-8 flex flex-col gap-8">
+<div>
+<h1 class="text-[28px] md:text-[32px] font-bold leading-tight mb-2 font-display">Temsilci Devir İşlemleri</h1>
+<p class="text-slate-500 dark:text-slate-400 font-body text-sm md:text-base">Müşteri portföylerini temsilciler arasında güvenle aktarın.</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+<label class="flex flex-col min-w-40 flex-1">
+<span class="text-base font-semibold leading-normal pb-2 font-display flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">file_export</span>
+                                    Kaynak Temsilci
+                                </span>
+<select class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-slate-900 dark:text-slate-100 focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 focus:border-primary h-14 bg-[image:--select-button-svg] placeholder:text-slate-500 p-[15px] text-base font-medium leading-normal shadow-sm">
+<option disabled="" selected="" value="">Temsilci Seçiniz</option>
+<option value="ahmet">Ahmet Yılmaz (Marmara Bölge)</option>
+<option value="ayse">Ayşe Demir (Ege Bölge)</option>
+<option value="mehmet">Mehmet Kaya (İç Anadolu)</option>
+</select>
+</label>
+<label class="flex flex-col min-w-40 flex-1">
+<span class="text-base font-semibold leading-normal pb-2 font-display flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">person_add</span>
+                                    Hedef Temsilci
+                                </span>
+<select class="form-input flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-slate-900 dark:text-slate-100 focus:outline-0 focus:ring-2 focus:ring-primary/50 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 focus:border-primary h-14 bg-[image:--select-button-svg] placeholder:text-slate-500 p-[15px] text-base font-medium leading-normal shadow-sm">
+<option disabled="" selected="" value="">Temsilci Seçiniz</option>
+<option value="ahmet">Ahmet Yılmaz (Marmara Bölge)</option>
+<option value="ayse">Ayşe Demir (Ege Bölge)</option>
+<option value="mehmet">Mehmet Kaya (İç Anadolu)</option>
+</select>
+</label>
+</div>
+</main>
+</div>
+</div>
+</div>
+</div>
+</body></html>

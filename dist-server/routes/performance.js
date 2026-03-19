@@ -6,8 +6,8 @@ const router = Router();
 const MODEL_NORMALIZE = {
     'anthropic/claude-sonnet-4-5-20250929': 'sonnet-4.5',
     'anthropic/claude-opus-4-6': 'opus-4.6',
-    'minimax/MiniMax-M2.5': 'minimax-m2.5',
-    'minimax-coding/MiniMax-M2.5': 'minimax-m2.5',
+    'minimax/MiniMax-M2.7': 'minimax-m2.7',
+    'minimax-coding/MiniMax-M2.7': 'minimax-m2.7',
     'kimi-coding/k2p5': 'kimi-k2p5',
 };
 function normalizeModel(raw) {
@@ -36,9 +36,9 @@ function loadAgentModels() {
     catch {
         // Fallback if config is unreadable
         return {
-            main: 'minimax-m2.5', koda: 'kimi-k2p5', flux: 'kimi-k2p5', atlas: 'kimi-k2p5',
-            iris: 'minimax-m2.5', sentinel: 'minimax-m2.5', cipher: 'kimi-k2p5',
-            lux: 'minimax-m2.5', nexus: 'minimax-m2.5', prism: 'minimax-m2.5',
+            main: 'minimax-m2.7', koda: 'kimi-k2p5', flux: 'kimi-k2p5', atlas: 'kimi-k2p5',
+            iris: 'minimax-m2.7', sentinel: 'minimax-m2.7', cipher: 'kimi-k2p5',
+            lux: 'minimax-m2.7', nexus: 'minimax-m2.7', prism: 'minimax-m2.7',
         };
     }
 }

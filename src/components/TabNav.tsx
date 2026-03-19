@@ -12,6 +12,8 @@ const tabs: { to: string; label: string; key?: string }[] = [
   { to: '/projects', label: 'PROJECTS', key: '6' },
   { to: '/files', label: 'FILES', key: '7' },
   { to: '/scrape', label: 'SCRAPE', key: '9' },
+  { to: '/rules', label: 'RULES', key: 'R' },
+  { to: '/live', label: 'LIVE', key: 'L' },
 ];
 
 interface TabNavProps {

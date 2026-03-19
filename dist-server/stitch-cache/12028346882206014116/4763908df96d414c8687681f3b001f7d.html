@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Shipping CRM Customer List</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1258e2",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display min-h-screen flex">
+<!-- Sidebar -->
+<div class="w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col h-screen fixed left-0 top-0">
+<div class="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3">
+<div class="bg-primary/10 p-2 rounded-lg text-primary">
+<span class="material-symbols-outlined text-2xl">local_shipping</span>
+</div>
+<div>
+<h1 class="text-lg font-bold text-slate-900 dark:text-white leading-none">ShipFlow CRM</h1>
+<p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Admin Portal</p>
+</div>
+</div>
+<nav class="flex-1 overflow-y-auto py-4 px-3 space-y-1 text-sm font-medium">
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg group transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-primary transition-colors">dashboard</span>
+                Dashboard
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 bg-primary/10 text-primary dark:text-primary rounded-lg" href="#">
+<span class="material-symbols-outlined text-[20px]">groups</span>
+                Customers
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg group transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-primary transition-colors">sailing</span>
+                Shipments
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg group transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-primary transition-colors">description</span>
+                Quotes
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg group transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-primary transition-colors">bar_chart</span>
+                Reports
+            </a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg group transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px] group-hover:text-primary transition-colors">settings</span>
+                Settings
+            </a>
+</nav>
+<div class="p-4 border-t border-slate-200 dark:border-slate-800">
+<div class="flex items-center gap-3">
+<img alt="User avatar" class="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700" data-alt="Admin user avatar portrait" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBLVhkQH-eNvO7mdtGYf_30H873h5ZLg4ioGnloxH7udZOMUTUEQqtY3BQERHIwqcd4FwZi1Ryf78IY5RObKgbKNBCa0pX8XGNbJ2FvGzFTGpKKPp3UIh_MkhJhOBHlkOes9guUPMF762-9zRHVJEhJ30PBhahI1BgeeIyJ6Pgjl5iZ260_uLfilsFPNmc970D2GdPxv44DyLI1VygU95O9YufMCFyeYKhe3IsD1FwtOo082cNnsVEEk1CTvRkP9EfmRTd-qGWtu5n8"/>
+<div class="flex-1 min-w-0">
+<p class="text-sm font-medium text-slate-900 dark:text-white truncate">Admin User</p>
+<p class="text-xs text-slate-500 dark:text-slate-400 truncate">admin@shipflow.com</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Main Content -->
+<main class="ml-64 flex-1 flex flex-col min-h-screen">
+<!-- Top Header -->
+<header class="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-8 py-4 flex items-center justify-between sticky top-0 z-10">
+<div>
+<h2 class="text-2xl font-bold text-slate-900 dark:text-white">Customer List</h2>
+<p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Manage all your shipping CRM contacts and leads</p>
+</div>
+<button class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[20px]">add</span>
+                Add Customer
+            </button>
+</header>
+<!-- Content Area -->
+<div class="flex-1 p-8">
+<div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col h-full">
+<!-- Toolbar -->
+<div class="p-4 border-b border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row gap-4 justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
+<!-- Search -->
+<div class="relative w-full sm:max-w-md">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">search</span>
+<input class="w-full pl-10 pr-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-shadow placeholder:text-slate-400 dark:text-white" placeholder="Search by company, contact, or email..." type="text"/>
+</div>
+<!-- Filters -->
+<div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+<button class="px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                            Status
+                            <span class="material-symbols-outlined text-[16px]">expand_more</span>
+</button>
+<button class="px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                            Potential
+                            <span class="material-symbols-outlined text-[16px]">expand_more</span>
+</button>
+<button class="px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-300 flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                            Transport Mode
+                            <span class="material-symbols-outlined text-[16px]">expand_more</span>
+</button>
+<button class="px-3 py-1.5 text-sm font-medium text-slate-500 hover:text-primary transition-colors flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">filter_alt_off</span>
+                            Clear
+                        </button>
+</div>
+</div>
+<!-- Table -->
+<div class="overflow-x-auto flex-1">
+<table class="w-full text-left text-sm whitespace-nowrap">
+<thead class="bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 font-medium border-b border-slate-200 dark:border-slate-800">
+<tr>
+<th class="px-6 py-4">Company Name</th>
+<th class="px-6 py-4">Contact</th>
+<th class="px-6 py-4">Phone</th>
+<th class="px-6 py-4">Email</th>
+<th class="px-6 py-4">Transport Mode</th>
+<th class="px-6 py-4 w-48">Potential</th>
+<th class="px-6 py-4">Status</th>
+<th class="px-6 py-4">Assigned Rep</th>
+<th class="px-6 py-4">Last Contact</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-200 dark:divide-slate-800 text-slate-700 dark:text-slate-300">
+<!-- Row 1 -->
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group cursor-pointer">
+<td class="px-6 py-4 font-medium text-slate-900 dark:text-white flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 flex items-center justify-center font-bold text-xs">GL</div>
+                                    Global Logistics Inc
+                                </td>
+<td class="px-6 py-4">Sarah Jenkins</td>
+<td class="px-6 py-4 text-slate-500 dark:text-slate-400">+1 555-0123</td>
+<td class="px-6 py-4 text-slate-500 dark:text-slate-400">sarah@global.com</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
+<span class="material-symbols-outlined text-[18px]">sailing</span>
+<span class="text-xs font-medium">Sea Freight</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<div class="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="h-full bg-green-500 rounded-full" style="width: 80%"></div>
+</div>
+<span class="text-xs font-medium text-slate-600 dark:text-slate-400 w-8">80%</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800">
+                                        Active
+                                    </span>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-600 dark:text-slate-300">MT</div>
+                                        Michael T.
+                                    </div>
+</td>
+<td class="px-6 py-4 text-slate-500 dark:text-slate-400">2023-10-25</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group cursor-pointer">
+<td class="px-6 py-4 font-medium text-slate-900 dark:text-white flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400 flex items-center justify-center font-bold text-xs">AS</div>
+                                    Apex Shipping
+                                </td>
+<td class="px-6 py-4">David Chen</td>
+<td class="px-6 py-4 text-slate-500 dark:text-slate-400">+1 555-0124</td>
+<td class="px-6 py-4 text-slate-500 dark:text-slate-400">david@apex.com</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-1.5 text-sky-600 dark:text-sky-400">
+<span class="material-symbols-outlined text-[18px]">flight</span>
+<span class="text-xs font-medium">Air Freight</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<div class="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="h-full bg-amber-500 rounded-full" style="width: 60%"></div>
+</div>
+<span class="text-xs font-medium text-slate-600 dark:text-slate-400 w-8">60%</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+                                        Lead
+                                    </span>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-600 dark:text-slate-300">SL</div>
+                                        Sarah L.
+                                    </div>
+</td>
+<td class="px-6 py-4 text-slate-500 dark:text-slate-400">2023-10-24</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group cursor-pointer">
+<td class="px-6 py-4 font-medium text-slate-900 dark:text-white flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 flex items-center justify-center font-bold text-xs">HT</div>
+                                    Horizon Transport
+                                </td>
+<td class="px-6 py-4">Emma Watson</td>
+<td class="px-6 py-4 text-slate-500 dark:text-slate-400">+1 555-0125</td>
+<td class="px-6 py-4 text-slate-500 dark:text-slate-400">emma@horizon.com</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-1.5 text-amber-600 dark:text-amber-500">
+<span class="material-symbols-outlined text-[18px]">local_shipping</span>
+<span class="text-xs font-medium">Land Freight</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<div class="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="h-full bg-green-500 rounded-full" style="width: 90%"></div>
+</div>
+<span class="text-xs font-medium text-slate-600 dark:text-slate-400 w-8">90%</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800">
+                                        Active
+                                    </span>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-600 dark:text-slate-300">MT</div>
+                                        Michael T.
+                                    </div>
+</td>
+<td class="px-6 py-4 text-slate-500 dark:text-slate-400">2023-10-23</td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group cursor-pointer">
+<td class="px-6 py-4 font-medium text-slate-900 dark:text-white flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-rose-100 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400 flex items-center justify-center font-bold text-xs">CF</div>
+                                    Continental Freight
+                                </td>
+<td class="px-6 py-4">James Wilson</td>
+<td class="px-6 py-4 text-slate-500 dark:text-slate-400">+1 555-0126</td>
+<td class="px-6 py-4 text-slate-500 dark:text-slate-400">james@continental.com</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-1.5 text-blue-600 dark:text-blue-400">
+<span class="material-symbols-outlined text-[18px]">sailing</span>
+<span class="text-xs font-medium">Sea Freight</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<div class="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="h-full bg-rose-400 rounded-full" style="width: 30%"></div>
+</div>
+<span class="text-xs font-medium text-slate-600 dark:text-slate-400 w-8">30%</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                                        Inactive
+                                    </span>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-600 dark:text-slate-300">SL</div>
+                                        Sarah L.
+                                    </div>
+</td>
+<td class="px-6 py-4 text-slate-500 dark:text-slate-400">2023-09-15</td>
+</tr>
+<!-- Row 5 -->
+<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group cursor-pointer">
+<td class="px-6 py-4 font-medium text-slate-900 dark:text-white flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400 flex items-center justify-center font-bold text-xs">PT</div>
+                                    Pacific Trade Co
+                                </td>
+<td class="px-6 py-4">Linda Davis</td>
+<td class="px-6 py-4 text-slate-500 dark:text-slate-400">+1 555-0127</td>
+<td class="px-6 py-4 text-slate-500 dark:text-slate-400">linda@pacific.com</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-1.5 text-sky-600 dark:text-sky-400">
+<span class="material-symbols-outlined text-[18px]">flight</span>
+<span class="text-xs font-medium">Air Freight</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<div class="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+<div class="h-full bg-green-500 rounded-full" style="width: 75%"></div>
+</div>
+<span class="text-xs font-medium text-slate-600 dark:text-slate-400 w-8">75%</span>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800">
+                                        Active
+                                    </span>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-600 dark:text-slate-300">MT</div>
+                                        Michael T.
+                                    </div>
+</td>
+<td class="px-6 py-4 text-slate-500 dark:text-slate-400">2023-10-20</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination -->
+<div class="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex items-center justify-between text-sm">
+<p class="text-slate-500 dark:text-slate-400">
+                        Showing <span class="font-medium text-slate-900 dark:text-white">1</span> to <span class="font-medium text-slate-900 dark:text-white">5</span> of <span class="font-medium text-slate-900 dark:text-white">42</span> results
+                    </p>
+<div class="flex items-center gap-1">
+<button class="px-2 py-1 rounded border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50" disabled="">
+<span class="material-symbols-outlined text-[18px] leading-none">chevron_left</span>
+</button>
+<button class="w-8 h-8 flex items-center justify-center rounded bg-primary text-white font-medium">1</button>
+<button class="w-8 h-8 flex items-center justify-center rounded border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium">2</button>
+<button class="w-8 h-8 flex items-center justify-center rounded border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium">3</button>
+<span class="px-1 text-slate-500">...</span>
+<button class="w-8 h-8 flex items-center justify-center rounded border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium">9</button>
+<button class="px-2 py-1 rounded border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800">
+<span class="material-symbols-outlined text-[18px] leading-none">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

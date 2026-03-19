@@ -139,7 +139,7 @@ router.patch('/agents/:id', async (req, res) => {
                     'sonnet-4.5': 'anthropic/claude-sonnet-4-5',
                     'opus-4.6': 'anthropic/claude-opus-4-6',
                     'glm-4.7': 'zai/glm-4.7',
-                    'minimax-m2.5': 'minimax/MiniMax-M2.5',
+                    'minimax-m2.7': 'minimax/MiniMax-M2.7',
                     'deepseek-chat': 'deepseek/deepseek-chat',
                     'deepseek-reasoner': 'deepseek/deepseek-reasoner',
                     'grok-3': 'xai/grok-3',
@@ -177,7 +177,7 @@ router.get('/models', async (_req, res) => {
     try {
         const models = [
             { id: 'kimi-k2p5', name: 'Kimi K2.5', provider: 'kimi-coding', cost: 'low' },
-            { id: 'minimax-m2.5', name: 'MiniMax M2.5', provider: 'minimax', cost: 'low' },
+            { id: 'minimax-m2.7', name: 'MiniMax M2.7', provider: 'minimax', cost: 'low' },
             { id: 'glm-4.7', name: 'GLM 4.7', provider: 'zai', cost: 'low' },
             { id: 'sonnet-4.5', name: 'Claude Sonnet 4.5', provider: 'anthropic', cost: 'medium' },
             { id: 'opus-4.6', name: 'Claude Opus 4.6', provider: 'anthropic', cost: 'high' },

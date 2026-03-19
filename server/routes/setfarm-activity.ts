@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { execSync, execFileSync } from 'child_process';
 import { cached } from '../utils/cache.js';
@@ -222,39 +222,155 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
     const notesMatch = output.match(/DESIGN_NOTES:\s*(.+)/);
     const designNotes = notesMatch ? notesMatch[1] : '';
 
+    // ENRICH: If screenMap exists but lacks htmlFile, merge from DESIGN_MANIFEST.json
+    if (screenMap.length > 0 && projectId) {
+      try {
+        const ctx0 = JSON.parse(run.context || '{}');
+        const repo0 = ctx0.repo || '';
+        if (repo0) {
+          const mp = join(repo0, 'stitch', 'DESIGN_MANIFEST.json');
+          if (existsSync(mp)) {
+            const mf = JSON.parse(readFileSync(mp, 'utf-8'));
+            if (Array.isArray(mf)) {
+              const byId = new Map(mf.map((s: any) => [s.screenId, s]));
+              screenMap = screenMap.map((s: any) => {
+                const m = byId.get(s.screenId);
+                return m ? { ...s, htmlFile: m.htmlFile || null, title: m.title || s.name } : s;
+              });
+            }
+          }
+        }
+      } catch { /* enrich failed */ }
+    }
+
+    // FALLBACK 1: Read from DESIGN_MANIFEST.json (design step writes this to repo)
+    if (screenMap.length === 0 && projectId) {
+      try {
+        const ctx = JSON.parse(run.context || '{}');
+        const repo = ctx.repo || '';
+        if (repo) {
+          const manifestPath = join(repo, 'stitch', 'DESIGN_MANIFEST.json');
+          if (existsSync(manifestPath)) {
+            const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+            if (Array.isArray(manifest)) {
+              screenMap = manifest.map((s: any) => ({
+                screenId: s.screenId || s.id || (s.name || 'screen').replace(/\s+/g, '-').toLowerCase(),
+                name: s.title || s.name || s.screenName || 'Screen',
+                description: s.description || '',
+                type: s.type || s.category || s.deviceType?.toLowerCase() || 'page',
+                htmlFile: s.htmlFile || null
+              }));
+            }
+          }
+        }
+      } catch { /* manifest read failed */ }
+    }
+
+    const STITCH_SCRIPT_EARLY = join(process.env.HOME || '/home/setrox', '.openclaw/setfarm-repo/scripts/stitch-api.mjs');
+
+    // FALLBACK 2: list-screens from Stitch API
+    if (screenMap.length === 0 && projectId) {
+      try {
+        const listResult = execFileSync('node', [STITCH_SCRIPT_EARLY, 'list-screens', projectId],
+          { timeout: 15_000, stdio: 'pipe' }).toString().trim();
+        const screens = JSON.parse(listResult);
+        if (Array.isArray(screens)) {
+          screenMap = screens.map((s: any) => ({
+            screenId: ((s.name || '').replace(/^projects\/\d+\/screens\//, '') || s.id || s.screenId || ''),
+            name: s.name || 'Screen',
+            description: s.description || '',
+            type: s.type || 'page'
+          }));
+        }
+      } catch { /* list-screens failed */ }
+    }
+
+    // FALLBACK 3: Scan repo stitch/ dir for .html+.png files directly
+    if (screenMap.length === 0) {
+      try {
+        const ctx3 = JSON.parse(run.context || '{}');
+        const repo3 = ctx3.repo || '';
+        if (repo3) {
+          const stitchDir3 = join(repo3, 'stitch');
+          if (existsSync(stitchDir3)) {
+            const htmlFiles = readdirSync(stitchDir3).filter((f: string) => f.endsWith('.html') && f !== 'DESIGN_MANIFEST.json');
+            screenMap = htmlFiles.map((f: string) => {
+              const screenId = f.replace('.html', '');
+              return { screenId, name: 'Screen', description: '', type: 'page', htmlFile: f };
+            });
+          }
+        }
+      } catch { /* stitch dir scan failed */ }
+    }
+
+
+    // Only return empty if we truly have no data
     if (!projectId || screenMap.length === 0) {
       res.json({ screens: screenMap, projectId, designSystem, designNotes });
       return;
     }
 
     // Cache dir for this project's screenshots
-    
+
     const cacheDir = join(import.meta.dirname || __dirname, '..', 'stitch-cache', projectId);
     mkdirSync(cacheDir, { recursive: true });
 
     const STITCH_SCRIPT = join(process.env.HOME || '/home/setrox', '.openclaw/setfarm-repo/scripts/stitch-api.mjs');
 
-    // Populate cache from repo's stitch/ dir (eager-downloaded during design step)
-    // Stitch API deletes screens after hours, so repo-local files are the only reliable source
-    try {
-      const ctx = JSON.parse(run.context || '{}');
-      const repo = ctx.repo || '';
-      if (repo) {
-        const repoStitchDir = join(repo, 'stitch');
-        if (existsSync(repoStitchDir)) {
-          execFileSync('node', [STITCH_SCRIPT, 'populate-cache', repoStitchDir, cacheDir], { timeout: 15_000, stdio: 'pipe' });
+    // Fix C: skip populate-cache if PNGs already exist in cacheDir
+    const { readdirSync: _rds } = await import('fs');
+    const existingPngs: string[] = (() => { try { return (_rds(cacheDir) as string[]).filter((f: string) => f.endsWith('.png')); } catch { return []; } })();
+
+    if (existingPngs.length === 0) {
+      // Populate cache from repo's stitch/ dir (eager-downloaded during design step)
+      // Stitch API deletes screens after hours, so repo-local files are the only reliable source
+      try {
+        const ctx = JSON.parse(run.context || '{}');
+        const repo = ctx.repo || '';
+        if (repo) {
+          const repoStitchDir = join(repo, 'stitch');
+          if (existsSync(repoStitchDir)) {
+            execFileSync('node', [STITCH_SCRIPT, 'populate-cache', repoStitchDir, cacheDir], { timeout: 15_000, stdio: 'pipe' });
+          }
         }
+      } catch { /* best effort */ }
+
+      // Fix B: if cacheDir still has no PNGs (completed run, worktree deleted), fallback to Stitch API
+      const pngsAfterCopy: string[] = (() => { try { return (_rds(cacheDir) as string[]).filter((f: string) => f.endsWith('.png')); } catch { return []; } })();
+      if (pngsAfterCopy.length === 0 && projectId) {
+        try {
+          const listOut = execFileSync('node', [STITCH_SCRIPT, 'list-screens', projectId], { timeout: 60_000, stdio: 'pipe' }).toString().trim();
+          const remoteScreens: any[] = JSON.parse(listOut);
+          for (const rs of remoteScreens) {
+            const sid: string = ((rs.name || '').replace(/^projects\/\d+\/screens\//, '') || rs.id || rs.screenId || '');
+            if (!sid) continue;
+            const screenshotUrl: string | null = rs.screenshotUrl || rs.screenshot?.downloadUrl || rs.screenshot?.download_url || null;
+            const htmlDownloadUrl: string | null = rs.htmlUrl || rs.htmlCode?.downloadUrl || rs.html_code?.download_url || null;
+            if (screenshotUrl) {
+              try { execFileSync('node', [STITCH_SCRIPT, 'download', screenshotUrl, join(cacheDir, sid + '.png')], { timeout: 60_000, stdio: 'pipe' }); } catch { /* best effort */ }
+            }
+            if (htmlDownloadUrl) {
+              try { execFileSync('node', [STITCH_SCRIPT, 'download', htmlDownloadUrl, join(cacheDir, sid + '.html')], { timeout: 60_000, stdio: 'pipe' }); } catch { /* best effort */ }
+            }
+          }
+        } catch { /* list-screens failed or Stitch API unavailable */ }
       }
-    } catch { /* best effort */ }
+    }
 
     const screens = screenMap.map((screen: any) => {
-      const screenshotPath = join(cacheDir, `${screen.screenId}.png`);
-      const htmlPath = join(cacheDir, `${screen.screenId}.html`);
+      // Try screenId-based files first, then htmlFile from manifest
+      const screenshotPath = join(cacheDir, screen.screenId + '.png');
+      const htmlById = join(cacheDir, screen.screenId + '.html');
+      const htmlByName = screen.htmlFile ? join(cacheDir, screen.htmlFile) : '';
+
+      const hasScreenshot = existsSync(screenshotPath);
+      const htmlPath = existsSync(htmlById) ? htmlById : (htmlByName && existsSync(htmlByName) ? htmlByName : '');
+      const htmlFileName = htmlPath ? htmlPath.split('/').pop() : null;
 
       return {
         ...screen,
-        screenshotUrl: existsSync(screenshotPath) ? `/stitch-cache/${projectId}/${screen.screenId}.png` : null,
-        htmlUrl: existsSync(htmlPath) ? `/stitch-cache/${projectId}/${screen.screenId}.html` : null,
+        screenshotUrl: hasScreenshot ? `/stitch-cache/${projectId}/${screen.screenId}.png` : null,
+        htmlUrl: htmlFileName ? `/stitch-cache/${projectId}/${htmlFileName}` : null,
       };
     });
 

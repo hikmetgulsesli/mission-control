@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+
+<html class="light" lang="tr"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Ntrans CRM - Giriş Ekranı</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "primary": "#2463eb",
+          "background-light": "#f6f6f8",
+          "background-dark": "#111621",
+        },
+        fontFamily: {
+          "display": ["Space Grotesk"]
+        },
+        borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+      },
+    },
+  }
+</script>
+<style>
+  body {
+    font-family: 'Space Grotesk', sans-serif;
+  }
+</style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 flex items-center justify-center min-h-screen">
+<div class="relative flex h-auto min-h-screen w-full flex-col group/design-root overflow-x-hidden justify-center items-center p-4">
+<div class="w-full max-w-md bg-white dark:bg-slate-800 rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
+<header class="flex flex-col items-center justify-center px-10 pt-10 pb-6 border-b border-solid border-slate-100 dark:border-slate-700">
+<div class="flex items-center gap-3 text-primary mb-6">
+<div class="size-8 text-primary flex items-center justify-center bg-primary/10 rounded-lg">
+<span class="material-symbols-outlined text-3xl">local_shipping</span>
+</div>
+<h2 class="text-slate-900 dark:text-slate-100 text-2xl font-bold leading-tight tracking-tight">Ntrans CRM</h2>
+</div>
+<div class="text-center w-full flex flex-col gap-2">
+<h1 class="text-slate-900 dark:text-white text-2xl font-bold leading-tight">Hesabınıza Giriş Yapın</h1>
+<p class="text-slate-500 dark:text-slate-400 text-sm font-medium leading-normal">Lojistik yönetim platformunuza erişin</p>
+</div>
+</header>
+<div class="p-8 pb-10 flex flex-col gap-5">
+<div class="flex w-full flex-col gap-4">
+<label class="flex flex-col w-full">
+<p class="text-slate-700 dark:text-slate-300 text-sm font-semibold leading-normal pb-2">E-posta</p>
+<div class="flex w-full items-stretch rounded-lg shadow-sm">
+<input class="form-input flex w-full min-w-0 resize-none overflow-hidden rounded-l-lg text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 h-12 placeholder:text-slate-400 dark:placeholder:text-slate-500 px-4 text-sm font-normal leading-normal border-r-0" placeholder="ornek@sirket.com" type="email" value=""/>
+<div class="text-slate-400 dark:text-slate-500 flex border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 items-center justify-center px-4 rounded-r-lg border-l-0">
+<span class="material-symbols-outlined text-xl">mail</span>
+</div>
+</div>
+</label>
+</div>
+<div class="flex w-full flex-col gap-4">
+<label class="flex flex-col w-full">
+<p class="text-slate-700 dark:text-slate-300 text-sm font-semibold leading-normal pb-2">Şifre</p>
+<div class="flex w-full items-stretch rounded-lg shadow-sm">
+<input class="form-input flex w-full min-w-0 resize-none overflow-hidden rounded-l-lg text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-primary border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 h-12 placeholder:text-slate-400 dark:placeholder:text-slate-500 px-4 text-sm font-normal leading-normal border-r-0" placeholder="••••••••" type="password" value=""/>
+<div class="text-slate-400 dark:text-slate-500 flex border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 items-center justify-center px-4 rounded-r-lg border-l-0">
+<span class="material-symbols-outlined text-xl">lock</span>
+</div>
+</div>
+</label>
+</div>
+<div class="flex items-center justify-between w-full pt-2">
+<label class="flex items-center gap-x-2 cursor-pointer group">
+<input class="h-4 w-4 rounded border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-primary focus:ring-primary focus:ring-offset-0 transition-colors" type="checkbox"/>
+<span class="text-slate-600 dark:text-slate-400 text-sm font-medium group-hover:text-slate-900 dark:group-hover:text-slate-200 transition-colors">Beni Hatırla</span>
+</label>
+<a class="text-primary hover:text-primary/80 text-sm font-semibold transition-colors" href="#">Şifremi Unuttum?</a>
+</div>
+<div class="pt-4">
+<button class="w-full h-12 flex items-center justify-center bg-primary hover:bg-primary/90 text-white text-base font-semibold rounded-lg shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 dark:focus:ring-offset-slate-900">
+          Giriş Yap
+        </button>
+</div>
+</div>
+</div>
+</div>
+</body></html>

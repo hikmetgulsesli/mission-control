@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Customer Activity Timeline Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Work+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#0ea5e9",
+                        "background-light": "#f8fafc",
+                        "background-dark": "#0f172a",
+                        "surface-light": "#ffffff",
+                        "surface-dark": "#1e293b",
+                        "border-light": "#e2e8f0",
+                        "border-dark": "#334155",
+                        "text-main-light": "#0f172a",
+                        "text-main-dark": "#f8fafc",
+                        "text-muted-light": "#64748b",
+                        "text-muted-dark": "#94a3b8",
+                    },
+                    fontFamily: {
+                        "display": ["Plus Jakarta Sans", "sans-serif"],
+                        "body": ["Work Sans", "sans-serif"]
+                    },
+                    borderRadius: { "DEFAULT": "0.375rem", "md": "0.5rem", "lg": "0.75rem", "xl": "1rem", "full": "9999px" },
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Work Sans', sans-serif; }
+        h1, h2, h3, h4, h5, h6, .font-display { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-text-main-light dark:text-text-main-dark min-h-screen flex flex-col">
+<!-- Top Navigation -->
+<header class="flex items-center justify-between whitespace-nowrap border-b border-border-light dark:border-border-dark px-6 py-3 bg-surface-light dark:bg-surface-dark sticky top-0 z-50">
+<div class="flex items-center gap-8">
+<div class="flex items-center gap-3 text-primary">
+<span class="material-symbols-outlined text-2xl">hub</span>
+<h2 class="text-text-main-light dark:text-text-main-dark text-lg font-bold font-display tracking-tight">CRM Hub</h2>
+</div>
+<div class="relative min-w-[240px] max-w-md hidden md:block">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-muted-light dark:text-text-muted-dark pointer-events-none">search</span>
+<input class="w-full bg-background-light dark:bg-background-dark border-transparent focus:border-primary focus:ring-1 focus:ring-primary rounded-md pl-10 pr-4 py-2 text-sm placeholder:text-text-muted-light dark:placeholder:text-text-muted-dark transition-colors" placeholder="Search accounts, contacts, activities..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<nav class="hidden lg:flex items-center gap-6">
+<a class="text-text-muted-light dark:text-text-muted-dark hover:text-text-main-light dark:hover:text-text-main-dark text-sm font-medium transition-colors" href="#">Dashboard</a>
+<a class="text-text-muted-light dark:text-text-muted-dark hover:text-text-main-light dark:hover:text-text-main-dark text-sm font-medium transition-colors" href="#">Contacts</a>
+<a class="text-primary text-sm font-semibold border-b-2 border-primary py-4 -mb-[18px]" href="#">Activities</a>
+<a class="text-text-muted-light dark:text-text-muted-dark hover:text-text-main-light dark:hover:text-text-main-dark text-sm font-medium transition-colors" href="#">Reports</a>
+</nav>
+<div class="flex items-center gap-3">
+<button class="bg-primary hover:bg-primary/90 text-white rounded-md px-4 py-2 text-sm font-semibold transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-[20px]">add</span>
+<span>New Activity</span>
+</button>
+<button class="text-text-muted-light dark:text-text-muted-dark hover:text-text-main-light dark:hover:text-text-main-dark p-2 rounded-full hover:bg-background-light dark:hover:bg-background-dark transition-colors relative">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border border-surface-light dark:border-surface-dark"></span>
+</button>
+<button class="text-text-muted-light dark:text-text-muted-dark hover:text-text-main-light dark:hover:text-text-main-dark p-2 rounded-full hover:bg-background-light dark:hover:bg-background-dark transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-blue-600 border border-border-light dark:border-border-dark flex items-center justify-center text-white text-xs font-bold shadow-sm" data-alt="User Avatar">JD</div>
+</div>
+</div>
+</header>
+<div class="flex flex-1 overflow-hidden">
+<!-- Sidebar: Customer Selection -->
+<aside class="w-72 bg-surface-light dark:bg-surface-dark border-r border-border-light dark:border-border-dark flex flex-col overflow-y-auto shrink-0 hidden md:flex">
+<div class="p-4 border-b border-border-light dark:border-border-dark sticky top-0 bg-surface-light/95 dark:bg-surface-dark/95 backdrop-blur z-10">
+<h3 class="font-display font-semibold text-sm text-text-muted-light dark:text-text-muted-dark uppercase tracking-wider mb-3">Customers</h3>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted-light dark:text-text-muted-dark text-[18px]">search</span>
+<input class="w-full bg-background-light dark:bg-background-dark border border-border-light dark:border-border-dark focus:border-primary focus:ring-1 focus:ring-primary rounded pl-9 pr-3 py-1.5 text-sm placeholder:text-text-muted-light dark:placeholder:text-text-muted-dark" placeholder="Filter customers..." type="text"/>
+</div>
+</div>
+<div class="flex-1 py-2">
+<!-- Active Customer -->
+<button class="w-full flex items-center gap-3 px-4 py-3 bg-primary/10 border-l-4 border-primary text-left transition-colors">
+<div class="w-10 h-10 rounded-md bg-white dark:bg-gray-800 shadow-sm border border-border-light dark:border-border-dark flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary">domain</span>
+</div>
+<div class="min-w-0 flex-1">
+<p class="text-sm font-semibold text-text-main-light dark:text-text-main-dark truncate">Acme Corp</p>
+<p class="text-xs text-text-muted-light dark:text-text-muted-dark truncate">Enterprise Client</p>
+</div>
+</button>
+<!-- Other Customers -->
+<button class="w-full flex items-center gap-3 px-4 py-3 hover:bg-background-light dark:hover:bg-background-dark border-l-4 border-transparent text-left transition-colors">
+<div class="w-10 h-10 rounded-md bg-white dark:bg-gray-800 shadow-sm border border-border-light dark:border-border-dark flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-text-muted-light dark:text-text-muted-dark">apartment</span>
+</div>
+<div class="min-w-0 flex-1">
+<p class="text-sm font-medium text-text-main-light dark:text-text-main-dark truncate">Globex Inc</p>
+<p class="text-xs text-text-muted-light dark:text-text-muted-dark truncate">Mid-Market</p>
+</div>
+</button>
+<button class="w-full flex items-center gap-3 px-4 py-3 hover:bg-background-light dark:hover:bg-background-dark border-l-4 border-transparent text-left transition-colors">
+<div class="w-10 h-10 rounded-md bg-white dark:bg-gray-800 shadow-sm border border-border-light dark:border-border-dark flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-text-muted-light dark:text-text-muted-dark">storefront</span>
+</div>
+<div class="min-w-0 flex-1">
+<p class="text-sm font-medium text-text-main-light dark:text-text-main-dark truncate">Initech</p>
+<p class="text-xs text-text-muted-light dark:text-text-muted-dark truncate">Small Business</p>
+</div>
+</button>
+<button class="w-full flex items-center gap-3 px-4 py-3 hover:bg-background-light dark:hover:bg-background-dark border-l-4 border-transparent text-left transition-colors">
+<div class="w-10 h-10 rounded-md bg-white dark:bg-gray-800 shadow-sm border border-border-light dark:border-border-dark flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-text-muted-light dark:text-text-muted-dark">corporate_fare</span>
+</div>
+<div class="min-w-0 flex-1">
+<p class="text-sm font-medium text-text-main-light dark:text-text-main-dark truncate">Soylent Corp</p>
+<p class="text-xs text-text-muted-light dark:text-text-muted-dark truncate">Enterprise Client</p>
+</div>
+</button>
+<button class="w-full flex items-center gap-3 px-4 py-3 hover:bg-background-light dark:hover:bg-background-dark border-l-4 border-transparent text-left transition-colors">
+<div class="w-10 h-10 rounded-md bg-white dark:bg-gray-800 shadow-sm border border-border-light dark:border-border-dark flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-text-muted-light dark:text-text-muted-dark">business</span>
+</div>
+<div class="min-w-0 flex-1">
+<p class="text-sm font-medium text-text-main-light dark:text-text-main-dark truncate">Umbrella Corp</p>
+<p class="text-xs text-text-muted-light dark:text-text-muted-dark truncate">Enterprise Client</p>
+</div>
+</button>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 overflow-y-auto">
+<div class="max-w-5xl mx-auto p-6 md:p-8">
+<!-- Header -->
+<div class="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-8">
+<div>
+<div class="flex items-center gap-3 mb-2">
+<div class="w-12 h-12 rounded-lg bg-white dark:bg-gray-800 shadow-sm border border-border-light dark:border-border-dark flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-2xl">domain</span>
+</div>
+<div>
+<h1 class="text-2xl font-bold font-display text-text-main-light dark:text-text-main-dark">Acme Corp</h1>
+<p class="text-sm text-text-muted-light dark:text-text-muted-dark">Customer Activity Timeline</p>
+</div>
+</div>
+</div>
+<div class="flex items-center gap-3 self-start">
+<button class="flex items-center justify-center gap-2 rounded-md h-9 px-4 bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark text-text-main-light dark:text-text-main-dark text-sm font-medium hover:bg-background-light dark:hover:bg-background-dark transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[18px]">filter_list</span>
+<span>Filter</span>
+</button>
+<button class="flex items-center justify-center gap-2 rounded-md h-9 px-4 bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark text-text-main-light dark:text-text-main-dark text-sm font-medium hover:bg-background-light dark:hover:bg-background-dark transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[18px]">calendar_today</span>
+<span>Date Range</span>
+</button>
+</div>
+</div>
+<!-- Filters -->
+<div class="flex gap-2 mb-8 overflow-x-auto pb-2 scrollbar-hide">
+<button class="flex h-8 shrink-0 items-center justify-center gap-x-1.5 rounded-full bg-primary/10 text-primary border border-primary/20 px-4 text-sm font-medium">
+                        All Activities
+                    </button>
+<button class="flex h-8 shrink-0 items-center justify-center gap-x-1.5 rounded-full bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark text-text-muted-light dark:text-text-muted-dark hover:text-text-main-light dark:hover:text-text-main-dark px-4 text-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[16px]">call</span> Calls
+                    </button>
+<button class="flex h-8 shrink-0 items-center justify-center gap-x-1.5 rounded-full bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark text-text-muted-light dark:text-text-muted-dark hover:text-text-main-light dark:hover:text-text-main-dark px-4 text-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[16px]">mail</span> Emails
+                    </button>
+<button class="flex h-8 shrink-0 items-center justify-center gap-x-1.5 rounded-full bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark text-text-muted-light dark:text-text-muted-dark hover:text-text-main-light dark:hover:text-text-main-dark px-4 text-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[16px]">videocam</span> Meetings
+                    </button>
+<button class="flex h-8 shrink-0 items-center justify-center gap-x-1.5 rounded-full bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark text-text-muted-light dark:text-text-muted-dark hover:text-text-main-light dark:hover:text-text-main-dark px-4 text-sm font-medium transition-colors">
+<span class="material-symbols-outlined text-[16px]">sticky_note_2</span> Notes
+                    </button>
+</div>
+<!-- Timeline -->
+<div class="relative pl-4 md:pl-8">
+<!-- Vertical Line -->
+<div class="absolute left-8 md:left-12 top-0 bottom-0 w-px bg-border-light dark:bg-border-dark"></div>
+<!-- Date Divider -->
+<div class="relative flex items-center gap-4 mb-6 -ml-4 md:-ml-8 z-10">
+<div class="bg-background-light dark:bg-background-dark text-text-muted-light dark:text-text-muted-dark text-xs font-semibold uppercase tracking-wider px-3 py-1 rounded-full border border-border-light dark:border-border-dark inline-block shadow-sm">
+                            Today
+                        </div>
+</div>
+<!-- Timeline Item: Meeting -->
+<div class="relative mb-8 pl-8 md:pl-12 group">
+<!-- Connector/Icon -->
+<div class="absolute -left-3.5 md:-left-[18px] top-1 w-8 h-8 rounded-full bg-white dark:bg-surface-dark border-2 border-primary flex items-center justify-center z-10 shadow-sm group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-primary text-[16px]">videocam</span>
+</div>
+<!-- Card -->
+<div class="bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow relative">
+<!-- Arrow pointing to timeline -->
+<div class="absolute top-4 -left-2 w-3 h-3 bg-surface-light dark:bg-surface-dark border-l border-t border-border-light dark:border-border-dark transform -rotate-45"></div>
+<div class="flex justify-between items-start gap-4 mb-2">
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="text-xs font-medium text-primary bg-primary/10 px-2 py-0.5 rounded">Meeting</span>
+<span class="text-xs text-text-muted-light dark:text-text-muted-dark">10:00 AM</span>
+</div>
+<h4 class="font-display font-semibold text-text-main-light dark:text-text-main-dark text-base">Quarterly Review &amp; Roadmap Planning</h4>
+</div>
+<button class="text-text-muted-light dark:text-text-muted-dark hover:text-text-main-light dark:hover:text-text-main-dark transition-colors">
+<span class="material-symbols-outlined text-[20px]">more_horiz</span>
+</button>
+</div>
+<p class="text-sm text-text-muted-light dark:text-text-muted-dark mb-4 leading-relaxed">Discussed Q3 performance metrics and aligned on the product roadmap for Q4. Client requested additional training sessions for the new reporting module.</p>
+<div class="flex items-center justify-between border-t border-border-light dark:border-border-dark pt-3 mt-2">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center text-white text-[10px] font-bold" data-alt="User JD">JD</div>
+<span class="text-xs text-text-muted-light dark:text-text-muted-dark font-medium">Logged by Jane Doe</span>
+</div>
+<div class="flex gap-2">
+<span class="flex items-center gap-1 text-xs text-text-muted-light dark:text-text-muted-dark bg-background-light dark:bg-background-dark px-2 py-1 rounded">
+<span class="material-symbols-outlined text-[14px]">attachment</span> 2 Files
+                                    </span>
+</div>
+</div>
+</div>
+</div>
+<!-- Timeline Item: Email -->
+<div class="relative mb-8 pl-8 md:pl-12 group">
+<div class="absolute -left-3.5 md:-left-[18px] top-1 w-8 h-8 rounded-full bg-white dark:bg-surface-dark border-2 border-blue-400 flex items-center justify-center z-10 shadow-sm group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-blue-500 text-[16px]">mail</span>
+</div>
+<div class="bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow relative">
+<div class="absolute top-4 -left-2 w-3 h-3 bg-surface-light dark:bg-surface-dark border-l border-t border-border-light dark:border-border-dark transform -rotate-45"></div>
+<div class="flex justify-between items-start gap-4 mb-2">
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30 px-2 py-0.5 rounded">Email Sent</span>
+<span class="text-xs text-text-muted-light dark:text-text-muted-dark">08:45 AM</span>
+</div>
+<h4 class="font-display font-semibold text-text-main-light dark:text-text-main-dark text-base">Follow-up: New Feature Access</h4>
+</div>
+<button class="text-text-muted-light dark:text-text-muted-dark hover:text-text-main-light dark:hover:text-text-main-dark transition-colors">
+<span class="material-symbols-outlined text-[20px]">more_horiz</span>
+</button>
+</div>
+<p class="text-sm text-text-muted-light dark:text-text-muted-dark mb-4 leading-relaxed">Sent the requested documentation and enablement guides for the beta features discussed last week.</p>
+<div class="flex items-center justify-between border-t border-border-light dark:border-border-dark pt-3 mt-2">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-600 dark:text-gray-300 text-[10px] font-bold" data-alt="User MS">MS</div>
+<span class="text-xs text-text-muted-light dark:text-text-muted-dark font-medium">Logged by Mike Smith</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Date Divider -->
+<div class="relative flex items-center gap-4 mb-6 -ml-4 md:-ml-8 z-10 pt-4">
+<div class="bg-background-light dark:bg-background-dark text-text-muted-light dark:text-text-muted-dark text-xs font-semibold uppercase tracking-wider px-3 py-1 rounded-full border border-border-light dark:border-border-dark inline-block shadow-sm">
+                            Yesterday
+                        </div>
+</div>
+<!-- Timeline Item: Call -->
+<div class="relative mb-8 pl-8 md:pl-12 group">
+<div class="absolute -left-3.5 md:-left-[18px] top-1 w-8 h-8 rounded-full bg-white dark:bg-surface-dark border-2 border-emerald-400 flex items-center justify-center z-10 shadow-sm group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-emerald-500 text-[16px]">call</span>
+</div>
+<div class="bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow relative">
+<div class="absolute top-4 -left-2 w-3 h-3 bg-surface-light dark:bg-surface-dark border-l border-t border-border-light dark:border-border-dark transform -rotate-45"></div>
+<div class="flex justify-between items-start gap-4 mb-2">
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/30 px-2 py-0.5 rounded">Outbound Call</span>
+<span class="text-xs text-text-muted-light dark:text-text-muted-dark">02:30 PM • 15 mins</span>
+</div>
+<h4 class="font-display font-semibold text-text-main-light dark:text-text-main-dark text-base">Check-in regarding support ticket</h4>
+</div>
+<button class="text-text-muted-light dark:text-text-muted-dark hover:text-text-main-light dark:hover:text-text-main-dark transition-colors">
+<span class="material-symbols-outlined text-[20px]">more_horiz</span>
+</button>
+</div>
+<p class="text-sm text-text-muted-light dark:text-text-muted-dark mb-4 leading-relaxed">Called to confirm that the critical priority ticket #49201 was resolved satisfactorily. Client confirmed systems are operational.</p>
+<div class="flex items-center justify-between border-t border-border-light dark:border-border-dark pt-3 mt-2">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center text-white text-[10px] font-bold" data-alt="User JD">JD</div>
+<span class="text-xs text-text-muted-light dark:text-text-muted-dark font-medium">Logged by Jane Doe</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Timeline Item: Note -->
+<div class="relative mb-8 pl-8 md:pl-12 group">
+<div class="absolute -left-3.5 md:-left-[18px] top-1 w-8 h-8 rounded-full bg-white dark:bg-surface-dark border-2 border-amber-400 flex items-center justify-center z-10 shadow-sm group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-amber-500 text-[16px]">sticky_note_2</span>
+</div>
+<div class="bg-surface-light dark:bg-surface-dark border border-border-light dark:border-border-dark rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow relative">
+<div class="absolute top-4 -left-2 w-3 h-3 bg-surface-light dark:bg-surface-dark border-l border-t border-border-light dark:border-border-dark transform -rotate-45"></div>
+<div class="flex justify-between items-start gap-4 mb-2">
+<div>
+<div class="flex items-center gap-2 mb-1">
+<span class="text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 rounded">Internal Note</span>
+<span class="text-xs text-text-muted-light dark:text-text-muted-dark">11:15 AM</span>
+</div>
+<h4 class="font-display font-semibold text-text-main-light dark:text-text-main-dark text-base">Account Expansion Opportunity</h4>
+</div>
+<button class="text-text-muted-light dark:text-text-muted-dark hover:text-text-main-light dark:hover:text-text-main-dark transition-colors">
+<span class="material-symbols-outlined text-[20px]">more_horiz</span>
+</button>
+</div>
+<div class="bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 p-3 rounded-md mb-4">
+<p class="text-sm text-text-main-light dark:text-text-main-dark italic">"Noticed high usage on the analytics module. We should prep a proposal for the Enterprise Data tier upgrade for next week's QBR."</p>
+</div>
+<div class="flex items-center justify-between border-t border-border-light dark:border-border-dark pt-3 mt-2">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-purple-500 flex items-center justify-center text-white text-[10px] font-bold" data-alt="User AR">AR</div>
+<span class="text-xs text-text-muted-light dark:text-text-muted-dark font-medium">Logged by Alex Rivera</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="text-center mt-8">
+<button class="text-primary hover:text-primary/80 text-sm font-semibold transition-colors">Load Older Activities</button>
+</div>
+</div>
+</main>
+</div>
+</body></html>

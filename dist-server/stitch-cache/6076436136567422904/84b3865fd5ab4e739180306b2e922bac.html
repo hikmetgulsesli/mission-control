@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Modern Minimal Counter App</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&amp;family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+  tailwind.config = {
+    darkMode: "class",
+    theme: {
+      extend: {
+        colors: {
+          "primary": "#20d3ee",
+          "background-light": "#f6f8f8",
+          "background-dark": "#101f22",
+        },
+        fontFamily: {
+          "display": ["Space Grotesk", "sans-serif"],
+          "body": ["DM Sans", "sans-serif"]
+        },
+        borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+      },
+    },
+  }
+</script>
+<style>
+  body {
+    background-color: #18181b;
+  }
+  .glass-card {
+    background: rgba(30, 41, 59, 0.4);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+</style>
+</head>
+<body class="font-body text-slate-100 min-h-screen flex items-center justify-center bg-[#18181b] p-4">
+<div class="glass-card rounded-2xl p-10 w-full max-w-md shadow-2xl flex flex-col items-center gap-12">
+<header class="w-full flex justify-between items-center mb-4">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-2xl">
+                calculate
+            </span>
+<h1 class="font-display font-semibold text-xl tracking-wide text-slate-200">Counter App</h1>
+</div>
+<button aria-label="Settings" class="text-slate-400 hover:text-primary transition-colors focus:outline-none">
+<span class="material-symbols-outlined">
+                settings
+            </span>
+</button>
+</header>
+<div class="flex flex-col items-center justify-center py-8">
+<span class="font-display font-bold text-[8rem] leading-none text-[#fafafa] tracking-tighter drop-shadow-lg">
+            0
+        </span>
+</div>
+<div class="flex items-center justify-center gap-6 w-full mt-4">
+<button aria-label="Decrease" class="flex items-center justify-center w-14 h-14 rounded-full border-2 border-primary text-primary hover:bg-primary/10 transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-[#18181b]">
+<span class="material-symbols-outlined text-3xl font-light">
+                remove
+            </span>
+</button>
+<button class="px-8 py-3 rounded-full border-2 border-primary text-primary font-medium tracking-wide hover:bg-primary/10 transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-[#18181b] uppercase text-sm">
+            Reset
+        </button>
+<button aria-label="Increase" class="flex items-center justify-center w-14 h-14 rounded-full border-2 border-primary text-primary hover:bg-primary/10 transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-[#18181b]">
+<span class="material-symbols-outlined text-3xl font-light">
+                add
+            </span>
+</button>
+</div>
+</div>
+</body></html>

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>System Settings: Logistics CRM Admin</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Work+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#0da6f2",
+                        "background-light": "#f5f7f8",
+                        "background-dark": "#101c22",
+                    },
+                    fontFamily: {
+                        "display": ["Plus Jakarta Sans", "sans-serif"],
+                        "body": ["Work Sans", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Work Sans', sans-serif; }
+        h1, h2, h3, h4, h5, h6, .font-display { font-family: 'Plus Jakarta Sans', sans-serif; }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen flex flex-col">
+<div class="relative flex h-auto min-h-screen w-full flex-col group/design-root overflow-x-hidden">
+<div class="layout-container flex h-full grow flex-col">
+<header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-b-slate-200 dark:border-b-slate-800 px-10 py-3 bg-white dark:bg-[#15232b]">
+<div class="flex items-center gap-4 text-slate-900 dark:text-slate-100">
+<div class="size-6 text-primary flex items-center justify-center">
+<span class="material-symbols-outlined" style="font-size: 28px;">local_shipping</span>
+</div>
+<h2 class="text-slate-900 dark:text-slate-100 text-lg font-bold leading-tight tracking-[-0.015em] font-display">Logistics CRM Admin</h2>
+</div>
+<div class="flex flex-1 justify-end gap-8">
+<div class="flex items-center gap-9">
+<a class="text-slate-600 hover:text-primary dark:text-slate-300 dark:hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">Dashboard</a>
+<a class="text-slate-600 hover:text-primary dark:text-slate-300 dark:hover:text-primary text-sm font-medium leading-normal transition-colors" href="#">Shipments</a>
+<a class="text-primary text-sm font-medium leading-normal" href="#">Settings</a>
+</div>
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10 ring-2 ring-primary/20" data-alt="Admin user profile picture" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCDVqSBloLazsZRQFJJxORf2bxaAX5rM7h_aYk6mCwMIlMemz0NsObgcFaNZv1qie78KoPSsGTfymgi6mQTn9yQ111u2ov0lWyDFhsXA4ohIDAO0bExVbkfX-Swqs2eUQ8FDkDu7ZEAad0A080HsLEkf7NFHWBlvpOuKlI9JzsJwSzqroWbFwE0dLRaMLXXoLDoM1EPtpParND9ex5e5uZwzoQGkVlw1QiVJAFmCgxo1SimzJq_XURwtH1YCIfN9G8W9xVWsmY82eI");'></div>
+</div>
+</header>
+<div class="px-10 flex flex-1 justify-center py-8">
+<div class="layout-content-container flex max-w-[1200px] flex-1 gap-8">
+<!-- Left Sidebar -->
+<div class="w-64 shrink-0 flex flex-col gap-6">
+<div class="flex flex-col">
+<h1 class="text-slate-900 dark:text-slate-100 text-xl font-bold leading-normal font-display">Sistem Ayarları</h1>
+<p class="text-slate-500 dark:text-slate-400 text-sm font-normal leading-normal">CRM Konfigürasyonu</p>
+</div>
+<div class="flex flex-col gap-1">
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-primary/10 text-primary transition-colors" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="text-sm font-medium leading-normal">Genel Ayarlar</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">mail</span>
+<span class="text-sm font-medium leading-normal">Email Ayarları</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">notifications</span>
+<span class="text-sm font-medium leading-normal">Bildirim Ayarları</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 transition-colors" href="#">
+<span class="material-symbols-outlined">database</span>
+<span class="text-sm font-medium leading-normal">Veri Yönetimi</span>
+</a>
+</div>
+</div>
+<!-- Right Main Content -->
+<div class="flex-1 flex flex-col bg-white dark:bg-[#15232b] rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+<div class="flex flex-col gap-6 p-8">
+<!-- Header -->
+<div class="flex flex-col gap-2 border-b border-slate-200 dark:border-slate-800 pb-6">
+<h2 class="text-slate-900 dark:text-slate-100 text-2xl font-bold leading-tight font-display">Genel Ayarlar</h2>
+<p class="text-slate-500 dark:text-slate-400 text-sm font-normal leading-normal">Sistem genel ayarlarını ve şirket bilgilerinizi yapılandırın.</p>
+</div>
+<!-- Logo Upload -->
+<div class="flex flex-col gap-4">
+<h3 class="text-slate-900 dark:text-slate-100 text-lg font-semibold leading-tight font-display">Logo Yükleme</h3>
+<div class="flex items-start gap-6">
+<div class="w-32 h-32 rounded-lg border border-slate-200 dark:border-slate-700 bg-background-light dark:bg-background-dark flex items-center justify-center bg-center bg-no-repeat bg-contain" data-alt="Company logo preview area" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAkUSSs75lYdkZybVgLhq3ODBh00O_xT86erNeJuoUQlgX0ur0cjfXaIpK4_y7ImQC3ICeiGAxw6NK37OrxcM08pGTtkuxa-BWQM_0w77kXgylQEPGhRd4qyjy-R8u5Oinr7eYURVxA0_e5Eu54rySlKG7xfZ8xZqj71Jymf1-7wy98wH6AHdXP3sKi8cama-SRWR_ZGD4d_6bd292U9cy-MO5_VmwLFxZJ132542W000Wzgy4xl8gqPwla4M35mbhLJMvCCicc6mc");'>
+</div>
+<div class="flex flex-col gap-3">
+<p class="text-sm text-slate-500 dark:text-slate-400">Önerilen boyut: 256x256px. Maksimum dosya boyutu: 2MB.</p>
+<div class="flex gap-3">
+<button class="px-4 py-2 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors">Yeni Logo Yükle</button>
+<button class="px-4 py-2 bg-white dark:bg-[#15232b] border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 text-sm font-medium rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">Kaldır</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Form Fields -->
+<div class="flex flex-col gap-6 pt-6 border-t border-slate-200 dark:border-slate-800">
+<h3 class="text-slate-900 dark:text-slate-100 text-lg font-semibold leading-tight font-display">Şirket Bilgileri</h3>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div class="flex flex-col gap-2">
+<label class="text-sm font-medium text-slate-700 dark:text-slate-300">Şirket Adı</label>
+<input class="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-[#1a2b35] text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-primary/50 text-sm" placeholder="Şirket adını giriniz" type="text" value="Global Logistics Corp"/>
+</div>
+<div class="flex flex-col gap-2">
+<label class="text-sm font-medium text-slate-700 dark:text-slate-300">Vergi Numarası (Tax ID)</label>
+<input class="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-[#1a2b35] text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-primary/50 text-sm" placeholder="Vergi numarasını giriniz" type="text" value="TR-1234567890"/>
+</div>
+</div>
+</div>
+<!-- Regional Settings -->
+<div class="flex flex-col gap-6 pt-6 border-t border-slate-200 dark:border-slate-800">
+<h3 class="text-slate-900 dark:text-slate-100 text-lg font-semibold leading-tight font-display">Bölgesel Ayarlar</h3>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div class="flex flex-col gap-2">
+<label class="text-sm font-medium text-slate-700 dark:text-slate-300">Varsayılan Para Birimi</label>
+<select class="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-[#1a2b35] text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-primary/50 text-sm">
+<option selected="" value="USD">USD - US Dollar</option>
+<option value="EUR">EUR - Euro</option>
+<option value="TRY">TRY - Turkish Lira</option>
+</select>
+</div>
+<div class="flex flex-col gap-2">
+<label class="text-sm font-medium text-slate-700 dark:text-slate-300">Saat Dilimi (Timezone)</label>
+<select class="w-full rounded-lg border-slate-300 dark:border-slate-600 bg-white dark:bg-[#1a2b35] text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-primary/50 text-sm">
+<option selected="" value="Europe/Istanbul">(GMT+03:00) Istanbul</option>
+<option value="Europe/London">(GMT+00:00) London</option>
+<option value="America/New_York">(GMT-05:00) New York</option>
+</select>
+</div>
+</div>
+</div>
+<!-- Actions -->
+<div class="flex items-center justify-end gap-4 pt-6 mt-4 border-t border-slate-200 dark:border-slate-800">
+<button class="px-5 py-2.5 bg-white dark:bg-[#15232b] border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 text-sm font-medium rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">İptal</button>
+<button class="px-5 py-2.5 bg-primary text-white text-sm font-medium rounded-lg hover:bg-primary/90 transition-colors shadow-sm shadow-primary/20">Değişiklikleri Kaydet</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</body></html>

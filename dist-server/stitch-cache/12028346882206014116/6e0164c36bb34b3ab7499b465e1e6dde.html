@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Shipping CRM - Quotation List</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1258e2",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#101622",
+                    },
+                    fontFamily: {
+                        "display": ["Inter"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen antialiased flex">
+<!-- Sidebar -->
+<aside class="w-64 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 flex flex-col hidden md:flex shrink-0 min-h-screen">
+<div class="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center gap-3">
+<div class="bg-primary/10 dark:bg-primary/20 text-primary p-2 rounded-lg">
+<span class="material-symbols-outlined">sailing</span>
+</div>
+<div>
+<h1 class="font-bold text-lg leading-tight">Shipping CRM</h1>
+<p class="text-xs text-slate-500 dark:text-slate-400">Global Logistics</p>
+</div>
+</div>
+<nav class="flex-1 p-4 space-y-1 overflow-y-auto">
+<a class="flex items-center gap-3 px-3 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">dashboard</span>
+<span class="text-sm font-medium">Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 bg-primary/10 dark:bg-primary/20 text-primary rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">description</span>
+<span class="text-sm font-medium">Quotations</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">local_shipping</span>
+<span class="text-sm font-medium">Shipments</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">group</span>
+<span class="text-sm font-medium">Customers</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">inventory_2</span>
+<span class="text-sm font-medium">Invoices</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">analytics</span>
+<span class="text-sm font-medium">Reports</span>
+</a>
+<div class="pt-4 mt-4 border-t border-slate-200 dark:border-slate-700">
+<a class="flex items-center gap-3 px-3 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors" href="#">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+<span class="text-sm font-medium">Settings</span>
+</a>
+</div>
+</nav>
+<div class="p-4 border-t border-slate-200 dark:border-slate-700">
+<div class="flex items-center gap-3">
+<img alt="User Avatar" class="w-10 h-10 rounded-full object-cover" data-alt="Profile picture of Sarah Jenkins" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAGxB0qO1pnJ56xw9wi2IyIwKge-FzSxsD_qOx7IXlNUm92gJd76p2EhLYOaSYzGsNQlIuOpyq1Qsi7qvGkG7toLN5MvXOoISjZREviCqrxozz-8_ymEkO_iwb1WvSW-R8zcF3Hx3esTK86nuvr6ukVjPP4xcW_gS_7xrDwje3oN0fytLhcrkgEeRlf-awOkP1o2XZQ1ARAqwLE1QmK1D6HJz1msgXJx1vlmKsoHkKkWT7z5690Bqp43a2vWqbbyJK9DW_7aHv_L_l5"/>
+<div class="flex-1 min-w-0">
+<p class="text-sm font-medium truncate">Sarah Jenkins</p>
+<p class="text-xs text-slate-500 dark:text-slate-400 truncate">Sales Manager</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Content -->
+<main class="flex-1 flex flex-col min-w-0 overflow-hidden">
+<!-- Header -->
+<header class="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
+<div class="flex items-center gap-4">
+<button class="md:hidden text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<h2 class="text-xl font-bold tracking-tight">Quotation List</h2>
+</div>
+<div class="flex items-center gap-3">
+<button class="relative p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full"></span>
+</button>
+<button class="bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-[18px]">add</span>
+                    Create Quotation
+                </button>
+</div>
+</header>
+<!-- Content Body -->
+<div class="flex-1 overflow-auto p-6 flex flex-col gap-6">
+<!-- Filters -->
+<div class="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-wrap gap-4 items-center justify-between">
+<div class="flex-1 min-w-[200px] relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">search</span>
+<input class="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all dark:text-white placeholder-slate-400" placeholder="Search quotes, customers..." type="text"/>
+</div>
+<div class="flex flex-wrap gap-3 items-center">
+<div class="relative">
+<select class="appearance-none pl-3 pr-8 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all">
+<option value="">Status: All</option>
+<option value="draft">Draft</option>
+<option value="pending">Pending</option>
+<option value="accepted">Accepted</option>
+<option value="expired">Expired</option>
+</select>
+<span class="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-[18px] pointer-events-none">expand_more</span>
+</div>
+<div class="relative">
+<select class="appearance-none pl-3 pr-8 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all">
+<option value="">Transport: All</option>
+<option value="air">Air Freight</option>
+<option value="sea">Sea Freight</option>
+<option value="land">Land Transport</option>
+</select>
+<span class="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 text-[18px] pointer-events-none">expand_more</span>
+</div>
+<button class="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+<span class="material-symbols-outlined text-[18px]">calendar_month</span>
+                        Date Range
+                    </button>
+<button class="p-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors tooltip" title="More Filters">
+<span class="material-symbols-outlined text-[20px]">tune</span>
+</button>
+</div>
+</div>
+<!-- Table Card -->
+<div class="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm flex-1 flex flex-col overflow-hidden">
+<div class="overflow-x-auto flex-1">
+<table class="w-full text-left border-collapse min-w-[1000px]">
+<thead>
+<tr class="bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700 text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400">
+<th class="px-4 py-3 font-medium">Quote No</th>
+<th class="px-4 py-3 font-medium">Customer</th>
+<th class="px-4 py-3 font-medium">Transport</th>
+<th class="px-4 py-3 font-medium">Service</th>
+<th class="px-4 py-3 font-medium">Route (Origin → Dest)</th>
+<th class="px-4 py-3 font-medium text-right">Price</th>
+<th class="px-4 py-3 font-medium text-center">Status</th>
+<th class="px-4 py-3 font-medium">Assigned To</th>
+<th class="px-4 py-3 font-medium">Date</th>
+<th class="px-4 py-3 font-medium text-center">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-200 dark:divide-slate-700 text-sm">
+<!-- Row 1 -->
+<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors group">
+<td class="px-4 py-3 whitespace-nowrap">
+<a class="font-medium text-primary hover:underline" href="#">Q-1001</a>
+</td>
+<td class="px-4 py-3">
+<div class="font-medium text-slate-900 dark:text-slate-100">Global Imports LLC</div>
+<div class="text-xs text-slate-500 dark:text-slate-400">US-NY</div>
+</td>
+<td class="px-4 py-3 whitespace-nowrap">
+<div class="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+<span class="material-symbols-outlined text-[18px] text-sky-500">flight</span>
+                                        Air
+                                    </div>
+</td>
+<td class="px-4 py-3 whitespace-nowrap text-slate-600 dark:text-slate-400">Door-to-Door</td>
+<td class="px-4 py-3">
+<div class="flex items-center gap-1 text-slate-700 dark:text-slate-300">
+<span>Shanghai</span>
+<span class="material-symbols-outlined text-[14px] text-slate-400">arrow_forward</span>
+<span>Hamburg</span>
+</div>
+</td>
+<td class="px-4 py-3 whitespace-nowrap text-right font-medium">
+                                    12,500 <span class="text-slate-500 text-xs font-normal">USD</span>
+</td>
+<td class="px-4 py-3 whitespace-nowrap text-center">
+<span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50">
+                                        Pending
+                                    </span>
+</td>
+<td class="px-4 py-3 whitespace-nowrap text-slate-600 dark:text-slate-400">Sarah Jenkins</td>
+<td class="px-4 py-3 whitespace-nowrap text-slate-600 dark:text-slate-400">Oct 12, 2023</td>
+<td class="px-4 py-3 whitespace-nowrap text-center">
+<button class="text-slate-400 hover:text-primary transition-colors opacity-0 group-hover:opacity-100">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors group">
+<td class="px-4 py-3 whitespace-nowrap">
+<a class="font-medium text-primary hover:underline" href="#">Q-1002</a>
+</td>
+<td class="px-4 py-3">
+<div class="font-medium text-slate-900 dark:text-slate-100">EuroTech Industries</div>
+<div class="text-xs text-slate-500 dark:text-slate-400">DE-BER</div>
+</td>
+<td class="px-4 py-3 whitespace-nowrap">
+<div class="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+<span class="material-symbols-outlined text-[18px] text-blue-500">directions_boat</span>
+                                        Sea
+                                    </div>
+</td>
+<td class="px-4 py-3 whitespace-nowrap text-slate-600 dark:text-slate-400">FCL</td>
+<td class="px-4 py-3">
+<div class="flex items-center gap-1 text-slate-700 dark:text-slate-300">
+<span>Rotterdam</span>
+<span class="material-symbols-outlined text-[14px] text-slate-400">arrow_forward</span>
+<span>New York</span>
+</div>
+</td>
+<td class="px-4 py-3 whitespace-nowrap text-right font-medium">
+                                    4,200 <span class="text-slate-500 text-xs font-normal">EUR</span>
+</td>
+<td class="px-4 py-3 whitespace-nowrap text-center">
+<span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50">
+                                        Accepted
+                                    </span>
+</td>
+<td class="px-4 py-3 whitespace-nowrap text-slate-600 dark:text-slate-400">Michael Chang</td>
+<td class="px-4 py-3 whitespace-nowrap text-slate-600 dark:text-slate-400">Oct 11, 2023</td>
+<td class="px-4 py-3 whitespace-nowrap text-center">
+<button class="text-slate-400 hover:text-primary transition-colors opacity-0 group-hover:opacity-100">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors group">
+<td class="px-4 py-3 whitespace-nowrap">
+<a class="font-medium text-primary hover:underline" href="#">Q-1003</a>
+</td>
+<td class="px-4 py-3">
+<div class="font-medium text-slate-900 dark:text-slate-100">Pacific Trading Co.</div>
+<div class="text-xs text-slate-500 dark:text-slate-400">CN-SZ</div>
+</td>
+<td class="px-4 py-3 whitespace-nowrap">
+<div class="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+<span class="material-symbols-outlined text-[18px] text-blue-500">directions_boat</span>
+                                        Sea
+                                    </div>
+</td>
+<td class="px-4 py-3 whitespace-nowrap text-slate-600 dark:text-slate-400">LCL</td>
+<td class="px-4 py-3">
+<div class="flex items-center gap-1 text-slate-700 dark:text-slate-300">
+<span>Shenzhen</span>
+<span class="material-symbols-outlined text-[14px] text-slate-400">arrow_forward</span>
+<span>Los Angeles</span>
+</div>
+</td>
+<td class="px-4 py-3 whitespace-nowrap text-right font-medium">
+                                    1,850 <span class="text-slate-500 text-xs font-normal">USD</span>
+</td>
+<td class="px-4 py-3 whitespace-nowrap text-center">
+<span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-slate-100 text-slate-800 dark:bg-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600">
+                                        Draft
+                                    </span>
+</td>
+<td class="px-4 py-3 whitespace-nowrap text-slate-600 dark:text-slate-400">Sarah Jenkins</td>
+<td class="px-4 py-3 whitespace-nowrap text-slate-600 dark:text-slate-400">Oct 10, 2023</td>
+<td class="px-4 py-3 whitespace-nowrap text-center">
+<button class="text-slate-400 hover:text-primary transition-colors opacity-0 group-hover:opacity-100">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors group">
+<td class="px-4 py-3 whitespace-nowrap">
+<a class="font-medium text-primary hover:underline" href="#">Q-1004</a>
+</td>
+<td class="px-4 py-3">
+<div class="font-medium text-slate-900 dark:text-slate-100">AutoParts Direct</div>
+<div class="text-xs text-slate-500 dark:text-slate-400">UK-LON</div>
+</td>
+<td class="px-4 py-3 whitespace-nowrap">
+<div class="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+<span class="material-symbols-outlined text-[18px] text-emerald-600">local_shipping</span>
+                                        Land
+                                    </div>
+</td>
+<td class="px-4 py-3 whitespace-nowrap text-slate-600 dark:text-slate-400">FTL</td>
+<td class="px-4 py-3">
+<div class="flex items-center gap-1 text-slate-700 dark:text-slate-300">
+<span>Berlin</span>
+<span class="material-symbols-outlined text-[14px] text-slate-400">arrow_forward</span>
+<span>Madrid</span>
+</div>
+</td>
+<td class="px-4 py-3 whitespace-nowrap text-right font-medium">
+                                    3,100 <span class="text-slate-500 text-xs font-normal">EUR</span>
+</td>
+<td class="px-4 py-3 whitespace-nowrap text-center">
+<span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300 border border-red-200 dark:border-red-800/50">
+                                        Expired
+                                    </span>
+</td>
+<td class="px-4 py-3 whitespace-nowrap text-slate-600 dark:text-slate-400">David Rodriguez</td>
+<td class="px-4 py-3 whitespace-nowrap text-slate-600 dark:text-slate-400">Oct 09, 2023</td>
+<td class="px-4 py-3 whitespace-nowrap text-center">
+<button class="text-slate-400 hover:text-primary transition-colors opacity-0 group-hover:opacity-100">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 5 -->
+<tr class="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors group">
+<td class="px-4 py-3 whitespace-nowrap">
+<a class="font-medium text-primary hover:underline" href="#">Q-1005</a>
+</td>
+<td class="px-4 py-3">
+<div class="font-medium text-slate-900 dark:text-slate-100">TechNova Solutions</div>
+<div class="text-xs text-slate-500 dark:text-slate-400">JP-TYO</div>
+</td>
+<td class="px-4 py-3 whitespace-nowrap">
+<div class="flex items-center gap-2 text-slate-700 dark:text-slate-300">
+<span class="material-symbols-outlined text-[18px] text-sky-500">flight</span>
+                                        Air
+                                    </div>
+</td>
+<td class="px-4 py-3 whitespace-nowrap text-slate-600 dark:text-slate-400">Express</td>
+<td class="px-4 py-3">
+<div class="flex items-center gap-1 text-slate-700 dark:text-slate-300">
+<span>Tokyo</span>
+<span class="material-symbols-outlined text-[14px] text-slate-400">arrow_forward</span>
+<span>London</span>
+</div>
+</td>
+<td class="px-4 py-3 whitespace-nowrap text-right font-medium">
+                                    18,900 <span class="text-slate-500 text-xs font-normal">USD</span>
+</td>
+<td class="px-4 py-3 whitespace-nowrap text-center">
+<span class="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50">
+                                        Pending
+                                    </span>
+</td>
+<td class="px-4 py-3 whitespace-nowrap text-slate-600 dark:text-slate-400">Michael Chang</td>
+<td class="px-4 py-3 whitespace-nowrap text-slate-600 dark:text-slate-400">Oct 08, 2023</td>
+<td class="px-4 py-3 whitespace-nowrap text-center">
+<button class="text-slate-400 hover:text-primary transition-colors opacity-0 group-hover:opacity-100">
+<span class="material-symbols-outlined text-[20px]">more_vert</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination -->
+<div class="p-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex items-center justify-between">
+<p class="text-sm text-slate-500 dark:text-slate-400">Showing <span class="font-medium text-slate-900 dark:text-slate-100">1</span> to <span class="font-medium text-slate-900 dark:text-slate-100">5</span> of <span class="font-medium text-slate-900 dark:text-slate-100">42</span> results</p>
+<div class="flex items-center gap-1">
+<button class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-50" disabled="">
+<span class="material-symbols-outlined text-[18px]">chevron_left</span>
+</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg bg-primary text-white text-sm font-medium">1</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 text-sm font-medium transition-colors">2</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 text-sm font-medium transition-colors">3</button>
+<span class="text-slate-400 px-1">...</span>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 text-sm font-medium transition-colors">9</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

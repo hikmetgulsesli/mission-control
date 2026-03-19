@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Logistics CRM Dashboard - Collapsed Sidebar</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#6324eb",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#161121",
+                        "slate-50": "#f8fafc",
+                        "slate-100": "#f1f5f9",
+                        "slate-200": "#e2e8f0",
+                        "slate-300": "#cbd5e1",
+                        "slate-400": "#94a3b8",
+                        "slate-500": "#64748b",
+                        "slate-600": "#475569",
+                        "slate-700": "#334155",
+                        "slate-800": "#1e293b",
+                        "slate-900": "#0f172a",
+                        "amber-500": "#f59e0b",
+                        "blue-600": "#2563eb",
+                        "green-600": "#16a34a",
+                        "red-600": "#dc2626"
+                    },
+                    fontFamily: {
+                        "display": ["Plus Jakarta Sans", "sans-serif"]
+                    },
+                    borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" },
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.fill {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100 min-h-screen flex flex-col antialiased">
+<!-- Top Navigation -->
+<header class="flex items-center justify-between whitespace-nowrap border-b border-solid border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-6 py-3 sticky top-0 z-10">
+<!-- Breadcrumb / Logo Area -->
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 text-primary">
+<span class="material-symbols-outlined fill text-2xl">local_shipping</span>
+<span class="font-bold text-lg tracking-tight hidden sm:block">LogiCRM</span>
+</div>
+<div class="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-2"></div>
+<div class="flex items-center gap-2">
+<a class="text-slate-500 dark:text-slate-400 hover:text-primary transition-colors text-sm font-medium" href="#">Dashboard</a>
+<span class="text-slate-400 dark:text-slate-500 text-sm material-symbols-outlined text-[16px]">chevron_right</span>
+<span class="text-slate-900 dark:text-slate-100 text-sm font-semibold">Overview</span>
+</div>
+</div>
+<!-- Right Actions -->
+<div class="flex items-center gap-4">
+<!-- Search -->
+<div class="relative hidden md:block w-64">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[20px]">search</span>
+<input class="w-full h-9 pl-10 pr-4 rounded-full bg-slate-100 dark:bg-slate-800 border-none text-sm focus:ring-2 focus:ring-primary/50 text-slate-900 dark:text-slate-100 placeholder:text-slate-500 dark:placeholder:text-slate-400" placeholder="Search..." type="text"/>
+</div>
+<div class="flex gap-2">
+<button class="flex items-center justify-center rounded-full h-9 w-9 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors" title="Theme">
+<span class="material-symbols-outlined text-[20px]">light_mode</span>
+</button>
+<button class="flex items-center justify-center rounded-full h-9 w-9 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors relative" title="Notifications">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+<span class="absolute top-2 right-2.5 w-2 h-2 rounded-full bg-red-600"></span>
+</button>
+</div>
+<div class="w-px h-6 bg-slate-200 dark:bg-slate-700"></div>
+<button class="flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-full pr-2 transition-colors">
+<div class="bg-primary/20 bg-cover bg-center rounded-full size-9 border border-primary/30" data-alt="User profile avatar" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDvNJRYOk2068e0PgzmSJLk6nG0l5qfA8QaQuyKdeH2KBh9OicbQd-krwikQ1AE3BQCNIehHZvYeN3N-2GFn05u0VNxsx5uwzc_F0Qgnp5q1bJNN1CSWPNqSSSxio4YhETZ1kCWbESvS2PWNyy6Env6LFuC3Bz6jsqxpWUbOSgoPYa6AfBI1mDcexRz6KXp4txZtdhq2aIiUsRLkeDqfiqJ2s67lX2aGzSiBVtegaEpXwZgfQPbn_v4GAdYpMpeOBDK2sNzACsChVbD");'></div>
+<div class="flex flex-col items-start hidden sm:block">
+<span class="text-sm font-semibold leading-none">Jane Doe</span>
+<span class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Admin</span>
+</div>
+<span class="material-symbols-outlined text-slate-400 hidden sm:block">arrow_drop_down</span>
+</button>
+</div>
+</header>
+<div class="flex flex-1 overflow-hidden">
+<!-- Collapsed Sidebar -->
+<aside class="w-[72px] flex-shrink-0 flex flex-col justify-between bg-white dark:bg-slate-900 border-r border-solid border-slate-200 dark:border-slate-800 py-6 overflow-y-auto">
+<nav class="flex flex-col items-center gap-4 px-2">
+<button class="w-12 h-12 flex items-center justify-center rounded-xl bg-primary/10 text-primary mb-2 transition-colors group relative" title="Dashboard">
+<span class="material-symbols-outlined fill text-[24px]">grid_view</span>
+<!-- Tooltip -->
+<span class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity">Dashboard</span>
+</button>
+<button class="w-12 h-12 flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 transition-colors group relative" title="Customers">
+<span class="material-symbols-outlined text-[24px]">group</span>
+<span class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity">Customers</span>
+</button>
+<button class="w-12 h-12 flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 transition-colors group relative" title="Quotes">
+<span class="material-symbols-outlined text-[24px]">description</span>
+<span class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity">Quotes</span>
+</button>
+<button class="w-12 h-12 flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 transition-colors group relative" title="Shipments">
+<span class="material-symbols-outlined text-[24px]">local_shipping</span>
+<span class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity">Shipments</span>
+</button>
+<button class="w-12 h-12 flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 transition-colors group relative" title="Activities">
+<span class="material-symbols-outlined text-[24px]">show_chart</span>
+<span class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity">Activities</span>
+</button>
+</nav>
+<nav class="flex flex-col items-center gap-2 px-2 mt-auto">
+<div class="w-8 h-px bg-slate-200 dark:bg-slate-700 my-2"></div>
+<button class="w-12 h-12 flex items-center justify-center rounded-xl text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100 transition-colors group relative" title="Settings">
+<span class="material-symbols-outlined text-[24px]">settings</span>
+<span class="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-50 transition-opacity">Settings</span>
+</button>
+</nav>
+</aside>
+<!-- Main Content -->
+<main class="flex-1 overflow-y-auto p-6 md:p-8">
+<div class="max-w-6xl mx-auto space-y-8">
+<!-- Page Header -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+<div>
+<h1 class="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Dashboard Overview</h1>
+<p class="text-slate-500 dark:text-slate-400 mt-1">Welcome back. Here's what's happening with your logistics today.</p>
+</div>
+<div class="flex gap-3">
+<button class="flex items-center gap-2 px-4 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[18px]">download</span>
+                            Export
+                        </button>
+<button class="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary hover:bg-primary/90 text-white text-sm font-medium transition-colors shadow-sm">
+<span class="material-symbols-outlined text-[18px]">add</span>
+                            New Quote
+                        </button>
+</div>
+</div>
+<!-- Key Metrics -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+<!-- Metric Card 1 -->
+<div class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-3">
+<div class="flex justify-between items-start">
+<div class="p-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400">
+<span class="material-symbols-outlined text-[20px]">group</span>
+</div>
+<span class="flex items-center text-xs font-medium text-green-600 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded-full">
+<span class="material-symbols-outlined text-[14px] mr-1">trending_up</span>
+                                +12%
+                            </span>
+</div>
+<div>
+<p class="text-sm font-medium text-slate-500 dark:text-slate-400">Total Customers</p>
+<h3 class="text-2xl font-bold text-slate-900 dark:text-white mt-1">1,248</h3>
+</div>
+</div>
+<!-- Metric Card 2 -->
+<div class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-3">
+<div class="flex justify-between items-start">
+<div class="p-2 rounded-lg bg-primary/10 text-primary">
+<span class="material-symbols-outlined text-[20px]">description</span>
+</div>
+<span class="flex items-center text-xs font-medium text-green-600 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded-full">
+<span class="material-symbols-outlined text-[14px] mr-1">trending_up</span>
+                                +5%
+                            </span>
+</div>
+<div>
+<p class="text-sm font-medium text-slate-500 dark:text-slate-400">Active Quotes</p>
+<h3 class="text-2xl font-bold text-slate-900 dark:text-white mt-1">342</h3>
+</div>
+</div>
+<!-- Metric Card 3 -->
+<div class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-3">
+<div class="flex justify-between items-start">
+<div class="p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-500">
+<span class="material-symbols-outlined text-[20px]">pending_actions</span>
+</div>
+<span class="flex items-center text-xs font-medium text-red-600 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded-full">
+<span class="material-symbols-outlined text-[14px] mr-1">trending_down</span>
+                                -2%
+                            </span>
+</div>
+<div>
+<p class="text-sm font-medium text-slate-500 dark:text-slate-400">Pending Approvals</p>
+<h3 class="text-2xl font-bold text-slate-900 dark:text-white mt-1">15</h3>
+</div>
+</div>
+<!-- Metric Card 4 -->
+<div class="bg-white dark:bg-slate-900 rounded-xl p-5 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col gap-3">
+<div class="flex justify-between items-start">
+<div class="p-2 rounded-lg bg-green-50 dark:bg-green-900/20 text-green-600">
+<span class="material-symbols-outlined text-[20px]">task_alt</span>
+</div>
+<span class="flex items-center text-xs font-medium text-green-600 bg-green-50 dark:bg-green-900/20 px-2 py-1 rounded-full">
+<span class="material-symbols-outlined text-[14px] mr-1">trending_up</span>
+                                +18%
+                            </span>
+</div>
+<div>
+<p class="text-sm font-medium text-slate-500 dark:text-slate-400">Completed Activities</p>
+<h3 class="text-2xl font-bold text-slate-900 dark:text-white mt-1">89</h3>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>
