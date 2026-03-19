@@ -153,4 +153,13 @@ export const api = {
     return fetchApi<any[]>('/api/live-feed' + qs);
   },
   importRules: (data: any) => fetchApi<any>('/api/rules/import', { method: 'POST', headers: CT_JSON, body: JSON.stringify(data) }),
+  // Performance
+  performance: () => fetchApi<any>('/api/performance'),
+  modelLimits: () => fetchApi<any[]>('/api/model-limits'),
+  quota: () => fetchApi<any>('/api/quota'),
+  // Scrape
+  scrapeHistory: () => fetchApi<any[]>('/api/scrape/history'),
+  scrape: (data: { url: string; adaptor?: string; format?: string }) => fetchApi<any>('/api/scrape', { method: 'POST', headers: CT_JSON, body: JSON.stringify(data) }),
+  // Agent update
+  updateAgent: (id: string, data: any) => fetchApi<any>(`/api/agents/${id}`, { method: 'PATCH', headers: CT_JSON, body: JSON.stringify(data) }),
 };

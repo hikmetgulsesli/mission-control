@@ -1,4 +1,5 @@
 import { StrictMode } from 'react';
+import './lib/fetch-interceptor';
 import { createRoot } from 'react-dom/client';
 import { ToastProvider } from './components/Toast';
 import App from './App';

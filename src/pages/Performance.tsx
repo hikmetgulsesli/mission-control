@@ -25,7 +25,7 @@ interface PerformanceData {
 }
 
 function fetchPerformance() {
-  return fetch('/api/performance').then(r => r.json());
+  return api.performance();
 }
 
 export function Performance() {

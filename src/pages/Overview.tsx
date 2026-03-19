@@ -1,3 +1,4 @@
+import { api } from "../lib/api";
 import { usePolling } from '../hooks/usePolling';
 import { useAppStore } from '../store/appStore';
 import { AgentCard } from '../components/AgentCard';
@@ -33,8 +34,8 @@ function CronStatus({ crons }: { crons: CronStatusItem[] }) {
 }
 
 function ModelLimits() {
-  const { data } = usePolling<ModelLimitItem[]>(() => fetch('/api/model-limits').then(r => r.json()), 60000);
-  const { data: quota } = usePolling<Record<string, { limit: number | null; used: number; tokens: number; windowHours: number }>>(() => fetch('/api/quota').then(r => r.json()), 60000);
+  const { data } = usePolling<ModelLimitItem[]>(() => api.modelLimits(), 60000);
+  const { data: quota } = usePolling<Record<string, { limit: number | null; used: number; tokens: number; windowHours: number }>>(() => api.quota(), 60000);
 
   if (!data || !Array.isArray(data) || data.length === 0) return null;
 
