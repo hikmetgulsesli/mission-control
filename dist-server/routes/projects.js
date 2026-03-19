@@ -98,7 +98,9 @@ router.get("/projects/next-port", async (_req, res) => {
                 }
             }
         }
-        catch { }
+        catch (e) {
+            console.warn("exec failed:", e?.message || e);
+        }
         // Setfarm project port range starts at 3507
         let port = 3507;
         while (usedPorts.has(port))
@@ -218,7 +220,7 @@ router.get("/projects/:id/export", async (req, res) => {
                     runIds.push(project.workflowRunId);
                 runs = allRuns.filter((r) => runIds.includes(r.id));
             }
-            catch { }
+            catch { /* fetch failed */ }
         }
         const filename = project.id + "-export.json";
         res.setHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
@@ -262,7 +264,9 @@ function systemctlAction(action, service) {
         execFileSync("systemctl", ["--user", cmd, service], { timeout: 10000, stdio: 'pipe' });
         return;
     }
-    catch { }
+    catch (e) {
+        console.warn("exec failed:", e?.message || e);
+    }
     execFileSync("sudo", ["systemctl", cmd, service], { timeout: 10000, stdio: 'pipe' });
 }
 router.post("/projects/:id/toggle", async (req, res) => {
@@ -295,23 +299,29 @@ router.post("/projects/:id/toggle", async (req, res) => {
                 try {
                     execFileSync("fuser", ["-k", `${port}/tcp`], { timeout: 5000, stdio: 'pipe' });
                 }
-                catch { }
+                catch (e) {
+                    console.warn("exec failed:", e?.message || e);
+                }
             }
             try {
                 systemctlAction("stop", service);
             }
-            catch { }
+            catch (e) {
+                console.warn("exec failed:", e?.message || e);
+            }
             // Disable so systemd won't auto-restart
             try {
                 execFileSync("systemctl", ["--user", "disable", service], { timeout: 5000, stdio: 'pipe' });
             }
-            catch { }
+            catch (e) {
+                console.warn("exec failed:", e?.message || e);
+            }
             // Marker file for medic guard
             try {
                 mkdirSync(DISABLED_DIR, { recursive: true });
                 writeFileSync(join(DISABLED_DIR, service), new Date().toISOString());
             }
-            catch { }
+            catch (e) { /* cleanup */ }
             // Persist state
             project.manuallyDisabled = true;
             saveProjects(projects);
@@ -321,7 +331,7 @@ router.post("/projects/:id/toggle", async (req, res) => {
             try {
                 execFileSync("systemctl", ["--user", "enable", service], { timeout: 5000, stdio: 'pipe' });
             }
-            catch { }
+            catch (e) { /* cleanup */ }
             try {
                 systemctlAction("start", service);
             }
@@ -333,7 +343,7 @@ router.post("/projects/:id/toggle", async (req, res) => {
             try {
                 unlinkSync(join(DISABLED_DIR, service));
             }
-            catch { }
+            catch (e) { /* cleanup */ }
             project.manuallyDisabled = false;
             saveProjects(projects);
         }
@@ -367,17 +377,21 @@ router.post("/projects/stop-all", async (_req, res) => {
                 try {
                     execFileSync("fuser", ["-k", `${port}/tcp`], { timeout: 5000, stdio: 'pipe' });
                 }
-                catch { }
+                catch (e) {
+                    console.warn("exec failed:", e?.message || e);
+                }
                 systemctlAction("stop", service);
                 try {
                     execFileSync("systemctl", ["--user", "disable", service], { timeout: 5000, stdio: 'pipe' });
                 }
-                catch { }
+                catch (e) {
+                    console.warn("exec failed:", e?.message || e);
+                }
                 try {
                     mkdirSync(DISABLED_DIR, { recursive: true });
                     writeFileSync(join(DISABLED_DIR, service), new Date().toISOString());
                 }
-                catch { }
+                catch (e) { /* cleanup */ }
                 project.manuallyDisabled = true;
                 results.push({ id: project.id, name: project.name, stopped: true });
             }
@@ -417,12 +431,14 @@ router.post("/projects/start-all", async (_req, res) => {
                 try {
                     execFileSync("systemctl", ["--user", "enable", service], { timeout: 5000, stdio: 'pipe' });
                 }
-                catch { }
+                catch (e) {
+                    console.warn("exec failed:", e?.message || e);
+                }
                 systemctlAction("start", service);
                 try {
                     unlinkSync(join(DISABLED_DIR, service));
                 }
-                catch { }
+                catch (e) { /* cleanup */ }
                 results.push({ id: project.id, name: project.name, started: true });
             }
             catch (err) {
@@ -470,7 +486,7 @@ router.delete("/projects/:id", async (req, res) => {
                 try {
                     unlinkSync(join(DISABLED_DIR, project.service));
                 }
-                catch { }
+                catch (e) { /* cleanup */ }
                 log.push("Service " + project.service + " stopped and disabled");
             }
             catch {
@@ -637,7 +653,7 @@ export function createProjectProgrammatic(data) {
                         writeFileSync(PROJECTS_FILE, JSON.stringify(all, null, 2));
                     }
                 }
-                catch { }
+                catch { /* JSON parse failed */ }
             }
             return { created: false, project: repoMatch, reason: "exists" };
         }

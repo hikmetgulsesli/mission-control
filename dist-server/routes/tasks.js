@@ -86,7 +86,7 @@ async function syncTasksWithStories() {
                         body: JSON.stringify({ status: newStatus }),
                     });
                 }
-                catch { }
+                catch { /* proxy request failed */ }
             }
         }
         // Refresh in_progress task timestamps so pulse animation works
@@ -99,11 +99,11 @@ async function syncTasksWithStories() {
                         body: JSON.stringify({ ...task, updated_at: new Date().toISOString() }),
                     });
                 }
-                catch { }
+                catch { /* proxy request failed */ }
             }
         }
     }
-    catch { }
+    catch { /* proxy request failed */ }
 }
 router.get("/tasks", async (_req, res) => {
     try {
@@ -172,8 +172,12 @@ router.post("/tasks/:id/images", express.json({ limit: "10mb" }), async (req, re
         const { base64, filename } = req.body;
         if (!base64 || !filename)
             return res.status(400).json({ error: "base64 and filename required" });
+        // File type validation
+        const ALLOWED_EXT = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg']);
+        const ext = filename.split(".").pop()?.toLowerCase() || "";
+        if (!ALLOWED_EXT.has(ext))
+            return res.status(400).json({ error: "Invalid file type. Allowed: " + [...ALLOWED_EXT].join(", ") });
         mkdirSync(UPLOADS_DIR, { recursive: true });
-        const ext = filename.split(".").pop() || "png";
         const savedName = `${Date.now()}-${randomUUID().slice(0, 8)}.${ext}`;
         const filePath = join(UPLOADS_DIR, savedName);
         writeFileSync(filePath, Buffer.from(base64, "base64"));

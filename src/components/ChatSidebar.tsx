@@ -45,7 +45,7 @@ export function ChatSidebar({ agents, selected, onSelect, loading }: Props) {
             agentId: agent.id,
             lastMessage: last.text?.slice(0, 80) || '',
             lastTimestamp: last.timestamp ? new Date(last.timestamp).getTime() : Date.now(),
-            messageCount: data.total || msgs.length,
+            messageCount: (data as any).total || msgs.length,
           });
         }
       }

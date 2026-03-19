@@ -1,3 +1,5 @@
+import { homedir } from 'os';
+import { join } from 'path';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 function loadEnv() {
@@ -35,4 +37,20 @@ export const config = {
     gatewayToken: process.env.GATEWAY_TOKEN || '',
     projectsJson: process.env.PROJECTS_JSON || '/home/setrox/projects/mission-control/projects.json',
     wsOrigin: process.env.WS_ORIGIN || '',
+    authToken: process.env.MC_AUTH_TOKEN || process.env.GATEWAY_TOKEN || '',
+};
+export const PATHS = {
+    openclawDir: join(homedir(), '.openclaw'),
+    agentsDir: join(homedir(), '.openclaw/agents'),
+    configFile: join(homedir(), '.openclaw/openclaw.json'),
+    setfarmDb: join(homedir(), '.openclaw/setfarm/setfarm.db'),
+    setfarmDir: join(homedir(), '.openclaw/setfarm'),
+    projectsDir: join(homedir(), 'projects'),
+    mobileDir: join(homedir(), 'mobile'),
+    workspaceDir: join(homedir(), '.openclaw/workspace'),
+    setfarmRepoDir: join(homedir(), '.openclaw/setfarm-repo'),
+    npmGlobalBin: join(homedir(), '.npm-global/bin'),
+    eventsJsonl: join(homedir(), '.openclaw/setfarm/events.jsonl'),
+    portRegistry: join(homedir(), '.openclaw/workspace/references/port-registry.md'),
+    serveBin: join(homedir(), '.npm-global/bin/serve'),
 };

@@ -1,4 +1,5 @@
 import { homedir } from 'os';
+import { PATHS } from '../config.js';
 import path from 'path';
 import { createHash } from 'crypto';
 import { execFile as execFileCb } from 'child_process';
@@ -7,7 +8,7 @@ import { readFile } from 'fs/promises';
 
 const execFileAsync = promisify(execFileCb);
 
-const DB_PATH = path.join(homedir(), '.openclaw/setfarm/setfarm.db');
+const DB_PATH = PATHS.setfarmDb;
 const STUCK_DETECTION_MS = 10 * 60 * 1000;  // 10min - show in UI
 const STUCK_THRESHOLD_MS = 15 * 60 * 1000;  // 15min - auto-unstick
 const MAX_AUTO_UNSTICK = 3;
@@ -668,7 +669,7 @@ export async function deleteRun(runId: string, cleanupProject = false) {
             await execFileAsync('systemctl', ['--user', 'stop', svc], { timeout: 5000 });
             await execFileAsync('systemctl', ['--user', 'disable', svc], { timeout: 5000 });
             log.push('Service stopped: ' + svc);
-          } catch {}
+          } catch (e: any) { console.warn("exec failed:", e?.message || e); }
         }
       }
     }

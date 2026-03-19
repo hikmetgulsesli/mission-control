@@ -11,7 +11,7 @@ export function useWebSocket() {
   const [messages, setMessages] = useState<WsMessage[]>([]);
   const [connected, setConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout>>();
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const closedIntentionally = useRef(false);
 
   useEffect(() => {
@@ -21,7 +21,9 @@ export function useWebSocket() {
       if (closedIntentionally.current) return;
 
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+      const token = (document.querySelector('meta[name="mc-token"]') as HTMLMetaElement)?.content || '';
+      const wsUrl = `${protocol}//${window.location.host}/ws${token ? '?token=' + encodeURIComponent(token) : ''}`;
+      const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {

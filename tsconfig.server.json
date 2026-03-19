@@ -5,7 +5,7 @@
     "moduleResolution": "bundler",
     "outDir": "./dist-server",
     "rootDir": "./server",
-    "strict": false,
+    "strict": true,
     
     "esModuleInterop": true,
     "skipLibCheck": true,

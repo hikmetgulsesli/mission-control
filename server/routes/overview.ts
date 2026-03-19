@@ -45,7 +45,7 @@ async function fetchRecentDeploys(): Promise<any[]> {
         try {
           await runCli('curl', ['-s', '-o', '/dev/null', '-w', '%{http_code}', '--connect-timeout', '1', 'http://127.0.0.1:' + port + '/']);
           online = true;
-        } catch {}
+        } catch { /* CLI call failed */ }
         const subdomain = p.domain ? p.domain.replace('.setrox.com.tr', '') : '';
         return { id: p.id, name: p.name, port, subdomain, online, emoji: p.emoji || '' };
       })

@@ -191,6 +191,8 @@ export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefre
   const [hiddenRuns, setHiddenRuns] = useState<Set<string>>(new Set());
   const [deleteModal, setDeleteModal] = useState<{ runId: string; runNumber: number; task: string } | null>(null);
   const [deleteInput, setDeleteInput] = useState('');
+  const [deleteSteps, setDeleteSteps] = useState<Array<{id: string; label: string; status: string; detail?: string}>>([]);
+  const [deleteResult, setDeleteResult] = useState<{success?: boolean; error?: string} | null>(null);
   const [deleteCleanup, setDeleteCleanup] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('all');
 

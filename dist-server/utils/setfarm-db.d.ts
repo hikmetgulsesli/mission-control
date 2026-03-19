@@ -37,14 +37,14 @@ export declare function getRunDetail(runId: string): Promise<{
     run: any;
     steps: any[];
     stories: any[];
-}>;
+} | null>;
 export declare function diagnoseStuckStep(runId: string, stepId?: string): Promise<{
-    stepId: string;
+    stepId: string | undefined;
     cause: string;
     fixable: boolean;
     description: string;
     excerpt: string;
-    suggestedFix: any;
+    suggestedFix: null;
     storyId?: undefined;
 } | {
     stepId: any;
@@ -53,7 +53,7 @@ export declare function diagnoseStuckStep(runId: string, stepId?: string): Promi
     fixable: boolean;
     description: string;
     excerpt: string;
-    suggestedFix: string;
+    suggestedFix: string | null;
 }>;
 interface AutoFixResult {
     success: boolean;

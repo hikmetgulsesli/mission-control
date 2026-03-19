@@ -1,9 +1,14 @@
 import type { OverviewData, Agent, Session, CronJob, Workflow, Run, SystemMetrics, DockerContainer, CostData, Task, ProjectData, TaskCreateData } from './types';
 
 const BASE = '';
+const AUTH_TOKEN = (document.querySelector('meta[name="mc-token"]') as HTMLMetaElement)?.content || '';
 
 async function fetchApi<T>(path: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, opts);
+  const headers: Record<string, string> = {
+    ...(AUTH_TOKEN ? { 'X-MC-Token': AUTH_TOKEN } : {}),
+    ...((opts?.headers as Record<string, string>) || {}),
+  };
+  const res = await fetch(`${BASE}${path}`, { ...opts, headers });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`API ${res.status}: ${text}`);

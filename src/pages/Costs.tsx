@@ -26,7 +26,7 @@ interface CostDataRaw {
 }
 
 export function Costs() {
-  const { data, loading } = usePolling<CostDataRaw>(api.costs, 60000);
+  const { data, loading } = usePolling<CostDataRaw>(() => api.costs() as Promise<any>, 60000);
 
   if (loading || !data) return <div className="page-loading">Loading costs...</div>;
 

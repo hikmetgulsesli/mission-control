@@ -64,9 +64,9 @@ function ModelLimits() {
                 <span className="model-limit-item__usage">
                   {used} calls / 5h
                 </span>
-                {p.usage?.today?.cost > 0 && (
+                {(p.usage?.today?.cost ?? 0) > 0 && (
                   <span className="model-limit-item__today-cost">
-                    ${p.usage.today.cost}
+                    ${p.usage?.today?.cost}
                   </span>
                 )}
               </div>
@@ -83,9 +83,9 @@ function ModelLimits() {
                   <span className="quota-bar__label" style={{ marginLeft: 0 }}>{used} calls / 5h</span>
                 </div>
               )}
-              {p.models?.length > 0 && (
+              {(p.models?.length ?? 0) > 0 && (
                 <div className="model-limit-item__models">
-                  {p.models.map((m: ModelBadge) => (
+                  {p.models?.map((m: ModelBadge) => (
                     <span key={m.id} className={`model-limit-item__model-badge model-limit-item__model-badge--${m.status}`}>
                       {m.name}
                     </span>

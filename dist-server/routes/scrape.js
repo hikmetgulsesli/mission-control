@@ -40,6 +40,17 @@ router.post('/scrape', async (req, res) => {
         if (!url || typeof url !== 'string') {
             return res.status(400).json({ success: false, error: 'URL is required' });
         }
+        // SSRF protection: block internal/private URLs
+        try {
+            const parsed = new URL(url);
+            const blocked = ['127.0.0.1', 'localhost', '0.0.0.0', '169.254.169.254'];
+            if (blocked.includes(parsed.hostname) || parsed.hostname.startsWith('10.') || parsed.hostname.startsWith('192.168.') || parsed.hostname.startsWith('172.')) {
+                return res.status(400).json({ success: false, error: 'Internal URLs not allowed' });
+            }
+        }
+        catch {
+            return res.status(400).json({ success: false, error: 'Invalid URL' });
+        }
         const input = JSON.stringify({
             url,
             adaptor: adaptor ?? 'auto',

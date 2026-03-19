@@ -97,7 +97,7 @@ router.get("/projects/next-port", async (_req, res) => {
           if (p >= 3000 && p <= 9999) usedPorts.add(p);
         }
       }
-    } catch {}
+    } catch (e: any) { console.warn("exec failed:", e?.message || e); }
     // Setfarm project port range starts at 3507
     let port = 3507;
     while (usedPorts.has(port)) port++;
@@ -208,7 +208,7 @@ router.get("/projects/:id/export", async (req, res) => {
         const runIds = [...(project.setfarmRunIds || [])];
         if (project.workflowRunId) runIds.push(project.workflowRunId);
         runs = allRuns.filter((r: any) => runIds.includes(r.id));
-      } catch {}
+      } catch { /* fetch failed */ }
     }
 
     const filename = project.id + "-export.json";
@@ -256,7 +256,7 @@ function systemctlAction(action: string, service: string) {
   try {
     execFileSync("systemctl", ["--user", cmd, service], { timeout: 10000, stdio: 'pipe' });
     return;
-  } catch {}
+  } catch (e: any) { console.warn("exec failed:", e?.message || e); }
   execFileSync("sudo", ["systemctl", cmd, service], { timeout: 10000, stdio: 'pipe' });
 }
 
@@ -288,19 +288,19 @@ router.post("/projects/:id/toggle", async (req, res) => {
       if (port) {
         try {
           execFileSync("fuser", ["-k", `${port}/tcp`], { timeout: 5000, stdio: 'pipe' });
-        } catch {}
+        } catch (e: any) { console.warn("exec failed:", e?.message || e); }
       }
-      try { systemctlAction("stop", service); } catch {}
+      try { systemctlAction("stop", service); } catch (e: any) { console.warn("exec failed:", e?.message || e); }
       // Disable so systemd won't auto-restart
-      try { execFileSync("systemctl", ["--user", "disable", service], { timeout: 5000, stdio: 'pipe' }); } catch {}
+      try { execFileSync("systemctl", ["--user", "disable", service], { timeout: 5000, stdio: 'pipe' }); } catch (e: any) { console.warn("exec failed:", e?.message || e); }
       // Marker file for medic guard
-      try { mkdirSync(DISABLED_DIR, { recursive: true }); writeFileSync(join(DISABLED_DIR, service), new Date().toISOString()); } catch {}
+      try { mkdirSync(DISABLED_DIR, { recursive: true }); writeFileSync(join(DISABLED_DIR, service), new Date().toISOString()); } catch (e: any) { /* cleanup */ }
       // Persist state
       project.manuallyDisabled = true;
       saveProjects(projects);
     } else {
       // Re-enable + start
-      try { execFileSync("systemctl", ["--user", "enable", service], { timeout: 5000, stdio: 'pipe' }); } catch {}
+      try { execFileSync("systemctl", ["--user", "enable", service], { timeout: 5000, stdio: 'pipe' }); } catch (e: any) { /* cleanup */ }
       try {
         systemctlAction("start", service);
       } catch (err: any) {
@@ -308,7 +308,7 @@ router.post("/projects/:id/toggle", async (req, res) => {
         return;
       }
       // Remove marker file
-      try { unlinkSync(join(DISABLED_DIR, service)); } catch {}
+      try { unlinkSync(join(DISABLED_DIR, service)); } catch (e: any) { /* cleanup */ }
       project.manuallyDisabled = false;
       saveProjects(projects);
     }
@@ -341,10 +341,10 @@ router.post("/projects/stop-all", async (_req, res) => {
       if (!isOnline) continue;
 
       try {
-        try { execFileSync("fuser", ["-k", `${port}/tcp`], { timeout: 5000, stdio: 'pipe' }); } catch {}
+        try { execFileSync("fuser", ["-k", `${port}/tcp`], { timeout: 5000, stdio: 'pipe' }); } catch (e: any) { console.warn("exec failed:", e?.message || e); }
         systemctlAction("stop", service);
-        try { execFileSync("systemctl", ["--user", "disable", service], { timeout: 5000, stdio: 'pipe' }); } catch {}
-        try { mkdirSync(DISABLED_DIR, { recursive: true }); writeFileSync(join(DISABLED_DIR, service), new Date().toISOString()); } catch {}
+        try { execFileSync("systemctl", ["--user", "disable", service], { timeout: 5000, stdio: 'pipe' }); } catch (e: any) { console.warn("exec failed:", e?.message || e); }
+        try { mkdirSync(DISABLED_DIR, { recursive: true }); writeFileSync(join(DISABLED_DIR, service), new Date().toISOString()); } catch (e: any) { /* cleanup */ }
         project.manuallyDisabled = true;
         results.push({ id: project.id, name: project.name, stopped: true });
       } catch (err: any) {
@@ -380,9 +380,9 @@ router.post("/projects/start-all", async (_req, res) => {
       if (isOnline) continue;
 
       try {
-        try { execFileSync("systemctl", ["--user", "enable", service], { timeout: 5000, stdio: 'pipe' }); } catch {}
+        try { execFileSync("systemctl", ["--user", "enable", service], { timeout: 5000, stdio: 'pipe' }); } catch (e: any) { console.warn("exec failed:", e?.message || e); }
         systemctlAction("start", service);
-        try { unlinkSync(join(DISABLED_DIR, service)); } catch {}
+        try { unlinkSync(join(DISABLED_DIR, service)); } catch (e: any) { /* cleanup */ }
         results.push({ id: project.id, name: project.name, started: true });
       } catch (err: any) {
         results.push({ id: project.id, name: project.name, started: false, error: err.message });
@@ -426,7 +426,7 @@ router.delete("/projects/:id", async (req, res) => {
           execFileSync("sudo", ["systemctl", "disable", project.service], { timeout: 10000, stdio: 'pipe' });
         }
         // Clean up marker file
-        try { unlinkSync(join(DISABLED_DIR, project.service)); } catch {}
+        try { unlinkSync(join(DISABLED_DIR, project.service)); } catch (e: any) { /* cleanup */ }
         log.push("Service " + project.service + " stopped and disabled");
       } catch { log.push("Service " + project.service + " stop failed"); }
     }
@@ -590,7 +590,7 @@ export function createProjectProgrammatic(data: {
           const all = JSON.parse(readFileSync(PROJECTS_FILE, "utf-8"));
           const idx = all.findIndex((p: any) => p.id === repoMatch.id);
           if (idx >= 0) { all[idx].repo = data.repo; writeFileSync(PROJECTS_FILE, JSON.stringify(all, null, 2)); }
-        } catch {}
+        } catch { /* JSON parse failed */ }
       }
       return { created: false, project: repoMatch, reason: "exists" };
     }

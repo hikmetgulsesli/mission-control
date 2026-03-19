@@ -47,7 +47,7 @@ export function AgentEditModal({ agent, onClose, onSave }: Props) {
   const [name, setName] = useState(agent.identityName || agent.name || meta?.name || agent.id);
   const [role, setRole] = useState(agent.role || meta?.role || '');
   const [model, setModel] = useState(toShortId(agent.model || meta?.model || ''));
-  const [description, setDescription] = useState(agent.description || meta?.description || '');
+  const [description, setDescription] = useState(agent.description || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');

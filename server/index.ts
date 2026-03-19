@@ -1,4 +1,5 @@
 import express from 'express';
+import { readFileSync } from 'fs';
 import helmet from 'helmet';
 import { createServer } from 'http';
 import { resolve, join } from 'path';
@@ -31,10 +32,32 @@ import discordNotifyRouter from "./routes/discord-notify.js";
 import scrapeRouter from "./routes/scrape.js";
 import rulesRouter from "./routes/rules.js";
 import liveFeedRouter from "./routes/live-feed.js";
+import { authMiddleware } from './middleware/auth.js';
+import rateLimit from 'express-rate-limit';
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
-app.use(helmet({ contentSecurityPolicy: false }));
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      connectSrc: ["'self'", "ws:", "wss:"],
+      imgSrc: ["'self'", "data:", "blob:"],
+      fontSrc: ["'self'"],
+    }
+  }
+}));
+
+// Auth middleware
+app.use('/api', authMiddleware);
+
+// Rate limiting
+app.use('/api', rateLimit({ windowMs: 60000, max: 200, standardHeaders: true }));
+app.use('/api/terminal', rateLimit({ windowMs: 60000, max: 20 }));
+app.use('/api/files/write', rateLimit({ windowMs: 60000, max: 30 }));
+app.use('/api/files/delete', rateLimit({ windowMs: 60000, max: 10 }));
 
 // API routes
 app.use('/api', overviewRouter);
@@ -98,7 +121,15 @@ if (existsSync(distDir)) {
     res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
-    res.sendFile(join(distDir, 'index.html'));
+    try {
+      let html = readFileSync(join(distDir, 'index.html'), 'utf-8');
+      if (config.authToken) {
+        html = html.replace('</head>', `<meta name="mc-token" content="${config.authToken}"></head>`);
+      }
+      res.type('html').send(html);
+    } catch {
+      res.sendFile(join(distDir, 'index.html'));
+    }
   });
 }
 
@@ -168,6 +199,11 @@ setInterval(async () => {
 }, MEDIC_INTERVAL_MS);
 
 
+
+// Unhandled rejection handler
+process.on('unhandledRejection', (reason) => {
+  console.error('[MC] Unhandled rejection:', reason);
+});
 
 // Graceful shutdown — release port on SIGTERM/SIGINT
 function shutdown(signal: string) {

@@ -50,6 +50,16 @@ function validateCommand(command: string, args: string[]): string | null {
     if (!safe.includes(args[0])) return `Git subcommand "${args[0]}" is not allowed`;
   }
 
+  if (command === 'openclaw') {
+    const safeSubcmds = new Set(['agents', 'cron', 'doctor', 'status', 'config']);
+    if (args[0] && !safeSubcmds.has(args[0])) return `openclaw subcommand "${args[0]}" not allowed`;
+  }
+
+  if (command === 'setfarm') {
+    const safeSubcmds = new Set(['workflow', 'step', 'medic', 'logs', 'version', 'runs']);
+    if (args[0] && !safeSubcmds.has(args[0])) return `setfarm subcommand "${args[0]}" not allowed`;
+  }
+
   return null;
 }
 

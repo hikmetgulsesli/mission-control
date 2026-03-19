@@ -81,7 +81,7 @@ export function Projects() {
   const [toggling, setToggling] = useState<string | null>(null);
   const [bulkAction, setBulkAction] = useState<string | null>(null);
 
-  const fetchProjects = () => api.projects().then((d) => { setProjects(d); setLoading(false); }).catch(() => setLoading(false));
+  const fetchProjects = () => api.projects().then((d) => { setProjects(d as any); setLoading(false); }).catch(() => setLoading(false));
 
   useEffect(() => {
     fetchProjects();

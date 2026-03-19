@@ -128,12 +128,12 @@ export function Ops() {
                       {diag.excerpt && <div style={{ color: '#888', marginTop: '0.25rem', fontFamily: 'monospace', fontSize: '0.75rem' }}>{diag.excerpt}</div>}
                       <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem' }}>
                         {diag.fixable && (
-                          <button className="stuck-banner__btn" style={{ borderColor: '#0f0' }} disabled={fixing === run.id} onClick={() => handleAutoFix(run.id, diag.cause, diag.storyId)}>
+                          <button className="stuck-banner__btn" style={{ borderColor: '#0f0' }} disabled={fixing === run.id} onClick={() => handleAutoFix(run.id, diag.cause, diag.storyId ?? undefined)}>
                             {fixing === run.id ? 'FIXING...' : 'AUTO-FIX'}
                           </button>
                         )}
                         {diag.storyId && !diag.fixable && (
-                          <button className="stuck-banner__btn" style={{ borderColor: '#f80' }} disabled={fixing === run.id} onClick={() => handleSkipStory(run.id, diag.storyId!, diag.description)}>
+                          <button className="stuck-banner__btn" style={{ borderColor: '#f80' }} disabled={fixing === run.id} onClick={() => handleSkipStory(run.id, diag.storyId ?? '', diag.description)}>
                             {fixing === run.id ? 'SKIPPING...' : 'SKIP STORY'}
                           </button>
                         )}

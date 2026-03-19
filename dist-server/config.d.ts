@@ -11,4 +11,20 @@ export declare const config: {
     gatewayToken: string;
     projectsJson: string;
     wsOrigin: string;
+    authToken: string;
+};
+export declare const PATHS: {
+    readonly openclawDir: string;
+    readonly agentsDir: string;
+    readonly configFile: string;
+    readonly setfarmDb: string;
+    readonly setfarmDir: string;
+    readonly projectsDir: string;
+    readonly mobileDir: string;
+    readonly workspaceDir: string;
+    readonly setfarmRepoDir: string;
+    readonly npmGlobalBin: string;
+    readonly eventsJsonl: string;
+    readonly portRegistry: string;
+    readonly serveBin: string;
 };

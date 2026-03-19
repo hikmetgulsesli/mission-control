@@ -85,20 +85,20 @@ export function WorkflowKanban({ workflows, runs }: Props) {
                       <div className="af-step__label">{STEP_LABELS[step.id] || step.id.toUpperCase()}</div>
                       <div className="af-step__agent">{step.agent}</div>
                       {status === 'running' && <div className="af-step__pulse" />}
-                      {runStep?.retryCount > 0 && <div className="af-step__retry">R{runStep.retryCount}</div>}
+                      {(runStep as any)?.retryCount > 0 && <div className="af-step__retry">R{(runStep as any).retryCount}</div>}
                     </div>
                   </div>
                 );
               })}
             </div>
 
-            {activeRun && activeRun.storyCount > 0 && (
+            {activeRun && (activeRun.storyCount ?? 0) > 0 && (
               <div className="af-pipeline__progress">
                 <div className="af-pipeline__progress-bar">
-                  <div className="af-pipeline__progress-fill" style={{ width: `${Math.round(((activeRun.storiesDone || 0) / activeRun.storyCount) * 100)}%` }} />
+                  <div className="af-pipeline__progress-fill" style={{ width: `${Math.round(((activeRun.storiesDone || 0) / (activeRun.storyCount ?? 1)) * 100)}%` }} />
                 </div>
                 <span className="af-pipeline__progress-text">
-                  {activeRun.storiesDone || 0}/{activeRun.storyCount} stories
+                  {activeRun.storiesDone || 0}/{activeRun.storyCount ?? 0} stories
                 </span>
               </div>
             )}

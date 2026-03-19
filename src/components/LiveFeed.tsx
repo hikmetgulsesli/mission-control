@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 interface LiveEvent {
   id: string;
@@ -61,10 +61,10 @@ function hasDetailData(ev: LiveEvent): boolean {
   return !!(ev.detail || ev.output);
 }
 
-function renderDetailContent(ev: LiveEvent): JSX.Element | null {
+function renderDetailContent(ev: LiveEvent): React.JSX.Element | null {
   if (!ev.detail && !ev.output) return null;
 
-  const lines: JSX.Element[] = [];
+  const lines: React.JSX.Element[] = [];
 
   if (ev.action === 'edit' && ev.detail) {
     ev.detail.split('\n').forEach((line, i) => {

@@ -2,8 +2,9 @@ import { Router } from 'express';
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { join } from 'path';
 import { cached } from '../utils/cache.js';
+import { PATHS } from '../config.js';
 const router = Router();
-const AGENTS_DIR = '/home/setrox/.openclaw/agents';
+const AGENTS_DIR = PATHS.agentsDir;
 const FIVE_HOURS_MS = 5 * 3600 * 1000;
 // Map provider to model substrings to match in JSONL
 const PROVIDER_MODELS = {
@@ -66,14 +67,14 @@ export function countRecentCalls() {
                                 }
                             }
                         }
-                        catch { }
+                        catch { /* best effort */ }
                     }
                 }
-                catch { }
+                catch { /* best effort */ }
             }
         }
     }
-    catch { }
+    catch { /* best effort */ }
     return counts;
 }
 router.get('/quota', async (_req, res) => {

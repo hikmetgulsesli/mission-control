@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from '
 import { join } from 'path';
 import { runCliJson, runCli } from '../utils/cli.js';
 import { cached, setCache } from '../utils/cache.js';
-import { config } from '../config.js';
+import { config, PATHS } from '../config.js';
 
 const router = Router();
 
@@ -12,7 +12,7 @@ const REAL_AGENTS = ['main', 'koda', 'flux', 'atlas', 'iris', 'sentinel', 'ciphe
 
 function getAgentActivity(agentId: string): { lastActive?: string; status: string } {
   const dir = agentId === "main" ? "main" : agentId;
-  const sessionsDir = join("/home/setrox/.openclaw/agents", dir, "sessions");
+  const sessionsDir = join(PATHS.agentsDir, dir, "sessions");
   if (!existsSync(sessionsDir)) return { status: "idle" };
   try {
     const files = readdirSync(sessionsDir)
@@ -204,9 +204,7 @@ router.get('/agents/:id/history', async (req, res) => {
 
     // Find session dir for this agent
     const agentDir = id === 'main' ? 'main' : id;
-    const sessionsDir = `/home/setrox/.openclaw/agents/${agentDir}/sessions`;
-    const { existsSync, readdirSync, readFileSync, statSync } = await import('fs');
-    const { join } = await import('path');
+    const sessionsDir = join(PATHS.agentsDir, agentDir, 'sessions');
 
     if (!existsSync(sessionsDir)) {
       res.json({ messages: [], sessions: [] });
@@ -274,7 +272,7 @@ router.get('/agents/:id/history', async (req, res) => {
               });
             }
           }
-        } catch {}
+        } catch { /* best effort */ }
       }
 
       if (sessionMessages.length > 0) {
@@ -302,9 +300,7 @@ router.get('/agents/:id/live', async (req, res) => {
   try {
     const { id } = req.params;
     const agentDir = id === 'main' ? 'main' : id;
-    const sessionsDir = `/home/setrox/.openclaw/agents/${agentDir}/sessions`;
-    const { existsSync, readdirSync, readFileSync, statSync } = await import('fs');
-    const { join } = await import('path');
+    const sessionsDir = join(PATHS.agentsDir, agentDir, 'sessions');
 
     let totalSessions = 0;
     let currentSession: any = null;
@@ -364,7 +360,7 @@ router.get('/agents/:id/live', async (req, res) => {
               }
               if (entry.message?.model) model = entry.message.model;
             }
-          } catch {}
+          } catch { /* best effort */ }
         }
 
         // Determine if actively working (session updated within 2 min)
@@ -402,7 +398,7 @@ router.get('/agents/:id/activity', async (req, res) => {
     const { id } = req.params;
     const isWorkflowAgent = id.includes('/');
     const agentDir = id === 'main' ? 'main' : id;
-    const sessionsDir = `/home/setrox/.openclaw/agents/${agentDir}/sessions`;
+    const sessionsDir = join(PATHS.agentsDir, agentDir, 'sessions');
 
     // Get all runs from Setfarm
     const { getRuns } = await import('../utils/setfarm.js');

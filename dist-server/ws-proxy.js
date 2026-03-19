@@ -3,6 +3,15 @@ import { config } from './config.js';
 export function setupWsProxy(server) {
     const wss = new WebSocketServer({ server, path: '/ws' });
     wss.on('connection', (clientWs, req) => {
+        // Auth check for WebSocket connections
+        if (config.authToken) {
+            const url = new URL(req.url || '', 'http://localhost');
+            const token = url.searchParams.get('token');
+            if (!token || token !== config.authToken) {
+                clientWs.close(1008, 'Unauthorized');
+                return;
+            }
+        }
         console.log('[WS] Client connected from', req.socket.remoteAddress);
         let gatewayWs = null;
         let authenticated = false;
@@ -116,8 +125,9 @@ export function setupWsProxy(server) {
                 });
                 return;
             }
-            // Otherwise forward raw
-            gatewayWs.send(raw);
+            // Drop unrecognized client message types
+            console.warn('[WS] Dropping unrecognized client message type');
+            return;
         });
         clientWs.on('close', () => {
             console.log('[WS] Client disconnected');

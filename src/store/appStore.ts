@@ -5,9 +5,13 @@ export interface AppStore {
   overview: OverviewData | null;
   system: SystemMetrics | null;
   agents: Agent[] | null;
+  /** PipelineRun[] from /api/setfarm/pipeline */
   pipeline: any[] | null;
+  /** SetfarmEvent[] from /api/setfarm/activity */
   activity: any[] | null;
+  /** WfAgent[] from /api/setfarm/agents */
   wfAgents: any[] | null;
+  /** AlertData from /api/setfarm/alerts */
   alerts: any | null;
   workflows: Workflow[] | null;
   runs: Run[] | null;

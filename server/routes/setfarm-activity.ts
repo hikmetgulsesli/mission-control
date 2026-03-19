@@ -3,6 +3,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 
 import { join } from 'path';
 import { execSync, execFileSync } from 'child_process';
 import { cached } from '../utils/cache.js';
+import { PATHS } from '../config.js';
 import { readFileSync as readSync, writeFileSync as writeSync, renameSync } from 'fs';
 import { tmpdir } from 'os';
 import { createProjectProgrammatic, updateProjectById } from './projects.js';
@@ -96,7 +97,7 @@ router.get('/setfarm/pipeline', async (_req, res) => {
             const dn = stories.filter((s: any) => s.status === "done").length;
             storyProgress = { completed: done, total: stories.length, verified: v, skipped: sk, running: ru, pending: pe, done: dn };
           }
-        } catch {}
+        } catch (e: any) { console.warn('getRunStories failed:', e?.message || e); }
         return {
           id: r.id,
           runNumber: r.run_number,
@@ -157,7 +158,7 @@ router.get('/setfarm/runs/:id/plan', async (req, res) => {
     if (idx !== -1) {
       prd = rawOutput.slice(0, idx).trim();
       const jsonPart = rawOutput.slice(idx + marker.length).trim();
-      try { stories = JSON.parse(jsonPart); } catch {}
+      try { stories = JSON.parse(jsonPart); } catch { /* malformed STORIES_JSON */ }
     }
 
     // Fallback: try to get stories from API
@@ -165,7 +166,7 @@ router.get('/setfarm/runs/:id/plan', async (req, res) => {
       try {
         const runStories = await getRunStories(req.params.id);
         if (runStories && runStories.length > 0) stories = runStories;
-      } catch {}
+      } catch { /* stories fallback failed */ }
     }
 
     // Extract project_memory from run context
@@ -173,7 +174,7 @@ router.get('/setfarm/runs/:id/plan', async (req, res) => {
     try {
       const ctx = typeof run.context === 'string' ? JSON.parse(run.context) : run.context;
       projectMemory = ctx.project_memory || '';
-    } catch {}
+    } catch { /* context parse failed */ }
 
     res.json({ prd, stories, rawOutput, projectMemory });
   } catch (err: any) {
@@ -204,7 +205,7 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
     let screenMap: any[] = [];
     const smMatch = output.match(/SCREEN_MAP:\s*\n(\[[\s\S]*?\n\])/);
     if (smMatch) {
-      try { screenMap = JSON.parse(smMatch[1]); } catch {}
+      try { screenMap = JSON.parse(smMatch[1]); } catch { /* malformed SCREEN_MAP JSON */ }
     }
 
     // Parse DESIGN_SYSTEM
@@ -266,7 +267,7 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
       } catch { /* manifest read failed */ }
     }
 
-    const STITCH_SCRIPT_EARLY = join(process.env.HOME || '/home/setrox', '.openclaw/setfarm-repo/scripts/stitch-api.mjs');
+    const STITCH_SCRIPT_EARLY = join(PATHS.setfarmRepoDir, 'scripts/stitch-api.mjs');
 
     // FALLBACK 2: list-screens from Stitch API
     if (screenMap.length === 0 && projectId) {
@@ -315,7 +316,7 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
     const cacheDir = join(import.meta.dirname || __dirname, '..', 'stitch-cache', projectId);
     mkdirSync(cacheDir, { recursive: true });
 
-    const STITCH_SCRIPT = join(process.env.HOME || '/home/setrox', '.openclaw/setfarm-repo/scripts/stitch-api.mjs');
+    const STITCH_SCRIPT = join(PATHS.setfarmRepoDir, 'scripts/stitch-api.mjs');
 
     // Fix C: skip populate-cache if PNGs already exist in cacheDir
     const { readdirSync: _rds } = await import('fs');
@@ -382,7 +383,7 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
 
 
 // Track last seen completed run IDs for auto-sync — persisted to disk
-const MC_SYNC_STATE_PATH = join('/home/setrox/.openclaw/setfarm', 'mc-sync-state.json');
+const MC_SYNC_STATE_PATH = join(PATHS.setfarmDir, 'mc-sync-state.json');
 
 function loadSyncState(): { finished: Set<string>; running: Set<string> } {
   try {
@@ -438,7 +439,7 @@ async function createBuildingProject(run: any): Promise<void> {
   try {
     const ctx = typeof run.context === 'string' ? JSON.parse(run.context) : run.context;
     repo = ctx?.repo || '';
-  } catch {}
+  } catch { /* context parse failed */ }
 
   // Fallback: extract repo from task string when context is empty
   if (!repo) {
@@ -456,7 +457,7 @@ async function createBuildingProject(run: any): Promise<void> {
     const res = await fetch('http://127.0.0.1:3080/api/projects/next-port');
     const data = await res.json() as any;
     port = data.port || null;
-  } catch {}
+  } catch (e: any) { console.warn('next-port fetch failed:', e?.message || e); }
 
   const stack = repo ? detectStack(repo) : [];
 
@@ -559,9 +560,9 @@ function detectStack(repo: string): string[] {
           break;
         }
       }
-    } catch {}
+    } catch { /* requirements.txt read failed */ }
     return stack;
-  } catch {
+  } catch { /* package.json read failed */
     return [];
   }
 }
@@ -593,7 +594,7 @@ function detectBackend(repo: string): { hasBackend: boolean; backendDir: string;
           const m = env.match(/^PORT\s*=\s*(\d+)/m);
           if (m) port = parseInt(m[1]);
         }
-      } catch {}
+      } catch { /* .env read failed */ }
       // Check for existing systemd service
       if (!port) {
         try {
@@ -604,7 +605,7 @@ function detectBackend(repo: string): { hasBackend: boolean; backendDir: string;
             const m = svc.match(/--port\s+(\d+)|PORT=(\d+)/);
             if (m) port = parseInt(m[1] || m[2]);
           }
-        } catch {}
+        } catch { /* systemd service read failed */ }
       }
       return { hasBackend: true, backendDir, backendType: type, port };
     }
@@ -617,7 +618,7 @@ function detectBackend(repo: string): { hasBackend: boolean; backendDir: string;
       const env = readFileSync(join(serverDir, '.env'), 'utf-8');
       const m = env.match(/^PORT\s*=\s*(\d+)/m);
       if (m) port = parseInt(m[1]);
-    } catch {}
+    } catch { /* server .env read failed */ }
     return { hasBackend: true, backendDir: serverDir, backendType: 'node', port };
   }
   return null;
@@ -632,7 +633,7 @@ function detectPort(repo: string, task: string): number | null {
       const m = env.match(/^PORT\s*=\s*(\d+)/m);
       if (m) return parseInt(m[1]);
     }
-  } catch {}
+  } catch { /* server .env read failed */ }
   // 2. Check server/src/index.ts for PORT constant (monorepo fallback)
   try {
     const serverIndex = join(repo, 'server', 'src', 'index.ts');
@@ -641,7 +642,7 @@ function detectPort(repo: string, task: string): number | null {
       const m = src.match(/PORT\s*(?:=|\|\|)\s*['"]?(\d{4})['"]?/);
       if (m) return parseInt(m[1]);
     }
-  } catch {}
+  } catch { /* server index.ts read failed */ }
   // 3. Check root .env for PORT
   try {
     const rootEnv = join(repo, '.env');
@@ -650,14 +651,14 @@ function detectPort(repo: string, task: string): number | null {
       const m = env.match(/^PORT\s*=\s*(\d+)/m);
       if (m) return parseInt(m[1]);
     }
-  } catch {}
+  } catch { /* root .env read failed */ }
   // 4. Check package.json start/dev script for explicit port
   try {
     const pkg = JSON.parse(readFileSync(join(repo, 'package.json'), 'utf-8'));
     const startScript = (pkg.scripts?.start || '') + ' ' + (pkg.scripts?.dev || '');
     const portMatch = startScript.match(/-p\s*(\d+)|--port\s*(\d+)|-l\s*(\d+)/);
     if (portMatch) return parseInt(portMatch[1] || portMatch[2] || portMatch[3]);
-  } catch {}
+  } catch { /* package.json read failed */ }
   // 5. Check vite.config for port (Vite dev port — only if no server port found above)
   try {
     for (const vp of ['vite.config.ts', 'client/vite.config.ts']) {
@@ -668,12 +669,12 @@ function detectPort(repo: string, task: string): number | null {
         if (m) return parseInt(m[1]);
       }
     }
-  } catch {}
+  } catch { /* vite config read failed */ }
   // 6. Allocate from port registry
   return allocatePort();
 }
 
-const PORT_REGISTRY = '/home/setrox/.openclaw/workspace/references/port-registry.md';
+const PORT_REGISTRY = PATHS.portRegistry;
 const PORT_RANGE_START = 3507;
 const PORT_RANGE_END = 3599;
 
@@ -685,7 +686,7 @@ function getUsedPorts(): Set<number> {
     for (const m of reg.matchAll(/\|\s*(\d{4})\s*\|/g)) {
       used.add(parseInt(m[1]));
     }
-  } catch {}
+  } catch { /* port registry read failed */ }
   // From projects.json
   try {
     const pFile = join(import.meta.dirname, '../../projects.json');
@@ -695,14 +696,15 @@ function getUsedPorts(): Set<number> {
         if (typeof v === 'number') used.add(v as number);
       }
     }
-  } catch {}
+  } catch { /* projects.json read failed */ }
   // From system (ss -tlnp) — controlled command, no user input
   try {
+    // Keep execSync: uses shell redirect (2>/dev/null)
     const ss = execSync('ss -tlnp 2>/dev/null', { timeout: 3000 }).toString();
     for (const m of ss.matchAll(/:(\d+)\s/g)) {
       used.add(parseInt(m[1]));
     }
-  } catch {}
+  } catch (e: any) { console.warn('ss port scan failed:', e?.message || e); }
   return used;
 }
 
@@ -737,7 +739,7 @@ function updatePortRegistry(port: number, name: string): void {
 }
 
 function detectStartCmd(repo: string, port: number): string | null {
-  const SERVE_BIN = '/home/setrox/.npm-global/bin/serve';
+  const SERVE_BIN = PATHS.serveBin;
   try {
     const pkg = JSON.parse(readFileSync(join(repo, 'package.json'), 'utf-8'));
     const deps = { ...pkg.dependencies, ...pkg.devDependencies };
@@ -756,7 +758,7 @@ function detectStartCmd(repo: string, port: number): string | null {
     }
     // Express / generic Node with start script
     if (pkg.scripts?.start) return `/usr/bin/npm start`;
-  } catch {}
+  } catch { /* package.json read failed */ }
   return null;
 }
 
@@ -830,7 +832,7 @@ function findExistingService(_port: number, slug: string, repo?: string): string
         return svc;
       }
     }
-  } catch {}
+  } catch (e: any) { console.warn('findExistingService failed:', e?.message || e); }
   return null;
 }
 
@@ -844,18 +846,18 @@ function runBuild(repo: string): { ok: boolean; error?: string } {
     // Install deps if node_modules missing
     if (!existsSync(join(repo, 'node_modules'))) {
       console.log('[auto-deploy] Installing dependencies with ' + pm);
-      execSync(pm + ' install', { cwd: repo, timeout: 120000, stdio: 'pipe' });
+      execFileSync(pm, ['install'], { cwd: repo, timeout: 120000, stdio: 'pipe' });
     }
 
     // Next.js: check .next/BUILD_ID
     if (deps['next'] && !existsSync(join(repo, '.next', 'BUILD_ID'))) {
       console.log('[auto-deploy] Running next build for ' + repo);
-      execSync(pm + ' run build', { cwd: repo, timeout: 300000, stdio: 'pipe' });
+      execFileSync(pm, ['run', 'build'], { cwd: repo, timeout: 300000, stdio: 'pipe' });
     }
     // Vite: check dist/index.html
     else if (deps['vite'] && !existsSync(join(repo, 'dist', 'index.html'))) {
       console.log('[auto-deploy] Running vite build for ' + repo);
-      execSync(pm + ' run build', { cwd: repo, timeout: 120000, stdio: 'pipe' });
+      execFileSync(pm, ['run', 'build'], { cwd: repo, timeout: 120000, stdio: 'pipe' });
     }
 
     return { ok: true };
@@ -867,14 +869,15 @@ function runBuild(repo: string): { ok: boolean; error?: string } {
 function healthCheck(port: number, retries = 3, delay = 3): boolean {
   for (let i = 0; i < retries; i++) {
     try {
+      // Keep execSync: uses shell quoting and redirect (2>/dev/null)
       const code = execSync(
         "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:" + port + "/ 2>/dev/null",
         { timeout: 10000 }
       ).toString().trim();
       if (['200', '301', '302', '304'].includes(code)) return true;
-    } catch {}
+    } catch { /* healthcheck request failed */ }
     if (i < retries - 1) {
-      try { execSync('sleep ' + delay); } catch {}
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delay * 1000);
     }
   }
   return false;
@@ -895,9 +898,9 @@ function autoDeployProject(projectId: string, projectName: string, repo: string,
       const portMatch = svcContent.match(/(?:PORT=|(?:-p|-l)\s+)(\d+)/);
       const existingPort = portMatch ? parseInt(portMatch[1]) : null;
       console.log('[auto-deploy] Existing service "' + existing + '" for repo ' + repo + ' — restarting');
-      try { execSync('sudo systemctl restart ' + existing, { timeout: 15000 }); } catch {}
+      try { execFileSync('sudo', ['systemctl', 'restart', existing], { timeout: 15000 }); } catch (e: any) { console.warn('systemctl restart failed:', e?.message || e); }
       return { deployed: true, port: existingPort || undefined, domain, service: existing };
-    } catch {}
+    } catch (e: any) { console.warn('existing service restart failed:', e?.message || e); }
   }
 
   // 2. Build if needed (before creating service!)
@@ -938,29 +941,29 @@ function autoDeployProject(projectId: string, projectName: string, repo: string,
     ].join('\n');
 
     writeFileSync('/tmp/' + serviceName, unit);
-    execSync(`sudo cp /tmp/${serviceName} /etc/systemd/system/${serviceName}`, { timeout: 5000 });
-    execSync('sudo systemctl daemon-reload', { timeout: 5000 });
+    execFileSync('sudo', ['cp', `/tmp/${serviceName}`, `/etc/systemd/system/${serviceName}`], { timeout: 5000 });
+    execFileSync('sudo', ['systemctl', 'daemon-reload'], { timeout: 5000 });
     // Kill any dev server (vite, webpack, etc.) in the repo directory or occupying the port
-    try { execSync(`pkill -f "vite.*${repo}" 2>/dev/null || true`, { timeout: 5000 }); } catch {}
-    try { execSync(`fuser -k ${port}/tcp 2>/dev/null || true`, { timeout: 5000 }); } catch {}
+    try { execFileSync('pkill', ['-f', `vite.*${repo}`], { timeout: 5000, stdio: 'pipe' }); } catch (e: any) { /* pkill returns non-zero when no process matched */ }
+    try { execFileSync('fuser', ['-k', `${port}/tcp`], { timeout: 5000, stdio: 'pipe' }); } catch (e: any) { /* fuser returns non-zero when port not in use */ }
     // Wait for port to free up
-    try { execSync('sleep 1'); } catch {}
-    execSync(`sudo systemctl enable --now ${serviceName}`, { timeout: 10000 });
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1000);
+    execFileSync('sudo', ['systemctl', 'enable', '--now', serviceName], { timeout: 10000 });
 
     // 5. Healthcheck
     const healthy = healthCheck(port);
     if (!healthy) {
       console.error('[auto-deploy] Healthcheck FAILED: ' + serviceName + ' port ' + port + ' - rolling back');
       // Rollback: stop the broken service so it doesn't run in a broken state
-      try { execSync('sudo systemctl stop ' + serviceName, { timeout: 10000 }); } catch {}
-      try { execSync('sudo systemctl disable ' + serviceName, { timeout: 5000 }); } catch {}
+      try { execFileSync('sudo', ['systemctl', 'stop', serviceName], { timeout: 10000 }); } catch (e: any) { console.warn('systemctl stop failed:', e?.message || e); }
+      try { execFileSync('sudo', ['systemctl', 'disable', serviceName], { timeout: 5000 }); } catch (e: any) { console.warn('systemctl disable failed:', e?.message || e); }
       // Send Discord notification about failed deploy
       try {
         const payload = JSON.stringify({ channel: 'setfarm-pipeline',
           message: 'Auto-deploy FAILED: ' + projectName + ' (port ' + port + ') - healthcheck failed, service rolled back' });
         writeFileSync('/tmp/deploy-notify.json', payload);
-        execSync("curl -s -X POST http://127.0.0.1:3080/api/discord-notify -H 'Content-Type: application/json' -d @/tmp/deploy-notify.json", { timeout: 10000 });
-      } catch {}
+        execFileSync('curl', ['-s', '-X', 'POST', 'http://127.0.0.1:3080/api/discord-notify', '-H', 'Content-Type: application/json', '-d', '@/tmp/deploy-notify.json'], { timeout: 10000, stdio: 'pipe' });
+      } catch (e: any) { console.warn("deploy notification failed:", e?.message || e); }
       return { deployed: false, error: 'healthcheck failed - service stopped (rollback)' };
     }
     console.log('[auto-deploy] Healthcheck OK: ' + serviceName + ' port ' + port);
@@ -977,9 +980,9 @@ function autoDeployProject(projectId: string, projectName: string, repo: string,
         // Match catch-all with any indent (or none)
         const updated = cfg.replace(/^(\s*)- service: http_status:404/m, entry + '$1- service: http_status:404');
         writeFileSync('/tmp/cloudflared-config.yml', updated);
-        execSync(`sudo cp /tmp/cloudflared-config.yml ${cfgPath}`, { timeout: 5000 });
-        execSync('sudo systemctl restart cloudflared', { timeout: 15000 });
-        execSync(`sudo cloudflared tunnel route dns ${TUNNEL_ID} ${domain}`, { timeout: 15000 });
+        execFileSync('sudo', ['cp', '/tmp/cloudflared-config.yml', cfgPath], { timeout: 5000 });
+        execFileSync('sudo', ['systemctl', 'restart', 'cloudflared'], { timeout: 15000 });
+        execFileSync('sudo', ['cloudflared', 'tunnel', 'route', 'dns', TUNNEL_ID, domain], { timeout: 15000 });
       }
     } catch (err: any) {
       console.error('Tunnel setup warning:', err.message);
@@ -1032,7 +1035,7 @@ async function syncProjectsFromRuns(): Promise<{ synced: any[]; skipped: string[
         const ctx = typeof r.context === 'string' ? JSON.parse(r.context) : r.context;
         const repo = ctx?.repo || '';
         if (repo && existsSync(join(repo, 'dist', 'index.html'))) return true;
-      } catch {}
+      } catch { /* context parse failed */ }
     }
     return false;
   });
@@ -1049,7 +1052,7 @@ async function syncProjectsFromRuns(): Promise<{ synced: any[]; skipped: string[
     try {
       const ctx = typeof run.context === 'string' ? JSON.parse(run.context) : run.context;
       repo = ctx?.repo || '';
-    } catch {}
+    } catch { /* context parse failed */ }
     // Fallback: extract repo from task string when context is empty
     if (!repo) {
       const flagMatch = run.task.match(/--repo\s+(\/\S+)/i);
@@ -1062,7 +1065,7 @@ async function syncProjectsFromRuns(): Promise<{ synced: any[]; skipped: string[
 
     // Repo validation: only ~/projects/ and ~/mobile/
     if (repo) {
-      const validPrefixes = ['/home/setrox/projects/', '/home/setrox/mobile/'];
+      const validPrefixes = [PATHS.projectsDir + '/', PATHS.mobileDir + '/'];
       if (!validPrefixes.some(prefix => repo.startsWith(prefix))) {
         skipped.push(run.id + ': non-project repo ' + repo);
         continue;
@@ -1141,7 +1144,7 @@ async function syncProjectsFromRuns(): Promise<{ synced: any[]; skipped: string[
               runNumber: run.run_number,
             });
           }
-        } catch {}
+        } catch (e: any) { console.warn('story update failed:', e?.message || e); }
         result.project.deployed = true;
         result.project.port = deploy.port;
         result.project.domain = deploy.domain;
@@ -1163,9 +1166,9 @@ async function syncProjectsFromRuns(): Promise<{ synced: any[]; skipped: string[
                 const entry = '- hostname: ' + domain + '\n  service: http://127.0.0.1:' + port + '\n';
                 const updated = cfg.replace(/^(\s*)- service: http_status:404/m, entry + '$1- service: http_status:404');
                 writeFileSync('/tmp/cloudflared-config.yml', updated);
-                execSync('sudo cp /tmp/cloudflared-config.yml /etc/cloudflared/config.yml', { timeout: 5000 });
-                execSync('sudo systemctl restart cloudflared', { timeout: 15000 });
-                execSync('sudo cloudflared tunnel route dns ' + TUNNEL_ID + ' ' + domain, { timeout: 15000 });
+                execFileSync('sudo', ['cp', '/tmp/cloudflared-config.yml', '/etc/cloudflared/config.yml'], { timeout: 5000 });
+                execFileSync('sudo', ['systemctl', 'restart', 'cloudflared'], { timeout: 15000 });
+                execFileSync('sudo', ['cloudflared', 'tunnel', 'route', 'dns', TUNNEL_ID, domain], { timeout: 15000 });
               }
             }
           } catch (err: any) {
@@ -1188,7 +1191,7 @@ async function syncProjectsFromRuns(): Promise<{ synced: any[]; skipped: string[
             runNumber: run.run_number,
           });
         }
-      } catch {}
+      } catch (e: any) { console.warn("story sync failed:", e?.message || e); }
       // B4: Auto-update checklist based on project state
       autoUpdateChecklist(result.project);
       updateProjectById(result.project.id, { checklist: result.project.checklist });
@@ -1224,7 +1227,7 @@ router.get("/setfarm/agent-feed", async (req, res) => {
       // Scan agent sessions for new messages
       const { existsSync, readdirSync, readFileSync, statSync } = await import("fs");
       const { join } = await import("path");
-      const agentsDir = "/home/setrox/.openclaw/agents";
+      const agentsDir = PATHS.agentsDir;
 
       if (existsSync(agentsDir)) {
         const agentDirs = readdirSync(agentsDir).filter((d: string) => {
@@ -1265,9 +1268,9 @@ router.get("/setfarm/agent-feed", async (req, res) => {
                 if (/HEARTBEAT|\[idle\]|polling|no.?tasks?/i.test(text)) continue;
                 const truncated = text.length > 200 ? text.slice(0, 200) + "..." : text;
                 await insertFeedEntry(agentId, agentId, truncated, sessionId);
-              } catch {}
+              } catch { /* malformed JSONL entry */ }
             }
-          } catch {}
+          } catch (e: any) { console.warn('session file read failed:', e?.message || e); }
         }
       }
 
@@ -1296,7 +1299,7 @@ router.delete("/setfarm/agent-feed", async (_req, res) => {
 router.delete("/setfarm/activity", async (_req, res) => {
   try {
     const { writeFile } = await import("fs/promises");
-    await writeFile("/home/setrox/.openclaw/setfarm/events.jsonl", "", "utf-8");
+    await writeFile(PATHS.eventsJsonl, "", "utf-8");
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Clear activity failed" });
