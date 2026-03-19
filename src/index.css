@@ -6489,3 +6489,54 @@ html, body, #root {
 .lf-detail-line-add { color: #66ff66; }
 .lf-detail-line-del { color: #ff6666; }
 .lf-detail-line-cmd { color: #00d4ff; }
+
+/* ── Live Feed Filter Enhancements ── */
+.lf-select--error {
+  border-color: var(--neon-red) !important;
+  color: var(--neon-red) !important;
+  background: rgba(255, 0, 64, 0.1);
+}
+
+.lf-row__project {
+  background: rgba(0, 255, 255, 0.08);
+  color: var(--neon-cyan);
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 2px;
+  letter-spacing: 0.03em;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+@media (max-width: 1200px) {
+  .lf-header__right { flex-wrap: wrap; }
+}
+
+@media (max-width: 768px) {
+  .lf-row__project { display: none; }
+}
+
+/* ── Live Feed Search ── */
+.lf-search {
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  font-family: var(--font);
+  font-size: 11px;
+  border-radius: 3px;
+  outline: none;
+  width: 140px;
+  transition: all 0.15s;
+}
+.lf-search:focus {
+  border-color: var(--neon-cyan);
+  width: 200px;
+}
+.lf-search::placeholder {
+  color: var(--text-dim);
+}

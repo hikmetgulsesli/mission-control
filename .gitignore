@@ -1,3 +1,28 @@
+# Environment
 .env
+.env.*
+
+# Dependencies
 node_modules/
+
+# Build output
 dist/
+dist-server/
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# Runtime data (project list, state)
+projects.json
+deleted-projects.json
+
+# Stitch design cache (downloaded on-demand)
+stitch-cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/

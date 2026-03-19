@@ -16,6 +16,7 @@ interface LiveEvent {
   cwd: string | null;
   detail: string | null;
   output: string | null;
+  project: string | null;
 }
 
 const AGENTS = [
@@ -30,6 +31,30 @@ const AGENTS = [
   { id: 'lux', label: 'Lux' },
   { id: 'nexus', label: 'Nexus' },
   { id: 'prism', label: 'Prism' },
+];
+
+const ACTION_TYPES = [
+  { id: 'all', label: 'ALL TYPES' },
+  { id: 'bash', label: 'BASH' },
+  { id: 'write', label: 'WRITE' },
+  { id: 'edit', label: 'EDIT' },
+  { id: 'read', label: 'READ' },
+  { id: 'grep', label: 'GREP' },
+  { id: 'glob', label: 'GLOB' },
+];
+
+const STATUS_FILTERS = [
+  { id: 'all', label: 'ALL STATUS' },
+  { id: 'error', label: 'ERR ONLY' },
+];
+
+const TIME_RANGES = [
+  { id: 'all', label: 'ALL TIME' },
+  { id: '5m', label: 'LAST 5m' },
+  { id: '15m', label: 'LAST 15m' },
+  { id: '30m', label: 'LAST 30m' },
+  { id: '1h', label: 'LAST 1h' },
+  { id: '3h', label: 'LAST 3h' },
 ];
 
 function actionColor(action: string, status: string): string {
@@ -99,6 +124,15 @@ export function LiveFeed() {
   const [events, setEvents] = useState<LiveEvent[]>([]);
   const [paused, setPaused] = useState(false);
   const [agentFilter, setAgentFilter] = useState('all');
+  const [actionFilter, setActionFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [projectFilter, setProjectFilter] = useState('all');
+  const [projects, setProjects] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [modelFilter, setModelFilter] = useState('all');
+  const [timeRange, setTimeRange] = useState('all');
+  const [models, setModels] = useState<string[]>([]);
   const [lastTs, setLastTs] = useState<string | null>(null);
   const [hasActivity, setHasActivity] = useState(false);
   const [lastEventTime, setLastEventTime] = useState(Date.now());
@@ -115,13 +149,39 @@ export function LiveFeed() {
     });
   }, []);
 
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 400);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Fetch available projects
+  useEffect(() => {
+    fetch('/api/live-feed/projects')
+      .then(r => r.ok ? r.json() : [])
+      .then(setProjects)
+      .catch(() => {});
+    const iv = setInterval(() => {
+      fetch('/api/live-feed/projects')
+        .then(r => r.ok ? r.json() : [])
+        .then(setProjects)
+        .catch(() => {});
+    }, 15000);
+    return () => clearInterval(iv);
+  }, []);
+
   const fetchEvents = useCallback(async () => {
     if (paused) return;
     try {
-      let url = '/api/live-feed';
-      const params: string[] = [];
-      if (lastTs) params.push('since=' + encodeURIComponent(lastTs));
+      // Always read from DB via /history endpoint
+      let url = '/api/live-feed/history';
+      const params: string[] = ['limit=300'];
       if (agentFilter !== 'all') params.push('agent=' + agentFilter);
+      if (actionFilter !== 'all') params.push('action=' + actionFilter);
+      if (statusFilter !== 'all') params.push('status=' + statusFilter);
+      if (projectFilter !== 'all') params.push('project=' + encodeURIComponent(projectFilter));
+      if (timeRange !== 'all') params.push('range=' + timeRange);
+      if (debouncedSearch) params.push('q=' + encodeURIComponent(debouncedSearch));
       if (params.length) url += '?' + params.join('&');
 
       const res = await fetch(url);
@@ -142,11 +202,17 @@ export function LiveFeed() {
           return deduped.slice(-300);
         });
         setLastTs(data[data.length - 1].ts);
+        // Extract unique models
+        setModels(prev => {
+          const all = new Set(prev);
+          data.forEach((e: LiveEvent) => { if (e.model) all.add(e.model); });
+          return [...all].sort();
+        });
       }
     } catch {
       // silent
     }
-  }, [paused, lastTs, agentFilter]);
+  }, [paused, lastTs, agentFilter, actionFilter, statusFilter, projectFilter, timeRange, debouncedSearch]);
 
   useEffect(() => {
     fetchEvents();
@@ -175,9 +241,9 @@ export function LiveFeed() {
     setEvents([]);
     setLastTs(null);
     setExpanded(new Set());
-  }, [agentFilter]);
+  }, [agentFilter, actionFilter, statusFilter, projectFilter, modelFilter, timeRange, debouncedSearch]);
 
-  const displayed = events;
+  const displayed = modelFilter === 'all' ? events : events.filter(e => e.model === modelFilter);
 
   return (
     <div className="lf-page">
@@ -192,13 +258,74 @@ export function LiveFeed() {
           )}
         </div>
         <div className="lf-header__right">
+          <input
+            className="lf-search"
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search..."
+            title="Search in commands, files, output"
+          />
+          <select
+            className="lf-select"
+            value={projectFilter}
+            onChange={e => setProjectFilter(e.target.value)}
+            title="Filter by project"
+          >
+            <option value="all">ALL PROJECTS</option>
+            {projects.map(p => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
           <select
             className="lf-select"
             value={agentFilter}
             onChange={e => setAgentFilter(e.target.value)}
+            title="Filter by agent"
           >
             {AGENTS.map(a => (
               <option key={a.id} value={a.id}>{a.label}</option>
+            ))}
+          </select>
+          <select
+            className="lf-select"
+            value={actionFilter}
+            onChange={e => setActionFilter(e.target.value)}
+            title="Filter by action type"
+          >
+            {ACTION_TYPES.map(a => (
+              <option key={a.id} value={a.id}>{a.label}</option>
+            ))}
+          </select>
+          <select
+            className={`lf-select ${statusFilter === 'error' ? 'lf-select--error' : ''}`}
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value)}
+            title="Filter by status"
+          >
+            {STATUS_FILTERS.map(s => (
+              <option key={s.id} value={s.id}>{s.label}</option>
+            ))}
+          </select>
+          <select
+            className="lf-select"
+            value={modelFilter}
+            onChange={e => setModelFilter(e.target.value)}
+            title="Filter by model"
+          >
+            <option value="all">ALL MODELS</option>
+            {models.map(m => (
+              <option key={m} value={m}>{m.split('/').pop() || m}</option>
+            ))}
+          </select>
+          <select
+            className="lf-select"
+            value={timeRange}
+            onChange={e => setTimeRange(e.target.value)}
+            title="Filter by time range"
+          >
+            {TIME_RANGES.map(t => (
+              <option key={t.id} value={t.id}>{t.label}</option>
             ))}
           </select>
           <button
@@ -217,7 +344,7 @@ export function LiveFeed() {
             {hasActivity ? 'Loading...' : 'No active agent sessions. Events will appear here when agents are working.'}
           </div>
         )}
-        {[...displayed].reverse().map((ev, i) => {
+        {displayed.map((ev, i) => {
           const isError = ev.status === 'error' || (ev.exitCode !== null && ev.exitCode !== 0);
           const color = isError ? '#ff4444' : actionColor(ev.action, ev.status);
           const expandable = hasDetailData(ev);
@@ -244,6 +371,9 @@ export function LiveFeed() {
                   <span className="lf-row__duration">
                     {ev.durationMs < 1000 ? ev.durationMs + 'ms' : (ev.durationMs / 1000).toFixed(1) + 's'}
                   </span>
+                )}
+                {ev.project && (
+                  <span className="lf-row__project" title={ev.project}>{ev.project}</span>
                 )}
                 {isError && <span className="lf-row__error">ERR</span>}
                 {expandable && (

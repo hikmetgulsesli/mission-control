@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import Database from 'better-sqlite3';
 import { readdirSync, statSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
@@ -45,7 +46,93 @@ interface LiveEvent {
   cwd: string | null;
   detail: string | null;
   output: string | null;
+  project: string | null;
 }
+
+
+// ── SQLite persistence ──
+const DB_PATH = join(homedir(), '.openclaw', 'setfarm', 'live-events.db');
+const db = new Database(DB_PATH);
+db.pragma('journal_mode = WAL');
+db.pragma('busy_timeout = 5000');
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS live_events (
+    id TEXT PRIMARY KEY,
+    ts TEXT NOT NULL,
+    agent TEXT NOT NULL,
+    model TEXT,
+    tool TEXT,
+    action TEXT NOT NULL,
+    summary TEXT,
+    file TEXT,
+    status TEXT NOT NULL DEFAULT 'completed',
+    duration_ms INTEGER,
+    exit_code INTEGER,
+    cwd TEXT,
+    project TEXT,
+    detail TEXT,
+    output TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_live_events_ts ON live_events(ts);
+  CREATE INDEX IF NOT EXISTS idx_live_events_status ON live_events(status);
+  CREATE INDEX IF NOT EXISTS idx_live_events_project ON live_events(project);
+  CREATE INDEX IF NOT EXISTS idx_live_events_agent ON live_events(agent);
+  CREATE INDEX IF NOT EXISTS idx_live_events_action ON live_events(action);
+  CREATE INDEX IF NOT EXISTS idx_live_events_error ON live_events(exit_code) WHERE exit_code IS NOT NULL AND exit_code != 0;
+`);
+
+const insertStmt = db.prepare(`
+  INSERT OR IGNORE INTO live_events (id, ts, agent, model, tool, action, summary, file, status, duration_ms, exit_code, cwd, project, detail, output)
+  VALUES (@id, @ts, @agent, @model, @tool, @action, @summary, @file, @status, @durationMs, @exitCode, @cwd, @project, @detail, @output)
+`);
+
+const insertMany = db.transaction((events: LiveEvent[]) => {
+  for (const e of events) {
+    insertStmt.run({
+      id: e.id,
+      ts: e.ts,
+      agent: e.agent,
+      model: e.model || null,
+      tool: e.tool || null,
+      action: e.action,
+      summary: e.summary || null,
+      file: e.file,
+      status: e.status,
+      durationMs: e.durationMs,
+      exitCode: e.exitCode,
+      cwd: e.cwd,
+      project: e.project,
+      detail: e.detail,
+      output: e.output,
+    });
+  }
+});
+
+function persistEvents(events: LiveEvent[]): void {
+  if (events.length === 0) return;
+  try {
+    insertMany(events);
+  } catch (err: any) {
+    console.error('[live-feed-db] Persist error:', err.message);
+  }
+}
+
+// Cleanup events older than 30 days (runs once on startup)
+try {
+  db.exec("DELETE FROM live_events WHERE ts < datetime('now', '-30 days')");
+} catch {}
+
+// Background scanner — keeps DB populated even when no client is viewing live feed
+setInterval(() => {
+  try {
+    const events = scanSessions();
+    persistEvents(events);
+  } catch (err: any) {
+    console.error('[live-feed-db] Background scan error:', err.message);
+  }
+}, 5000);
 
 // Cache
 let feedCache: { data: LiveEvent[]; ts: number } = { data: [], ts: 0 };
@@ -115,6 +202,15 @@ function tailLines(filePath: string, n: number): string[] {
 function truncate(s: string | undefined | null, max: number): string | null {
   if (!s) return null;
   return s.length > max ? s.slice(0, max) + '\n... (truncated)' : s;
+}
+
+function extractProject(cwd: string | null, summary?: string | null, file?: string | null, detail?: string | null): string | null {
+  const sources = [cwd, summary, file, detail].filter(Boolean) as string[];
+  for (const src of sources) {
+    const m = src.match(/\/projects\/([a-zA-Z0-9_-]+)/);
+    if (m) return m[1];
+  }
+  return null;
 }
 
 function extractDetail(toolName: string, args: any, resultContent: any): { detail: string | null; output: string | null } {
@@ -254,6 +350,7 @@ function scanSessions(): LiveEvent[] {
             cwd: details.cwd || null,
             detail,
             output,
+            project: extractProject(details.cwd || null, summary, filePath, typeof callBlock.arguments === "string" ? callBlock.arguments : null),
           };
           events.push(event);
         }
@@ -276,6 +373,7 @@ router.get('/live-feed', async (req, res) => {
     }
 
     const events = scanSessions();
+    persistEvents(events);
     feedCache = { data: events, ts: now };
     return filterAndRespond(events, req, res);
   } catch (err: any) {
@@ -288,6 +386,13 @@ function filterAndRespond(events: LiveEvent[], req: any, res: any) {
   let filtered = events;
   // Filter out step peek polling noise (runs every ~7s per agent, floods the feed)
   filtered = filtered.filter(e => !(e.summary && e.summary.includes("step peek")));
+  // grep exit 1 = no match (normal), not an error
+  filtered = filtered.map(e => {
+    if (e.action === 'bash' && e.exitCode === 1 && e.summary && e.summary.match(/^(grep |find )/)) {
+      return { ...e, exitCode: 0, status: 'completed' };
+    }
+    return e;
+  });
 
   const since = req.query.since as string;
   if (since) {
@@ -295,6 +400,28 @@ function filterAndRespond(events: LiveEvent[], req: any, res: any) {
     if (!isNaN(sinceMs)) {
       filtered = filtered.filter(e => new Date(e.ts).getTime() > sinceMs);
     }
+  }
+
+  const project = req.query.project as string;
+  if (project) {
+    filtered = filtered.filter(e => e.project === project);
+  }
+
+  const status = req.query.status as string;
+  if (status === 'error') {
+    filtered = filtered.filter(e => e.status === 'error' || (e.exitCode !== null && e.exitCode !== 0));
+  }
+
+  const action = req.query.action as string;
+  if (action) {
+    filtered = filtered.filter(e => e.action === action.toLowerCase());
+  }
+
+  const range = req.query.range as string;
+  if (range && range !== 'all') {
+    const rangeMs: Record<string, number> = { '5m': 5*60e3, '15m': 15*60e3, '30m': 30*60e3, '1h': 60*60e3, '3h': 3*60*60e3 };
+    const cutoff = Date.now() - (rangeMs[range] || 60*60e3);
+    filtered = filtered.filter(e => new Date(e.ts).getTime() > cutoff);
   }
 
   const agent = req.query.agent as string;
@@ -305,5 +432,131 @@ function filterAndRespond(events: LiveEvent[], req: any, res: any) {
   // Cap at 500 events
   res.json(filtered.slice(-500));
 }
+
+router.get('/live-feed/projects', async (_req, res) => {
+  try {
+    const now = Date.now();
+    let events: LiveEvent[];
+    if (now - feedCache.ts < CACHE_TTL_MS && feedCache.data.length > 0) {
+      events = feedCache.data;
+    } else {
+      events = scanSessions();
+      persistEvents(events);
+      feedCache = { data: events, ts: now };
+    }
+    const projects = [...new Set(events.map(e => e.project).filter(Boolean))].sort();
+    res.json(projects);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+router.get('/live-feed/errors', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+    const project = req.query.project as string;
+    const agent = req.query.agent as string;
+    const since = req.query.since as string;
+    const action = req.query.action as string;
+
+    let sql = `SELECT * FROM live_events WHERE (status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0))`;
+    const params: any[] = [];
+
+    if (project) { sql += ' AND project = ?'; params.push(project); }
+    if (agent) { sql += ' AND agent = ?'; params.push(agent.toLowerCase()); }
+    if (action) { sql += ' AND action = ?'; params.push(action.toLowerCase()); }
+    if (since) { sql += ' AND ts > ?'; params.push(since); }
+
+    sql += ' ORDER BY ts DESC LIMIT ?';
+    params.push(limit);
+
+    const rows = db.prepare(sql).all(...params);
+    const mapped = (rows as any[]).map(r => ({
+      ...r,
+      durationMs: r.duration_ms,
+      exitCode: r.exit_code,
+      agentEmoji: Object.values(AGENT_MAP).find(a => a.name.toLowerCase() === (r.agent || '').toLowerCase())?.emoji || '',
+    }));
+    res.json(mapped);
+  } catch (err: any) {
+    console.error('[live-feed-db] Errors query error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/live-feed/history', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string) || 100, 1000);
+    const project = req.query.project as string;
+    const agent = req.query.agent as string;
+    const action = req.query.action as string;
+    const since = req.query.since as string;
+    const until = req.query.until as string;
+    const status = req.query.status as string;
+
+    let sql = 'SELECT * FROM live_events WHERE 1=1';
+    const params: any[] = [];
+
+    if (project) { sql += ' AND project = ?'; params.push(project); }
+    if (agent) { sql += ' AND agent = ?'; params.push(agent.toLowerCase()); }
+    if (action) { sql += ' AND action = ?'; params.push(action.toLowerCase()); }
+    if (since) { sql += ' AND ts > ?'; params.push(since); }
+    if (until) { sql += ' AND ts < ?'; params.push(until); }
+    const range = req.query.range as string;
+    if (range && range !== 'all') {
+      const rangeMs: Record<string, number> = { '5m': 5*60e3, '15m': 15*60e3, '30m': 30*60e3, '1h': 60*60e3, '3h': 3*60*60e3 };
+      const cutoff = new Date(Date.now() - (rangeMs[range] || 60*60e3)).toISOString();
+      sql += ' AND ts > ?'; params.push(cutoff);
+    }
+    if (status === 'error') { sql += " AND (status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0))"; }
+
+    const q = req.query.q as string;
+    if (q) {
+      sql += ' AND (summary LIKE ? OR detail LIKE ? OR output LIKE ? OR file LIKE ?)';
+      const like = '%' + q + '%';
+      params.push(like, like, like, like);
+    }
+
+    sql += ' ORDER BY ts DESC LIMIT ?';
+    params.push(limit);
+
+    const rows = db.prepare(sql).all(...params);
+    // Map snake_case DB columns to camelCase for frontend
+    const mapped = (rows as any[]).map(r => ({
+      ...r,
+      durationMs: r.duration_ms,
+      exitCode: r.exit_code,
+      agentEmoji: Object.values(AGENT_MAP).find(a => a.name.toLowerCase() === (r.agent || '').toLowerCase())?.emoji || '',
+    }));
+    res.json(mapped);
+  } catch (err: any) {
+    console.error('[live-feed-db] History query error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/live-feed/stats', async (_req, res) => {
+  try {
+    const total = db.prepare('SELECT COUNT(*) as count FROM live_events').get() as any;
+    const errors = db.prepare("SELECT COUNT(*) as count FROM live_events WHERE status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0)").get() as any;
+    const byProject = db.prepare("SELECT project, COUNT(*) as count, SUM(CASE WHEN status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0) THEN 1 ELSE 0 END) as errors FROM live_events WHERE project IS NOT NULL GROUP BY project ORDER BY count DESC").all();
+    const byAgent = db.prepare("SELECT agent, COUNT(*) as count, SUM(CASE WHEN status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0) THEN 1 ELSE 0 END) as errors FROM live_events GROUP BY agent ORDER BY count DESC").all();
+    const byAction = db.prepare("SELECT action, COUNT(*) as count, SUM(CASE WHEN status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0) THEN 1 ELSE 0 END) as errors FROM live_events GROUP BY action ORDER BY count DESC").all();
+    const oldest = db.prepare('SELECT MIN(ts) as oldest FROM live_events').get() as any;
+    
+    res.json({
+      total: total.count,
+      errors: errors.count,
+      errorRate: total.count > 0 ? ((errors.count / total.count) * 100).toFixed(1) + '%' : '0%',
+      oldestEvent: oldest.oldest,
+      byProject,
+      byAgent,
+      byAction,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 export default router;
