@@ -1,3 +1,4 @@
+import React from 'react';
 import { AGENT_MAP } from '../lib/constants';
 
 
@@ -32,7 +33,7 @@ interface AgentCardProps {
   onEdit?: (agent: any) => void;
 }
 
-export function AgentCard({ agent, sessions = [], compact = false, onChat, onActivity, onEdit }: AgentCardProps) {
+export const AgentCard = React.memo(function AgentCard({ agent, sessions = [], compact = false, onChat, onActivity, onEdit }: AgentCardProps) {
   const meta = AGENT_MAP[agent.id];
   const name = agent.identityName || agent.name || meta?.name || agent.id;
   const emoji = agent.identityEmoji || meta?.emoji || '?';
@@ -151,4 +152,4 @@ export function AgentCard({ agent, sessions = [], compact = false, onChat, onAct
       </div>
     </div>
   );
-}
+});

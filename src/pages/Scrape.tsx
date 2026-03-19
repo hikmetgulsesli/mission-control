@@ -77,6 +77,7 @@ export function Scrape() {
                 onChange={e => setUrl(e.target.value)}
                 onKeyDown={handleKeyDown}
                 spellCheck={false}
+                aria-label="URL to scrape"
               />
               <button
                 className="scrape-form__btn"
@@ -89,7 +90,7 @@ export function Scrape() {
             <div className="scrape-form__options">
               <label className="scrape-form__field">
                 <span>Adaptor</span>
-                <select value={adaptor} onChange={e => setAdaptor(e.target.value)}>
+                <select value={adaptor} onChange={e => setAdaptor(e.target.value)} aria-label="Scrape adaptor">
                   <option value="auto">Auto Detect</option>
                   <option value="amazon">Amazon</option>
                   <option value="linkedin">LinkedIn</option>
@@ -99,7 +100,7 @@ export function Scrape() {
               </label>
               <label className="scrape-form__field">
                 <span>Format</span>
-                <select value={format} onChange={e => setFormat(e.target.value)}>
+                <select value={format} onChange={e => setFormat(e.target.value)} aria-label="Output format">
                   <option value="json">JSON</option>
                   <option value="text">Text</option>
                   <option value="markdown">Markdown</option>
@@ -169,7 +170,10 @@ export function Scrape() {
                   <div
                     key={i}
                     className={`scrape-history__item scrape-history__item--${h.status}`}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => setUrl(h.url)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setUrl(h.url); } }}
                     title={h.url}
                   >
                     <div className="scrape-history__item-url">{shortUrl}</div>

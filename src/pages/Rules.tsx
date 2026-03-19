@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 
 interface Rule {
   id: string;
@@ -35,6 +36,7 @@ export function Rules() {
   const [rules, setRules] = useState<Rule[]>([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [activeStage, setActiveStage] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
@@ -69,9 +71,10 @@ export function Rules() {
     setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Bu kurali silmek istediginize emin misiniz?')) return;
-    await fetch(`/api/rules/${id}`, { method: 'DELETE' });
+  const handleDeleteConfirmed = async () => {
+    if (!deleteConfirmId) return;
+    await fetch(`/api/rules/${deleteConfirmId}`, { method: 'DELETE' });
+    setDeleteConfirmId(null);
     load();
   };
 
@@ -227,7 +230,7 @@ export function Rules() {
                 fontFamily: 'var(--font)', outline: 'none',
               }}
             />
-            <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} style={{
+            <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} aria-label="Filter by project type" style={{
               padding: '4px 8px', fontSize: 11, background: 'var(--bg-input)',
               color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 4,
               fontFamily: 'var(--font)', outline: 'none', cursor: 'pointer',
@@ -245,7 +248,7 @@ export function Rules() {
           display: 'flex', gap: 10, marginBottom: 14, padding: '8px 14px',
           background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 6,
         }}>
-          <input type="text" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)}
+          <input type="text" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} aria-label="Search rules"
             style={{
               flex: 1, minWidth: 160, padding: '6px 10px', fontSize: 11,
               background: 'var(--bg-input)', color: 'var(--text-primary)',
@@ -253,7 +256,7 @@ export function Rules() {
               fontFamily: 'var(--font)', outline: 'none',
             }}
           />
-          <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} style={selectStyle}>
+          <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} aria-label="Filter by project type" style={selectStyle}>
             <option value="">All Types</option>
             {PROJECT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
@@ -273,7 +276,7 @@ export function Rules() {
               borderLeft: `3px solid ${catColor}`, borderRadius: 4,
               opacity: r.enabled === false ? 0.35 : 1, transition: 'all 0.15s',
             }}>
-              <div onClick={() => toggle(r.id)} style={{
+              <div role="button" tabIndex={0} onClick={() => toggle(r.id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(r.id); } }} style={{
                 display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
                 cursor: 'pointer', userSelect: 'none',
               }}>
@@ -344,7 +347,7 @@ export function Rules() {
                     <button className="btn" style={{ padding: '1px 6px', fontSize: 9 }}
                       onClick={() => setModal({ open: true, rule: r })}>EDIT</button>
                     <button className="btn btn--danger" style={{ padding: '1px 6px', fontSize: 9 }}
-                      onClick={() => handleDelete(r.id)}>DEL</button>
+                      onClick={() => setDeleteConfirmId(r.id)}>DEL</button>
                   </div>
                 )}
               </div>
@@ -379,6 +382,16 @@ export function Rules() {
           No rules found
         </div>
       )}
+
+      {/* Delete confirmation */}
+      <ConfirmDialog
+        open={!!deleteConfirmId}
+        title="Kural Sil"
+        message="Bu kurali silmek istediginize emin misiniz?"
+        confirmLabel="Sil"
+        onConfirm={handleDeleteConfirmed}
+        onCancel={() => setDeleteConfirmId(null)}
+      />
 
       {modal.open && <RuleModal rule={modal.rule} onSave={handleSave} onClose={() => setModal({ open: false })} />}
     </div>

@@ -108,7 +108,7 @@ export function WorkflowKanban({ workflows, runs }: Props) {
 
       {selectedStep && (
         <div className="step-detail-backdrop" onClick={() => setSelectedStep(null)}>
-          <div className="step-detail" onClick={e => e.stopPropagation()}>
+          <div className="step-detail" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
             <div className="step-detail__header">
               <h4>{selectedStep.id?.toUpperCase()}</h4>
               <span className={`step-detail__status step-detail__status--${selectedStep.status}`}>{selectedStep.status}</span>

@@ -1,3 +1,4 @@
+import { REAL_AGENT_IDS } from '../shared/agents.js';
 import { Router } from 'express';
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
@@ -7,7 +8,7 @@ import { config, PATHS } from '../config.js';
 
 const router = Router();
 
-const REAL_AGENTS = ['main', 'koda', 'flux', 'atlas', 'iris', 'sentinel', 'cipher', 'lux', 'nexus', 'prism'];
+const REAL_AGENTS = REAL_AGENT_IDS as unknown as string[];
 
 
 function getAgentActivity(agentId: string): { lastActive?: string; status: string } {

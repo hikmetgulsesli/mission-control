@@ -1,8 +1,11 @@
 import { useEffect, useState, useRef } from "react";
 import { GlitchText } from "../components/GlitchText";
-import { ProjectChecklist } from "../components/ProjectChecklist";
 import { api } from "../lib/api";
 import { useToast } from "../components/Toast";
+import { ProjectCard } from "../components/projects/ProjectCard";
+import { ProjectDetailPanel } from "../components/projects/ProjectDetailPanel";
+import { CreateProjectModal } from "../components/projects/CreateProjectModal";
+import { DeleteProjectModal } from "../components/projects/DeleteProjectModal";
 
 
 function formatDuration(createdAt?: string, completedAt?: string, buildStartedAt?: string, buildCompletedAt?: string): string | null {
@@ -115,7 +118,6 @@ export function Projects() {
         if (s.id === 'db') return { ...s, status: logStr.includes('Setfarm') ? 'done' as const : 'skip' as const };
         return s;
       });
-      // Animate steps one by one
       for (let i = 0; i < updated.length; i++) {
         await new Promise(r => setTimeout(r, 200));
         setDeleteSteps(prev => prev.map((s, idx) => idx <= i ? updated[idx] : s));
@@ -299,299 +301,50 @@ export function Projects() {
       {/* Own projects - full cards */}
       <div className="projects-grid">
         {ownProjects.map((p) => (
-          <div
+          <ProjectCard
             key={p.id}
-            className={`project-card ${selected === p.id ? "project-card--selected" : ""} ${p.status === "building" ? "project-card--building" : p.status === "failed" ? "project-card--failed" : ""} ${p.type === "mobile" ? "project-card--mobile" : `project-card--${p.serviceStatus === "active" ? "online" : "offline"}`}`}
-            onClick={() => setSelected(selected === p.id ? null : p.id)}
-          >
-            <div className="project-card__header">
-              <span className="project-card__emoji">{p.emoji}</span>
-              <span className="project-card__name">{p.name}</span>
-              {p.type === "mobile" ? (
-                <span className="project-card__status project-card__status--mobile">MOBILE</span>
-              ) : p.status === "building" ? (
-                <span className="project-card__status project-card__status--building">BUILDING</span>
-              ) : (
-                <button
-                  className={"project-card__toggle " + (p.serviceStatus === "active" ? "project-card__toggle--on" : "project-card__toggle--off")}
-                  onClick={(e) => handleToggle(e, p)}
-                  disabled={toggling === p.id || p.id === "mission-control"}
-                  title={p.serviceStatus === "active" ? "Durdur" : "Baslat"}
-                >
-                  <span className="project-card__toggle-knob" />
-                  <span className="project-card__toggle-label">
-                    {toggling === p.id ? "..." : p.serviceStatus === "active" ? "ON" : "OFF"}
-                  </span>
-                </button>
-              )}
-            </div>
-
-            <p className="project-card__desc" title={p.description}>{p.description}</p>
-
-            <div className="project-card__meta">
-              {p.type !== "mobile" && (
-                <div className="project-card__meta-row">
-                  <span className="project-card__label">PORT</span>
-                  <span className="project-card__value">
-                    {p.ports.frontend}{p.ports.backend ? ` / ${p.ports.backend}` : ""}
-                  </span>
-                </div>
-              )}
-              {p.type !== "mobile" && p.domain && (
-                <div className="project-card__meta-row">
-                  <span className="project-card__label">DOMAIN</span>
-                  <a className="project-card__link" href={`https://${p.domain}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
-                    {p.domain}
-                  </a>
-                </div>
-              )}
-              {p.type === "mobile" && p.repo && (
-                <div className="project-card__meta-row">
-                  <span className="project-card__label">REPO</span>
-                  <span className="project-card__value">{p.repo.split("/").pop()}</span>
-                </div>
-              )}
-              <div className="project-card__meta-row">
-                <span className="project-card__label">STACK</span>
-                <div className="project-card__tags">
-                  {(p.stack || []).map((s) => <span key={s} className="project-card__tag">{s}</span>)}
-                </div>
-              </div>
-              {p.github && (
-                <div className="project-card__meta-row">
-                  <span className="project-card__label">GITHUB</span>
-                  <a className="project-card__link" href={p.github} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
-                    {p.github.replace("https://github.com/", "")}
-                  </a>
-                </div>
-              )}
-              {p.stories && p.stories.total > 0 && (
-                <div className="project-card__meta-row">
-                  <span className="project-card__label">STORIES</span>
-                  <span className="project-card__value">{p.stories.done}/{p.stories.total}</span>
-                </div>
-              )}
-              {p.runNumber && (
-                <div className="project-card__meta-row">
-                  <span className="project-card__label">RUN</span>
-                  <span className="project-card__value">#{p.runNumber}</span>
-                </div>
-              )}
-              {(p.createdAt || p.completedAt) && (
-                <div className="project-card__meta-row">
-                  <span className="project-card__label">TARIH</span>
-                  <span className="project-card__value project-card__dates">
-                    {p.createdAt && <span>{p.createdAt.slice(0, 10)}</span>}
-                    {p.createdAt && p.completedAt && <span> → </span>}
-                    {p.completedAt && <span>{p.completedAt.slice(0, 10)}</span>}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* Checklist progress mini */}
-            {p.checklist && p.checklist.length > 0 && (
-              <div className="project-card__checklist-mini">
-                <div className="project-card__checklist-bar">
-                  <div className="project-card__checklist-fill" style={{
-                    width: `${Math.round((p.checklist.filter((c: any) => c.completed).length / p.checklist.length) * 100)}%`
-                  }} />
-                </div>
-                <span className="project-card__checklist-text">
-                  {p.checklist.filter((c: any) => c.completed).length}/{p.checklist.length}
-                </span>
-              </div>
-            )}
-
-            {/* Card actions */}
-            <div className="project-card__actions" onClick={(e) => e.stopPropagation()}>
-              <button className="btn btn--tiny" onClick={() => handleExport(p.id)} title="Export JSON">EXPORT</button>
-              {p.id !== "mission-control" && (
-                <button className="btn btn--tiny btn--danger" onClick={(e) => openDeleteModal(e, p)} title="Projeyi sil">SIL</button>
-              )}
-            </div>
-          </div>
+            project={p}
+            selected={selected === p.id}
+            toggling={toggling === p.id}
+            onSelect={() => setSelected(selected === p.id ? null : p.id)}
+            onToggle={(e) => handleToggle(e, p)}
+            onExport={() => handleExport(p.id)}
+            onDelete={(e) => openDeleteModal(e, p)}
+          />
         ))}
       </div>
 
       {/* Project detail panel */}
       {sel && (
-        <div className="project-detail">
-          <div className="project-detail__header">
-            <span className="project-detail__emoji">{sel.emoji}</span>
-            <h3 className="project-detail__title">{sel.name}</h3>
-            <button className="project-detail__close" onClick={() => setSelected(null)}>{"\u2715"}</button>
-          </div>
-
-          <div className="project-detail__grid">
-            <div className="project-detail__section">
-              <h4>Genel Bilgiler</h4>
-              <table className="project-detail__table">
-                <tbody>
-                  <tr><td>Durum</td><td>{sel.serviceStatus === "active" ? "Calisiyor" : "Durmus"}</td></tr>
-                  <tr><td>Servis</td><td><code>{sel.service}</code></td></tr>
-                  {sel.type !== "mobile" && <tr><td>Port</td><td>{sel.ports.frontend}{sel.ports.backend ? ` (frontend) / ${sel.ports.backend} (backend)` : ""}</td></tr>}
-                  {sel.type !== "mobile" && sel.domain && <tr><td>Domain</td><td><a href={`https://${sel.domain}`} target="_blank" rel="noopener noreferrer">{sel.domain}</a></td></tr>}
-                  {sel.type === "mobile" && <tr><td>Platform</td><td>React Native / Expo</td></tr>}
-                  <tr><td>Repo</td><td><code>{sel.repo}</code></td></tr>
-                  {sel.github && <tr><td>GitHub</td><td><a href={sel.github} target="_blank" rel="noopener noreferrer">{sel.github.replace("https://github.com/", "")}</a></td></tr>}
-                  <tr><td>Olusturan</td><td>{sel.createdBy}</td></tr>
-                  <tr><td>Tarih</td><td>{sel.createdAt}{sel.completedAt ? ` → ${sel.completedAt.slice(0, 10)}` : ""}</td></tr>
-                  <tr><td>Süre</td><td>{formatDuration(sel.createdAt, sel.completedAt, sel.buildStartedAt, sel.buildCompletedAt) ?? "-"}{!sel.completedAt && !sel.buildCompletedAt ? " (devam ediyor)" : ""}</td></tr>
-                  {sel.workflowRunId && <tr><td>Workflow Run</td><td><code>{sel.workflowRunId}</code></td></tr>}
-                  {sel.pr && <tr><td>Pull Request</td><td><a href={sel.pr} target="_blank" rel="noopener noreferrer">PR #1</a></td></tr>}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Project Checklist */}
-            {sel.checklist && (
-              <div className="project-detail__section">
-                <ProjectChecklist
-                  projectId={sel.id}
-                  checklist={sel.checklist}
-                  onUpdate={(updated) => handleChecklistUpdate(sel.id, updated)}
-                />
-              </div>
-            )}
-
-            {sel.prd && (
-              <div className="project-detail__section">
-                <h4>Urun Tanimi (PRD)</h4>
-                <p className="project-detail__prd">{sel.prd}</p>
-              </div>
-            )}
-
-            <div className="project-detail__section">
-              <h4>Ozellikler</h4>
-              <ul className="project-detail__list">
-                {sel.features.map((f, i) => <li key={i}>{f}</li>)}
-              </ul>
-            </div>
-
-            {sel.tasks.length > 0 && (
-              <div className="project-detail__section">
-                <h4>Gorevler / User Stories</h4>
-                <ul className="project-detail__list project-detail__list--tasks">
-                  {sel.tasks.map((t, i) => (
-                    <li key={i}>
-                      <span className="project-detail__task-check">{"\u2713"}</span>
-                      {t}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        </div>
+        <ProjectDetailPanel
+          project={sel}
+          onClose={() => setSelected(null)}
+          onChecklistUpdate={handleChecklistUpdate}
+          formatDuration={formatDuration}
+        />
       )}
 
       {/* Create project modal */}
-      {showCreate && (
-        <div className="modal-backdrop" onClick={() => setShowCreate(false)}>
-          <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={handleCreate}>
-            <h3>Yeni Proje Olustur</h3>
-            <label>
-              Proje Adi
-              <input type="text" value={createForm.name} onChange={(e) => setCreateForm(f => ({ ...f, name: e.target.value }))} placeholder="ornek-proje" autoFocus />
-            </label>
-            <label>
-              Aciklama
-              <textarea value={createForm.description} onChange={(e) => setCreateForm(f => ({ ...f, description: e.target.value }))} rows={2} placeholder="Proje aciklamasi..." />
-            </label>
-            <label>
-              Tur
-              <select value={createForm.type} onChange={(e) => setCreateForm(f => ({ ...f, type: e.target.value }))}>
-                <option value="web">Web Uygulamasi</option>
-                <option value="mobile">Mobil Uygulama</option>
-              </select>
-            </label>
-            <label>
-              Emoji
-              <input type="text" value={createForm.emoji} onChange={(e) => setCreateForm(f => ({ ...f, emoji: e.target.value }))} placeholder="\u{1F4E6}" maxLength={4} />
-            </label>
-            <div className="modal__actions">
-              <button type="button" className="btn" onClick={() => setShowCreate(false)}>Vazgec</button>
-              <button type="submit" className="btn btn--primary" disabled={createLoading || !createForm.name.trim()}>
-                {createLoading ? "Olusturuluyor..." : "Olustur"}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+      <CreateProjectModal
+        open={showCreate}
+        form={createForm}
+        loading={createLoading}
+        onFormChange={setCreateForm}
+        onSubmit={handleCreate}
+        onClose={() => setShowCreate(false)}
+      />
 
       {/* Delete confirmation modal */}
-      {deleteTarget && (
-        <div className="modal-backdrop" onClick={() => !deleteLoading && setDeleteTarget(null)}>
-          <div className="modal delete-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="delete-modal__header">
-              <h3 style={{ color: '#f85149', margin: 0 }}>Projeyi Sil</h3>
-              <button className="modal__close" onClick={() => !deleteLoading && setDeleteTarget(null)}>{"✕"}</button>
-            </div>
-            <div className="delete-modal__body">
-              <div className="delete-modal__warning">
-                <strong>{deleteTarget.emoji} {deleteTarget.name}</strong> projesi ve tum kaynaklari kalici olarak silinecek.
-              </div>
-
-              {/* Checklist — only visible during/after deletion */}
-              {(deleteLoading || deleteResult || deleteSteps.some(s => s.status !== 'waiting')) && <div style={{ margin: '12px 0', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {(deleteSteps.length > 0 ? deleteSteps : [
-                  { id: 'service', label: 'Systemd servisi', detail: deleteTarget.service || '-', status: 'waiting' as const },
-                  { id: 'tunnel', label: 'Cloudflare tunnel', detail: deleteTarget.domain || '-', status: 'waiting' as const },
-                  { id: 'files', label: 'Yerel dosyalar', detail: deleteTarget.repo || '~/projects/' + deleteTarget.id, status: 'waiting' as const },
-                  { id: 'github', label: 'GitHub repo', detail: deleteTarget.github?.replace('https://github.com/', '') || '-', status: 'waiting' as const },
-                  { id: 'json', label: 'projects.json', detail: deleteTarget.id, status: 'waiting' as const },
-                  { id: 'db', label: 'Pipeline kayitlari', detail: 'runs, steps, stories', status: 'waiting' as const },
-                ]).map((step) => (
-                  <div key={step.id} style={{
-                    display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px',
-                    background: step.status === 'done' ? 'rgba(63, 185, 80, 0.08)' : step.status === 'fail' ? 'rgba(248, 81, 73, 0.08)' : 'rgba(255,255,255,0.03)',
-                    borderRadius: '6px', fontSize: '13px', transition: 'all 0.3s ease',
-                    borderLeft: `3px solid ${step.status === 'done' ? '#3fb950' : step.status === 'fail' ? '#f85149' : step.status === 'skip' ? '#484f58' : '#30363d'}`
-                  }}>
-                    <span style={{ fontSize: '16px', width: '20px', textAlign: 'center', flexShrink: 0 }}>
-                      {step.status === 'done' ? '✅' : step.status === 'fail' ? '❌' : step.status === 'skip' ? '➖' : '⏳'}
-                    </span>
-                    <span style={{ color: step.status === 'skip' ? '#484f58' : '#e6edf3', fontWeight: 500 }}>{step.label}</span>
-                    <span style={{ color: '#484f58', fontSize: '11px', marginLeft: 'auto', fontFamily: 'monospace' }}>{step.detail}</span>
-                  </div>
-                ))}
-              </div>
-}
-
-              {!deleteLoading && !deleteResult && (
-                <div style={{ margin: '12px 0', padding: '10px', background: 'rgba(255,255,255,0.03)', borderRadius: '6px', fontSize: '13px', color: '#8b949e' }}>
-                  Silinecekler: servis, tunnel, dosyalar, GitHub repo, DB kayitlari
-                </div>
-              )}
-
-              {!deleteResult && (
-                <div className="delete-modal__confirm">
-                  <label>Onaylamak icin proje adini yazin: <strong style={{ color: '#f85149' }}>{deleteTarget.name}</strong></label>
-                  <input type="text" value={deleteConfirm} onChange={(e) => setDeleteConfirm(e.target.value)} placeholder={deleteTarget.name} disabled={deleteLoading} autoFocus />
-                </div>
-              )}
-              {deleteResult && !deleteResult.success && (
-                <div className="delete-modal__result delete-modal__result--error">
-                  <strong>Hata:</strong> {deleteResult.error}
-                </div>
-              )}
-            </div>
-            <div className="modal__actions">
-              {deleteResult?.success ? (
-                <button className="btn" onClick={() => { setDeleteTarget(null); setDeleteConfirm(""); setDeleteResult(null); setDeleteSteps([]); }}>Kapat</button>
-              ) : (
-                <>
-                  <button className="btn" onClick={() => setDeleteTarget(null)} disabled={deleteLoading}>Vazgec</button>
-                  <button className="btn btn--danger" onClick={handleDelete} disabled={deleteConfirm.trim() !== deleteTarget.name.trim() || deleteLoading}>
-                    {deleteLoading ? "Siliniyor..." : "Kalici Olarak Sil"}
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <DeleteProjectModal
+        target={deleteTarget}
+        confirmText={deleteConfirm}
+        loading={deleteLoading}
+        result={deleteResult}
+        steps={deleteSteps}
+        onConfirmTextChange={setDeleteConfirm}
+        onDelete={handleDelete}
+        onClose={() => { setDeleteTarget(null); setDeleteConfirm(""); setDeleteResult(null); setDeleteSteps([]); }}
+      />
     </div>
   );
 }

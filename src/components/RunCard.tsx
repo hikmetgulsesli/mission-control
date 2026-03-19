@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { format } from 'date-fns';
 import { api } from '../lib/api';
 import { useToast } from './Toast';
 import type { Run } from '../lib/types';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface Props {
   run: Run;
@@ -18,10 +19,11 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`run-badge ${cls}`}>{status}</span>;
 }
 
-export function RunCard({ run, onClick, onDelete }: Props) {
+export const RunCard = React.memo(function RunCard({ run, onClick, onDelete }: Props) {
   const { toast } = useToast();
   const [expanded, setExpanded] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const statusClass = run.status === 'running' ? 'run-card--running'
     : run.status === 'completed' ? 'run-card--completed'
@@ -31,9 +33,13 @@ export function RunCard({ run, onClick, onDelete }: Props) {
   const doneSteps = run.steps?.filter(s => s.status === 'done').length || 0;
   const totalSteps = run.steps?.length || 0;
 
-  const handleDelete = async (e: React.MouseEvent) => {
+  const handleDeleteClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!confirm(`Delete run ${run.id.slice(0, 8)}? This cannot be undone.`)) return;
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteConfirmed = async () => {
+    setShowDeleteConfirm(false);
     setDeleting(true);
     try {
       await api.deleteRun(run.id);
@@ -46,8 +52,8 @@ export function RunCard({ run, onClick, onDelete }: Props) {
   };
 
   return (
-    <div className={`run-card ${statusClass} ${onClick ? 'run-card--clickable' : ''}`} onClick={onClick}>
-      <div className="run-card__header" onClick={() => setExpanded(!expanded)} style={{ cursor: 'pointer' }}>
+    <div className={`run-card ${statusClass} ${onClick ? 'run-card--clickable' : ''}`} onClick={onClick} role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined} onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}>
+      <div className="run-card__header" role="button" tabIndex={0} onClick={() => setExpanded(!expanded)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(!expanded); } }} style={{ cursor: 'pointer' }}>
         <span className="run-card__id">#{run.id.slice(0, 8)}</span>
         <span className="run-card__workflow">{run.workflow}</span>
         {run.progress && <span className="run-card__progress">{run.progress}</span>}
@@ -77,7 +83,7 @@ export function RunCard({ run, onClick, onDelete }: Props) {
         <div className="run-card__steps">
           <div className="run-card__steps-header">Pipeline Steps</div>
           {run.steps.map((step, i) => (
-            <div key={i} className={`run-card__step run-card__step--${step.status}`}>
+            <div key={step.id || i} className={`run-card__step run-card__step--${step.status}`}>
               <span className="run-card__step-status">
                 {step.status === 'done' ? '✓' : step.status === 'failed' ? '✗' : step.status === 'pending' ? '▶' : '○'}
               </span>
@@ -100,13 +106,21 @@ export function RunCard({ run, onClick, onDelete }: Props) {
       {run.status !== 'running' && (
         <button 
           className="run-card__delete" 
-          onClick={handleDelete}
+          onClick={handleDeleteClick}
           disabled={deleting}
           title="Delete run"
         >
           {deleting ? '...' : '🗑️'}
         </button>
       )}
+    <ConfirmDialog
+        open={showDeleteConfirm}
+        title="Run Sil"
+        message={`Run ${run.id.slice(0, 8)} silinecek. Bu islem geri alinamaz.`}
+        confirmLabel="Sil"
+        onConfirm={handleDeleteConfirmed}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </div>
   );
-}
+});

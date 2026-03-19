@@ -1,3 +1,4 @@
+import { REAL_AGENT_IDS } from '../shared/agents.js';
 import { Router } from 'express';
 import { readFileSync } from 'fs';
 import { config } from '../config.js';
@@ -6,7 +7,7 @@ import { runCliJson, runCli } from '../utils/cli.js';
 import { getSystemMetrics } from '../utils/prometheus.js';
 import { getRuns } from '../utils/setfarm.js';
 const router = Router();
-const REAL_AGENTS = ['main', 'koda', 'flux', 'atlas', 'iris', 'sentinel', 'cipher', 'lux', 'nexus', 'prism'];
+const REAL_AGENTS = REAL_AGENT_IDS;
 // Fetch open PRs from GitHub (cached 5 min)
 async function fetchOpenPRs() {
     try {

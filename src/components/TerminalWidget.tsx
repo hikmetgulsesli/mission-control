@@ -93,7 +93,7 @@ export function TerminalDrawer({ open, onClose }: { open: boolean; onClose: () =
       </div>
       <div className="term-drawer__body" ref={outputRef}>
         {history.map((entry, i) => (
-          <div key={i} className="term-drawer__entry">
+          <div key={`cmd-${i}`} className="term-drawer__entry">
             <div className="term-drawer__prompt">
               <span className="term-drawer__dollar">$ </span>
               <span>{entry.command} {entry.args.join(' ')}</span>

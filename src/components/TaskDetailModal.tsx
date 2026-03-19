@@ -69,7 +69,7 @@ export function TaskDetailModal({ task, agents, onClose, onSaved }: Props) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal task-detail-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal task-detail-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <div className="task-detail-modal__header">
           <h3>{isNew ? "New Task" : "Edit Task"}</h3>
           <button className="agent-edit-modal__close" onClick={onClose}>X</button>
@@ -140,7 +140,7 @@ export function TaskDetailModal({ task, agents, onClose, onSaved }: Props) {
             <label>ATTACHMENTS</label>
             <div className="task-detail-modal__thumbs">
               {task.images.map((img, i) => (
-                <div key={i} className="task-detail-modal__thumb">
+                <div key={img} className="task-detail-modal__thumb">
                   <img src={`/uploads/${img}`} alt={img} />
                   <button
                     className="task-detail-modal__thumb-delete"

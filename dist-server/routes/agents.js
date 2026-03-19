@@ -1,3 +1,4 @@
+import { REAL_AGENT_IDS } from '../shared/agents.js';
 import { Router } from 'express';
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
@@ -5,7 +6,7 @@ import { runCliJson, runCli } from '../utils/cli.js';
 import { cached, setCache } from '../utils/cache.js';
 import { config, PATHS } from '../config.js';
 const router = Router();
-const REAL_AGENTS = ['main', 'koda', 'flux', 'atlas', 'iris', 'sentinel', 'cipher', 'lux', 'nexus', 'prism'];
+const REAL_AGENTS = REAL_AGENT_IDS;
 function getAgentActivity(agentId) {
     const dir = agentId === "main" ? "main" : agentId;
     const sessionsDir = join(PATHS.agentsDir, dir, "sessions");

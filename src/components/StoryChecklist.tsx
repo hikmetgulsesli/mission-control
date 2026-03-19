@@ -51,7 +51,7 @@ export function StoryChecklist({ runId, onRetry }: { runId: string; onRetry?: (s
           {story.acceptance_criteria && Array.isArray(story.acceptance_criteria) && story.acceptance_criteria.length > 0 && (
             <ul className="story-checklist__criteria">
               {story.acceptance_criteria.map((ac, i) => (
-                <li key={i}>{typeof ac === 'string' ? ac : JSON.stringify(ac)}</li>
+                <li key={`ac-${i}`}>{typeof ac === 'string' ? ac : JSON.stringify(ac)}</li>
               ))}
             </ul>
           )}

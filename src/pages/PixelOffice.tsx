@@ -238,7 +238,7 @@ export function PixelOffice({ visible }: Props) {
 
       {chatOverlay && (
         <div className="pixel-office__chat-overlay" onClick={() => setChatOverlay(null)}>
-          <div className="pixel-office__chat-overlay-content" onClick={e => e.stopPropagation()}>
+          <div className="pixel-office__chat-overlay-content" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
             <div className="pixel-office__chat-overlay-header">
               {agentInfo ? `${agentInfo.emoji} ${agentInfo.name}` : chatOverlay.agent}
               <button

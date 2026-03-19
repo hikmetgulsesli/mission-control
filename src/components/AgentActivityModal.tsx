@@ -21,7 +21,7 @@ export function AgentActivityModal({ agentId, agentName, onClose }: Props) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal modal--large" onClick={e => e.stopPropagation()}>
+      <div className="modal modal--large" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
         <div className="modal__header">
           <h3>📊 {agentName} Activity</h3>
           <button className="modal__close" onClick={onClose}>×</button>

@@ -74,7 +74,7 @@ export function Costs() {
           </thead>
           <tbody>
             {tokenRows.map((row, i) => (
-              <tr key={i}>
+              <tr key={row.model || i}>
                 <td className="token-table__model">{row.model}</td>
                 <td>{row.calls?.toLocaleString() ?? '-'}</td>
                 <td>{row.input ?? '-'}</td>
@@ -106,7 +106,7 @@ export function Costs() {
               </thead>
               <tbody>
                 {tokenRowsToday.map((row, i) => (
-                  <tr key={i}>
+                  <tr key={row.model || i}>
                     <td className="token-table__model">{row.model}</td>
                     <td>{row.calls?.toLocaleString() ?? '-'}</td>
                     <td>{row.input ?? '-'}</td>

@@ -81,7 +81,7 @@ export function AgentEditModal({ agent, onClose, onSave }: Props) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal agent-edit-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal agent-edit-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <div className="agent-edit-modal__header">
           <span className="agent-edit-modal__emoji" style={{ color }}>{emoji}</span>
           <h3>{name}</h3>
@@ -95,6 +95,7 @@ export function AgentEditModal({ agent, onClose, onSave }: Props) {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Agent name"
+            autoFocus
           />
         </label>
 
