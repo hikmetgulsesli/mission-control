@@ -287,11 +287,12 @@ router.post('/prd/mockups', async (req, res) => {
 });
 // GET /prd/mockups/stream — SSE streaming mockup uretimi
 router.get("/prd/mockups/stream", async (req, res) => {
-  const { prdId, prdContent: rawContent, title: rawTitle } = req.query as any;
+  const { prdId, prdContent: rawContent, title: rawTitle, skipCount: rawSkip, projectId: existingProjectId } = req.query as any;
   const prd = prdId ? await getPrd(prdId) : null;
   const content = rawContent || prd?.prd_content;
   const prdTitle = rawTitle || prd?.title || "Untitled";
   const platform = prd?.platform || "web";
+  const skipCount = parseInt(rawSkip || "0", 10);
 
   if (!content) { res.status(400).json({ error: "prdContent or prdId required" }); return; }
 
@@ -317,11 +318,13 @@ router.get("/prd/mockups/stream", async (req, res) => {
     const keepalive = setInterval(() => { try { res.write(": ping\n\n"); } catch { clearInterval(keepalive); } }, 15000);
 
   try {
-    const projectId = await createStitchProject("PRD: " + prdTitle);
+    const projectId = existingProjectId || await createStitchProject("PRD: " + prdTitle);
     if (!projectId) { clearInterval(keepalive); send("error", { message: "Failed to create Stitch project" }); res.end(); return; }
 
-    const prompts = extractScreenPrompts(content, platform);
-    send("start", { projectId, total: prompts.length });
+    const allPrompts = extractScreenPrompts(content, platform);
+    const prompts = skipCount > 0 ? allPrompts.slice(skipCount) : allPrompts;
+    const totalAll = allPrompts.length;
+    send("start", { projectId, total: totalAll, remaining: prompts.length, resumed: skipCount > 0 });
 
     const allScreens: any[] = [];
     const cacheDir = join(homedir(), ".openclaw", "setfarm", "stitch-cache", projectId);
@@ -329,7 +332,8 @@ router.get("/prd/mockups/stream", async (req, res) => {
 
     for (let i = 0; i < prompts.length; i++) {
       const sp = prompts[i];
-      send("progress", { index: i, total: prompts.length, title: sp.title, status: "generating" });
+      const globalIndex = skipCount + i;
+      send("progress", { index: globalIndex, total: totalAll, title: sp.title, status: "generating" });
 
       const screen = await generateScreen(projectId, sp.prompt, sp.title, sp.device);
       if (screen) {
@@ -347,7 +351,7 @@ router.get("/prd/mockups/stream", async (req, res) => {
           prompt: sp.prompt, projectId,
         };
         allScreens.push(entry);
-        send("screen", { index: i, total: prompts.length, screen: entry });
+        send("screen", { index: globalIndex, total: totalAll, screen: entry });
       }
       if (i < prompts.length - 1) await new Promise(r => setTimeout(r, 2000));
     }

@@ -294,6 +294,68 @@ export function PrdGenerator() {
     es.onerror = () => { closeEs(); };
   };
 
+  // Mockup devam et (kesilmisse kalan ekranlari uret)
+  const handleResumeMockups = async () => {
+    if (!store.prdContent || !store.id) return;
+    const existingCount = store.mockupScreens.length;
+    if (existingCount === 0) { handleMockups(); return; }
+
+    setLoading('mockups', true);
+    addLog(`Kalan ekranlar uretiliyor (${existingCount} mevcut)...`);
+
+    const params = new URLSearchParams({ prdId: store.id });
+    if (store.title) params.set('title', store.title);
+    params.set('skipCount', String(existingCount));
+    if (store.stitchProjectId) params.set('projectId', store.stitchProjectId);
+
+    const es = new EventSource(`/api/prd/mockups/stream?${params.toString()}`);
+    let closed = false;
+    const closeEs = () => { if (!closed) { closed = true; es.close(); setLoading('mockups', false); } };
+
+    es.addEventListener('start', (e) => {
+      const data = JSON.parse(e.data);
+      if (!store.stitchProjectId) setStore({ stitchProjectId: data.projectId || null });
+      addLog(`${data.remaining} ekran daha uretilecek`);
+    });
+
+    es.addEventListener('progress', (e) => {
+      const data = JSON.parse(e.data);
+      addLog(`[${data.index + 1}/${data.total}] ${data.title} uretiliyor...`);
+    });
+
+    es.addEventListener('screen', (e) => {
+      const data = JSON.parse(e.data);
+      const current = usePrdStore.getState().mockupScreens;
+      setStore({ mockupScreens: [...current, data.screen] });
+      addLog(`[${data.index + 1}/${data.total}] ${data.screen.name} tamamlandi`);
+    });
+
+    es.addEventListener('done', (e) => {
+      const data = JSON.parse(e.data);
+      // Merge existing + new
+      const existing = usePrdStore.getState().mockupScreens;
+      setStore({ mockupScreens: existing, stitchProjectId: data.projectId });
+      addLog(`Tamamlandi! Toplam ${existing.length} ekran`);
+      closeEs();
+      const prdContent = usePrdStore.getState().prdContent;
+      if (existing.length > 0 && prdContent) {
+        api.prdScreenCoverage({ prdContent, screens: existing })
+          .then(cov => setStore({ screenCoverage: cov }))
+          .catch(() => {});
+      }
+    });
+
+    es.addEventListener('error', (e) => {
+      try { const data = JSON.parse((e as MessageEvent).data); addLog(`Hata: ${data.message}`); } catch {
+        const current = usePrdStore.getState().mockupScreens;
+        addLog(`Baglanti kesildi — ${current.length} ekran mevcut`);
+      }
+      closeEs();
+    });
+
+    es.onerror = () => { closeEs(); };
+  };
+
   // A/B karsilastirma
   const handleCompare = async () => {
     if (!store.id) return;
@@ -608,6 +670,9 @@ export function PrdGenerator() {
                   <button className="btn btn--small" onClick={() => setStore({ editMode: !store.editMode })}>{store.editMode ? 'Onizle' : 'Duzenle'}</button>
                   <button className="btn btn--small btn--primary" onClick={handleEnhance} disabled={store.loading.enhance}>{store.loading.enhance ? 'Gelistiriliyor...' : 'Gelistir'}</button>
                   <button className="btn btn--small" onClick={handleMockups} disabled={store.loading.mockups}>{store.loading.mockups ? 'Uretiliyor...' : 'Mockup Uret'}</button>
+                  {store.mockupScreens.length > 0 && !store.loading.mockups && (
+                    <button className="btn btn--small btn--primary" onClick={handleResumeMockups}>Devam Et</button>
+                  )}
                   <button className="btn btn--small" onClick={handleCompare} disabled={store.loading.compare}>A/B</button>
                   <button className="btn btn--small" onClick={() => {
                     const blob = new Blob([store.prdContent], { type: 'text/markdown' });
