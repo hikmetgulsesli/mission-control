@@ -201,6 +201,17 @@ export function PrdGenerator() {
         costEstimate: result.cost_estimate,
       });
       addLog(`PRD v${result.prd_version} — Skor: ${result.score}/100`);
+      // Coverage yeniden hesapla (PRD degisti, yeni sayfalar eklenmis olabilir)
+      const currentScreens = usePrdStore.getState().mockupScreens;
+      if (currentScreens.length > 0 && result.prd_content) {
+        try {
+          const cov = await api.prdScreenCoverage({ prdContent: result.prd_content, screens: currentScreens });
+          setStore({ screenCoverage: cov });
+          if (cov.missing.length > 0) {
+            addLog(`${cov.missing.length} yeni/eksik sayfa tespit edildi`);
+          }
+        } catch { /* optional */ }
+      }
     } catch (err: any) {
       addLog(`Gelistirme hatasi: ${err.message}`);
     }
@@ -415,16 +426,33 @@ export function PrdGenerator() {
 
   // Eksik sayfa icin mockup uret
   const handleGenerateMissing = async (title: string) => {
-    if (!store.stitchProjectId || !store.id) { addLog('Once mockup ureti yapilmali'); return; }
+    if (!store.stitchProjectId || !store.id) { addLog('Once mockup uretimi yapilmali'); return; }
     setLoading('screenAction', true);
     addLog(`"${title}" sayfasi icin mockup uretiliyor...`);
     try {
+      // PRD'den bu sayfanin detaylarini bul
+      const prdLines = store.prdContent.split('\n');
+      let pageDetails = '';
+      let found = false;
+      for (const line of prdLines) {
+        if (found && /^#{1,2}\s/.test(line)) break;
+        if (line.toLowerCase().includes(title.toLowerCase()) && /^#{1,2}\s/.test(line)) { found = true; }
+        if (found) pageDetails += line + '\n';
+      }
+      const prompt = `Create a web page screen for: ${title}\n\nPage details:\n${pageDetails || title}\n\nMatch the existing design system exactly.`;
       const result = await api.prdVariantScreen(store.id, {
         sourceScreenId: store.mockupScreens[0]?.id || '',
-        prompt: `Create a web page screen for: ${title}. Make it match the existing design system.`,
+        prompt,
       });
       setStore({ mockupScreens: result.screens });
       addLog(`"${title}" mockup'i uretildi`);
+      // Coverage guncelle
+      const prdContent = usePrdStore.getState().prdContent;
+      if (prdContent && result.screens.length > 0) {
+        api.prdScreenCoverage({ prdContent, screens: result.screens })
+          .then(cov => setStore({ screenCoverage: cov }))
+          .catch(() => {});
+      }
     } catch (err: any) {
       addLog(`Uretim hatasi: ${err.message}`);
     }
