@@ -295,6 +295,11 @@ router.get("/prd/mockups/stream", async (req, res) => {
 
   if (!content) { res.status(400).json({ error: "prdContent or prdId required" }); return; }
 
+  // Disable socket timeout for long-running SSE
+  req.socket.setTimeout(0);
+  req.socket.setNoDelay(true);
+  req.socket.setKeepAlive(true);
+
   // SSE headers
   res.writeHead(200, {
     "Content-Type": "text/event-stream",
@@ -308,9 +313,12 @@ router.get("/prd/mockups/stream", async (req, res) => {
     res.write("data: " + JSON.stringify(data) + "\n\n");
   };
 
+  // Keepalive ping every 15s to prevent connection timeout
+    const keepalive = setInterval(() => { try { res.write(": ping\n\n"); } catch { clearInterval(keepalive); } }, 15000);
+
   try {
     const projectId = await createStitchProject("PRD: " + prdTitle);
-    if (!projectId) { send("error", { message: "Failed to create Stitch project" }); res.end(); return; }
+    if (!projectId) { clearInterval(keepalive); send("error", { message: "Failed to create Stitch project" }); res.end(); return; }
 
     const prompts = extractScreenPrompts(content, platform);
     send("start", { projectId, total: prompts.length });
@@ -346,9 +354,11 @@ router.get("/prd/mockups/stream", async (req, res) => {
 
     if (prdId) { await updatePrd(prdId, { mockup_screens: allScreens }); }
     send("done", { projectId, screens: allScreens, total: allScreens.length });
+    clearInterval(keepalive);
   } catch (err: any) {
     send("error", { message: err.message });
   }
+  clearInterval(keepalive);
   res.end();
 });
 

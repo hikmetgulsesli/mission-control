@@ -214,12 +214,34 @@ export function PrdGenerator() {
     setStore({ mockupScreens: [], activeTab: 'mockup', screenCoverage: null });
     addLog('Mockup uretiliyor...');
 
-    const params = new URLSearchParams();
-    if (store.id) params.set('prdId', store.id);
-    if (!store.id && store.prdContent) params.set('prdContent', store.prdContent);
+    // PRD DB'de yoksa once kaydet (SSE icin prdId lazim, prdContent URL'e sigmaz)
+    let prdId = store.id;
+    if (!prdId) {
+      try {
+        const result = await api.prdGenerate({
+          title: store.title || 'Untitled',
+          platform: store.platform,
+          description: store.description,
+          analysis: store.analysis,
+          research: store.research,
+          chatHistory: store.chatHistory,
+          urls: store.urls.filter((u: string) => u.trim()),
+        });
+        prdId = result.id;
+        setStore({ id: result.id, prdVersion: result.prd_version, score: result.score, scoreDetails: result.score_details, costEstimate: result.cost_estimate });
+      } catch (err: any) {
+        addLog(`PRD kaydetme hatasi: ${err.message}`);
+        setLoading('mockups', false);
+        return;
+      }
+    }
+
+    const params = new URLSearchParams({ prdId: prdId! });
     if (store.title) params.set('title', store.title);
 
     const es = new EventSource(`/api/prd/mockups/stream?${params.toString()}`);
+    let closed = false;
+    const closeEs = () => { if (!closed) { closed = true; es.close(); setLoading('mockups', false); } };
 
     es.addEventListener('start', (e) => {
       const data = JSON.parse(e.data);
@@ -234,7 +256,8 @@ export function PrdGenerator() {
 
     es.addEventListener('screen', (e) => {
       const data = JSON.parse(e.data);
-      setStore({ mockupScreens: [...usePrdStore.getState().mockupScreens, data.screen] });
+      const current = usePrdStore.getState().mockupScreens;
+      setStore({ mockupScreens: [...current, data.screen] });
       addLog(`[${data.index + 1}/${data.total}] ${data.screen.name} tamamlandi`);
     });
 
@@ -242,11 +265,11 @@ export function PrdGenerator() {
       const data = JSON.parse(e.data);
       setStore({ mockupScreens: data.screens, stitchProjectId: data.projectId });
       addLog(`${data.total} ekran mockup'i uretildi`);
-      es.close();
-      setLoading('mockups', false);
+      closeEs();
       // Coverage check
-      if (data.screens.length > 0 && store.prdContent) {
-        api.prdScreenCoverage({ prdContent: store.prdContent, screens: data.screens })
+      const prdContent = usePrdStore.getState().prdContent;
+      if (data.screens.length > 0 && prdContent) {
+        api.prdScreenCoverage({ prdContent, screens: data.screens })
           .then(cov => setStore({ screenCoverage: cov }))
           .catch(() => {});
       }
@@ -257,16 +280,18 @@ export function PrdGenerator() {
         const data = JSON.parse((e as MessageEvent).data);
         addLog(`Mockup hatasi: ${data.message}`);
       } catch {
-        addLog('Mockup baglantisi kesildi');
+        // SSE reconnect attempt — ignore if already got screens
+        const current = usePrdStore.getState().mockupScreens;
+        if (current.length > 0) {
+          addLog(`Baglanti kesildi ama ${current.length} ekran mevcut`);
+        } else {
+          addLog('Mockup baglantisi kesildi');
+        }
       }
-      es.close();
-      setLoading('mockups', false);
+      closeEs();
     });
 
-    es.onerror = () => {
-      es.close();
-      setLoading('mockups', false);
-    };
+    es.onerror = () => { closeEs(); };
   };
 
   // A/B karsilastirma
