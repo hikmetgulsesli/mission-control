@@ -26,3 +26,8 @@ Thumbs.db
 # Editor
 .vscode/
 .idea/
+
+# Stitch cache
+stitch/
+.stitch-screens-*
+DESIGN.md
