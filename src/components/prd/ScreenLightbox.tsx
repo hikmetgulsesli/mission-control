@@ -94,16 +94,16 @@ export function ScreenLightbox({
         {/* Close button */}
         <button className="screen-lightbox__close" onClick={onClose}>x</button>
 
-        {/* Preview */}
+        {/* Preview — HTML iframe preferred over PNG thumbnail */}
         <div className="screen-lightbox__preview">
           {loading ? (
             <div className="screen-lightbox__loading">Yukleniyor...</div>
+          ) : screen.htmlUrl ? (
+            <iframe src={screen.htmlUrl} title={screen.name} sandbox="allow-scripts allow-same-origin" />
           ) : screen.screenshotUrl ? (
-            <a href={screen.screenshotUrl} target="_blank" rel="noopener noreferrer" title="Tam boyut goruntulemek icin tikla">
+            <a href={screen.screenshotUrl} target="_blank" rel="noopener noreferrer">
               <img src={screen.screenshotUrl} alt={screen.name} />
             </a>
-          ) : screen.htmlUrl ? (
-            <iframe src={screen.htmlUrl} title={screen.name} sandbox="allow-scripts" />
           ) : (
             <div className="screen-lightbox__placeholder">Onizleme mevcut degil</div>
           )}
@@ -163,11 +163,8 @@ export function ScreenLightbox({
                 <button className="btn btn--small" onClick={() => onRegenerate(screen.id)} disabled={loading}>Degistir</button>
                 <button className="btn btn--small" onClick={() => setEditingPrompt(true)} disabled={loading}>Duzenle & Uret</button>
                 <button className="btn btn--small" onClick={() => onVariant(screen.id)} disabled={loading}>Varyant</button>
-                {screen.screenshotUrl && (
-                  <a href={screen.screenshotUrl} target="_blank" rel="noopener noreferrer" className="btn btn--small">Resmi Ac</a>
-                )}
                 {screen.htmlUrl && (
-                  <a href={screen.htmlUrl} target="_blank" rel="noopener noreferrer" className="btn btn--small">HTML Ac</a>
+                  <a href={screen.htmlUrl} target="_blank" rel="noopener noreferrer" className="btn btn--small">Yeni Sekmede Ac</a>
                 )}
               </>
             )}
