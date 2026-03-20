@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 
 interface PrdState {
   id: string | null;
@@ -74,38 +73,13 @@ const initialState: PrdState = {
   lightboxScreenId: null,
 };
 
-// B4 fix: persist critical form fields to localStorage so chat history survives page refresh
-export const usePrdStore = create<PrdState & PrdActions>()(
-  persist(
-    (set) => ({
-      ...initialState,
-      setState: (updates) => set((s) => ({ ...s, ...updates })),
-      addLog: (msg) => set((s) => ({ logs: [...s.logs, `[${new Date().toLocaleTimeString('tr-TR')}] ${msg}`] })),
-      setLoading: (key, val) => set((s) => ({
-        loading: { ...s.loading, [key]: val },
-        loadingStartedAt: { ...s.loadingStartedAt, [key]: val ? (s.loadingStartedAt[key] || Date.now()) : 0 },
-      })),
-      reset: () => set({ ...initialState, urls: [''], logs: [] }),
-    }),
-    {
-      name: 'mc-prd-draft',
-      partialize: (state) => ({
-        id: state.id,
-        title: state.title,
-        platform: state.platform,
-        urls: state.urls,
-        description: state.description,
-        chatHistory: state.chatHistory,
-        prdContent: state.prdContent,
-        prdVersion: state.prdVersion,
-        score: state.score,
-        scoreDetails: state.scoreDetails,
-        costEstimate: state.costEstimate,
-        mockupScreens: state.mockupScreens,
-        stitchProjectId: state.stitchProjectId,
-        projectName: state.projectName,
-        workflow: state.workflow,
-      }),
-    },
-  ),
-);
+export const usePrdStore = create<PrdState & PrdActions>((set) => ({
+  ...initialState,
+  setState: (updates) => set((s) => ({ ...s, ...updates })),
+  addLog: (msg) => set((s) => ({ logs: [...s.logs, `[${new Date().toLocaleTimeString('tr-TR')}] ${msg}`] })),
+  setLoading: (key, val) => set((s) => ({
+    loading: { ...s.loading, [key]: val },
+    loadingStartedAt: { ...s.loadingStartedAt, [key]: val ? (s.loadingStartedAt[key] || Date.now()) : 0 },
+  })),
+  reset: () => set({ ...initialState, urls: [''], logs: [] }),
+}));
