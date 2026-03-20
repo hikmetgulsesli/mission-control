@@ -136,13 +136,12 @@ export async function downloadScreen(projectId: string, screenId: string, output
     validateStitchId(projectId, 'projectId');
     validateStitchId(screenId, 'screenId');
     mkdirSync(outputDir, { recursive: true });
-    const output = await runStitch(['download-screen', projectId, screenId, outputDir]);
-    const htmlMatch = output.match(/html[:\s]+(.+\.html)/i);
-    const pngMatch = output.match(/screenshot[:\s]+(.+\.png)/i);
-    return {
-      htmlPath: htmlMatch?.[1] || join(outputDir, `${screenId}.html`),
-      screenshotPath: pngMatch?.[1] || join(outputDir, `${screenId}.png`),
-    };
+    // stitch-api.mjs expects a FILE path, not directory
+    const outputFile = join(outputDir, `${screenId}.html`);
+    const output = await runStitch(['download-screen', projectId, screenId, outputFile]);
+    const htmlPath = join(outputDir, `${screenId}.html`);
+    const screenshotPath = join(outputDir, `${screenId}.png`);
+    return { htmlPath, screenshotPath };
   } catch (err: any) {
     console.error('[STITCH] downloadScreen error:', err.message);
     return null;
@@ -191,7 +190,11 @@ export async function generateMockupsFromPrd(prdContent: string, title: string, 
     if (screen.screenId && screen.status === 'done') {
       try {
         const downloaded = await downloadScreen(projectId, screen.screenId, cacheDir);
-        if (downloaded) screen.localHtml = downloaded.htmlPath;
+        if (downloaded) {
+          screen.localHtml = downloaded.htmlPath;
+          screen.screenshotUrl = `/stitch-cache/${projectId}/${screen.screenId}.png`;
+          screen.htmlUrl = `/stitch-cache/${projectId}/${screen.screenId}.html`;
+        }
       } catch { /* continue */ }
     }
   }

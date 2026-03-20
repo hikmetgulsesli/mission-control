@@ -341,7 +341,12 @@ router.get("/prd/mockups/stream", async (req, res) => {
         if (screen.screenId && screen.status === "done") {
           try {
             const dl = await downloadScreen(projectId, screen.screenId, cacheDir);
-            if (dl) screen.localHtml = dl.htmlPath;
+            if (dl) {
+              screen.localHtml = dl.htmlPath;
+              // Use local URLs for full-quality screenshots + HTML
+              screen.screenshotUrl = `/stitch-cache/${projectId}/${screen.screenId}.png`;
+              screen.htmlUrl = `/stitch-cache/${projectId}/${screen.screenId}.html`;
+            }
           } catch { /* ok */ }
         }
         const entry = {
