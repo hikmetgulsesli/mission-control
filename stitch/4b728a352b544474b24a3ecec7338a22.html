@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="tr"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700;800;900&amp;family=Inter:wght@300;400;500;600;700&amp;family=Geist+Mono:wght@100..900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "on-primary": "#005f28",
+                        "secondary-fixed": "#7afbb7",
+                        "secondary-container": "#006d44",
+                        "on-secondary-container": "#e1ffe9",
+                        "error-dim": "#d53d18",
+                        "on-background": "#f9f5fd",
+                        "secondary-fixed-dim": "#6beca9",
+                        "surface-variant": "#25252d",
+                        "tertiary": "#7de9ff",
+                        "on-tertiary-fixed": "#00363e",
+                        "on-primary-container": "#002c0f",
+                        "on-secondary-fixed": "#00492c",
+                        "surface-container-low": "#131319",
+                        "inverse-on-surface": "#55545b",
+                        "on-surface": "#f9f5fd",
+                        "tertiary-fixed": "#00e0fd",
+                        "secondary-dim": "#6beca9",
+                        "error": "#ff7351",
+                        "background": "#0e0e13",
+                        "on-error-container": "#ffd2c8",
+                        "on-surface-variant": "#acaab1",
+                        "on-tertiary-container": "#004b56",
+                        "secondary": "#7afbb7",
+                        "surface-tint": "#6bff8f",
+                        "surface-container-lowest": "#000000",
+                        "error-container": "#b92902",
+                        "on-primary-fixed": "#004a1d",
+                        "on-tertiary-fixed-variant": "#005561",
+                        "outline-variant": "#48474d",
+                        "surface": "#0e0e13",
+                        "on-secondary-fixed-variant": "#006942",
+                        "primary-container": "#0abc56",
+                        "on-tertiary": "#005561",
+                        "tertiary-fixed-dim": "#00d1ec",
+                        "on-error": "#450900",
+                        "inverse-primary": "#006e2f",
+                        "on-secondary": "#005e3a",
+                        "surface-container-highest": "#25252d",
+                        "on-primary-fixed-variant": "#006a2d",
+                        "surface-bright": "#2c2b33",
+                        "primary-fixed": "#6bff8f",
+                        "inverse-surface": "#fcf8ff",
+                        "outline": "#76747b",
+                        "surface-dim": "#0e0e13",
+                        "primary": "#6bff8f",
+                        "primary-fixed-dim": "#5bf083",
+                        "surface-container-high": "#1f1f26",
+                        "tertiary-container": "#00e0fd",
+                        "tertiary-dim": "#00d1ec",
+                        "primary-dim": "#5bf083",
+                        "surface-container": "#19191f"
+                    },
+                    fontFamily: {
+                        "headline": ["Space Grotesk"],
+                        "body": ["Inter"],
+                        "label": ["Geist Mono"],
+                        "technical": ["Geist Mono"]
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "0.75rem", "xl": "1rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body { background-color: #0e0e13; color: #f9f5fd; font-family: 'Inter', sans-serif; }
+        .glass-panel {
+            background: rgba(31, 31, 38, 0.6);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+        .status-glow {
+            box-shadow: 0 0 12px #7de9ff;
+        }
+        .text-glow {
+            text-shadow: 0 0 10px rgba(107, 255, 143, 0.4);
+        }
+    </style>
+</head>
+<body class="selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopNavBar -->
+<nav class="fixed top-0 w-full z-50 bg-[#0e0e13]/80 backdrop-blur-md shadow-[0_0_20px_rgba(107,255,143,0.05)]">
+<div class="flex justify-between items-center px-6 py-4 max-w-7xl mx-auto">
+<div class="text-xl font-black tracking-tighter text-[#6bff8f]">ALEX CINOVOJ</div>
+<div class="hidden md:flex gap-8 items-center">
+<a class="font-['Space_Grotesk'] tracking-tight font-bold uppercase text-slate-400 hover:text-[#6bff8f] transition-colors" href="#">Selected Works</a>
+<a class="font-['Space_Grotesk'] tracking-tight font-bold uppercase text-slate-400 hover:text-[#6bff8f] transition-colors" href="#">Quiet AI</a>
+<a class="font-['Space_Grotesk'] tracking-tight font-bold uppercase text-slate-400 hover:text-[#6bff8f] transition-colors" href="#">Open Source</a>
+<a class="font-['Space_Grotesk'] tracking-tight font-bold uppercase text-slate-400 hover:text-[#6bff8f] transition-colors" href="#">Contact</a>
+<button class="bg-[#0abc56] text-[#002c0f] px-5 py-2 font-bold uppercase tracking-tight rounded hover:bg-[#6bff8f] transition-all duration-300 scale-95 active:scale-90">Hire Me</button>
+</div>
+<div class="md:hidden">
+<span class="material-symbols-outlined text-primary cursor-pointer">menu</span>
+</div>
+</div>
+</nav>
+<main class="pt-32 pb-20 px-6 max-w-7xl mx-auto">
+<!-- Hero Section -->
+<header class="mb-32">
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-8">
+<div class="max-w-3xl">
+<div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface-container-high border border-outline-variant/15 mb-6">
+<div class="w-2 h-2 rounded-full bg-tertiary status-glow"></div>
+<span class="font-label text-[10px] tracking-widest uppercase text-tertiary">System Version 4.0.1</span>
+</div>
+<h1 class="font-headline text-6xl md:text-8xl font-black tracking-tighter mb-8 leading-[0.9]">
+                        TASARIM <span class="text-primary text-glow">SİSTEMİ</span>
+</h1>
+<p class="font-body text-xl text-on-surface-variant leading-relaxed">
+                        The Precision Engineer: A high-fidelity framework designed for technical performance, visual clarity, and obsidian-grade contrast.
+                    </p>
+</div>
+<div class="flex flex-col items-end text-right">
+<span class="font-label text-xs tracking-[0.2em] text-outline mb-2">LAST UPDATED</span>
+<span class="font-technical text-2xl font-medium">2024.11.02</span>
+</div>
+</div>
+</header>
+<!-- North Star Section -->
+<section class="mb-32 bg-surface-container-lowest rounded-xl overflow-hidden border border-outline-variant/10">
+<div class="grid md:grid-cols-2">
+<div class="p-12 flex flex-col justify-center">
+<span class="font-label text-xs tracking-widest text-primary mb-4">MANIFESTO</span>
+<h2 class="font-headline text-4xl font-bold tracking-tight mb-6 uppercase">The Precision Engineer</h2>
+<p class="font-body text-on-surface-variant mb-8 leading-relaxed">
+                        Moved beyond generic dark mode. This system treats the interface as a custom-built physical console—asymmetric where function dictates, meticulously aligned, and breathing with intentional negative space.
+                    </p>
+<div class="space-y-4">
+<div class="flex items-start gap-4">
+<span class="material-symbols-outlined text-primary" data-icon="settings_input_component">settings_input_component</span>
+<div>
+<h4 class="font-headline font-bold text-sm uppercase mb-1">Tonal Layering</h4>
+<p class="text-xs text-on-surface-variant">Depth through background shifts, not shadows.</p>
+</div>
+</div>
+<div class="flex items-start gap-4">
+<span class="material-symbols-outlined text-primary" data-icon="light_mode">light_mode</span>
+<div>
+<h4 class="font-headline font-bold text-sm uppercase mb-1">Luminous Accents</h4>
+<p class="text-xs text-on-surface-variant">Functional glows represent actionable states.</p>
+</div>
+</div>
+</div>
+</div>
+<div class="relative min-h-[400px] bg-surface-container flex items-center justify-center overflow-hidden">
+<div class="absolute inset-0 bg-gradient-to-tr from-primary/10 to-transparent"></div>
+<img class="object-cover w-full h-full opacity-60 mix-blend-overlay" data-alt="Abstract architectural lines and green neon lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCMhBTUpdsmUj3mpGqWAhQIxrtlomk02RpjIHuMbh7glVxSWhRjkFXuxAFCbhSkvVj-79F-GhbEGc2ZRdpBGNsqpUtyMX60P4Q5Uns3X03Srhdej4seNb9n8YbLC22XMxewuSoGKgW7w26nFqBT3YIgvuybXuqKQiAsAe2QW_NrPpyom0nRe0c1PQoLd7qICBZrofnMfdl7NgMy_XgAZ_R28eRusqBLAPMSGmHKCTwC-DzaE-A8Gl-TBpfcbqkryEnW_V0Km0B9L_zS"/>
+<div class="absolute inset-0 flex items-center justify-center">
+<div class="w-64 h-64 border border-primary/20 rounded-full animate-pulse"></div>
+<div class="absolute w-48 h-48 border border-primary/40 rounded-full"></div>
+<span class="material-symbols-outlined text-primary text-6xl" data-icon="precision_manufacturing">precision_manufacturing</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Color Architecture -->
+<section class="mb-32">
+<div class="flex items-center gap-4 mb-12">
+<span class="font-label text-xs tracking-widest text-outline uppercase">Section 01</span>
+<div class="h-px flex-grow bg-outline-variant/20"></div>
+<h3 class="font-headline text-2xl font-bold uppercase">Color Architecture</h3>
+</div>
+<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
+<!-- Color Cards -->
+<div class="space-y-3">
+<div class="aspect-square bg-primary rounded-lg shadow-[0_0_20px_rgba(107,255,143,0.15)]"></div>
+<div>
+<p class="font-headline font-bold text-sm">PRIMARY</p>
+<p class="font-technical text-xs text-on-surface-variant">#6BFF8F</p>
+</div>
+</div>
+<div class="space-y-3">
+<div class="aspect-square bg-surface rounded-lg border border-outline-variant/30"></div>
+<div>
+<p class="font-headline font-bold text-sm">SURFACE</p>
+<p class="font-technical text-xs text-on-surface-variant">#0E0E13</p>
+</div>
+</div>
+<div class="space-y-3">
+<div class="aspect-square bg-surface-container rounded-lg"></div>
+<div>
+<p class="font-headline font-bold text-sm">CONTAINER</p>
+<p class="font-technical text-xs text-on-surface-variant">#19191F</p>
+</div>
+</div>
+<div class="space-y-3">
+<div class="aspect-square bg-tertiary rounded-lg"></div>
+<div>
+<p class="font-headline font-bold text-sm">TERTIARY</p>
+<p class="font-technical text-xs text-on-surface-variant">#7DE9FF</p>
+</div>
+</div>
+<div class="space-y-3">
+<div class="aspect-square bg-error-container rounded-lg"></div>
+<div>
+<p class="font-headline font-bold text-sm">ERROR</p>
+<p class="font-technical text-xs text-on-surface-variant">#B92902</p>
+</div>
+</div>
+<div class="space-y-3">
+<div class="aspect-square bg-surface-variant rounded-lg"></div>
+<div>
+<p class="font-headline font-bold text-sm">VARIANT</p>
+<p class="font-technical text-xs text-on-surface-variant">#25252D</p>
+</div>
+</div>
+</div>
+</section>
+<!-- Component Library -->
+<section class="mb-32">
+<div class="flex items-center gap-4 mb-12">
+<span class="font-label text-xs tracking-widest text-outline uppercase">Section 02</span>
+<div class="h-px flex-grow bg-outline-variant/20"></div>
+<h3 class="font-headline text-2xl font-bold uppercase">Component Library</h3>
+</div>
+<div class="grid lg:grid-cols-3 gap-12">
+<!-- Buttons -->
+<div class="space-y-8">
+<h4 class="font-label text-[10px] tracking-[0.3em] text-primary uppercase border-b border-primary/20 pb-2">Interactive Actions</h4>
+<div class="space-y-6">
+<button class="w-full bg-gradient-to-br from-primary to-primary-container text-on-primary py-4 rounded font-headline font-extrabold uppercase tracking-tight shadow-lg shadow-primary/10 transition-transform active:scale-95">
+                            Primary Action
+                        </button>
+<button class="w-full bg-transparent border border-outline-variant/30 text-primary py-4 rounded font-headline font-bold uppercase tracking-tight hover:bg-primary/5 transition-colors">
+                            Secondary Ghost
+                        </button>
+<div class="flex gap-4">
+<button class="flex-1 bg-surface-container py-3 rounded-full text-xs font-label uppercase tracking-widest text-on-surface-variant hover:text-primary transition-colors">
+                                Flat Toggle
+                            </button>
+<button class="p-3 bg-surface-container-high rounded text-primary">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Inputs -->
+<div class="space-y-8">
+<h4 class="font-label text-[10px] tracking-[0.3em] text-primary uppercase border-b border-primary/20 pb-2">Data Acquisition</h4>
+<div class="space-y-6">
+<div class="space-y-2">
+<label class="font-label text-[10px] text-on-surface-variant ml-1 uppercase tracking-widest">System Key</label>
+<div class="relative">
+<input class="w-full bg-surface-container-lowest border-0 rounded p-4 font-technical text-sm text-primary placeholder:text-outline focus:ring-1 focus:ring-primary/40 transition-all" placeholder="Enter alphanumeric string..." type="text"/>
+<span class="absolute right-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-outline-variant text-sm" data-icon="key">key</span>
+</div>
+</div>
+<div class="space-y-2">
+<label class="font-label text-[10px] text-on-surface-variant ml-1 uppercase tracking-widest">Network Protocol</label>
+<select class="w-full bg-surface-container-lowest border-0 rounded p-4 font-technical text-sm text-on-surface focus:ring-1 focus:ring-primary/40">
+<option>IEEE 802.11AX</option>
+<option>HTTP/3 QUIC</option>
+<option>TCP/IP STACK</option>
+</select>
+</div>
+</div>
+</div>
+<!-- Card Sample -->
+<div class="space-y-8">
+<h4 class="font-label text-[10px] tracking-[0.3em] text-primary uppercase border-b border-primary/20 pb-2">Information Shells</h4>
+<div class="group bg-surface-container rounded-lg p-6 hover:bg-surface-container-high transition-all duration-300 border border-outline-variant/5">
+<div class="flex justify-between items-start mb-6">
+<div class="p-2 bg-surface-container-lowest rounded">
+<span class="material-symbols-outlined text-tertiary" data-icon="monitoring">monitoring</span>
+</div>
+<span class="font-technical text-[10px] text-primary bg-primary/10 px-2 py-1 rounded">ACTIVE</span>
+</div>
+<h5 class="font-headline font-bold text-lg mb-2">Live Telemetry Data</h5>
+<p class="text-xs text-on-surface-variant font-body leading-relaxed mb-6">
+                            High-frequency sampling of user interactions across the obsidian layer.
+                        </p>
+<div class="pt-4 border-t border-outline-variant/10 flex justify-between items-center">
+<span class="font-technical text-xs text-outline">LATENCY: 12ms</span>
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors" data-icon="arrow_forward">arrow_forward</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Typography -->
+<section class="mb-32">
+<div class="flex items-center gap-4 mb-12">
+<span class="font-label text-xs tracking-widest text-outline uppercase">Section 03</span>
+<div class="h-px flex-grow bg-outline-variant/20"></div>
+<h3 class="font-headline text-2xl font-bold uppercase">Type Systems</h3>
+</div>
+<div class="space-y-12">
+<div class="flex flex-col md:flex-row gap-8 items-baseline">
+<span class="font-label text-xs text-outline w-32 shrink-0">DISPLAY LG</span>
+<h2 class="font-headline text-6xl font-black tracking-tighter uppercase">Precision</h2>
+<span class="font-technical text-xs text-on-surface-variant">Space Grotesk Black / -0.04em</span>
+</div>
+<div class="flex flex-col md:flex-row gap-8 items-baseline border-t border-outline-variant/10 pt-8">
+<span class="font-label text-xs text-outline w-32 shrink-0">BODY MD</span>
+<p class="font-body text-lg text-on-surface-variant max-w-2xl leading-relaxed">
+                        The interface should feel like a high-end physical tool. Every pixel has a purpose, every movement is calculated. Clarity is our primary objective.
+                    </p>
+<span class="font-technical text-xs text-on-surface-variant">Inter Regular / 1.125rem</span>
+</div>
+<div class="flex flex-col md:flex-row gap-8 items-baseline border-t border-outline-variant/10 pt-8">
+<span class="font-label text-xs text-outline w-32 shrink-0">TECHNICAL</span>
+<p class="font-technical text-lg text-primary uppercase tracking-widest">
+                        System_Failure_Detected: Stack Overflow at 0x00F12
+                    </p>
+<span class="font-technical text-xs text-on-surface-variant">Geist Mono / Tracking 0.1em</span>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="bg-[#0e0e13] w-full border-t border-[#48474d]/15">
+<div class="flex flex-col md:flex-row justify-between items-center px-8 py-12 max-w-7xl mx-auto gap-4">
+<div class="flex items-center gap-4">
+<div class="text-[#6bff8f] font-bold font-['Geist_Mono'] text-[10px] uppercase tracking-widest">ALEX CINOVOJ</div>
+<div class="w-1 h-1 rounded-full bg-outline-variant"></div>
+<div class="font-['Geist_Mono'] text-[10px] uppercase tracking-widest text-slate-500">© 2024 Alex Cinovoj. Built with Quiet Systems.</div>
+</div>
+<div class="flex gap-8">
+<a class="font-['Geist_Mono'] text-[10px] uppercase tracking-widest text-slate-500 hover:text-[#6bff8f] hover:glow-sm transition-all opacity-80 hover:opacity-100" href="#">LinkedIn</a>
+<a class="font-['Geist_Mono'] text-[10px] uppercase tracking-widest text-slate-500 hover:text-[#6bff8f] hover:glow-sm transition-all opacity-80 hover:opacity-100" href="#">GitHub</a>
+<a class="font-['Geist_Mono'] text-[10px] uppercase tracking-widest text-slate-500 hover:text-[#6bff8f] hover:glow-sm transition-all opacity-80 hover:opacity-100" href="#">Read.cv</a>
+</div>
+</div>
+</footer>
+</body></html>

@@ -207,26 +207,66 @@ export function PrdGenerator() {
     setLoading('enhance', false);
   };
 
-  // Mockup uret
+// Mockup uret (SSE streaming — ekranlar teker teker gelir)
   const handleMockups = async () => {
     if (!store.prdContent) return;
     setLoading('mockups', true);
+    setStore({ mockupScreens: [], activeTab: 'mockup', screenCoverage: null });
     addLog('Mockup uretiliyor...');
-    try {
-      const result = await api.prdMockups({ prdId: store.id, prdContent: store.prdContent, title: store.title });
-      setStore({ mockupScreens: result.screens, activeTab: 'mockup', stitchProjectId: result.projectId || null });
-      addLog(`${result.screens.length} ekran mockup'i uretildi`);
+
+    const params = new URLSearchParams();
+    if (store.id) params.set('prdId', store.id);
+    if (!store.id && store.prdContent) params.set('prdContent', store.prdContent);
+    if (store.title) params.set('title', store.title);
+
+    const es = new EventSource(`/api/prd/mockups/stream?${params.toString()}`);
+
+    es.addEventListener('start', (e) => {
+      const data = JSON.parse(e.data);
+      setStore({ stitchProjectId: data.projectId || null });
+      addLog(`Stitch projesi olusturuldu — ${data.total} ekran uretilecek`);
+    });
+
+    es.addEventListener('progress', (e) => {
+      const data = JSON.parse(e.data);
+      addLog(`[${data.index + 1}/${data.total}] ${data.title} uretiliyor...`);
+    });
+
+    es.addEventListener('screen', (e) => {
+      const data = JSON.parse(e.data);
+      setStore({ mockupScreens: [...usePrdStore.getState().mockupScreens, data.screen] });
+      addLog(`[${data.index + 1}/${data.total}] ${data.screen.name} tamamlandi`);
+    });
+
+    es.addEventListener('done', (e) => {
+      const data = JSON.parse(e.data);
+      setStore({ mockupScreens: data.screens, stitchProjectId: data.projectId });
+      addLog(`${data.total} ekran mockup'i uretildi`);
+      es.close();
+      setLoading('mockups', false);
       // Coverage check
-      if (result.screens.length > 0 && store.prdContent) {
-        try {
-          const cov = await api.prdScreenCoverage({ prdContent: store.prdContent, screens: result.screens });
-          setStore({ screenCoverage: cov });
-        } catch { /* coverage check optional */ }
+      if (data.screens.length > 0 && store.prdContent) {
+        api.prdScreenCoverage({ prdContent: store.prdContent, screens: data.screens })
+          .then(cov => setStore({ screenCoverage: cov }))
+          .catch(() => {});
       }
-    } catch (err: any) {
-      addLog(`Mockup hatasi: ${err.message}`);
-    }
-    setLoading('mockups', false);
+    });
+
+    es.addEventListener('error', (e) => {
+      try {
+        const data = JSON.parse((e as MessageEvent).data);
+        addLog(`Mockup hatasi: ${data.message}`);
+      } catch {
+        addLog('Mockup baglantisi kesildi');
+      }
+      es.close();
+      setLoading('mockups', false);
+    });
+
+    es.onerror = () => {
+      es.close();
+      setLoading('mockups', false);
+    };
   };
 
   // A/B karsilastirma
@@ -483,7 +523,7 @@ export function PrdGenerator() {
             <ProgressBar active={!!store.loading.analyze} startedAt={store.loadingStartedAt.analyze || 0} label="Site Analiz Ediliyor" steps={['HTML indiriliyor...', 'Sayfa yapisi inceleniyor...', 'Renkler ve fontlar cikariliyor...', 'Komponentler tespit ediliyor...', 'Analiz tamamlaniyor...']} />
             <ProgressBar active={!!store.loading.generate} startedAt={store.loadingStartedAt.generate || 0} label="PRD Olusturuluyor" steps={['Veriler hazirlaniyor...', 'Analiz entegre ediliyor...', 'PRD yaziliyor...', 'Sayfalar tanimlaniyor...', 'Komponentler eslestiriliyor...', 'Puanlama yapiliyor...']} />
             <ProgressBar active={!!store.loading.enhance} startedAt={store.loadingStartedAt.enhance || 0} label="PRD Gelistiriliyor" steps={['Mevcut PRD analiz ediliyor...', 'Eksik bolumler tespit ediliyor...', 'Detaylar ekleniyor...', 'Animasyonlar tanimlaniyor...', 'Puanlama yapiliyor...']} />
-            <ProgressBar active={!!store.loading.mockups} startedAt={store.loadingStartedAt.mockups || 0} label="Mockup Uretiliyor" steps={['Stitch projesi olusturuluyor...', 'Ekranlar hazirlaniyor...', 'Tasarimlar uretiliyor...', 'Screenshot\'lar indiriliyor...', 'Cache\'e yaziliyor...']} />
+            <ProgressBar active={!!store.loading.mockups} startedAt={store.loadingStartedAt.mockups || 0} label={`Mockup Uretiliyor (${store.mockupScreens.length} ekran hazir)`} steps={["Ekranlar uretiliyor...", "Indiriliyor...", "Tamamlaniyor..."]} />
             <ProgressBar active={!!store.loading.compare} startedAt={store.loadingStartedAt.compare || 0} label="A/B Karsilastirma" steps={['Minimal versiyon yaziliyor...', 'Detayli versiyon yaziliyor...', 'Puanlama yapiliyor...']} />
             <ProgressBar active={!!store.loading.research} startedAt={store.loadingStartedAt.research || 0} label="Web Arastirmasi" steps={['Konu arastiriliyor...', 'Best practice\'ler toplanilyor...', 'UX pattern\'lar analiz ediliyor...', 'Sonuclar derleniyor...']} />
 

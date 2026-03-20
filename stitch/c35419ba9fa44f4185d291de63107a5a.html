@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&amp;family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@400;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "surface-container-highest": "#2d3449",
+              "on-error": "#690005",
+              "surface-bright": "#31394d",
+              "tertiary-fixed-dim": "#ffb59c",
+              "secondary-fixed-dim": "#bcc7de",
+              "outline": "#909097",
+              "surface-variant": "#2d3449",
+              "background": "#0b1326",
+              "on-secondary-container": "#aeb9d0",
+              "on-surface-variant": "#c6c6cd",
+              "surface-container-low": "#131b2e",
+              "surface-container-high": "#222a3d",
+              "on-background": "#dae2fd",
+              "on-primary-fixed": "#001e2c",
+              "primary-container": "#001a27",
+              "error": "#ffb4ab",
+              "tertiary-container": "#320a00",
+              "on-primary-container": "#008abb",
+              "on-secondary": "#263143",
+              "tertiary": "#ffb59c",
+              "on-tertiary-fixed": "#380c00",
+              "on-tertiary": "#5c1a00",
+              "outline-variant": "#45464d",
+              "on-error-container": "#ffdad6",
+              "primary-fixed": "#c4e7ff",
+              "inverse-primary": "#00668a",
+              "on-primary-fixed-variant": "#004c69",
+              "surface-container-lowest": "#060e20",
+              "on-secondary-fixed-variant": "#3c475a",
+              "error-container": "#93000a",
+              "surface-tint": "#7bd0ff",
+              "surface": "#0b1326",
+              "on-secondary-fixed": "#111c2d",
+              "secondary-fixed": "#d8e3fb",
+              "surface-container": "#171f33",
+              "primary-fixed-dim": "#7bd0ff",
+              "tertiary-fixed": "#ffdbcf",
+              "secondary": "#bcc7de",
+              "on-surface": "#dae2fd",
+              "surface-dim": "#0b1326",
+              "inverse-surface": "#dae2fd",
+              "inverse-on-surface": "#283044",
+              "primary": "#7bd0ff",
+              "on-tertiary-container": "#d25e32",
+              "on-primary": "#00354a",
+              "secondary-container": "#3e495d",
+              "on-tertiary-fixed-variant": "#822800"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Space Grotesk"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-body selection:bg-primary/30">
+<!-- TopAppBar -->
+<nav class="fixed top-0 w-full z-50 bg-[#0b1326]/60 backdrop-blur-xl bg-gradient-to-b from-[#0b1326] to-transparent">
+<div class="flex justify-between items-center px-8 py-6 max-w-7xl mx-auto">
+<div class="text-xl font-black tracking-tighter text-[#7bd0ff] uppercase font-headline">ALEX CINOVOJ</div>
+<div class="hidden md:flex items-center gap-10 font-headline font-bold tracking-tight">
+<a class="text-[#7bd0ff] font-bold border-b border-[#7bd0ff] pb-1" href="#">Selected Works</a>
+<a class="text-[#dae2fd] hover:text-[#7bd0ff] transition-colors duration-300" href="#">Quiet AI</a>
+<a class="text-[#dae2fd] hover:text-[#7bd0ff] transition-colors duration-300" href="#">Open Source</a>
+<a class="text-[#dae2fd] hover:text-[#7bd0ff] transition-colors duration-300" href="#">Contact</a>
+</div>
+<button class="bg-gradient-to-br from-primary to-on-primary-container px-6 py-2 rounded-md text-on-primary-fixed font-headline font-bold scale-95 transition-transform active:opacity-80">
+                Hire Me
+            </button>
+</div>
+</nav>
+<main class="pt-32 pb-24">
+<!-- Context Rail -->
+<aside class="fixed left-8 top-1/2 -translate-y-1/2 hidden xl:block pointer-events-none">
+<div class="rotate-90 origin-left text-[0.6rem] font-label uppercase tracking-[0.4em] text-outline-variant whitespace-nowrap">
+                01 / PROJECT OVERVIEW &amp; METRICS
+            </div>
+</aside>
+<!-- Hero Section -->
+<section class="max-w-7xl mx-auto px-8 mb-32">
+<div class="max-w-4xl">
+<p class="font-label text-tertiary text-xs uppercase tracking-widest mb-6">Founder @ TechTide AI</p>
+<h1 class="font-headline text-5xl md:text-7xl font-extrabold tracking-tighter text-on-surface leading-tight mb-8">
+                    Quiet AI Systems: <br/>
+<span class="text-primary italic">Architecting the Invisible.</span>
+</h1>
+<p class="text-lg md:text-xl text-on-surface-variant max-w-2xl leading-relaxed">
+                    Engineering autonomous frameworks that operate with silent efficiency. Leveraging high-level abstractions to build resilient, distributed intelligence for the next generation of enterprise automation.
+                </p>
+</div>
+</section>
+<!-- Stats Grid (Bento Style) -->
+<section class="max-w-7xl mx-auto px-8 mb-32">
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+<!-- Stat Card 1 -->
+<div class="bg-surface-container-low p-10 rounded-xl relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-4 opacity-10">
+<span class="material-symbols-outlined text-6xl" data-icon="hub">hub</span>
+</div>
+<h3 class="font-label text-tertiary text-[0.75rem] uppercase tracking-widest mb-12">Deployment Scale</h3>
+<div class="font-headline text-5xl font-black text-on-surface mb-2">200+</div>
+<p class="text-on-surface-variant font-medium">Agents in Claw Ecosystem</p>
+</div>
+<!-- Stat Card 2 -->
+<div class="bg-surface-container-low p-10 rounded-xl border-l-4 border-primary group hover:bg-surface-container transition-colors duration-500">
+<h3 class="font-label text-primary text-[0.75rem] uppercase tracking-widest mb-12">Community Impact</h3>
+<div class="font-headline text-5xl font-black text-on-surface mb-2">10</div>
+<p class="text-on-surface-variant font-medium">Open Claw Projects Live</p>
+</div>
+<!-- Stat Card 3 -->
+<div class="bg-surface-container p-10 rounded-xl relative overflow-hidden ring-1 ring-outline-variant/20">
+<div class="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent"></div>
+<h3 class="font-label text-tertiary text-[0.75rem] uppercase tracking-widest mb-12">Performance Baseline</h3>
+<div class="font-headline text-5xl font-black text-on-surface mb-2">99.9%</div>
+<p class="text-on-surface-variant font-medium">Inference Reliability Rate</p>
+</div>
+</div>
+</section>
+<!-- Tech Stack & Prowess -->
+<section class="bg-surface-container-low py-32 mb-32">
+<div class="max-w-7xl mx-auto px-8 grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
+<div>
+<h2 class="font-headline text-3xl font-bold mb-6">Technical Foundation</h2>
+<p class="text-on-surface-variant mb-12 leading-relaxed">
+                        Precision engineering requires a stack that balances performance with aesthetic integrity. We utilize <span class="text-primary font-bold">Next.js</span> for structural robustness and <span class="text-primary font-bold">Tailwind CSS</span> for responsive, utility-first design systems.
+                    </p>
+<div class="flex flex-wrap gap-4">
+<span class="bg-secondary-container text-on-secondary-container px-6 py-2 rounded-full font-label text-xs uppercase tracking-tighter">TypeScript</span>
+<span class="bg-secondary-container text-on-secondary-container px-6 py-2 rounded-full font-label text-xs uppercase tracking-tighter">React 18</span>
+<span class="bg-secondary-container text-on-secondary-container px-6 py-2 rounded-full font-label text-xs uppercase tracking-tighter">Edge Runtime</span>
+<span class="bg-secondary-container text-on-secondary-container px-6 py-2 rounded-full font-label text-xs uppercase tracking-tighter">PostgreSQL</span>
+<span class="bg-secondary-container text-on-secondary-container px-6 py-2 rounded-full font-label text-xs uppercase tracking-tighter">Vector DB</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-4 rounded-xl shadow-2xl shadow-background/50">
+<div class="bg-surface-container p-8 rounded-lg border border-outline-variant/10 aspect-video flex items-center justify-center overflow-hidden">
+<div class="w-full h-full bg-gradient-to-tr from-surface-container-highest via-surface-container-high to-surface-container-low rounded-md relative flex items-center justify-center">
+<span class="material-symbols-outlined text-8xl text-primary/20" data-icon="terminal">terminal</span>
+<div class="absolute bottom-4 left-4 font-label text-[0.6rem] text-primary/40 uppercase tracking-widest">Sys_Status: Optimized</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Project Showcase (Editorial List) -->
+<section class="max-w-7xl mx-auto px-8 mb-32">
+<h2 class="font-headline text-3xl font-bold mb-16 flex items-center gap-4">
+                Selected Projects
+                <span class="h-px flex-1 bg-outline-variant/20"></span>
+</h2>
+<div class="space-y-1">
+<!-- Project 01 -->
+<div class="group flex flex-col md:flex-row items-start md:items-center justify-between py-12 px-6 hover:bg-surface-container-highest transition-all duration-300 rounded-xl">
+<div class="flex items-center gap-12">
+<span class="font-label text-outline-variant text-sm">01</span>
+<div>
+<h3 class="font-headline text-2xl font-bold text-on-surface mb-2">Claw Orchestrator</h3>
+<p class="text-on-surface-variant font-body">Multi-agent decision tree engine for real-time logistics.</p>
+</div>
+</div>
+<div class="mt-6 md:mt-0 flex items-center gap-4">
+<span class="material-symbols-outlined text-primary group-hover:translate-x-2 transition-transform" data-icon="arrow_forward">arrow_forward</span>
+</div>
+</div>
+<!-- Project 02 -->
+<div class="group flex flex-col md:flex-row items-start md:items-center justify-between py-12 px-6 hover:bg-surface-container-highest transition-all duration-300 rounded-xl">
+<div class="flex items-center gap-12">
+<span class="font-label text-outline-variant text-sm">02</span>
+<div>
+<h3 class="font-headline text-2xl font-bold text-on-surface mb-2">Quiet Analytics</h3>
+<p class="text-on-surface-variant font-body">Privacy-first behavioral analysis with zero-knowledge proofs.</p>
+</div>
+</div>
+<div class="mt-6 md:mt-0 flex items-center gap-4">
+<span class="material-symbols-outlined text-primary group-hover:translate-x-2 transition-transform" data-icon="arrow_forward">arrow_forward</span>
+</div>
+</div>
+<!-- Project 03 -->
+<div class="group flex flex-col md:flex-row items-start md:items-center justify-between py-12 px-6 hover:bg-surface-container-highest transition-all duration-300 rounded-xl">
+<div class="flex items-center gap-12">
+<span class="font-label text-outline-variant text-sm">03</span>
+<div>
+<h3 class="font-headline text-2xl font-bold text-on-surface mb-2">Neural Fabric</h3>
+<p class="text-on-surface-variant font-body">Self-healing serverless infrastructure for AI inference.</p>
+</div>
+</div>
+<div class="mt-6 md:mt-0 flex items-center gap-4">
+<span class="material-symbols-outlined text-primary group-hover:translate-x-2 transition-transform" data-icon="arrow_forward">arrow_forward</span>
+</div>
+</div>
+</div>
+</section>
+<!-- CTA Section -->
+<section class="max-w-7xl mx-auto px-8">
+<div class="bg-surface-container rounded-2xl p-16 text-center relative overflow-hidden border border-outline-variant/10">
+<div class="relative z-10">
+<h2 class="font-headline text-4xl font-extrabold mb-8 tracking-tighter">Ready to deploy silence?</h2>
+<button class="inline-flex items-center gap-3 bg-gradient-to-br from-primary to-on-primary-container px-10 py-4 rounded-md text-on-primary-fixed font-headline font-bold text-lg hover:shadow-2xl hover:shadow-primary/20 transition-all">
+                        Build with Quiet Systems
+                        <span class="material-symbols-outlined" data-icon="bolt">bolt</span>
+</button>
+</div>
+<!-- Abstract Glow -->
+<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-primary/10 rounded-full blur-[120px]"></div>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="w-full border-t border-[#45464d]/20 bg-[#131b2e]">
+<div class="flex flex-col md:flex-row justify-between items-center px-12 py-16 w-full max-w-7xl mx-auto">
+<div class="text-[#7bd0ff] font-bold font-headline mb-8 md:mb-0">ALEX CINOVOJ</div>
+<div class="font-['Space_Grotesk'] text-[0.75rem] uppercase tracking-widest text-[#dae2fd]/60 text-center mb-8 md:mb-0">
+                © 2024 Alex Cinovoj — TechTide AI. Built with Quiet Systems.
+            </div>
+<div class="flex gap-8 font-label text-[0.75rem] uppercase tracking-widest">
+<a class="text-[#dae2fd]/60 hover:text-[#ffb59c] transition-all underline-offset-4 hover:underline" href="#">LinkedIn</a>
+<a class="text-[#dae2fd]/60 hover:text-[#ffb59c] transition-all underline-offset-4 hover:underline" href="#">GitHub</a>
+<a class="text-[#dae2fd]/60 hover:text-[#ffb59c] transition-all underline-offset-4 hover:underline" href="#">Read.cv</a>
+<a class="text-[#dae2fd]/60 hover:text-[#ffb59c] transition-all underline-offset-4 hover:underline" href="#">Email</a>
+</div>
+</div>
+</footer>
+</body></html>

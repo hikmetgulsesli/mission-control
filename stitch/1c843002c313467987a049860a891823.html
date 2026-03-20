@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Analytical Atelier | Precision in every pixel.</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "tertiary-fixed": "#53ddfc",
+              "on-secondary-fixed": "#324053",
+              "surface-bright": "#f7f9fb",
+              "on-tertiary-fixed-variant": "#005564",
+              "surface-container": "#eaeff2",
+              "tertiary-container": "#53ddfc",
+              "surface-tint": "#0053dc",
+              "surface-variant": "#dce4e8",
+              "on-surface": "#2c3437",
+              "on-primary-fixed": "#ffffff",
+              "outline-variant": "#acb3b7",
+              "secondary-fixed": "#d5e3fc",
+              "surface-dim": "#d4dbdf",
+              "secondary-dim": "#465468",
+              "primary-fixed-dim": "#2d68f0",
+              "on-surface-variant": "#596064",
+              "on-secondary-container": "#455367",
+              "on-primary": "#faf8ff",
+              "background": "#f7f9fb",
+              "primary": "#0053dc",
+              "surface-container-highest": "#dce4e8",
+              "error": "#a83836",
+              "on-primary-fixed-variant": "#f9f7ff",
+              "on-primary-container": "#000000",
+              "primary-fixed": "#3e76fe",
+              "error-container": "#fa746f",
+              "primary-container": "#3e76fe",
+              "tertiary-dim": "#005b6c",
+              "on-tertiary-container": "#004b58",
+              "on-secondary-fixed-variant": "#4e5c71",
+              "surface-container-lowest": "#ffffff",
+              "inverse-surface": "#0b0f10",
+              "on-tertiary-fixed": "#003640",
+              "secondary-fixed-dim": "#c7d5ed",
+              "on-error": "#fff7f6",
+              "outline": "#747c80",
+              "inverse-on-surface": "#9a9d9f",
+              "secondary": "#526074",
+              "surface": "#f7f9fb",
+              "on-error-container": "#6e0a12",
+              "surface-container-low": "#f0f4f7",
+              "primary-dim": "#0049c2",
+              "tertiary": "#00687b",
+              "on-secondary": "#f8f8ff",
+              "tertiary-fixed-dim": "#40ceed",
+              "on-tertiary": "#effbff",
+              "surface-container-high": "#e3e9ed",
+              "error-dim": "#67040d",
+              "inverse-primary": "#618bff",
+              "secondary-container": "#d5e3fc",
+              "on-background": "#2c3437"
+            },
+            fontFamily: {
+              "headline": ["Manrope"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; background-color: #f7f9fb; color: #2c3437; -webkit-font-smoothing: antialiased; }
+        .font-manrope { font-family: 'Manrope', sans-serif; }
+        .glass-card { background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(20px); }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+    </style>
+</head>
+<body class="bg-background text-on-background">
+<!-- TopNavBar -->
+<nav class="w-full top-0 z-50 bg-[#f7f9fb] sticky">
+<div class="flex justify-between items-center max-w-7xl mx-auto px-8 py-4">
+<div class="text-2xl font-bold tracking-tighter text-slate-900 font-manrope">Analytical Atelier</div>
+<div class="hidden md:flex items-center space-x-8">
+<a class="font-manrope text-sm font-medium tracking-tight text-[#0053dc] font-semibold border-b-2 border-[#0053dc] pb-1" href="#">Product</a>
+<a class="font-manrope text-sm font-medium tracking-tight text-slate-600 hover:text-slate-900 transition-colors duration-200" href="#">Features</a>
+<a class="font-manrope text-sm font-medium tracking-tight text-slate-600 hover:text-slate-900 transition-colors duration-200" href="#">Pricing</a>
+</div>
+<div class="flex items-center space-x-4">
+<button class="font-manrope text-sm font-medium tracking-tight text-slate-600 hover:text-slate-900 px-4 py-2">Login</button>
+<button class="bg-primary hover:bg-primary-dim text-on-primary-fixed px-5 py-2 rounded-lg font-manrope text-sm font-semibold transition-all duration-300 shadow-sm">Signup</button>
+</div>
+</div>
+</nav>
+<main>
+<!-- Hero Section -->
+<section class="relative overflow-hidden pt-20 pb-32">
+<div class="max-w-7xl mx-auto px-8 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+<div class="lg:col-span-7 z-10">
+<div class="inline-flex items-center bg-secondary-container px-3 py-1 rounded-full mb-6">
+<span class="text-[10px] uppercase tracking-[0.2em] font-bold text-on-secondary-container">Version 2.0 Now Live</span>
+</div>
+<h1 class="font-headline text-6xl md:text-7xl font-extrabold tracking-tight text-on-surface mb-8 leading-[1.1]">
+                        Precision in Every <span class="bg-gradient-to-r from-primary to-primary-container bg-clip-text text-transparent">Logic Gate</span>
+</h1>
+<p class="font-body text-xl text-on-surface-variant max-w-xl mb-10 leading-relaxed">
+                        The analytical workspace for modern engineering teams to bridge the gap between requirements and reality.
+                    </p>
+<div class="flex flex-wrap gap-4">
+<button class="bg-gradient-to-br from-primary to-primary-container text-on-primary-fixed px-8 py-4 rounded-lg font-manrope font-bold text-lg hover:opacity-90 transition-all shadow-xl shadow-primary/20 flex items-center gap-2">
+                            Get Started for Free
+                            <span class="material-symbols-outlined text-lg">arrow_forward</span>
+</button>
+<button class="bg-surface-container-lowest text-on-surface border border-outline-variant/20 px-8 py-4 rounded-lg font-manrope font-bold text-lg hover:bg-surface-container-low transition-all">
+                            Book a Demo
+                        </button>
+</div>
+</div>
+<div class="lg:col-span-5 relative">
+<div class="aspect-square bg-surface-container-high rounded-[2rem] overflow-hidden shadow-2xl relative transform rotate-3 border border-surface-container-highest">
+<div class="absolute inset-0 bg-gradient-to-tr from-primary/10 to-transparent"></div>
+<img alt="Data visualization dashboard" class="w-full h-full object-cover mix-blend-multiply opacity-80" data-alt="Abstract UI showing complex data analytical graphs and code" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAaKwU2O1p94Pt69O4o4h7MAXc7ei6xzd0WILbvXNJ7R3qgMIEECQIcOn_HRi7_8O9X2B83HT52x8BYPKLWrtN4Y-fRdzydDFRpy6H9cNbDLHI9SdZwkSs0LpPpOcDjw7q3-voKh-xoY9GCJUtMuycDqqS6mqJb6jPN3-jXK4UZTs_xiVgyPXSEmvVX1h7FuKKGLK0jkAHgauSy1AVZviLLyFzbYOmD6lS_2mKxRp0ryob2OEMnm_3vqU5Dvk95nehI__8pA6gpjNIW"/>
+<!-- Decorative Floaties -->
+<div class="absolute top-8 -left-8 glass-card p-4 rounded-xl shadow-lg border border-white/40 max-w-[200px] -rotate-6">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<span class="text-xs font-bold font-manrope uppercase tracking-tighter">Logic Validated</span>
+</div>
+<div class="h-1 w-full bg-surface-container rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[92%]"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Background Decorative Element -->
+<div class="absolute top-0 right-0 -z-10 w-1/3 h-full bg-surface-container-low skew-x-12 translate-x-1/2"></div>
+</section>
+<!-- Bento Grid Feature Section -->
+<section class="py-24 bg-surface-container-low">
+<div class="max-w-7xl mx-auto px-8">
+<div class="mb-16">
+<h2 class="font-headline text-4xl font-bold text-on-surface mb-4">Engineered for Accuracy</h2>
+<p class="font-body text-on-surface-variant max-w-2xl">We replaced cluttered grids with an intentional workspace designed for focus and architectural precision.</p>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+<!-- Card 1 -->
+<div class="group bg-surface-container-lowest p-10 rounded-xl transition-all duration-300 hover:shadow-2xl hover:shadow-primary/5 border-b-4 border-transparent hover:border-primary flex flex-col justify-between h-full">
+<div>
+<div class="w-12 h-12 rounded-lg bg-primary/5 flex items-center justify-center mb-8 group-hover:bg-primary group-hover:text-white transition-all">
+<span class="material-symbols-outlined text-primary group-hover:text-white">psychology</span>
+</div>
+<h3 class="font-headline text-2xl font-bold mb-4">Requirement Intelligence</h3>
+<p class="font-body text-on-surface-variant leading-relaxed">AI-driven PRD analysis that identifies edge cases and logical gaps before the first line of code is written.</p>
+</div>
+<div class="mt-8 pt-6 border-t border-surface-container-highest/50">
+<a class="text-primary font-bold text-sm flex items-center gap-1 group/link" href="#">
+                                Explore Analytics <span class="material-symbols-outlined text-sm group-hover/link:translate-x-1 transition-transform">arrow_forward</span>
+</a>
+</div>
+</div>
+<!-- Card 2 -->
+<div class="group bg-surface-container-lowest p-10 rounded-xl transition-all duration-300 hover:shadow-2xl hover:shadow-primary/5 border-b-4 border-transparent hover:border-primary flex flex-col justify-between h-full">
+<div>
+<div class="w-12 h-12 rounded-lg bg-primary/5 flex items-center justify-center mb-8 group-hover:bg-primary group-hover:text-white transition-all">
+<span class="material-symbols-outlined text-primary group-hover:text-white">rule</span>
+</div>
+<h3 class="font-headline text-2xl font-bold mb-4">Logic Verification</h3>
+<p class="font-body text-on-surface-variant leading-relaxed">Seamlessly link test cases to functional requirements with bi-directional traceability that never breaks.</p>
+</div>
+<div class="mt-8 pt-6 border-t border-surface-container-highest/50">
+<a class="text-primary font-bold text-sm flex items-center gap-1 group/link" href="#">
+                                View Verification <span class="material-symbols-outlined text-sm group-hover/link:translate-x-1 transition-transform">arrow_forward</span>
+</a>
+</div>
+</div>
+<!-- Card 3 -->
+<div class="group bg-surface-container-lowest p-10 rounded-xl transition-all duration-300 hover:shadow-2xl hover:shadow-primary/5 border-b-4 border-transparent hover:border-primary flex flex-col justify-between h-full">
+<div>
+<div class="w-12 h-12 rounded-lg bg-primary/5 flex items-center justify-center mb-8 group-hover:bg-primary group-hover:text-white transition-all">
+<span class="material-symbols-outlined text-primary group-hover:text-white">insights</span>
+</div>
+<h3 class="font-headline text-2xl font-bold mb-4">Execution Insights</h3>
+<p class="font-body text-on-surface-variant leading-relaxed">Real-time tracking of test cycles and logic validation with editorial-grade reporting for stakeholders.</p>
+</div>
+<div class="mt-8 pt-6 border-t border-surface-container-highest/50">
+<a class="text-primary font-bold text-sm flex items-center gap-1 group/link" href="#">
+                                Analyze Cycles <span class="material-symbols-outlined text-sm group-hover/link:translate-x-1 transition-transform">arrow_forward</span>
+</a>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Product Preview / Asymmetric Section -->
+<section class="py-24 overflow-hidden">
+<div class="max-w-7xl mx-auto px-8">
+<div class="flex flex-col lg:flex-row items-center gap-16">
+<div class="lg:w-1/2">
+<h2 class="font-headline text-4xl font-bold mb-8 leading-tight">The Traceability Rail™: <br/>Context is Everything.</h2>
+<p class="font-body text-lg text-on-surface-variant mb-8">
+                            Our unique vertical navigation connects every requirement to its associated test results, code snippets, and design mocks. No more context switching.
+                        </p>
+<div class="space-y-6">
+<div class="flex gap-4 items-start">
+<div class="mt-1 w-6 h-6 rounded-full bg-tertiary-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[14px] text-on-tertiary-container" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+<div>
+<h4 class="font-manrope font-bold text-on-surface">Automated Mapping</h4>
+<p class="text-sm text-on-surface-variant">Syncs with Jira, GitHub, and Figma in real-time.</p>
+</div>
+</div>
+<div class="flex gap-4 items-start">
+<div class="mt-1 w-6 h-6 rounded-full bg-tertiary-container flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-[14px] text-on-tertiary-container" style="font-variation-settings: 'FILL' 1;">check</span>
+</div>
+<div>
+<h4 class="font-manrope font-bold text-on-surface">Conflict Resolution</h4>
+<p class="text-sm text-on-surface-variant">AI highlights conflicting requirements before they reach dev.</p>
+</div>
+</div>
+</div>
+</div>
+<div class="lg:w-1/2 relative">
+<div class="bg-surface-container-highest rounded-xl p-2 shadow-inner">
+<img alt="Software development management interface" class="rounded-lg shadow-2xl" data-alt="Clean software interface with sidebar and data tables" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDPDdXg16knFE9JSvWqOcMRjM2yo6VcetYZ0YEp-M99Ux2NONLD_xBlVXhfUpUOjyH8j1yHbqxeRCA9ldS5LFdCSu8nQaca-zXD00i6vOL-nhfGOidYDefXsJCSAg1IvqfufQHvLcWgV5W-VPSiHF1uT9f_dlCzfCg6Is3GdcSkaI3yirsblP1X_26Q9SVgYozEfnDgIcsGszfPTSiRlTfxA1bTg882N1kxkRA0x4LpdvYoCIqWIozhuVj6AVDrx6L2AbueKNx98us8"/>
+</div>
+<!-- Absolute floating element -->
+<div class="absolute -bottom-10 -left-10 glass-card p-6 rounded-xl border border-white shadow-2xl hidden md:block">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-error-container/20 flex items-center justify-center">
+<span class="material-symbols-outlined text-error">warning</span>
+</div>
+<div>
+<p class="text-[10px] uppercase font-bold text-on-surface-variant tracking-widest">System Alert</p>
+<p class="font-manrope font-bold">Requirement Conflict Detected</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- CTA Section -->
+<section class="py-24">
+<div class="max-w-5xl mx-auto px-8">
+<div class="bg-primary-container rounded-[2.5rem] p-12 md:p-20 text-center relative overflow-hidden group">
+<div class="absolute inset-0 bg-gradient-to-br from-primary to-primary-container opacity-90"></div>
+<!-- Abstract Background Pattern -->
+<div class="absolute inset-0 opacity-10 pointer-events-none" style="background-image: radial-gradient(#fff 2px, transparent 2px); background-size: 32px 32px;"></div>
+<div class="relative z-10">
+<h2 class="font-headline text-4xl md:text-5xl font-extrabold text-on-primary-fixed mb-6 leading-tight">Ready to achieve logic-perfect execution?</h2>
+<p class="font-body text-on-primary-fixed/80 text-lg mb-10 max-w-2xl mx-auto">
+                            Join 500+ engineering teams who have unified their documentation and testing lifecycle.
+                        </p>
+<div class="flex flex-col sm:flex-row justify-center gap-4">
+<button class="bg-surface-container-lowest text-primary px-10 py-4 rounded-lg font-manrope font-bold text-lg hover:bg-surface-bright transition-all shadow-xl">
+                                Create Your Atelier
+                            </button>
+<button class="bg-transparent text-on-primary-fixed border border-on-primary-fixed/30 px-10 py-4 rounded-lg font-manrope font-bold text-lg hover:bg-on-primary-fixed/10 transition-all">
+                                View Enterprise Plans
+                            </button>
+</div>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="bg-slate-100 w-full bottom-0 border-t border-slate-200/15">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-7xl mx-auto px-8 py-12">
+<div>
+<div class="font-manrope font-bold text-slate-900 mb-4">Analytical Atelier</div>
+<p class="font-inter text-xs uppercase tracking-widest text-slate-500 max-w-xs leading-loose">
+                    © 2024 Analytical Atelier. Precision in every pixel.
+                </p>
+</div>
+<div class="flex flex-wrap gap-x-12 gap-y-4 justify-start md:justify-end">
+<a class="font-inter text-xs uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:underline decoration-[#0053dc] underline-offset-4 transition-all duration-300" href="#">Documentation</a>
+<a class="font-inter text-xs uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:underline decoration-[#0053dc] underline-offset-4 transition-all duration-300" href="#">API Reference</a>
+<a class="font-inter text-xs uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:underline decoration-[#0053dc] underline-offset-4 transition-all duration-300" href="#">Status</a>
+<a class="font-inter text-xs uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:underline decoration-[#0053dc] underline-offset-4 transition-all duration-300" href="#">Privacy Policy</a>
+<a class="font-inter text-xs uppercase tracking-widest text-slate-500 hover:text-slate-800 hover:underline decoration-[#0053dc] underline-offset-4 transition-all duration-300" href="#">Terms of Service</a>
+</div>
+</div>
+</footer>
+</body></html>

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { createPrd, getPrd, listPrds, updatePrd, deletePrd, listTemplates, getTemplate } from '../services/prd-db.js';
 import { scorePrd, estimateCost, checkScreenCoverage } from '../services/prd-scoring.js';
 import { generatePrd, enhancePrd, generateChatQuestions, generateAbComparison, analyzeSite, analyzeScreenshot } from '../services/prd-llm.js';
-import { generateMockupsFromPrd, deleteScreenFromCache, regenerateScreen, generateScreen, downloadScreen, prepareDesignFilesForRepo } from '../services/stitch-integration.js';
+import { generateMockupsFromPrd, deleteScreenFromCache, regenerateScreen, generateScreen, downloadScreen, prepareDesignFilesForRepo, createStitchProject, extractScreenPrompts } from '../services/stitch-integration.js';
 import { mapComponentsFromPrd, generateComponentSection } from '../services/component-mapper.js';
 import { getRunBenchmark, analyzePrdFormats } from '../services/benchmark.js';
 import { homedir } from 'os';
@@ -284,6 +284,72 @@ router.post('/prd/mockups', async (req, res) => {
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
+});
+// GET /prd/mockups/stream — SSE streaming mockup uretimi
+router.get("/prd/mockups/stream", async (req, res) => {
+  const { prdId, prdContent: rawContent, title: rawTitle } = req.query as any;
+  const prd = prdId ? await getPrd(prdId) : null;
+  const content = rawContent || prd?.prd_content;
+  const prdTitle = rawTitle || prd?.title || "Untitled";
+  const platform = prd?.platform || "web";
+
+  if (!content) { res.status(400).json({ error: "prdContent or prdId required" }); return; }
+
+  // SSE headers
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+
+  const send = (event: string, data: any) => {
+    res.write("event: " + event + "\n");
+    res.write("data: " + JSON.stringify(data) + "\n\n");
+  };
+
+  try {
+    const projectId = await createStitchProject("PRD: " + prdTitle);
+    if (!projectId) { send("error", { message: "Failed to create Stitch project" }); res.end(); return; }
+
+    const prompts = extractScreenPrompts(content, platform);
+    send("start", { projectId, total: prompts.length });
+
+    const allScreens: any[] = [];
+    const cacheDir = join(homedir(), ".openclaw", "setfarm", "stitch-cache", projectId);
+    mkdirSync(cacheDir, { recursive: true });
+
+    for (let i = 0; i < prompts.length; i++) {
+      const sp = prompts[i];
+      send("progress", { index: i, total: prompts.length, title: sp.title, status: "generating" });
+
+      const screen = await generateScreen(projectId, sp.prompt, sp.title, sp.device);
+      if (screen) {
+        screen.prompt = sp.prompt;
+        if (screen.screenId && screen.status === "done") {
+          try {
+            const dl = await downloadScreen(projectId, screen.screenId, cacheDir);
+            if (dl) screen.localHtml = dl.htmlPath;
+          } catch { /* ok */ }
+        }
+        const entry = {
+          id: screen.screenId, name: screen.title, status: screen.status,
+          screenshotUrl: screen.screenshotUrl, htmlUrl: screen.htmlUrl,
+          localHtml: screen.localHtml, width: screen.width, height: screen.height,
+          prompt: sp.prompt, projectId,
+        };
+        allScreens.push(entry);
+        send("screen", { index: i, total: prompts.length, screen: entry });
+      }
+      if (i < prompts.length - 1) await new Promise(r => setTimeout(r, 2000));
+    }
+
+    if (prdId) { await updatePrd(prdId, { mockup_screens: allScreens }); }
+    send("done", { projectId, screens: allScreens, total: allScreens.length });
+  } catch (err: any) {
+    send("error", { message: err.message });
+  }
+  res.end();
 });
 
 // DELETE /prd/screens/:prdId/:screenId — Ekrani sil

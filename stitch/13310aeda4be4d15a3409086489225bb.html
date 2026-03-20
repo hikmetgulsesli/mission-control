@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>ALEXCINOVOJ | The Editorial Architect</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&amp;family=Inter:wght@400;500&amp;family=Space+Grotesk:wght@400;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              colors: {
+                "surface-tint": "#7bd0ff",
+                "on-error-container": "#ffdad6",
+                "secondary-container": "#3e495d",
+                "on-secondary-fixed-variant": "#3c475a",
+                "error": "#ffb4ab",
+                "surface-container-lowest": "#060e20",
+                "tertiary-fixed-dim": "#ffb59c",
+                "surface-dim": "#0b1326",
+                "on-primary-fixed": "#001e2c",
+                "on-tertiary": "#5c1a00",
+                "on-primary-fixed-variant": "#004c69",
+                "on-tertiary-fixed-variant": "#822800",
+                "surface-container-low": "#131b2e",
+                "outline-variant": "#45464d",
+                "primary": "#7bd0ff",
+                "on-primary-container": "#008abb",
+                "on-secondary-fixed": "#111c2d",
+                "secondary": "#bcc7de",
+                "on-tertiary-fixed": "#380c00",
+                "surface-container-high": "#222a3d",
+                "secondary-fixed-dim": "#bcc7de",
+                "on-surface": "#dae2fd",
+                "tertiary-fixed": "#ffdbcf",
+                "inverse-primary": "#00668a",
+                "surface-bright": "#31394d",
+                "primary-fixed-dim": "#7bd0ff",
+                "secondary-fixed": "#d8e3fb",
+                "on-primary": "#00354a",
+                "inverse-on-surface": "#283044",
+                "on-secondary-container": "#aeb9d0",
+                "outline": "#909097",
+                "on-error": "#690005",
+                "error-container": "#93000a",
+                "on-surface-variant": "#c6c6cd",
+                "primary-container": "#001a27",
+                "background": "#0b1326",
+                "surface-container-highest": "#2d3449",
+                "surface": "#0b1326",
+                "tertiary": "#ffb59c",
+                "surface-container": "#171f33",
+                "on-tertiary-container": "#d25e32",
+                "primary-fixed": "#c4e7ff",
+                "tertiary-container": "#320a00",
+                "surface-variant": "#2d3449",
+                "inverse-surface": "#dae2fd",
+                "on-background": "#dae2fd",
+                "on-secondary": "#263143"
+              },
+              fontFamily: {
+                "headline": ["Manrope"],
+                "body": ["Inter"],
+                "label": ["Space Grotesk"]
+              },
+              borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "9999px"},
+            },
+          },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        body {
+            background-color: #0b1326;
+            color: #dae2fd;
+            scroll-behavior: smooth;
+        }
+        .editorial-grid {
+            display: grid;
+            grid-template-columns: repeat(12, minmax(0, 1fr));
+            gap: 2rem;
+        }
+        .context-rail {
+            writing-mode: vertical-rl;
+            transform: rotate(180deg);
+        }
+    </style>
+</head>
+<body class="font-body selection:bg-primary selection:text-on-primary-fixed">
+<!-- TopAppBar -->
+<nav class="fixed top-0 w-full z-50 bg-[#0b1326]/60 backdrop-blur-xl no-border bg-gradient-to-b from-[#0b1326] to-transparent">
+<div class="flex justify-between items-center px-8 py-6 max-w-7xl mx-auto">
+<div class="text-xl font-black tracking-tighter text-[#7bd0ff] font-['Manrope']">ALEXCINOVOJ</div>
+<div class="hidden md:flex gap-10 items-center">
+<a class="text-[#7bd0ff] font-bold border-b-2 border-[#7bd0ff] pb-1 font-['Manrope'] text-sm uppercase tracking-widest" href="#">Work</a>
+<a class="text-slate-400 hover:text-[#7bd0ff] transition-colors font-['Manrope'] text-sm uppercase tracking-widest" href="#">About</a>
+<a class="text-slate-400 hover:text-[#7bd0ff] transition-colors font-['Manrope'] text-sm uppercase tracking-widest" href="#">Services</a>
+<a class="text-slate-400 hover:text-[#7bd0ff] transition-colors font-['Manrope'] text-sm uppercase tracking-widest" href="#">Contact</a>
+</div>
+<button class="bg-gradient-to-br from-primary to-on-primary-container text-on-primary-fixed px-6 py-2 rounded-md font-label font-bold text-xs uppercase tracking-widest scale-95 active:scale-90 transition-transform">
+                Get in Touch
+            </button>
+</div>
+</nav>
+<main class="pt-32">
+<!-- Hero Section -->
+<section class="max-w-7xl mx-auto px-8 mb-40 relative">
+<div class="absolute left-0 top-0 h-full hidden lg:flex items-center">
+<span class="context-rail font-label text-[10px] tracking-[0.4em] text-outline-variant uppercase">01 / INTRODUCTION</span>
+</div>
+<div class="ml-0 lg:ml-20">
+<h1 class="font-headline text-6xl md:text-8xl font-extrabold tracking-tighter leading-tight mb-8 max-w-4xl">
+                    Crafting Digital <br/> Experiences <br/>
+<span class="text-primary italic">With Intent.</span>
+</h1>
+<div class="flex flex-col md:flex-row items-start md:items-end gap-12">
+<p class="font-body text-xl text-on-surface-variant max-w-xl leading-relaxed">
+                        An independent digital curator and product designer specialized in building high-fidelity interfaces that balance mathematical precision with creative asymmetry.
+                    </p>
+<a class="group flex items-center gap-4 text-tertiary font-label font-bold tracking-widest uppercase text-sm border-b border-tertiary pb-1 hover:opacity-70 transition-all" href="#work">
+                        View Projects
+                        <span class="material-symbols-outlined transition-transform group-hover:translate-x-1">arrow_forward</span>
+</a>
+</div>
+</div>
+</section>
+<!-- Project Showcase (Bento Grid) -->
+<section class="max-w-7xl mx-auto px-8 mb-40" id="work">
+<div class="flex items-center justify-between mb-16 ml-0 lg:ml-20">
+<h2 class="font-headline text-3xl font-bold tracking-tight">Selected Works</h2>
+<div class="h-px bg-outline-variant/20 flex-grow mx-8 hidden md:block"></div>
+<span class="font-label text-xs uppercase tracking-widest text-on-surface-variant">Selected 2023—2024</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-12 gap-8 ml-0 lg:ml-20">
+<!-- Large Project Card -->
+<div class="md:col-span-8 group cursor-pointer">
+<div class="bg-surface-container-low rounded-lg overflow-hidden mb-6 relative aspect-video">
+<img alt="Digital Art Piece" class="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-700 scale-105 group-hover:scale-100" data-alt="Abstract blue and dark geometric shapes" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAN7dGwc69h7y5BiTzrQF5NnrTNfOAAsGV7fLlRsCQbaMGcVTw09IVTL1RIcw06V0bd0TbDRHhtjXh21ICYl1T2efvH1TPXHpKU3v6Z0VQWctcUJe7FolKHxzygXICSj5zTGXqbHQMJMQdGCoj6sRzVvxvNaObAeHwHfdIPvSiSJGScrb_oE1GeLA5p1-pWLBvUz_hTjSEDx6u6-A2SJ_-rheAXK8ArInqhTdnNKmn6yKIdYBr5NElrZqAb0wKMP1pCR6DPY27IV6-A"/>
+<div class="absolute top-6 left-6 flex gap-2">
+<span class="bg-surface/80 backdrop-blur-md px-3 py-1 rounded-full font-label text-[10px] tracking-widest uppercase">Fintech</span>
+<span class="bg-surface/80 backdrop-blur-md px-3 py-1 rounded-full font-label text-[10px] tracking-widest uppercase">2024</span>
+</div>
+</div>
+<div class="flex justify-between items-start">
+<div>
+<h3 class="font-headline text-2xl font-bold mb-1 group-hover:text-primary transition-colors">Aura Banking Interface</h3>
+<p class="font-body text-on-surface-variant">The future of wealth management through editorial design.</p>
+</div>
+<span class="material-symbols-outlined text-outline-variant">north_east</span>
+</div>
+</div>
+<!-- Vertical Project Card -->
+<div class="md:col-span-4 group cursor-pointer pt-0 md:pt-20">
+<div class="bg-surface-container-low rounded-lg overflow-hidden mb-6 relative aspect-[3/4]">
+<img alt="Minimalist Tech" class="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-700 scale-105 group-hover:scale-100" data-alt="Minimalist technology hardware photography" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA29_uUEFLpUKuhxuDjqmd5Ov4BEZiS7TxmSJB7tYxuFqznUCshInzE7sU-Q2b0SxmaBal5gJX_ccelzbDcGU_yVaUqnzfR9B2HPEghXOVVXK8Lx4Y2K5Z5pyFfWqeDvZBRZbit9io0tik1CftvVjhbnzBNyJt02cL8t7TqcwIGF_XzavLdMijrNgUYYYEY8-9K44XVWrN3fMsbbEsLFI2jgVfNOBYWYqjRpQcNZcNf2G6Ti7_5JwLra2g6Z8z0_4eCmoFxg3fFy5Lb"/>
+</div>
+<h3 class="font-headline text-2xl font-bold mb-1 group-hover:text-primary transition-colors">Nova OS</h3>
+<p class="font-body text-on-surface-variant">Minimalist desktop environment for focus.</p>
+</div>
+<!-- Small Project Card 1 -->
+<div class="md:col-span-6 group cursor-pointer">
+<div class="bg-surface-container-low rounded-lg overflow-hidden mb-6 relative aspect-square">
+<img alt="Visual Identity" class="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-700 scale-105 group-hover:scale-100" data-alt="Modern visual identity design with gradient" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBdigRVtAp3ksM3nNHNiuGJ6hTkujcADLnq-Aqsri96ZxAAUu3ZCUCIRWbSgXED61BkL7-8t8IL5bwvwO2myBZ0ijMMPsv7yG50YCNdD6XSbl-VeTUn-2z7UgUzuUdtkZ-bHz9P-sMC23snXApHCnKsBko6tv1BafVjNBgvjraNVegXvxfY3z2W_ZkIY8-VGnvEPBX4Zu5qgOHOBTQyBvsAMRdSyLQdMpOcGKKGyNl8UtYqqEbMy5YVTP0GVOtZN3rJ0_axgzuTq06l"/>
+</div>
+<h3 class="font-headline text-2xl font-bold mb-1 group-hover:text-primary transition-colors">Vanguard Identity</h3>
+<p class="font-body text-on-surface-variant">Branding for a future-proof architecture firm.</p>
+</div>
+<!-- Small Project Card 2 -->
+<div class="md:col-span-6 group cursor-pointer">
+<div class="bg-surface-container-low rounded-lg overflow-hidden mb-6 relative aspect-square">
+<img alt="Abstract Interface" class="w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-700 scale-105 group-hover:scale-100" data-alt="Dark abstract 3D interface element" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBd7tO-HVUsi-E1dS8-dqwOn80OLyLRJ4rVRPRFpZLNWCbkOqGDNtCCWfIdpthpqX8yi4JcT7MP7A0C9zR8ltDyKRP6kjVuAR6Lu-14eX2TjJE_Hnw_nZO-w2WwEb_hY98ms3hj6fzFuw8RFfJEa6ZmX4ZFOdfWiGUM1T_NkXzunmHq7RxPl8Fc-uv3jkymX31NdNf7IM3q9GOJ_5ix1Rn0q1i6_9SQBMo--00JzUI-DtyAYyac59i8dzrbDnOyQdInGLIy2qukQRuv"/>
+</div>
+<h3 class="font-headline text-2xl font-bold mb-1 group-hover:text-primary transition-colors">Sphere E-Commerce</h3>
+<p class="font-body text-on-surface-variant">A spatial shopping experience for luxury goods.</p>
+</div>
+</div>
+</section>
+<!-- About Section -->
+<section class="bg-surface-container-low py-32 mb-40">
+<div class="max-w-7xl mx-auto px-8 ml-0 lg:ml-20">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-20 items-center">
+<div class="relative">
+<div class="absolute -top-10 -left-10 w-40 h-40 bg-primary/10 blur-[100px] rounded-full"></div>
+<img alt="Alexcinovoj Profile" class="rounded-lg grayscale object-cover w-full aspect-[4/5] relative z-10" data-alt="Professional portrait of male designer in dark studio" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAqLBOZQhzs7WEOx6Dm5cSudNCMNTNDZ1XxvkGOe0McflBwJdTGn3KRINdyyIMgFGzOcWuoem2dUhvlrtSFT3TG7sC12nF82a8MI1Uvm23Rmh3DdvkYMjLqfvAcQG5DTIqPu2KqlwtqKKVJllTB4D8Sm1FGCZyjb2_cu15ydibpFObuK4WfQ_MK5BKuuzyNfiW_VA9BgoMIWQoP8UIMt7goP_ic9x_syUoGpd4g8yjsaltRWOjE0NkpiWXqvYedMoL99gGkvcSgC1Ml"/>
+</div>
+<div>
+<span class="font-label text-xs uppercase tracking-widest text-primary mb-6 block">The Architect</span>
+<h2 class="font-headline text-4xl font-bold mb-8 leading-tight">Digital curator by trade, <br/> visionary by nature.</h2>
+<div class="space-y-6 font-body text-on-surface-variant leading-relaxed">
+<p>
+                                Based in the digital ether, I partner with forward-thinking teams to translate complex systems into intuitive, high-fidelity visual languages. My approach is rooted in the belief that design should be felt, not just seen.
+                            </p>
+<p>
+                                With over 8 years of experience in product design, I bridge the gap between aesthetic excellence and technical feasibility. I don't just build interfaces; I design ecosystems that thrive on clarity and purpose.
+                            </p>
+</div>
+<div class="mt-12 grid grid-cols-2 gap-8">
+<div>
+<h4 class="font-label text-[10px] uppercase tracking-widest text-outline mb-2">Focus</h4>
+<p class="text-sm">Product Design<br/>Visual Identity<br/>Creative Direction</p>
+</div>
+<div>
+<h4 class="font-label text-[10px] uppercase tracking-widest text-outline mb-2">Tools</h4>
+<p class="text-sm">Figma &amp; Framer<br/>SwiftUI &amp; React<br/>Cinema 4D</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- CTA / Connect -->
+<section class="max-w-7xl mx-auto px-8 mb-40 text-center">
+<h2 class="font-headline text-5xl md:text-7xl font-extrabold mb-12 tracking-tighter">Ready to curate <br/> something <span class="text-tertiary">extraordinary?</span></h2>
+<button class="bg-gradient-to-br from-primary to-on-primary-container text-on-primary-fixed px-12 py-5 rounded-md font-label font-bold text-sm uppercase tracking-widest transition-all hover:scale-105 active:scale-95">
+                Start a Conversation
+            </button>
+</section>
+</main>
+<!-- Footer -->
+<footer class="w-full border-t border-slate-800/30 bg-[#060e20] tonal-shift from surface-container-low to surface-container-lowest">
+<div class="flex flex-col md:flex-row justify-between items-center px-12 py-10 w-full max-w-7xl mx-auto">
+<div class="mb-8 md:mb-0">
+<div class="text-sm font-bold text-[#7bd0ff] font-['Space_Grotesk'] mb-2">ALEXCINOVOJ</div>
+<div class="font-['Space_Grotesk'] uppercase tracking-widest text-[10px] text-slate-500">© 2024 ALEXCINOVOJ. CURATED WITH INTENTION.</div>
+</div>
+<div class="flex gap-8 items-center">
+<a class="font-['Space_Grotesk'] uppercase tracking-widest text-[10px] text-slate-500 hover:text-[#ffb59c] transition-colors duration-200" href="#">LinkedIn</a>
+<a class="font-['Space_Grotesk'] uppercase tracking-widest text-[10px] text-slate-500 hover:text-[#ffb59c] transition-colors duration-200" href="#">Dribbble</a>
+<a class="font-['Space_Grotesk'] uppercase tracking-widest text-[10px] text-slate-500 hover:text-[#ffb59c] transition-colors duration-200" href="#">Layers</a>
+<a class="font-['Space_Grotesk'] uppercase tracking-widest text-[10px] text-slate-500 hover:text-[#ffb59c] transition-colors duration-200" href="#">Email</a>
+</div>
+</div>
+</footer>
+</body></html>

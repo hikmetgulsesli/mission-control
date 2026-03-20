@@ -269,3 +269,22 @@ export async function prepareDesignFilesForRepo(
 
   return { screenMap, designSystem };
 }
+
+// Helper: extract screen prompts from PRD content (used by SSE streaming endpoint)
+export function extractScreenPrompts(prdContent: string, platform: string): { title: string; prompt: string; device: string }[] {
+  const sections = prdContent.split(/^#{1,2}\s+/m).filter(s => s.trim());
+  const screenPrompts: { title: string; prompt: string; device: string }[] = [];
+  for (const section of sections.slice(0, 8)) {
+    const sectionTitle = section.split("\n")[0]?.trim() || "";
+    if (!sectionTitle) continue;
+    if (/teknik|api|veri\s*modeli|technical|data\s*model|deployment/i.test(sectionTitle)) continue;
+    const sectionContent = section.slice(0, 1000);
+    const device = platform === "mobile" ? "MOBILE" : "DESKTOP";
+    screenPrompts.push({
+      title: sectionTitle,
+      prompt: "Create a " + (platform === "mobile" ? "mobile app" : "web page") + " screen for: " + sectionTitle + "\n\nDetails:\n" + sectionContent,
+      device,
+    });
+  }
+  return screenPrompts;
+}
