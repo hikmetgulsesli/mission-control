@@ -16,6 +16,7 @@ interface PrdMockupsProps {
   coverage?: { covered: string[]; missing: string[]; coverage: number } | null;
   onScreenClick: (screenId: string) => void;
   onClearAll?: () => void;
+  onGenerateMissing?: (title: string) => void;
 }
 
 function getCoverageBadgeClass(coverage: number): string {
@@ -24,7 +25,7 @@ function getCoverageBadgeClass(coverage: number): string {
   return 'prd-mockups__coverage--poor';
 }
 
-export function PrdMockups({ screens, coverage, onScreenClick, onClearAll }: PrdMockupsProps) {
+export function PrdMockups({ screens, coverage, onScreenClick, onClearAll, onGenerateMissing }: PrdMockupsProps) {
   if (!screens || screens.length === 0) {
     return (
       <div className="prd-empty">
@@ -54,7 +55,8 @@ export function PrdMockups({ screens, coverage, onScreenClick, onClearAll }: Prd
         <div className="prd-mockups__missing">
           <span className="prd-mockups__missing-label">Eksik sayfalar:</span>
           {coverage.missing.map((m, i) => (
-            <span key={i} className="prd-mockups__missing-item">{m}</span>
+            <span key={i} className={`prd-mockups__missing-item ${onGenerateMissing ? 'prd-mockups__missing-item--clickable' : ''}`}
+              onClick={() => onGenerateMissing?.(m)} title="Tikla: bu sayfa icin mockup uret">{m}</span>
           ))}
         </div>
       )}

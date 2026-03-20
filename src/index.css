@@ -7095,6 +7095,16 @@ html, body, #root {
   border: 1px solid rgba(255, 0, 64, 0.2);
 }
 
+.prd-mockups__missing-item--clickable {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.prd-mockups__missing-item--clickable:hover {
+  background: rgba(255, 0, 64, 0.25);
+  border-color: var(--neon-red);
+}
+
 /* Mockup card variants */
 .prd-mockup-card {
   cursor: pointer;

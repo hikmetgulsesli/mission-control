@@ -413,6 +413,24 @@ export function PrdGenerator() {
     }
   };
 
+  // Eksik sayfa icin mockup uret
+  const handleGenerateMissing = async (title: string) => {
+    if (!store.stitchProjectId || !store.id) { addLog('Once mockup ureti yapilmali'); return; }
+    setLoading('screenAction', true);
+    addLog(`"${title}" sayfasi icin mockup uretiliyor...`);
+    try {
+      const result = await api.prdVariantScreen(store.id, {
+        sourceScreenId: store.mockupScreens[0]?.id || '',
+        prompt: `Create a web page screen for: ${title}. Make it match the existing design system.`,
+      });
+      setStore({ mockupScreens: result.screens });
+      addLog(`"${title}" mockup'i uretildi`);
+    } catch (err: any) {
+      addLog(`Uretim hatasi: ${err.message}`);
+    }
+    setLoading('screenAction', false);
+  };
+
   // Toplu sil
   const handleClearAllScreens = () => {
     setStore({ mockupScreens: [], screenCoverage: null, lightboxScreenId: null });
@@ -636,6 +654,7 @@ export function PrdGenerator() {
                 coverage={store.screenCoverage}
                 onScreenClick={handleScreenClick}
                 onClearAll={handleClearAllScreens}
+                onGenerateMissing={handleGenerateMissing}
               />
             )}
             {store.activeTab === 'compare' && <PrdCompare data={store.compareData} />}

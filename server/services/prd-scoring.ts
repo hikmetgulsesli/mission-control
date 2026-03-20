@@ -109,11 +109,19 @@ export function checkScreenCoverage(
   // Extract visual section headings (skip technical/api/data sections)
   const sectionHeadings: string[] = [];
   for (const line of lines) {
-    const match = line.match(/^#{1,3}\s+(.+)/);
+    // Only h1/h2 — skip h3+ (CSS details, sub-properties)
+    const match = line.match(/^#{1,2}\s+(.+)/);
     if (!match) continue;
     const heading = match[1].trim();
-    if (/teknik|api|veri\s*modeli|technical|data\s*model|deployment|komponent\s*k[uü]t[uü]phanesi|responsive|animasyon/i.test(heading)) continue;
-    if (/proje\s*genel|tasarim\s*sistemi|design\s*system|tipografi|renkler|colors|fonts/i.test(heading)) continue;
+    // Skip non-page sections
+    if (/teknik|api|veri\s*modeli|technical|data\s*model|deployment/i.test(heading)) continue;
+    if (/komponent|component|eslestirme|library/i.test(heading)) continue;
+    if (/proje\s*genel|genel\s*bak|overview|giris/i.test(heading)) continue;
+    if (/tasarim\s*sistemi|design\s*system|tipografi|typography|renkler|colors|fonts|tema|theme/i.test(heading)) continue;
+    if (/responsive|breakpoint|animasyon|animation|transition|spacing|border|shadow|cursor|skeleton|hover|fade|pulse|seo|performance|accessibility|analytics/i.test(heading)) continue;
+    if (/kullanim|typescript|interface|prd\s/i.test(heading)) continue;
+    // Skip numbered sub-sections like "3.1 Ana Sayfa"
+    if (/^\d+\.\d+\s/.test(heading)) continue;
     sectionHeadings.push(heading);
   }
 
