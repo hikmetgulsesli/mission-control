@@ -291,10 +291,18 @@ export function PrdGenerator() {
         const data = JSON.parse((e as MessageEvent).data);
         addLog(`Mockup hatasi: ${data.message}`);
       } catch {
-        // SSE reconnect attempt — ignore if already got screens
         const current = usePrdStore.getState().mockupScreens;
         if (current.length > 0) {
           addLog(`Baglanti kesildi ama ${current.length} ekran mevcut`);
+          // Coverage check — eksik sayfalari goster
+          const prdContent = usePrdStore.getState().prdContent;
+          if (prdContent) {
+            api.prdScreenCoverage({ prdContent, screens: current })
+              .then(cov => {
+                setStore({ screenCoverage: cov });
+                if (cov.missing.length > 0) addLog(`${cov.missing.length} eksik sayfa var — tiklayarak uretebilirsiniz`);
+              }).catch(() => {});
+          }
         } else {
           addLog('Mockup baglantisi kesildi');
         }
