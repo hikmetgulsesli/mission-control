@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { api } from '../lib/api';
 import { usePrdStore } from '../store/prdStore';
 import { PrdChat } from '../components/prd/PrdChat';
@@ -51,6 +51,7 @@ function estimateCostLocal(content: string) {
 
 export function PrdGenerator() {
   const store = usePrdStore();
+  const esRef = useRef<EventSource | null>(null);
   const { setState: setStore, addLog, setLoading, reset } = store;
 
   // URL veya aciklamadan otomatik proje adi onerisi
@@ -251,6 +252,7 @@ export function PrdGenerator() {
     if (store.title) params.set('title', store.title);
 
     const es = new EventSource(`/api/prd/mockups/stream?${params.toString()}`);
+    esRef.current = es;
     let closed = false;
     const closeEs = () => { if (!closed) { closed = true; es.close(); setLoading('mockups', false); } };
 
@@ -483,6 +485,17 @@ export function PrdGenerator() {
       addLog(`Uretim hatasi: ${err.message}`);
     }
     setLoading('screenAction', false);
+  };
+
+  // Mockup uretimini durdur
+  const handleStopMockups = () => {
+    if (esRef.current) {
+      esRef.current.close();
+      esRef.current = null;
+    }
+    setLoading('mockups', false);
+    const current = usePrdStore.getState().mockupScreens;
+    addLog(`Uretim durduruldu — ${current.length} ekran mevcut`);
   };
 
   // Toplu sil
@@ -750,6 +763,9 @@ export function PrdGenerator() {
                   <button className="btn btn--small" onClick={() => setStore({ editMode: !store.editMode })}>{store.editMode ? 'Onizle' : 'Duzenle'}</button>
                   <button className="btn btn--small btn--primary" onClick={handleEnhance} disabled={store.loading.enhance}>{store.loading.enhance ? 'Gelistiriliyor...' : 'Gelistir'}</button>
                   <button className="btn btn--small" onClick={handleMockups} disabled={store.loading.mockups}>{store.loading.mockups ? 'Uretiliyor...' : 'Mockup Uret'}</button>
+                  {store.loading.mockups && (
+                    <button className="btn btn--small btn--danger" onClick={handleStopMockups}>Durdur</button>
+                  )}
                   {store.mockupScreens.length > 0 && !store.loading.mockups && (
                     <button className="btn btn--small btn--primary" onClick={handleResumeMockups}>Devam Et</button>
                   )}

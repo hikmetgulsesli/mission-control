@@ -307,51 +307,80 @@ export function extractScreenPrompts(prdContent: string, platform: string): { ti
   const device = platform === "mobile" ? "MOBILE" : "DESKTOP";
   const screenPrompts: { title: string; prompt: string; device: string }[] = [];
 
-  // Strategy 1: Find "## Sayfalar" section and extract page list
-  const pageListMatch = prdContent.match(/^##\s+Sayfalar[\s\S]*?(?=^##\s+(?!Sayfalar))/m);
+  // Strategy 1: Find "## Sayfalar" list and extract page names
+  const pageListMatch = prdContent.match(/^##\s+Sayfalar[\s\S]*?(?=^##\s+\d)/m);
   const pageNames: string[] = [];
   if (pageListMatch) {
     const listLines = pageListMatch[0].split("\n").slice(1);
     for (const line of listLines) {
-      const m = line.match(/^[-*]\s+\*\*(.+?)\*\*/) || line.match(/^[-*]\s+(.+?)\s*[\u2014\u2013-]\s/) || line.match(/^[-*]\s+(.+)/);
-      if (m && m[1].trim().length > 2) pageNames.push(m[1].trim());
+      // Match: "- **Ana Sayfa** — desc" or "- Ana Sayfa (/) — desc" or "- Ana Sayfa — desc"
+      const m = line.match(/^[-*]\s+\*\*(.+?)\*\*/) || line.match(/^[-*]\s+(.+?)\s*[\(\u2014\u2013—-]/) || line.match(/^[-*]\s+(.+)/);
+      if (m && m[1].trim().length > 2) {
+        let name = m[1].trim().replace(/\s*\(.*?\)\s*$/, ""); // remove (/) paths
+        pageNames.push(name);
+      }
     }
   }
 
-  // Build section map: heading -> content
+  // Build section map: heading -> content (h2 sections only)
   const sectionMap = new Map<string, string>();
-  const parts = prdContent.split(/^(#{1,2}\s+.+)$/m);
+  const parts = prdContent.split(/^(##\s+.+)$/m);
   for (let i = 1; i < parts.length; i += 2) {
-    const heading = parts[i].replace(/^#{1,2}\s+/, "").trim();
+    const rawHeading = parts[i].replace(/^##\s+/, "").trim();
+    // Strip numbering: "3. Ana Sayfa (`/`)" -> "Ana Sayfa"
+    const heading = rawHeading.replace(/^\d+\.\s*/, "").replace(/\s*\(.*?\)\s*/g, "").replace(/`/g, "").trim();
     const body = (parts[i + 1] || "").trim();
     sectionMap.set(heading, body);
   }
 
-  // Skip patterns
-  const skipRe = /proje\s*genel|genel\s*bak|overview|tasarim\s*sistemi|design\s*system|renkler|tipografi|fonts|^sayfalar$|teknik|api\b|veri\s*modeli|deployment|komponent|animasyon|responsive|breakpoint|seo|performance|accessibility/i;
-
-  // Use page list if found, otherwise h2 sections
-  const targets = pageNames.length >= 2
-    ? pageNames
-    : [...sectionMap.keys()].filter(h => !skipRe.test(h));
-
-  for (const pageName of targets.slice(0, 8)) {
-    let sectionContent = "";
-    for (const [heading, body] of sectionMap) {
-      if (heading.includes(pageName) || pageName.includes(heading) || heading.toLowerCase() === pageName.toLowerCase()) {
-        sectionContent = body.slice(0, 1500);
-        break;
+  // If page list found, use those names
+  if (pageNames.length >= 2) {
+    for (const pageName of pageNames.slice(0, 8)) {
+      // Find matching section
+      let sectionContent = "";
+      for (const [heading, body] of sectionMap) {
+        // Fuzzy match: page name appears in heading or vice versa
+        const hLower = heading.toLowerCase();
+        const pLower = pageName.toLowerCase();
+        if (hLower.includes(pLower) || pLower.includes(hLower) || hLower === pLower) {
+          sectionContent = body.slice(0, 1500);
+          break;
+        }
       }
-    }
-    if (!sectionContent) sectionContent = "A page called: " + pageName;
+      if (!sectionContent) {
+        // Try word overlap
+        const pWords = pageName.toLowerCase().split(/\s+/);
+        for (const [heading, body] of sectionMap) {
+          const hLower = heading.toLowerCase();
+          if (pWords.filter(w => w.length > 2 && hLower.includes(w)).length >= 1) {
+            sectionContent = body.slice(0, 1500);
+            break;
+          }
+        }
+      }
+      if (!sectionContent) sectionContent = pageName;
 
-    let prompt = "Create a " + (platform === "mobile" ? "mobile app" : "web page") + " screen for: " + pageName;
-    prompt += "\n\nPage details:\n" + sectionContent;
-    if (designContext) {
-      prompt += "\n\nIMPORTANT - Use this exact design system (colors, fonts, spacing):\n" + designContext;
+      let prompt = "Create a " + (platform === "mobile" ? "mobile app" : "web page") + " screen for: " + pageName;
+      prompt += "\n\nPage details:\n" + sectionContent;
+      if (designContext) prompt += "\n\nIMPORTANT - Use this exact design system (colors, fonts, spacing):\n" + designContext;
+      prompt += "\n\nMake the design pixel-perfect, modern, and production-ready.";
+      screenPrompts.push({ title: pageName, prompt, device });
     }
+    return screenPrompts;
+  }
+
+  // Fallback: use h2 sections, skip non-page ones
+  const skipRe = /proje\s*genel|genel\s*bak|overview|tasarim\s*sistemi|design\s*system|renkler|tipografi|fonts|^sayfalar$|teknik|api\b|veri\s*modeli|deployment|komponent|animasyon|responsive|breakpoint|seo|performance|accessibility|browser|gereksinim|eslestirme/i;
+
+  for (const [heading, body] of sectionMap) {
+    if (skipRe.test(heading)) continue;
+    if (screenPrompts.length >= 8) break;
+
+    let prompt = "Create a " + (platform === "mobile" ? "mobile app" : "web page") + " screen for: " + heading;
+    prompt += "\n\nPage details:\n" + body.slice(0, 1500);
+    if (designContext) prompt += "\n\nIMPORTANT - Use this exact design system (colors, fonts, spacing):\n" + designContext;
     prompt += "\n\nMake the design pixel-perfect, modern, and production-ready.";
-    screenPrompts.push({ title: pageName, prompt, device });
+    screenPrompts.push({ title: heading, prompt, device });
   }
   return screenPrompts;
 }
