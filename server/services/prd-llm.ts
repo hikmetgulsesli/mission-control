@@ -61,11 +61,17 @@ KURALLAR:
 PRD FORMATI:
 1. Proje Genel Bakis (1 paragraf)
 2. Tasarim Sistemi: renkler (hex kodlari), fontlar, spacing degerleri
-3. Her sayfa/ekran icin ayri bolum — layout, komponentler, davranislar
-4. Animasyonlar: timing (ms), easing, duration
-5. Responsive breakpoint'ler (mobile/tablet/desktop)
-6. Veri modeli (interface/type tanimlari)
-7. API endpoint'leri
+3. Sayfa Listesi: projedeki TUM sayfalari/ekranlari listele (## Sayfalar basligiyla). Her sayfa icin:
+   - Sayfa adi (benzersiz, net)
+   - 1 satirlik aciklama
+   Ornek: "Ana Sayfa — Hero section, ozellikler grid, CTA"
+4. Her sayfa icin ayri detay bolumu (## [Sayfa Adi]) — layout, komponentler, davranislar, exact CSS degerleri
+5. Animasyonlar: timing (ms), easing, duration
+6. Responsive breakpoint'ler (mobile/tablet/desktop)
+7. Veri modeli (interface/type tanimlari)
+8. API endpoint'leri
+
+ONEMLI: "## Sayfalar" bolumunde TUM sayfalari/ekranlari ac acik listele. Her sayfa sonra ayri ## bolum olarak detaylandirilacak. Sayfa sayisi en az 3, projenin buyuklugune gore 4-8 arasi.
 
 Tech stack: ${platform === 'mobile' ? 'React Native + Expo + TypeScript' : 'React + TypeScript + Tailwind CSS + shadcn/ui'}
 

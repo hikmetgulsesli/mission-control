@@ -303,22 +303,55 @@ function extractDesignContext(prdContent: string): string {
 }
 
 export function extractScreenPrompts(prdContent: string, platform: string): { title: string; prompt: string; device: string }[] {
-  const sections = prdContent.split(/^#{1,2}\s+/m).filter(s => s.trim());
   const designContext = extractDesignContext(prdContent);
+  const device = platform === "mobile" ? "MOBILE" : "DESKTOP";
   const screenPrompts: { title: string; prompt: string; device: string }[] = [];
-  for (const section of sections.slice(0, 8)) {
-    const sectionTitle = section.split("\n")[0]?.trim() || "";
-    if (!sectionTitle) continue;
-    if (/teknik|api|veri\s*modeli|technical|data\s*model|deployment|komponent\s*k/i.test(sectionTitle)) continue;
-    const sectionContent = section.slice(0, 1500);
-    const device = platform === "mobile" ? "MOBILE" : "DESKTOP";
-    let prompt = "Create a " + (platform === "mobile" ? "mobile app" : "web page") + " screen for: " + sectionTitle;
+
+  // Strategy 1: Find "## Sayfalar" section and extract page list
+  const pageListMatch = prdContent.match(/^##\s+Sayfalar[\s\S]*?(?=^##\s+(?!Sayfalar))/m);
+  const pageNames: string[] = [];
+  if (pageListMatch) {
+    const listLines = pageListMatch[0].split("\n").slice(1);
+    for (const line of listLines) {
+      const m = line.match(/^[-*]\s+\*\*(.+?)\*\*/) || line.match(/^[-*]\s+(.+?)\s*[\u2014\u2013-]\s/) || line.match(/^[-*]\s+(.+)/);
+      if (m && m[1].trim().length > 2) pageNames.push(m[1].trim());
+    }
+  }
+
+  // Build section map: heading -> content
+  const sectionMap = new Map<string, string>();
+  const parts = prdContent.split(/^(#{1,2}\s+.+)$/m);
+  for (let i = 1; i < parts.length; i += 2) {
+    const heading = parts[i].replace(/^#{1,2}\s+/, "").trim();
+    const body = (parts[i + 1] || "").trim();
+    sectionMap.set(heading, body);
+  }
+
+  // Skip patterns
+  const skipRe = /proje\s*genel|genel\s*bak|overview|tasarim\s*sistemi|design\s*system|renkler|tipografi|fonts|^sayfalar$|teknik|api\b|veri\s*modeli|deployment|komponent|animasyon|responsive|breakpoint|seo|performance|accessibility/i;
+
+  // Use page list if found, otherwise h2 sections
+  const targets = pageNames.length >= 2
+    ? pageNames
+    : [...sectionMap.keys()].filter(h => !skipRe.test(h));
+
+  for (const pageName of targets.slice(0, 8)) {
+    let sectionContent = "";
+    for (const [heading, body] of sectionMap) {
+      if (heading.includes(pageName) || pageName.includes(heading) || heading.toLowerCase() === pageName.toLowerCase()) {
+        sectionContent = body.slice(0, 1500);
+        break;
+      }
+    }
+    if (!sectionContent) sectionContent = "A page called: " + pageName;
+
+    let prompt = "Create a " + (platform === "mobile" ? "mobile app" : "web page") + " screen for: " + pageName;
     prompt += "\n\nPage details:\n" + sectionContent;
     if (designContext) {
-      prompt += "\n\nIMPORTANT — Use this exact design system (colors, fonts, spacing):\n" + designContext;
+      prompt += "\n\nIMPORTANT - Use this exact design system (colors, fonts, spacing):\n" + designContext;
     }
-    prompt += "\n\nMake the design pixel-perfect, modern, and production-ready. Follow the color palette and typography exactly.";
-    screenPrompts.push({ title: sectionTitle, prompt, device });
+    prompt += "\n\nMake the design pixel-perfect, modern, and production-ready.";
+    screenPrompts.push({ title: pageName, prompt, device });
   }
   return screenPrompts;
 }
