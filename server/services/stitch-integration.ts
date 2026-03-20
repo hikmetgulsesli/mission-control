@@ -307,80 +307,93 @@ export function extractScreenPrompts(prdContent: string, platform: string): { ti
   const device = platform === "mobile" ? "MOBILE" : "DESKTOP";
   const screenPrompts: { title: string; prompt: string; device: string }[] = [];
 
-  // Strategy 1: Find "## Sayfalar" list and extract page names
-  const pageListMatch = prdContent.match(/^##\s+Sayfalar[\s\S]*?(?=^##\s+\d)/m);
+  // Extract page names from PRD — multiple strategies
   const pageNames: string[] = [];
-  if (pageListMatch) {
-    const listLines = pageListMatch[0].split("\n").slice(1);
-    for (const line of listLines) {
-      // Match: "- **Ana Sayfa** — desc" or "- Ana Sayfa (/) — desc" or "- Ana Sayfa — desc"
-      const m = line.match(/^[-*]\s+\*\*(.+?)\*\*/) || line.match(/^[-*]\s+(.+?)\s*[\(\u2014\u2013—-]/) || line.match(/^[-*]\s+(.+)/);
+  const lines = prdContent.split("\n");
+
+  // Strategy 1: Find "Sayfa Listesi" or "Sayfalar" section, parse bullet list
+  let inPageList = false;
+  for (const line of lines) {
+    if (/^#{1,3}\s+.*(?:sayfa\s*listesi|sayfalar)/i.test(line)) {
+      inPageList = true;
+      continue;
+    }
+    if (inPageList) {
+      if (/^#{1,2}\s/.test(line)) { inPageList = false; continue; }
+      // Parse: "/ — Ana Sayfa: desc" or "- Ana Sayfa — desc" or "- **Ana Sayfa**"
+      const m = line.match(/^[-*]\s+(?:\/\S*\s*[—\u2014-]\s*)?(.+?)(?:\s*[:—\u2014-]\s|$)/)
+            || line.match(/^[-*]\s+\*\*(.+?)\*\*/)
+            || line.match(/^[-*]\s+(.+)/);
       if (m && m[1].trim().length > 2) {
-        let name = m[1].trim().replace(/\s*\(.*?\)\s*$/, ""); // remove (/) paths
-        pageNames.push(name);
+        let name = m[1].trim().replace(/\s*\(.*?\)\s*$/, "").replace(/\s*\/\S*\s*$/, "");
+        if (name.length > 2 && !/^[\/\-]/.test(name)) pageNames.push(name);
       }
     }
   }
 
-  // Build section map: heading -> content (h2 sections only)
+  // Strategy 2: Find h3 headings under "Sayfa Detaylari" section
+  if (pageNames.length < 2) {
+    let inDetailSection = false;
+    for (const line of lines) {
+      if (/^##\s+.*(?:sayfa\s*detay|page\s*detail)/i.test(line)) { inDetailSection = true; continue; }
+      if (inDetailSection && /^##\s/.test(line) && !/sayfa/i.test(line)) { inDetailSection = false; continue; }
+      if (inDetailSection && /^###\s/.test(line)) {
+        let name = line.replace(/^###\s+/, "").replace(/\s*\(.*?\)\s*/g, "").replace(/^\d+\.\s*/, "").trim();
+        if (name.length > 2) pageNames.push(name);
+      }
+    }
+  }
+
+  // Strategy 3: Find h2/h3 headings that look like page names (have route paths)
+  if (pageNames.length < 2) {
+    for (const line of lines) {
+      if (/^#{2,3}\s+.+\(\//.test(line)) {
+        let name = line.replace(/^#{2,3}\s+/, "").replace(/\s*\(.*?\)\s*/g, "").replace(/^\d+\.\s*/, "").trim();
+        if (name.length > 2) pageNames.push(name);
+      }
+    }
+  }
+
+  // Build section map from ALL headings (h2 + h3)
   const sectionMap = new Map<string, string>();
-  const parts = prdContent.split(/^(##\s+.+)$/m);
+  const parts = prdContent.split(/^(#{2,3}\s+.+)$/m);
   for (let i = 1; i < parts.length; i += 2) {
-    const rawHeading = parts[i].replace(/^##\s+/, "").trim();
-    // Strip numbering: "3. Ana Sayfa (`/`)" -> "Ana Sayfa"
+    const rawHeading = parts[i].replace(/^#{2,3}\s+/, "").trim();
     const heading = rawHeading.replace(/^\d+\.\s*/, "").replace(/\s*\(.*?\)\s*/g, "").replace(/`/g, "").trim();
     const body = (parts[i + 1] || "").trim();
     sectionMap.set(heading, body);
   }
 
-  // If page list found, use those names
-  if (pageNames.length >= 2) {
-    for (const pageName of pageNames.slice(0, 8)) {
-      // Find matching section
-      let sectionContent = "";
-      for (const [heading, body] of sectionMap) {
-        // Fuzzy match: page name appears in heading or vice versa
-        const hLower = heading.toLowerCase();
-        const pLower = pageName.toLowerCase();
-        if (hLower.includes(pLower) || pLower.includes(hLower) || hLower === pLower) {
-          sectionContent = body.slice(0, 1500);
-          break;
-        }
-      }
-      if (!sectionContent) {
-        // Try word overlap
-        const pWords = pageName.toLowerCase().split(/\s+/);
-        for (const [heading, body] of sectionMap) {
-          const hLower = heading.toLowerCase();
-          if (pWords.filter(w => w.length > 2 && hLower.includes(w)).length >= 1) {
-            sectionContent = body.slice(0, 1500);
-            break;
-          }
-        }
-      }
-      if (!sectionContent) sectionContent = pageName;
+  // Use page names if found
+  const targets = pageNames.length >= 2 ? pageNames : [];
 
-      let prompt = "Create a " + (platform === "mobile" ? "mobile app" : "web page") + " screen for: " + pageName;
-      prompt += "\n\nPage details:\n" + sectionContent;
-      if (designContext) prompt += "\n\nIMPORTANT - Use this exact design system (colors, fonts, spacing):\n" + designContext;
-      prompt += "\n\nMake the design pixel-perfect, modern, and production-ready.";
-      screenPrompts.push({ title: pageName, prompt, device });
+  // Fallback: filter sectionMap keys
+  if (targets.length < 2) {
+    const skipRe = /proje\s*genel|genel\s*bak|overview|tasarim|design\s*system|renkler|tipografi|fonts|sayfalar|sayfa\s*listesi|sayfa\s*detay|teknik|api\b|veri\s*modeli|deployment|komponent|animasyon|responsive|breakpoint|seo|performance|accessibility|browser|gereksinim|eslestirme|shadow|border|spacing|timing|keyframe|stagger/i;
+    for (const [heading] of sectionMap) {
+      if (!skipRe.test(heading) && targets.length < 8) targets.push(heading);
     }
-    return screenPrompts;
   }
 
-  // Fallback: use h2 sections, skip non-page ones
-  const skipRe = /proje\s*genel|genel\s*bak|overview|tasarim\s*sistemi|design\s*system|renkler|tipografi|fonts|^sayfalar$|teknik|api\b|veri\s*modeli|deployment|komponent|animasyon|responsive|breakpoint|seo|performance|accessibility|browser|gereksinim|eslestirme/i;
+  for (const pageName of targets.slice(0, 8)) {
+    let sectionContent = "";
+    for (const [heading, body] of sectionMap) {
+      const hLower = heading.toLowerCase();
+      const pLower = pageName.toLowerCase();
+      const pWords = pLower.split(/\s+/).filter(w => w.length > 2);
+      if (hLower.includes(pLower) || pLower.includes(hLower) || hLower === pLower
+          || pWords.filter(w => hLower.includes(w)).length >= 1) {
+        sectionContent = body.slice(0, 1500);
+        break;
+      }
+    }
+    if (!sectionContent) sectionContent = pageName;
 
-  for (const [heading, body] of sectionMap) {
-    if (skipRe.test(heading)) continue;
-    if (screenPrompts.length >= 8) break;
-
-    let prompt = "Create a " + (platform === "mobile" ? "mobile app" : "web page") + " screen for: " + heading;
-    prompt += "\n\nPage details:\n" + body.slice(0, 1500);
+    let prompt = "Create a " + (platform === "mobile" ? "mobile app" : "web page") + " screen for: " + pageName;
+    prompt += "\n\nPage details:\n" + sectionContent;
     if (designContext) prompt += "\n\nIMPORTANT - Use this exact design system (colors, fonts, spacing):\n" + designContext;
     prompt += "\n\nMake the design pixel-perfect, modern, and production-ready.";
-    screenPrompts.push({ title: heading, prompt, device });
+    screenPrompts.push({ title: pageName, prompt, device });
   }
   return screenPrompts;
-}
+
