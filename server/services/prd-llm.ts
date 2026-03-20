@@ -154,12 +154,15 @@ export async function enhancePrd(currentPrd: string, version: number): Promise<s
 
 Kurallar:
 - Genel ifadeleri spesifik yap ("modern" → exact CSS values)
-- Eksik ekranları ekle
-- Animasyon timing/easing detayları ekle
-- Komponent props/state detayları ekle
+- Eksik sayfalari/ekranlari ekle — MUTLAKA "## Sayfalar" bolumundeki listeye de ekle
+- "## Sayfalar" listesi her zaman GUNCEL tutulmali — tum sayfa/ekranlar burada listelenmeli
+- Yeni sayfa eklediginde hem listeye hem ayri ## bolum olarak detay ekle
+- Animasyon timing/easing detaylari ekle
+- Komponent props/state detaylari ekle
 - Responsive breakpoint'ler ekle
-- Edge case'leri tanımla
-- Her iterasyonda önemli ölçüde daha detaylı yap`,
+- Edge case'leri tanimla
+- Her iterasyonda onemli olcude daha detayli yap
+- Mevcut sayfalarin icerigini silme, sadece eksik olanlari ekle`,
     },
     {
       role: 'user',
