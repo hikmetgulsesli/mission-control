@@ -394,15 +394,33 @@ export function PrdGenerator() {
   const handleStartRun = async () => {
     if (!store.id || !store.prdContent) return;
     setLoading('startRun', true);
-    addLog('Pipeline baslatiliyor...');
+    const projectName = store.projectName || store.title;
+    const screens = store.mockupScreens;
+
+    addLog('--- PIPELINE BASLATIYOR ---');
+    addLog(`1/6 Repo olusturuluyor: ~/projects/${projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/`);
+
+    if (screens.length > 0) {
+      addLog(`2/6 Design dosyalari yerlestiriliyor (${screens.length} ekran)...`);
+      addLog('   stitch/ dizini + .stitch + DESIGN_MANIFEST.json');
+    } else {
+      addLog('2/6 Design dosyasi yok — design step sifirdan calisacak');
+    }
+
+    addLog(`3/6 PRD + metadata task string olusturuluyor...`);
+    addLog(`4/6 setfarm workflow run ${store.workflow} calistiriliyor...`);
+
     try {
       const result = await api.prdStartRun({
         prdId: store.id,
-        projectName: store.projectName || store.title,
+        projectName,
         workflow: store.workflow,
       });
       setStore({ runId: result.runId });
-      addLog(`Pipeline baslatildi! Run ID: ${result.runId}`);
+      addLog(`5/6 Pipeline baslatildi! Run ID: ${result.runId}`);
+      if (result.repoPath) addLog(`   Repo: ${result.repoPath}`);
+      addLog('6/6 AGENTS tabindan takip edebilirsiniz');
+      addLog('--- PIPELINE AKTIF ---');
     } catch (err: any) {
       addLog(`Pipeline hatasi: ${err.message}`);
     }

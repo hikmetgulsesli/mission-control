@@ -619,7 +619,8 @@ router.post('/prd/start-run', async (req, res) => {
     const out = await runCli('setfarm', ['workflow', 'run', wf, task]);
 
     // Extract run ID from output
-    const runIdMatch = out.match(/run[_\s]*(?:id)?[:\s]*([a-zA-Z0-9_-]+)/i);
+    // Parse run ID — UUID format (8-4-4-4-12)
+    const runIdMatch = out.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
     const runId = runIdMatch?.[1] || null;
 
     if (runId) {
