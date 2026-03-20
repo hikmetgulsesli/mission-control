@@ -7,18 +7,28 @@ import { readFile } from 'fs/promises';
 
 const execFileAsync = promisify(execFileCb);
 
-// Stitch API script path — setfarm-repo'dan veya scripts'ten
 const STITCH_SCRIPT = join(homedir(), '.openclaw', 'setfarm-repo', 'scripts', 'stitch-api.mjs');
 const STITCH_SCRIPT_ALT = join(homedir(), '.openclaw', 'scripts', 'stitch-api.mjs');
 const STITCH_CACHE_DIR = join(homedir(), '.openclaw', 'setfarm', 'stitch-cache');
 
-// A3 fix: path traversal guard — projectId/screenId must be hex only
-const SAFE_HEX_RE = /^[a-f0-9-]+$/i;
+// Path traversal guard — Stitch IDs can be hex or numeric
+const SAFE_ID_RE = /^[a-f0-9-]+$/i;
 function validateStitchId(value: string, name: string): string {
-  if (!value || !SAFE_HEX_RE.test(value)) {
-    throw new Error(`Invalid ${name}: must be hex/dash characters only`);
+  if (!value || !SAFE_ID_RE.test(value)) {
+    throw new Error(`Invalid ${name}: must be alphanumeric (hex/digits/dash) only`);
   }
   return value;
+}
+
+// Extract projectId from stitch-api.mjs output (JSON first, regex fallback)
+function parseProjectId(output: string): string {
+  try {
+    const data = JSON.parse(output);
+    if (data.projectId) return String(data.projectId);
+    if (data.project_id) return String(data.project_id);
+  } catch { /* not JSON, try regex */ }
+  const m = output.match(/project[_\s]*(?:id)?[:\s]*["']?([a-f0-9]+)["']?/i);
+  return m?.[1] || '';
 }
 
 function getStitchScript(): string {
@@ -30,7 +40,7 @@ function getStitchScript(): string {
 async function runStitch(args: string[]): Promise<string> {
   const script = getStitchScript();
   const { stdout, stderr } = await execFileAsync('node', [script, ...args], {
-    timeout: 300000, // 5 min
+    timeout: 300000,
     maxBuffer: 5 * 1024 * 1024,
     env: { ...process.env, HOME: homedir() },
   });
@@ -56,25 +66,19 @@ export interface StitchScreen {
 export async function ensureStitchProject(name: string, repoPath?: string): Promise<{ projectId: string; name: string }> {
   const args = ['ensure-project', name];
   if (repoPath) args.push(repoPath);
-
   const output = await runStitch(args);
-  // Parse project ID from output
-  const idMatch = output.match(/project[_\s]*(?:id)?[:\s]*([a-f0-9]+)/i);
-  const projectId = idMatch?.[1] || '';
-
+  const projectId = parseProjectId(output);
   return { projectId, name };
 }
 
 export async function createStitchProject(title: string): Promise<string> {
   const output = await runStitch(['create-project', title]);
-  const idMatch = output.match(/project[_\s]*(?:id)?[:\s]*([a-f0-9]+)/i);
-  return idMatch?.[1] || '';
+  return parseProjectId(output);
 }
 
 export async function generateScreen(projectId: string, prompt: string, title: string, device = 'DESKTOP'): Promise<StitchScreen | null> {
   try {
     const output = await runStitch(['generate-screen-safe', projectId, prompt, title, device, 'GEMINI_3_PRO']);
-    // Parse screen data from JSON output
     try {
       const data = JSON.parse(output);
       if (data.screens?.[0]) {
@@ -91,27 +95,12 @@ export async function generateScreen(projectId: string, prompt: string, title: s
         };
       }
       if (data.skipped) {
-        return {
-          screenId: data.existingScreenId || '',
-          title,
-          htmlUrl: null,
-          screenshotUrl: null,
-          localHtml: null,
-          status: 'skipped',
-        };
+        return { screenId: data.existingScreenId || '', title, htmlUrl: null, screenshotUrl: null, localHtml: null, status: 'skipped' };
       }
     } catch {
-      // Not JSON, parse from text
-      const screenIdMatch = output.match(/screen[_\s]*(?:id)?[:\s]*([a-f0-9]+)/i);
+      const screenIdMatch = output.match(/screen[_\s]*(?:id)?[:\s]*["']?([a-f0-9]+)["']?/i);
       if (screenIdMatch) {
-        return {
-          screenId: screenIdMatch[1],
-          title,
-          htmlUrl: null,
-          screenshotUrl: null,
-          localHtml: null,
-          status: 'done',
-        };
+        return { screenId: screenIdMatch[1], title, htmlUrl: null, screenshotUrl: null, localHtml: null, status: 'done' };
       }
     }
     return null;
@@ -148,7 +137,6 @@ export async function downloadScreen(projectId: string, screenId: string, output
     validateStitchId(screenId, 'screenId');
     mkdirSync(outputDir, { recursive: true });
     const output = await runStitch(['download-screen', projectId, screenId, outputDir]);
-    // Find downloaded files
     const htmlMatch = output.match(/html[:\s]+(.+\.html)/i);
     const pngMatch = output.match(/screenshot[:\s]+(.+\.png)/i);
     return {
@@ -165,25 +153,20 @@ export async function generateMockupsFromPrd(prdContent: string, title: string, 
   projectId: string;
   screens: StitchScreen[];
 }> {
-  // 1. Create/ensure Stitch project
   const projectId = await createStitchProject(`PRD: ${title}`);
   if (!projectId) {
     throw new Error('Failed to create Stitch project');
   }
 
-  // 2. Extract screens from PRD sections
   const sections = prdContent.split(/^#{1,2}\s+/m).filter(s => s.trim());
   const screenPrompts: { title: string; prompt: string; device: string }[] = [];
 
   for (const section of sections.slice(0, 8)) {
     const sectionTitle = section.split('\n')[0]?.trim() || '';
     if (!sectionTitle) continue;
-    // Skip non-visual sections
     if (/teknik|api|veri\s*modeli|technical|data\s*model|deployment/i.test(sectionTitle)) continue;
-
     const sectionContent = section.slice(0, 1000);
     const device = platform === 'mobile' ? 'MOBILE' : 'DESKTOP';
-
     screenPrompts.push({
       title: sectionTitle,
       prompt: `Create a ${platform === 'mobile' ? 'mobile app' : 'web page'} screen for: ${sectionTitle}\n\nDetails:\n${sectionContent}`,
@@ -191,7 +174,6 @@ export async function generateMockupsFromPrd(prdContent: string, title: string, 
     });
   }
 
-  // 3. Generate screens (sequential to avoid rate limits)
   const screens: StitchScreen[] = [];
   for (const sp of screenPrompts) {
     const screen = await generateScreen(projectId, sp.prompt, sp.title, sp.device);
@@ -199,11 +181,9 @@ export async function generateMockupsFromPrd(prdContent: string, title: string, 
       screen.prompt = sp.prompt;
       screens.push(screen);
     }
-    // Small delay between generations
     await new Promise(r => setTimeout(r, 2000));
   }
 
-  // 4. Download to cache
   const cacheDir = join(STITCH_CACHE_DIR, projectId);
   mkdirSync(cacheDir, { recursive: true });
 
@@ -211,12 +191,8 @@ export async function generateMockupsFromPrd(prdContent: string, title: string, 
     if (screen.screenId && screen.status === 'done') {
       try {
         const downloaded = await downloadScreen(projectId, screen.screenId, cacheDir);
-        if (downloaded) {
-          screen.localHtml = downloaded.htmlPath;
-        }
-      } catch {
-        // Download failed, continue
-      }
+        if (downloaded) screen.localHtml = downloaded.htmlPath;
+      } catch { /* continue */ }
     }
   }
 
@@ -224,15 +200,13 @@ export async function generateMockupsFromPrd(prdContent: string, title: string, 
 }
 
 export async function deleteScreenFromCache(projectId: string, screenId: string): Promise<boolean> {
-  if (!projectId || !screenId || !SAFE_HEX_RE.test(projectId) || !SAFE_HEX_RE.test(screenId)) {
+  if (!projectId || !screenId || !SAFE_ID_RE.test(projectId) || !SAFE_ID_RE.test(screenId)) {
     return false;
   }
   const cacheDir = join(STITCH_CACHE_DIR, projectId);
   const { unlink } = await import('fs/promises');
-  const extensions = ['.html', '.png'];
-  for (const ext of extensions) {
-    const filePath = join(cacheDir, `${screenId}${ext}`);
-    try { await unlink(filePath); } catch { /* file may not exist */ }
+  for (const ext of ['.html', '.png']) {
+    try { await unlink(join(cacheDir, `${screenId}${ext}`)); } catch { /* ok */ }
   }
   return true;
 }
@@ -240,13 +214,10 @@ export async function deleteScreenFromCache(projectId: string, screenId: string)
 export async function regenerateScreen(projectId: string, screenId: string, prompt: string, title: string, device = 'DESKTOP'): Promise<StitchScreen | null> {
   validateStitchId(projectId, 'projectId');
   validateStitchId(screenId, 'screenId');
-  // Delete old cached files
   await deleteScreenFromCache(projectId, screenId);
-  // Generate new screen with same or updated prompt
   const screen = await generateScreen(projectId, prompt, title, device);
   if (screen) {
     screen.prompt = prompt;
-    // Download to cache
     const cacheDir = join(STITCH_CACHE_DIR, projectId);
     mkdirSync(cacheDir, { recursive: true });
     if (screen.screenId && screen.status === 'done') {
@@ -265,7 +236,7 @@ export async function prepareDesignFilesForRepo(
   repoPath: string,
 ): Promise<{ screenMap: Record<string, string>; designSystem: any }> {
   validateStitchId(projectId, 'projectId');
-  const { writeFile, copyFile, readFile: readFileAsync } = await import('fs/promises');
+  const { writeFile, copyFile } = await import('fs/promises');
 
   const stitchDir = join(repoPath, 'stitch');
   mkdirSync(stitchDir, { recursive: true });
@@ -274,53 +245,26 @@ export async function prepareDesignFilesForRepo(
   const screenMap: Record<string, string> = {};
   const manifestScreens: any[] = [];
 
-  // Copy HTML files from cache to repo stitch/ dir
   for (const screen of screens) {
     if (!screen.screenId || screen.status !== 'done') continue;
     const srcHtml = join(cacheDir, `${screen.screenId}.html`);
     const destHtml = join(stitchDir, `${screen.screenId}.html`);
-    try {
-      if (existsSync(srcHtml)) {
-        await copyFile(srcHtml, destHtml);
-      }
-    } catch { /* continue */ }
-
+    try { if (existsSync(srcHtml)) await copyFile(srcHtml, destHtml); } catch { /* ok */ }
     screenMap[screen.title] = screen.screenId;
-    manifestScreens.push({
-      id: screen.screenId,
-      title: screen.title,
-      file: `${screen.screenId}.html`,
-      width: screen.width,
-      height: screen.height,
-    });
+    manifestScreens.push({ id: screen.screenId, title: screen.title, file: `${screen.screenId}.html`, width: screen.width, height: screen.height });
   }
 
-  // Write .stitch project file
-  await writeFile(join(repoPath, '.stitch'), JSON.stringify({
-    projectId,
-    name: `PRD Design`,
-    updatedAt: new Date().toISOString(),
-  }, null, 2));
+  await writeFile(join(repoPath, '.stitch'), JSON.stringify({ projectId, name: 'PRD Design', updatedAt: new Date().toISOString() }, null, 2));
+  await writeFile(join(stitchDir, 'DESIGN_MANIFEST.json'), JSON.stringify({ projectId, screens: manifestScreens, generatedAt: new Date().toISOString() }, null, 2));
 
-  // Write DESIGN_MANIFEST.json
-  await writeFile(join(stitchDir, 'DESIGN_MANIFEST.json'), JSON.stringify({
-    projectId,
-    screens: manifestScreens,
-    generatedAt: new Date().toISOString(),
-  }, null, 2));
-
-  // Extract design tokens from first HTML
   let designSystem: any = {};
   if (manifestScreens.length > 0) {
     try {
       const output = await runStitch(['extract-tokens', projectId, cacheDir]);
       const data = JSON.parse(output);
       designSystem = data;
-      // Write design-tokens.css
-      if (data.css) {
-        await writeFile(join(stitchDir, 'design-tokens.css'), data.css);
-      }
-    } catch { /* extract-tokens failed, continue */ }
+      if (data.css) await writeFile(join(stitchDir, 'design-tokens.css'), data.css);
+    } catch { /* extract-tokens failed */ }
   }
 
   return { screenMap, designSystem };
