@@ -1,7 +1,6 @@
-import { homedir } from 'os';
-import { join } from 'path';
 import { readFileSync } from 'fs';
-import { resolve } from 'path';
+import { resolve, join } from 'path';
+import { homedir } from 'os';
 
 function loadEnv() {
   try {
@@ -22,34 +21,34 @@ function loadEnv() {
 }
 loadEnv();
 
+const HOME = homedir();
+
 export const config = {
   port: parseInt(process.env.MC_PORT || '3080', 10),
   gatewayWs: process.env.GATEWAY_WS || 'ws://127.0.0.1:18789',
-  setfarmUrl: process.env.SETFARM_URL || 'http://127.0.0.1:3333',
+  setfarmUrl: process.env.SETFARM_URL || process.env.ANTFARM_URL || 'http://127.0.0.1:3333',
   prometheusUrl: process.env.PROMETHEUS_URL || 'http://127.0.0.1:9090',
-  dataJson: process.env.DATA_JSON || '/home/setrox/.openclaw/dashboard/data.json',
-  jobsJson: process.env.JOBS_JSON || '/home/setrox/.openclaw/cron/jobs.json',
-  avatarsDir: process.env.AVATARS_DIR || '/home/setrox/.openclaw/dashboard/avatars',
-  cliPath: process.env.CLI_PATH || '/home/setrox/.local/bin',
-  clawtabsConfig: process.env.CLAWTABS_CONFIG || '/home/setrox/.openclaw/clawtabs-config.json',
+  dataJson: process.env.DATA_JSON || join(HOME, '.openclaw/dashboard/data.json'),
+  jobsJson: process.env.JOBS_JSON || join(HOME, '.openclaw/cron/jobs.json'),
+  avatarsDir: process.env.AVATARS_DIR || join(HOME, '.openclaw/dashboard/avatars'),
+  cliPath: process.env.CLI_PATH || join(HOME, '.local/bin'),
+  clawtabsConfig: process.env.CLAWTABS_CONFIG || join(HOME, '.openclaw/clawtabs-config.json'),
   gatewayToken: process.env.GATEWAY_TOKEN || '',
-  projectsJson: process.env.PROJECTS_JSON || '/home/setrox/projects/mission-control/projects.json',
+  projectsJson: process.env.PROJECTS_JSON || join(HOME, 'mission-control/projects.json'),
   wsOrigin: process.env.WS_ORIGIN || '',
-  authToken: process.env.MC_AUTH_TOKEN || process.env.GATEWAY_TOKEN || '',
+  authToken: process.env.AUTH_TOKEN || '',
 };
 
+// A1 fix: PATHS export — setfarm-activity.ts bunu import ediyor
 export const PATHS = {
-  openclawDir: join(homedir(), '.openclaw'),
-  agentsDir: join(homedir(), '.openclaw/agents'),
-  configFile: join(homedir(), '.openclaw/openclaw.json'),
-  setfarmDb: join(homedir(), '.openclaw/setfarm/setfarm.db'),
-  setfarmDir: join(homedir(), '.openclaw/setfarm'),
-  projectsDir: join(homedir(), 'projects'),
-  mobileDir: join(homedir(), 'mobile'),
-  workspaceDir: join(homedir(), '.openclaw/workspace'),
-  setfarmRepoDir: join(homedir(), '.openclaw/setfarm-repo'),
-  npmGlobalBin: join(homedir(), '.npm-global/bin'),
-  eventsJsonl: join(homedir(), '.openclaw/setfarm/events.jsonl'),
-  portRegistry: join(homedir(), '.openclaw/workspace/references/port-registry.md'),
-  serveBin: join(homedir(), '.npm-global/bin/serve'),
-} as const;
+  setfarmDir: process.env.SETFARM_DIR || join(HOME, '.openclaw/setfarm'),
+  setfarmRepoDir: process.env.SETFARM_REPO_DIR || join(HOME, '.openclaw/setfarm-repo'),
+  projectsDir: process.env.PROJECTS_DIR || join(HOME, 'projects'),
+  mobileDir: process.env.MOBILE_DIR || join(HOME, 'mobile'),
+  eventsJsonl: process.env.EVENTS_JSONL || join(HOME, '.openclaw/setfarm/events.jsonl'),
+  sessionsDir: process.env.SESSIONS_DIR || join(HOME, '.openclaw/sessions'),
+  scriptsDir: process.env.SCRIPTS_DIR || join(HOME, '.openclaw/scripts'),
+  agentsDir: process.env.AGENTS_DIR || join(HOME, '.openclaw/agents'),
+  portRegistry: process.env.PORT_REGISTRY || join(HOME, '.openclaw/setfarm/port-registry.json'),
+  serveBin: process.env.SERVE_BIN || join(HOME, '.npm-global/bin/serve'),
+};

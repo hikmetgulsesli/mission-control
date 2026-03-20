@@ -16,6 +16,7 @@ import { NotFound } from "./pages/NotFound";
 import { Scrape } from "./pages/Scrape";
 import { Rules } from "./pages/Rules";
 import { Live } from "./pages/Live";
+import { PrdGenerator } from "./pages/PrdGenerator";
 
 function RunDetailRoute() {
   const { id } = useParams<{ id: string }>();
@@ -47,6 +48,7 @@ export default function App() {
           <Route path="live" element={<Live />} />
           <Route path="workflows" element={<Workflows />} />
           <Route path="tasks" element={<Tasks />} />
+          <Route path="prd" element={<PrdGenerator />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>

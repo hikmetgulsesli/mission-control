@@ -207,7 +207,8 @@ function truncate(s: string | undefined | null, max: number): string | null {
 function extractProject(cwd: string | null, summary?: string | null, file?: string | null, detail?: string | null): string | null {
   const sources = [cwd, summary, file, detail].filter(Boolean) as string[];
   for (const src of sources) {
-    const m = src.match(/\/projects\/([a-zA-Z0-9_-]+)/);
+    // Only match /home/<user>/projects/<name> — NOT src/projects/page.tsx
+    const m = src.match(/\/home\/[^\/]+\/projects\/([a-zA-Z0-9_-]+)/);
     if (m) return m[1];
   }
   return null;
@@ -386,10 +387,18 @@ function filterAndRespond(events: LiveEvent[], req: any, res: any) {
   let filtered = events;
   // Filter out step peek polling noise (runs every ~7s per agent, floods the feed)
   filtered = filtered.filter(e => !(e.summary && e.summary.includes("step peek")));
-  // grep exit 1 = no match (normal), not an error
+  // Normalize harmless exit codes — these are NOT errors
   filtered = filtered.map(e => {
-    if (e.action === 'bash' && e.exitCode === 1 && e.summary && e.summary.match(/^(grep |find )/)) {
-      return { ...e, exitCode: 0, status: 'completed' };
+    if (e.action === 'bash' && e.exitCode !== null && e.exitCode !== 0 && e.summary) {
+      const s = e.summary;
+      // grep/find/ls exit 1-2 = no match or file not found (normal shell behavior)
+      if (s.match(/^(grep |find |ls |cat .* \| grep|wc )/)) {
+        return { ...e, exitCode: 0, status: 'completed' };
+      }
+      // process poll/log with no output — cosmetic, not an error
+      if (s === 'process poll' || s === 'process log') {
+        return { ...e, exitCode: 0, status: 'completed' };
+      }
     }
     return e;
   });
@@ -435,17 +444,8 @@ function filterAndRespond(events: LiveEvent[], req: any, res: any) {
 
 router.get('/live-feed/projects', async (_req, res) => {
   try {
-    const now = Date.now();
-    let events: LiveEvent[];
-    if (now - feedCache.ts < CACHE_TTL_MS && feedCache.data.length > 0) {
-      events = feedCache.data;
-    } else {
-      events = scanSessions();
-      persistEvents(events);
-      feedCache = { data: events, ts: now };
-    }
-    const projects = [...new Set(events.map(e => e.project).filter(Boolean))].sort();
-    res.json(projects);
+    const rows = db.prepare("SELECT DISTINCT project FROM live_events WHERE project IS NOT NULL ORDER BY project").all() as { project: string }[];
+    res.json(rows.map(r => r.project));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -460,7 +460,7 @@ router.get('/live-feed/errors', async (req, res) => {
     const since = req.query.since as string;
     const action = req.query.action as string;
 
-    let sql = `SELECT * FROM live_events WHERE (status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0))`;
+    let sql = `SELECT * FROM live_events WHERE (status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0)) AND summary NOT LIKE '%step peek%'`;
     const params: any[] = [];
 
     if (project) { sql += ' AND project = ?'; params.push(project); }
@@ -495,7 +495,7 @@ router.get('/live-feed/history', async (req, res) => {
     const until = req.query.until as string;
     const status = req.query.status as string;
 
-    let sql = 'SELECT * FROM live_events WHERE 1=1';
+    let sql = "SELECT * FROM live_events WHERE summary NOT LIKE '%step peek%'";
     const params: any[] = [];
 
     if (project) { sql += ' AND project = ?'; params.push(project); }

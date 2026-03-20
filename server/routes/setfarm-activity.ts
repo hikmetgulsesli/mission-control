@@ -485,7 +485,7 @@ async function createBuildingProject(run: any): Promise<void> {
     emoji: '🏗',
     createdBy: 'setfarm-workflow',
     setfarmRunId: run.id,
-    task: run.task.split('\n').slice(0, 3).join(' ').slice(0, 200),
+    task: run.task.replace(/^--task\s+/i, '').replace(/^Proje:\s*/i, '').split('\n').slice(0, 3).join(' ').slice(0, 200),
     status: 'building',
     port: port || undefined,
   });
@@ -508,7 +508,10 @@ function extractProjectName(task: string): string {
   const repoMatch = task.match(/Repo:\s*\/home\/setrox\/([a-z0-9-]+)/i);
   if (repoMatch) return repoMatch[1];
 
-  const firstLine = task.split('\n')[0].replace(/^#+\s*/, '').trim();
+  // Strip CLI prefixes: --task, Proje: etc.
+  let firstLine = task.split('\n')[0].replace(/^#+\s*/, '').trim();
+  firstLine = firstLine.replace(/^--task\s+/i, '').trim();
+  firstLine = firstLine.replace(/^Proje:\s*/i, '').trim();
 
   // Pattern 1: "Build/Create X app/project/tool"
   const buildMatch = firstLine.match(/(?:Build|Create|Implement|Add|Make|Develop)\s+(?:(?:a|an|the)\s+)?(.+?)\s+(?:web\s+)?(?:app(?:lication)?|project|service|tool|system|api|dashboard|page|site|feature)/i)
@@ -636,7 +639,7 @@ async function syncProjectsFromRuns(): Promise<{ synced: any[]; skipped: string[
       emoji: mobile ? '\u{1F4F1}' : '\u{1F527}',
       createdBy: 'setfarm-workflow',
       setfarmRunId: run.id,
-      task: run.task.split('\n').slice(0, 3).join(' ').slice(0, 200),
+      task: run.task.replace(/^--task\s+/i, '').replace(/^Proje:\s*/i, '').split('\n').slice(0, 3).join(' ').slice(0, 200),
       type: mobile ? 'mobile' : 'web',
     });
 

@@ -1,24 +1,12 @@
 import { Router } from "express";
-import { readFileSync, writeFileSync, existsSync, rmSync, mkdirSync, unlinkSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, rmSync } from "fs";
 import { join } from "path";
 import { createConnection } from "net";
 import { execSync, execFileSync } from "child_process";
 import { config } from "../config.js";
-import { deleteRunsByProject } from "../utils/setfarm-db.js";
 
 const router = Router();
 const PROJECTS_FILE = (config as any).projectsJson || join(import.meta.dirname, "../../projects.json");
-const DISABLED_DIR = join(process.env.HOME || "/home/setrox", ".openclaw/disabled-services");
-const DELETED_FILE = join(import.meta.dirname || __dirname, "../../deleted-projects.json");
-
-function loadDeletedIds(): Set<string> {
-  try { return new Set(JSON.parse(readFileSync(DELETED_FILE, "utf-8"))); } catch { return new Set(); }
-}
-function addDeletedId(id: string) {
-  const ids = loadDeletedIds();
-  ids.add(id);
-  writeFileSync(DELETED_FILE, JSON.stringify([...ids], null, 2));
-}
 
 const DEFAULT_CHECKLIST = [
   { id: "task-received", label: "Gorev iletildi", completed: false },
@@ -53,11 +41,6 @@ function saveProjects(projects: any[]) {
 
 async function enrichWithStatus(projects: any[]) {
   for (const p of projects) {
-    // Respect manually disabled state — don't override with port check
-    if (p.manuallyDisabled) {
-      p.serviceStatus = "inactive";
-      continue;
-    }
     const port = p.ports?.frontend || p.ports?.backend;
     if (port) {
       p.serviceStatus = (await checkPort(port)) ? "active" : "inactive";
@@ -97,7 +80,7 @@ router.get("/projects/next-port", async (_req, res) => {
           if (p >= 3000 && p <= 9999) usedPorts.add(p);
         }
       }
-    } catch (e: any) { console.warn("exec failed:", e?.message || e); }
+    } catch {}
     // Setfarm project port range starts at 3507
     let port = 3507;
     while (usedPorts.has(port)) port++;
@@ -110,7 +93,7 @@ router.get("/projects/next-port", async (_req, res) => {
 router.get("/projects/:id", async (req, res) => {
   try {
     const projects = loadProjects();
-    const project = findProjectByIdOrRepo(projects, req.params.id);
+    const project = projects.find((p: any) => p.id === req.params.id);
     if (!project) { res.status(404).json({ error: "Project not found" }); return; }
     res.json(project);
   } catch (err: any) {
@@ -148,7 +131,7 @@ router.post("/projects", async (req, res) => {
       stories: { total: 0, done: 0 },
       features: [],
       tasks: [],
-      github: normalizeGithub(github),
+      github: github || "",
       category: category || "own",
       checklist: DEFAULT_CHECKLIST.map(c => ({ ...c })),
     };
@@ -164,7 +147,7 @@ router.post("/projects", async (req, res) => {
 router.patch("/projects/:id", async (req, res) => {
   try {
     const projects = loadProjects();
-    const _match = findProjectByIdOrRepo(projects, req.params.id); const idx = _match ? projects.findIndex((p: any) => p.id === _match.id) : -1;
+    const idx = projects.findIndex((p: any) => p.id === req.params.id);
     if (idx === -1) { res.status(404).json({ error: "Project not found" }); return; }
 
     const updates = req.body;
@@ -183,7 +166,7 @@ router.patch("/projects/:id", async (req, res) => {
     }
 
     for (const [key, val] of Object.entries(updates)) {
-      if (key !== "id") projects[idx][key] = key === "github" ? normalizeGithub(val) : val;
+      if (key !== "id") projects[idx][key] = val;
     }
 
     projects[idx].updatedAt = new Date().toISOString();
@@ -197,7 +180,7 @@ router.patch("/projects/:id", async (req, res) => {
 router.get("/projects/:id/export", async (req, res) => {
   try {
     const projects = loadProjects();
-    const project = findProjectByIdOrRepo(projects, req.params.id);
+    const project = projects.find((p: any) => p.id === req.params.id);
     if (!project) { res.status(404).json({ error: "Project not found" }); return; }
 
     let runs: any[] = [];
@@ -208,7 +191,7 @@ router.get("/projects/:id/export", async (req, res) => {
         const runIds = [...(project.setfarmRunIds || [])];
         if (project.workflowRunId) runIds.push(project.workflowRunId);
         runs = allRuns.filter((r: any) => runIds.includes(r.id));
-      } catch { /* fetch failed */ }
+      } catch {}
     }
 
     const filename = project.id + "-export.json";
@@ -250,13 +233,17 @@ router.post("/projects/import", async (req, res) => {
 });
 
 function systemctlAction(action: string, service: string) {
+  // C2 fix: validate service name to prevent injection
+  if (!/^[a-zA-Z0-9_@.-]+$/.test(service)) {
+    throw new Error(`Invalid service name: ${service}`);
+  }
   // "start" → use "restart" to handle stale processes
   const cmd = action === "start" ? "restart" : action;
   // Try user-level first, then system-level
   try {
     execFileSync("systemctl", ["--user", cmd, service], { timeout: 10000, stdio: 'pipe' });
     return;
-  } catch (e: any) { console.warn("exec failed:", e?.message || e); }
+  } catch {}
   execFileSync("sudo", ["systemctl", cmd, service], { timeout: 10000, stdio: 'pipe' });
 }
 
@@ -288,33 +275,23 @@ router.post("/projects/:id/toggle", async (req, res) => {
       if (port) {
         try {
           execFileSync("fuser", ["-k", `${port}/tcp`], { timeout: 5000, stdio: 'pipe' });
-        } catch (e: any) { console.warn("exec failed:", e?.message || e); }
+        } catch {}
       }
-      try { systemctlAction("stop", service); } catch (e: any) { console.warn("exec failed:", e?.message || e); }
-      // Disable so systemd won't auto-restart
-      try { execFileSync("systemctl", ["--user", "disable", service], { timeout: 5000, stdio: 'pipe' }); } catch (e: any) { console.warn("exec failed:", e?.message || e); }
-      // Marker file for medic guard
-      try { mkdirSync(DISABLED_DIR, { recursive: true }); writeFileSync(join(DISABLED_DIR, service), new Date().toISOString()); } catch (e: any) { /* cleanup */ }
-      // Persist state
-      project.manuallyDisabled = true;
-      saveProjects(projects);
+      try { systemctlAction("stop", service); } catch {}
     } else {
-      // Re-enable + start
-      try { execFileSync("systemctl", ["--user", "enable", service], { timeout: 5000, stdio: 'pipe' }); } catch (e: any) { /* cleanup */ }
       try {
         systemctlAction("start", service);
       } catch (err: any) {
         res.status(500).json({ error: "Failed to start service: " + err.message });
         return;
       }
-      // Remove marker file
-      try { unlinkSync(join(DISABLED_DIR, service)); } catch (e: any) { /* cleanup */ }
-      project.manuallyDisabled = false;
-      saveProjects(projects);
     }
 
-    // Return expected status immediately — port may not be ready yet
-    const serviceStatus = action === "start" ? "active" : "inactive";
+    // Check new status
+    const port = project.ports?.frontend || project.ports?.backend;
+    // Give service a moment to start/stop
+    await new Promise(r => setTimeout(r, 1000));
+    const serviceStatus = port ? ((await checkPort(port)) ? "active" : "inactive") : "unknown";
 
     res.json({ success: true, serviceStatus });
   } catch (err: any) {
@@ -341,18 +318,15 @@ router.post("/projects/stop-all", async (_req, res) => {
       if (!isOnline) continue;
 
       try {
-        try { execFileSync("fuser", ["-k", `${port}/tcp`], { timeout: 5000, stdio: 'pipe' }); } catch (e: any) { console.warn("exec failed:", e?.message || e); }
+        // Kill orphan processes on port
+        try { execFileSync("fuser", ["-k", `${port}/tcp`], { timeout: 5000, stdio: 'pipe' }); } catch {}
         systemctlAction("stop", service);
-        try { execFileSync("systemctl", ["--user", "disable", service], { timeout: 5000, stdio: 'pipe' }); } catch (e: any) { console.warn("exec failed:", e?.message || e); }
-        try { mkdirSync(DISABLED_DIR, { recursive: true }); writeFileSync(join(DISABLED_DIR, service), new Date().toISOString()); } catch (e: any) { /* cleanup */ }
-        project.manuallyDisabled = true;
         results.push({ id: project.id, name: project.name, stopped: true });
       } catch (err: any) {
         results.push({ id: project.id, name: project.name, stopped: false, error: err.message });
       }
     }
 
-    saveProjects(projects);
     res.json({ success: true, results });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -367,8 +341,6 @@ router.post("/projects/start-all", async (_req, res) => {
     for (const project of projects) {
       if (project.id === "mission-control") continue;
       if (project.category === "external") continue;
-      // Skip individually disabled projects — respect user intent
-      if (project.manuallyDisabled) continue;
 
       const service = project.service;
       if (!service || !(/^[a-zA-Z0-9_.-]+$/).test(service)) continue;
@@ -380,9 +352,7 @@ router.post("/projects/start-all", async (_req, res) => {
       if (isOnline) continue;
 
       try {
-        try { execFileSync("systemctl", ["--user", "enable", service], { timeout: 5000, stdio: 'pipe' }); } catch (e: any) { console.warn("exec failed:", e?.message || e); }
         systemctlAction("start", service);
-        try { unlinkSync(join(DISABLED_DIR, service)); } catch (e: any) { /* cleanup */ }
         results.push({ id: project.id, name: project.name, started: true });
       } catch (err: any) {
         results.push({ id: project.id, name: project.name, started: false, error: err.message });
@@ -403,7 +373,7 @@ router.delete("/projects/:id", async (req, res) => {
     const project = projects.find((p: any) => p.id === id);
 
     if (!project) { res.status(404).json({ error: "Project not found" }); return; }
-    if (confirmName?.trim() !== project.name?.trim()) {
+    if (confirmName !== project.name) {
       res.status(400).json({ error: "Name confirmation does not match", expected: project.name });
       return;
     }
@@ -416,28 +386,28 @@ router.delete("/projects/:id", async (req, res) => {
 
     if (project.service && !project.service.startsWith("docker:") && /^[a-zA-Z0-9_.-]+$/.test(project.service)) {
       try {
-        // Try user-level first (most services are user-level)
-        try {
-          execFileSync("systemctl", ["--user", "stop", project.service], { timeout: 10000, stdio: 'pipe' });
-          execFileSync("systemctl", ["--user", "disable", project.service], { timeout: 10000, stdio: 'pipe' });
-        } catch {
-          // Fallback to system-level
-          execFileSync("sudo", ["systemctl", "stop", project.service], { timeout: 10000, stdio: 'pipe' });
-          execFileSync("sudo", ["systemctl", "disable", project.service], { timeout: 10000, stdio: 'pipe' });
-        }
-        // Clean up marker file
-        try { unlinkSync(join(DISABLED_DIR, project.service)); } catch (e: any) { /* cleanup */ }
+        execFileSync("sudo", ["systemctl", "stop", project.service], { timeout: 10000, stdio: 'pipe' });
+        execFileSync("sudo", ["systemctl", "disable", project.service], { timeout: 10000, stdio: 'pipe' });
         log.push("Service " + project.service + " stopped and disabled");
       } catch { log.push("Service " + project.service + " stop failed"); }
     }
 
     if (project.domain) {
       try {
-        // Domain from projects.json — sanitize for sed pattern safety
-        const safeDomain = project.domain.replace(/[^a-zA-Z0-9._-]/g, "");
-        execFileSync("sudo", ["sed", "-i", "/" + safeDomain + "/{N;d;}", "/etc/cloudflared/config.yml"], { timeout: 10000 });
-        // cloudflared restart skipped — kills all tunnels including MC. Config change takes effect on next natural restart.
-        log.push("Tunnel: " + project.domain + " removed");
+        const cfgPath = "/etc/cloudflared/config.yml";
+        const cfg = readFileSync(cfgPath, "utf-8");
+        const lines = cfg.split("\n");
+        const newLines: string[] = [];
+        let skip = false;
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i].includes(project.domain)) { skip = true; continue; }
+          if (skip && lines[i].trimStart().startsWith("service:")) { skip = false; continue; }
+          skip = false;
+          newLines.push(lines[i]);
+        }
+        writeFileSync(cfgPath, newLines.join("\n"));
+        execSync("sudo systemctl restart cloudflared", { timeout: 15000 });
+        log.push("Tunnel entry " + project.domain + " removed");
       } catch (err: any) { log.push("Tunnel removal failed: " + err.message); }
     }
 
@@ -448,32 +418,9 @@ router.delete("/projects/:id", async (req, res) => {
       } catch (err: any) { log.push("Repo deletion failed: " + err.message); }
     }
 
-    // Delete GitHub repo if exists
-    if (project.github) {
-      try {
-        const repoSlug = project.github.replace("https://github.com/", "");
-        if (/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(repoSlug)) {
-          execFileSync("gh", ["repo", "delete", repoSlug, "--yes"], { timeout: 15000, stdio: "pipe" });
-          log.push("GitHub repo deleted: " + repoSlug);
-        }
-      } catch (err: any) { log.push("GitHub delete failed: " + (err.stderr?.toString() || err.message)); }
-    }
-
     const updated = projects.filter((p: any) => p.id !== id);
     saveProjects(updated);
-    addDeletedId(id);
     log.push("Removed from projects.json");
-
-    // Clean setfarm DB records (runs, steps, stories, claim_log) for this project
-    try {
-      const dbResult = await deleteRunsByProject(id);
-      if (dbResult.deleted > 0) {
-        log.push(...dbResult.log);
-        log.push(`Setfarm: ${dbResult.deleted} run(s) cleaned`);
-      }
-    } catch (err: any) {
-      log.push('Setfarm DB cleanup failed: ' + err.message);
-    }
 
     res.json({ success: true, deleted: project.name, log });
   } catch (err: any) {
@@ -482,25 +429,12 @@ router.delete("/projects/:id", async (req, res) => {
 });
 
 
-/** Normalize github field: ensure full URL or empty string */
-function normalizeGithub(val: any): string {
-  if (!val || typeof val !== "string") return "";
-  const trimmed = val.trim();
-  if (!trimmed) return "";
-  if (trimmed.startsWith("https://github.com/")) return trimmed;
-  // Looks like a slug (user/repo)
-  if (/^[\w.-]+\/[\w.-]+$/.test(trimmed)) return "https://github.com/" + trimmed;
-  return trimmed;
-}
-
 export function updateProjectById(id: string, fields: Record<string, any>): any | null {
-  const deletedIds = loadDeletedIds();
-  if (deletedIds.has(id)) return null;
   const projects = loadProjects();
   const idx = projects.findIndex((p: any) => p.id === id);
   if (idx === -1) return null;
   for (const [key, val] of Object.entries(fields)) {
-    if (key !== "id") projects[idx][key] = key === "github" ? normalizeGithub(val) : val;
+    if (key !== "id") projects[idx][key] = val;
   }
   projects[idx].updatedAt = new Date().toISOString();
   saveProjects(projects);
@@ -510,25 +444,6 @@ export function updateProjectById(id: string, fields: Record<string, any>): any 
 /** Normalize ID for duplicate detection: strip articles, common suffixes */
 function normalizeProjectId(id: string): string {
   return id.replace(/^(?:a-|an-|the-)/, '').replace(/-(app|project|service|tool|system)$/, '');
-}
-
-
-/** Find project by ID, repo basename, or repo path fallback */
-function findProjectByIdOrRepo(projects: any[], id: string): any | undefined {
-  // 1. Exact ID match
-  let p = projects.find((p: any) => p.id === id);
-  if (p) return p;
-  // 2. Repo basename match (e.g. 'nakliye-crm' matches repo '/home/setrox/projects/nakliye-crm')
-  p = projects.find((p: any) => {
-    if (!p.repo) return false;
-    const basename = p.repo.replace(/\/+$/, '').split('/').pop();
-    return basename === id;
-  });
-  if (p) return p;
-  // 3. Normalized ID match
-  const normalizedId = normalizeProjectId(id);
-  p = projects.find((p: any) => normalizeProjectId(p.id) === normalizedId);
-  return p;
 }
 
 /** Check if newId is an extension of an existing project (prefix match).
@@ -560,17 +475,10 @@ export function createProjectProgrammatic(data: {
   task?: string;
   status?: string;
   port?: number;
-  type?: string;
 }): { created: boolean; project: any; reason?: string } {
   const projects = loadProjects();
   const id = data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
   const normalizedId = normalizeProjectId(id);
-
-  // CHECK 0: Was this project manually deleted? Never re-create it.
-  const deletedIds = loadDeletedIds();
-  if (deletedIds.has(id) || deletedIds.has(normalizedId)) {
-    return { created: false, project: { id, name: data.name }, reason: "deleted" };
-  }
 
   // CHECK 1 (PRIMARY): Repo path match — most reliable dedup signal
   if (data.repo) {
@@ -590,7 +498,7 @@ export function createProjectProgrammatic(data: {
           const all = JSON.parse(readFileSync(PROJECTS_FILE, "utf-8"));
           const idx = all.findIndex((p: any) => p.id === repoMatch.id);
           if (idx >= 0) { all[idx].repo = data.repo; writeFileSync(PROJECTS_FILE, JSON.stringify(all, null, 2)); }
-        } catch { /* JSON parse failed */ }
+        } catch {}
       }
       return { created: false, project: repoMatch, reason: "exists" };
     }
@@ -692,11 +600,6 @@ export function deduplicateProjects(): number {
         winner.ports = { ...(loser.ports || {}), ...(winner.ports || {}) };
       }
     }
-  }
-  // Also filter out any projects that were manually deleted
-  const deletedIds = loadDeletedIds();
-  for (const p of projects) {
-    if (deletedIds.has(p.id)) idsToRemove.add(p.id);
   }
   if (idsToRemove.size > 0) {
     const cleaned = projects.filter((p: any) => !idsToRemove.has(p.id));

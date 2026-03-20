@@ -29,6 +29,7 @@ import officeRouter from "./routes/office.js";
 import terminalRouter from "./routes/terminal.js";
 import filesRouter from "./routes/files.js";
 import discordNotifyRouter from "./routes/discord-notify.js";
+import prdGeneratorRouter from "./routes/prd-generator.js";
 import scrapeRouter from "./routes/scrape.js";
 import rulesRouter from "./routes/rules.js";
 import liveFeedRouter from "./routes/live-feed.js";
@@ -41,11 +42,11 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       connectSrc: ["'self'", "ws:", "wss:"],
-      imgSrc: ["'self'", "data:", "blob:"],
-      fontSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "blob:", "https://cdn.simpleicons.org", "https://lh3.googleusercontent.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
     }
   }
 }));
@@ -80,6 +81,7 @@ app.use("/api", officeRouter);
 app.use("/api", terminalRouter);
 app.use("/api", filesRouter);
 app.use("/api", discordNotifyRouter);
+app.use("/api", prdGeneratorRouter);
 app.use("/api", scrapeRouter);
 app.use("/api", rulesRouter);
 app.use("/api", liveFeedRouter);
