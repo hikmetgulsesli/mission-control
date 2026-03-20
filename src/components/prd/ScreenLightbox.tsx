@@ -99,7 +99,9 @@ export function ScreenLightbox({
           {loading ? (
             <div className="screen-lightbox__loading">Yukleniyor...</div>
           ) : screen.screenshotUrl ? (
-            <img src={screen.screenshotUrl} alt={screen.name} />
+            <a href={screen.screenshotUrl} target="_blank" rel="noopener noreferrer" title="Tam boyut goruntulemek icin tikla">
+              <img src={screen.screenshotUrl} alt={screen.name} />
+            </a>
           ) : screen.htmlUrl ? (
             <iframe src={screen.htmlUrl} title={screen.name} sandbox="allow-scripts" />
           ) : (
@@ -161,6 +163,9 @@ export function ScreenLightbox({
                 <button className="btn btn--small" onClick={() => onRegenerate(screen.id)} disabled={loading}>Degistir</button>
                 <button className="btn btn--small" onClick={() => setEditingPrompt(true)} disabled={loading}>Duzenle & Uret</button>
                 <button className="btn btn--small" onClick={() => onVariant(screen.id)} disabled={loading}>Varyant</button>
+                {screen.screenshotUrl && (
+                  <a href={screen.screenshotUrl} target="_blank" rel="noopener noreferrer" className="btn btn--small">Resmi Ac</a>
+                )}
                 {screen.htmlUrl && (
                   <a href={screen.htmlUrl} target="_blank" rel="noopener noreferrer" className="btn btn--small">HTML Ac</a>
                 )}

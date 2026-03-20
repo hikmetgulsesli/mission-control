@@ -92,7 +92,8 @@ if (existsSync(config.avatarsDir)) {
 }
 
 // Serve Stitch design cache (screenshots + HTML)
-const stitchCacheDir = resolve(import.meta.dirname || __dirname, "stitch-cache");
+import { homedir } from "os";
+const stitchCacheDir = join(homedir(), ".openclaw", "setfarm", "stitch-cache");
 app.use("/stitch-cache", express.static(stitchCacheDir));
 
 // Serve uploads (task images)
