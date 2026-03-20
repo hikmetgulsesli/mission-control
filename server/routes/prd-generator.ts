@@ -357,11 +357,25 @@ router.get("/prd/mockups/stream", async (req, res) => {
         };
         allScreens.push(entry);
         send("screen", { index: globalIndex, total: totalAll, screen: entry });
+        // Save incrementally — DB always has latest screens even if connection drops
+        if (prdId) {
+          const existingPrd = await getPrd(prdId);
+          const existingScreens = existingPrd?.mockup_screens || [];
+          // Merge: keep existing (from previous sessions) + add new
+          const merged = [...existingScreens.filter((s: any) => !allScreens.some((n: any) => n.id === s.id)), ...allScreens];
+          await updatePrd(prdId, { mockup_screens: merged });
+        }
       }
       if (i < prompts.length - 1) await new Promise(r => setTimeout(r, 2000));
     }
 
-    if (prdId) { await updatePrd(prdId, { mockup_screens: allScreens }); }
+    // Final save with merged screens
+    if (prdId) {
+      const existingPrd = await getPrd(prdId);
+      const existingScreens = existingPrd?.mockup_screens || [];
+      const merged = [...existingScreens.filter((s: any) => !allScreens.some((n: any) => n.id === s.id)), ...allScreens];
+      await updatePrd(prdId, { mockup_screens: merged });
+    }
     send("done", { projectId, screens: allScreens, total: allScreens.length });
     clearInterval(keepalive);
   } catch (err: any) {
