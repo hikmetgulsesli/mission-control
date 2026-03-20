@@ -413,6 +413,12 @@ export function PrdGenerator() {
     }
   };
 
+  // Toplu sil
+  const handleClearAllScreens = () => {
+    setStore({ mockupScreens: [], screenCoverage: null, lightboxScreenId: null });
+    addLog('Tum ekranlar silindi');
+  };
+
   // Screen gallery handlers
   const handleScreenClick = (screenId: string) => {
     setStore({ lightboxScreenId: screenId });
@@ -629,6 +635,7 @@ export function PrdGenerator() {
                 screens={store.mockupScreens}
                 coverage={store.screenCoverage}
                 onScreenClick={handleScreenClick}
+                onClearAll={handleClearAllScreens}
               />
             )}
             {store.activeTab === 'compare' && <PrdCompare data={store.compareData} />}

@@ -15,6 +15,7 @@ interface PrdMockupsProps {
   screens: Screen[];
   coverage?: { covered: string[]; missing: string[]; coverage: number } | null;
   onScreenClick: (screenId: string) => void;
+  onClearAll?: () => void;
 }
 
 function getCoverageBadgeClass(coverage: number): string {
@@ -23,7 +24,7 @@ function getCoverageBadgeClass(coverage: number): string {
   return 'prd-mockups__coverage--poor';
 }
 
-export function PrdMockups({ screens, coverage, onScreenClick }: PrdMockupsProps) {
+export function PrdMockups({ screens, coverage, onScreenClick, onClearAll }: PrdMockupsProps) {
   if (!screens || screens.length === 0) {
     return (
       <div className="prd-empty">
@@ -38,6 +39,9 @@ export function PrdMockups({ screens, coverage, onScreenClick }: PrdMockupsProps
       {/* Header with count and coverage */}
       <div className="prd-mockups__header">
         <span className="prd-mockups__count">{screens.length} ekran</span>
+        {screens.length > 0 && onClearAll && (
+          <button className="btn btn--small btn--danger" onClick={onClearAll}>Tumunu Sil</button>
+        )}
         {coverage && (
           <span className={`prd-mockups__coverage ${getCoverageBadgeClass(coverage.coverage)}`}>
             {coverage.covered.length}/{coverage.covered.length + coverage.missing.length} sayfa kapsaniyor ({coverage.coverage}%)

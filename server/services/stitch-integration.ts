@@ -274,20 +274,51 @@ export async function prepareDesignFilesForRepo(
 }
 
 // Helper: extract screen prompts from PRD content (used by SSE streaming endpoint)
+// Extract design system info from PRD (colors, fonts, spacing) for Stitch prompts
+function extractDesignContext(prdContent: string): string {
+  const lines = prdContent.split("\n");
+  const designLines: string[] = [];
+  let inDesignSection = false;
+  for (const line of lines) {
+    if (/^#{1,3}\s.*(tasarim\s*sistemi|design\s*system|renkler|colors|tipografi|typography|fonts)/i.test(line)) {
+      inDesignSection = true;
+      designLines.push(line);
+      continue;
+    }
+    if (inDesignSection) {
+      if (/^#{1,2}\s/.test(line) && !/renkler|colors|font|tipografi|spacing|tema|theme/i.test(line)) {
+        inDesignSection = false;
+        continue;
+      }
+      designLines.push(line);
+    }
+  }
+  // Also extract hex colors and font names from entire PRD
+  const hexColors = [...new Set((prdContent.match(/#[0-9a-fA-F]{3,8}/g) || []))].slice(0, 10);
+  const fontMatch = prdContent.match(/font[- ]?family[:\s]*([^;\n]+)/i);
+  let extra = "";
+  if (hexColors.length > 0) extra += "\nColors: " + hexColors.join(", ");
+  if (fontMatch) extra += "\nFont: " + fontMatch[1].trim();
+  return (designLines.join("\n").slice(0, 1500) + extra).trim();
+}
+
 export function extractScreenPrompts(prdContent: string, platform: string): { title: string; prompt: string; device: string }[] {
   const sections = prdContent.split(/^#{1,2}\s+/m).filter(s => s.trim());
+  const designContext = extractDesignContext(prdContent);
   const screenPrompts: { title: string; prompt: string; device: string }[] = [];
   for (const section of sections.slice(0, 8)) {
     const sectionTitle = section.split("\n")[0]?.trim() || "";
     if (!sectionTitle) continue;
-    if (/teknik|api|veri\s*modeli|technical|data\s*model|deployment/i.test(sectionTitle)) continue;
-    const sectionContent = section.slice(0, 1000);
+    if (/teknik|api|veri\s*modeli|technical|data\s*model|deployment|komponent\s*k/i.test(sectionTitle)) continue;
+    const sectionContent = section.slice(0, 1500);
     const device = platform === "mobile" ? "MOBILE" : "DESKTOP";
-    screenPrompts.push({
-      title: sectionTitle,
-      prompt: "Create a " + (platform === "mobile" ? "mobile app" : "web page") + " screen for: " + sectionTitle + "\n\nDetails:\n" + sectionContent,
-      device,
-    });
+    let prompt = "Create a " + (platform === "mobile" ? "mobile app" : "web page") + " screen for: " + sectionTitle;
+    prompt += "\n\nPage details:\n" + sectionContent;
+    if (designContext) {
+      prompt += "\n\nIMPORTANT — Use this exact design system (colors, fonts, spacing):\n" + designContext;
+    }
+    prompt += "\n\nMake the design pixel-perfect, modern, and production-ready. Follow the color palette and typography exactly.";
+    screenPrompts.push({ title: sectionTitle, prompt, device });
   }
   return screenPrompts;
 }
