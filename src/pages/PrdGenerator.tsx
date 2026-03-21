@@ -1,4 +1,4 @@
-import { useCallback, useRef, useEffect } from 'react';
+import { useCallback, useRef, useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { usePrdStore } from '../store/prdStore';
 import { PrdChat } from '../components/prd/PrdChat';
@@ -61,6 +61,7 @@ function estimateCostLocal(content: string) {
 
 export function PrdGenerator() {
   const store = usePrdStore();
+  const [previousPrd, setPreviousPrd] = useState('');
   const esRef = useRef<EventSource | null>(null);
 
   // Sayfa acildiginda son PRD'yi DB'den otomatik yukle
@@ -227,11 +228,31 @@ export function PrdGenerator() {
 
   // PRD gelistir
   const handleEnhance = async () => {
+    setPreviousPrd(store.prdContent || '');
     if (!store.id) return;
     setLoading('enhance', true);
     addLog('PRD gelistiriliyor...');
     try {
-      const result = await api.prdEnhance({ prdId: store.id });
+      // Start async enhance job
+      await fetch('/api/prd/enhance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prdId: store.id }),
+      });
+      // Poll for completion every 5s
+      const result = await new Promise<any>((resolve, reject) => {
+        const poll = setInterval(async () => {
+          try {
+            const res = await fetch('/api/prd/enhance/status?prdId=' + encodeURIComponent(store.id!));
+            const data = await res.json();
+            if (data.status === 'done') { clearInterval(poll); resolve(data.result); }
+            else if (data.status === 'error') { clearInterval(poll); reject(new Error(data.error)); }
+            else if (data.status === 'idle') { clearInterval(poll); reject(new Error('Islem bulunamadi — tekrar deneyin')); }
+          } catch { clearInterval(poll); reject(new Error('Polling hatasi')); }
+        }, 5000);
+        // Timeout after 10 minutes
+        setTimeout(() => { clearInterval(poll); reject(new Error('Zaman asimi (10dk)')); }, 600000);
+      });
       setStore({
         prdContent: result.prd_content,
         prdVersion: result.prd_version,
@@ -489,40 +510,46 @@ export function PrdGenerator() {
       setStore({ chatHistory: [...newHistory, { role: 'assistant', content: `Hata: ${err.message}` }] });
     }
   };
-
-  // Eksik sayfa icin mockup uret
   const handleGenerateMissing = async (title: string) => {
     if (!store.stitchProjectId || !store.id) { addLog('Once mockup uretimi yapilmali'); return; }
-    setLoading('screenAction', true);
+    setLoading('mockups', true);
     addLog(`"${title}" sayfasi icin mockup uretiliyor...`);
     try {
-      // PRD'den bu sayfanin detaylarini bul
-      const prdLines = store.prdContent.split('\n');
-      let pageDetails = '';
-      let found = false;
-      for (const line of prdLines) {
-        if (found && /^#{1,2}\s/.test(line)) break;
-        if (line.toLowerCase().includes(title.toLowerCase()) && /^#{1,2}\s/.test(line)) { found = true; }
-        if (found) pageDetails += line + '\n';
-      }
-      const prompt = `Create a web page screen for: ${title}\n\nPage details:\n${pageDetails || title}\n\nMatch the existing design system exactly.`;
-      const result = await api.prdVariantScreen(store.id, {
-        sourceScreenId: store.mockupScreens[0]?.id || '',
-        prompt,
+      // SSE stream ile tek sayfa uret (variant degil, yeni bagimsiz ekran)
+      const params = new URLSearchParams({
+        prdId: store.id,
+        prdContent: store.prdContent,
+        title: title,
+        projectId: store.stitchProjectId,
+        skipCount: String(store.mockupScreens.length),
       });
-      setStore({ mockupScreens: result.screens });
-      addLog(`"${title}" mockup'i uretildi`);
-      // Coverage guncelle
-      const prdContent = usePrdStore.getState().prdContent;
-      if (prdContent && result.screens.length > 0) {
-        api.prdScreenCoverage({ prdContent, screens: result.screens })
+      // Use single screen generation via regenerate endpoint with full PRD context
+      const prdTruncated = store.prdContent.length > 8000 ? store.prdContent.slice(0, 8000) : store.prdContent;
+      const prompt = `Build a complete, production-ready web page design for: "${title}"\n\nFULL PROJECT PRD:\n${prdTruncated}\n\nTARGET PAGE: "${title}"\n\nUse the EXACT design system from the PRD. Match existing screens style.`;
+
+      // Use regenerate on a dummy screen or generate fresh
+      const res = await fetch('/api/prd/screens/' + store.id + '/generate-missing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, prompt, projectId: store.stitchProjectId }),
+      });
+      if (!res.ok) throw new Error('Generation failed: ' + res.status);
+      const result = await res.json();
+      if (result.screen) {
+        const updated = [...store.mockupScreens, result.screen];
+        setStore({ mockupScreens: updated });
+        addLog(`"${title}" mockup'i uretildi`);
+        // Coverage guncelle
+        api.prdScreenCoverage({ prdContent: store.prdContent, screens: updated })
           .then(cov => setStore({ screenCoverage: cov }))
           .catch(() => {});
+      } else {
+        addLog(`"${title}" uretilemedi`);
       }
     } catch (err: any) {
       addLog(`Uretim hatasi: ${err.message}`);
     }
-    setLoading('screenAction', false);
+    setLoading('mockups', false);
   };
 
   // Mockup uretimini durdur
@@ -748,7 +775,7 @@ export function PrdGenerator() {
 
             {store.activeTab === 'prd' && (
               store.prdContent ? (
-                <PrdEditor content={store.prdContent} editMode={store.editMode} onChange={(c) => setStore({ prdContent: c })} />
+                <PrdEditor content={store.prdContent} editMode={store.editMode} onChange={(c) => setStore({ prdContent: c })} previousContent={previousPrd} />
               ) : !Object.values(store.loading).some(v => v) ? (
                 <div className="prd-empty">
                   <p>Henuz PRD olusturulmadi.</p>
@@ -763,6 +790,7 @@ export function PrdGenerator() {
                 onScreenClick={handleScreenClick}
                 onClearAll={handleClearAllScreens}
                 onGenerateMissing={handleGenerateMissing}
+                onDeleteScreen={handleDeleteScreen}
               />
             )}
             {store.activeTab === 'compare' && <PrdCompare data={store.compareData} />}

@@ -17,8 +17,13 @@ export function scorePrd(content: string): ScoreDetails {
 
   // 1. Sayfa/ekran detayı (0-20)
   let pageDetail = 0;
-  const screenHeaders = lines.filter(l => /^#{1,3}\s.*(sayfa|ekran|page|screen|view)/i.test(l)).length;
-  const hasRoutes = /route|path|sayfa\s*haritası|navigation/i.test(lower);
+  // Count pages: headings with "sayfa/page/screen/view" OR headings with route paths like (/path)
+  const screenHeaders = lines.filter(l =>
+    /^#{1,3}\s.*(sayfa|ekran|page|screen|view)/i.test(l) ||
+    /^#{1,3}\s+.*\(\/[^)]*\)/.test(l) ||
+    /^#{1,3}\s+.*\(\/\)/.test(l)
+  ).length;
+  const hasRoutes = /route|path|sayfa\s*haritası|navigation|\(\/[a-z]/i.test(lower);
   const hasPageDescriptions = screenHeaders >= 2;
   if (screenHeaders >= 4) pageDetail = 20;
   else if (screenHeaders >= 2) pageDetail = 14;

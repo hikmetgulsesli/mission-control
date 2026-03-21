@@ -17,6 +17,7 @@ interface PrdMockupsProps {
   onScreenClick: (screenId: string) => void;
   onClearAll?: () => void;
   onGenerateMissing?: (title: string) => void;
+  onDeleteScreen?: (screenId: string) => void;
 }
 
 function getCoverageBadgeClass(coverage: number): string {
@@ -25,7 +26,7 @@ function getCoverageBadgeClass(coverage: number): string {
   return 'prd-mockups__coverage--poor';
 }
 
-export function PrdMockups({ screens, coverage, onScreenClick, onClearAll, onGenerateMissing }: PrdMockupsProps) {
+export function PrdMockups({ screens, coverage, onScreenClick, onClearAll, onGenerateMissing, onDeleteScreen }: PrdMockupsProps) {
   if (!screens || screens.length === 0) {
     return (
       <div className="prd-empty">
@@ -93,6 +94,13 @@ export function PrdMockups({ screens, coverage, onScreenClick, onClearAll, onGen
             </div>
             {screen.width && screen.height && (
               <div className="prd-mockup-card__size">{screen.width}x{screen.height}</div>
+            )}
+            {onDeleteScreen && (
+              <button
+                className="prd-mockup-card__delete"
+                onClick={(e) => { e.stopPropagation(); onDeleteScreen(screen.id); }}
+                title="Bu ekrani sil"
+              >SIL</button>
             )}
           </div>
         ))}

@@ -23,6 +23,14 @@ export function PrdHistory({ onSelect, onClose, templatesMode }: PrdHistoryProps
     })();
   }, [templatesMode]);
 
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    try {
+      await fetch('/api/prd/history/' + id, { method: 'DELETE' });
+      setItems(prev => prev.filter(p => p.id !== id));
+    } catch {}
+  };
+
   return (
     <div className="prd-modal-overlay" onClick={onClose}>
       <div className="prd-modal" onClick={(e) => e.stopPropagation()}>
@@ -57,6 +65,13 @@ export function PrdHistory({ onSelect, onClose, templatesMode }: PrdHistoryProps
                       <span className="prd-history-item__date">
                         {new Date(item.created_at).toLocaleDateString('tr-TR')}
                       </span>
+                    )}
+                    {!templatesMode && (
+                      <button
+                        className="prd-history-item__delete"
+                        onClick={(e) => handleDelete(e, item.id)}
+                        title="Sil"
+                      >SIL</button>
                     )}
                   </div>
                   {item.description && (

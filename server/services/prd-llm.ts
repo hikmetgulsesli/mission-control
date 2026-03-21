@@ -20,7 +20,7 @@ async function callLlm(messages: { role: string; content: string }[], maxTokens 
         max_tokens: maxTokens,
         temperature: 0.7,
       }),
-      signal: AbortSignal.timeout(300000), // 5 min
+      signal: AbortSignal.timeout(600000), // 5 min
     });
   } catch (err: any) {
     // D5 fix: user-friendly timeout message
@@ -116,7 +116,7 @@ ${contextBlock}
 SIMDI HEMEN PRD YAZ. "# PRD — ${title}" ile basla. Soru sorma, aciklama yapma, sadece PRD icerigini yaz.`,
   });
 
-  const raw = await callLlm(messages, 8192);
+  const raw = await callLlm(messages, 16000);
   return cleanPrdOutput(raw);
 }
 
@@ -155,17 +155,17 @@ export async function enhancePrd(currentPrd: string, version: number): Promise<s
       role: 'system',
       content: `Sen bir PRD kalite uzmanısın. Mevcut PRD'yi analiz edip daha detaylı hale getirirsin.
 
-Kurallar:
+KRITIK KURALLAR:
+- MEVCUT SAYFA BOLUMLERINI ASLA SILME. Tum sayfa detaylari (## Ana Sayfa, ## Projeler vb.) korunmali
+- Mevcut icerigi koru, sadece EKLE veya DETAYLANDIR
 - Genel ifadeleri spesifik yap ("modern" → exact CSS values)
-- Eksik sayfalari/ekranlari ekle — MUTLAKA "## Sayfalar" bolumundeki listeye de ekle
-- "## Sayfalar" listesi her zaman GUNCEL tutulmali — tum sayfa/ekranlar burada listelenmeli
-- Yeni sayfa eklediginde hem listeye hem ayri ## bolum olarak detay ekle
-- Animasyon timing/easing detaylari ekle
-- Komponent props/state detaylari ekle
-- Responsive breakpoint'ler ekle
+- Eksik sayfalari/ekranlari ekle — "## Sayfalar" bolumundeki listeye de ekle
+- Animasyon timing/easing detaylari ekle (eksikse)
+- Komponent props/state detaylari ekle (eksikse)
+- Responsive breakpoint'ler ekle (eksikse)
 - Edge case'leri tanimla
-- Her iterasyonda onemli olcude daha detayli yap
-- Mevcut sayfalarin icerigini silme, sadece eksik olanlari ekle`,
+- CIKTI: Onceki PRD'nin TAMAMI + eklenen detaylar. Hicbir bolum cikarilmamali.
+- Eger PRD zaten 100 puan aliyorsa, sadece kucuk iyilestirmeler yap, bolum silme`,
     },
     {
       role: 'user',
@@ -177,7 +177,7 @@ Gelistir ve sadece yeni PRD'yi Markdown olarak dondur. Meta yorum, aciklama, dus
     },
   ];
 
-  const raw = await callLlm(messages, 8192);
+  const raw = await callLlm(messages, 16000);
   return cleanPrdOutput(raw);
 }
 

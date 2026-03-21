@@ -200,33 +200,53 @@ router.post('/prd/generate', async (req, res) => {
   }
 });
 
-// POST /prd/enhance — PRD'yi gelistir
+// Async enhance job storage
+const enhanceJobs = new Map<string, { status: string; result?: any; error?: string }>();
+
+// POST /prd/enhance — Start async enhance job (returns immediately)
 router.post('/prd/enhance', async (req, res) => {
-  try {
-    const { prdId } = req.body;
-    if (!prdId) { res.status(400).json({ error: 'prdId required' }); return; }
+  const { prdId } = req.body;
+  if (!prdId) { res.status(400).json({ error: 'prdId required' }); return; }
+  const prd = await getPrd(prdId);
+  if (!prd?.prd_content) { res.status(404).json({ error: 'PRD not found' }); return; }
 
-    const prd = await getPrd(prdId);
-    if (!prd?.prd_content) { res.status(404).json({ error: 'PRD not found or empty' }); return; }
+  // Start job in background
+  enhanceJobs.set(prdId, { status: 'running' });
+  res.json({ status: 'started', prdId });
 
-    const enhanced = await enhancePrd(prd.prd_content, prd.prd_version);
-    const scoreResult = scorePrd(enhanced);
-    const costResult = estimateCost(enhanced);
-
-    await updatePrd(prdId, {
-      prd_content: enhanced,
-      prd_version: prd.prd_version + 1,
-      score: scoreResult.total,
-      score_details: scoreResult,
-      cost_estimate: costResult,
-    });
-
-    const updated = await getPrd(prdId);
-    res.json(updated);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+  // Run enhance in background (no await — fire and forget)
+  (async () => {
+    try {
+      const enhanced = await enhancePrd(prd.prd_content, prd.prd_version);
+      const scoreResult = scorePrd(enhanced);
+      const costResult = estimateCost(enhanced);
+      await updatePrd(prdId, {
+        prd_content: enhanced,
+        prd_version: prd.prd_version + 1,
+        score: scoreResult.total,
+        score_details: scoreResult,
+        cost_estimate: costResult,
+      });
+      const updated = await getPrd(prdId);
+      enhanceJobs.set(prdId, { status: 'done', result: updated });
+    } catch (err: any) {
+      enhanceJobs.set(prdId, { status: 'error', error: err.message });
+    }
+    // Clean up after 5 minutes
+    setTimeout(() => enhanceJobs.delete(prdId), 300000);
+  })();
 });
+
+// GET /prd/enhance/status — Poll for enhance completion
+router.get('/prd/enhance/status', async (req, res) => {
+  const prdId = req.query.prdId as string;
+  if (!prdId) { res.status(400).json({ error: 'prdId required' }); return; }
+  const job = enhanceJobs.get(prdId);
+  if (!job) { res.json({ status: 'idle' }); return; }
+  res.json(job);
+});
+
+
 
 // POST /prd/score — PRD puanla
 router.post('/prd/score', async (req, res) => {
@@ -505,6 +525,46 @@ router.post('/prd/screens/:prdId/variant', async (req, res) => {
 
     await updatePrd(prdId, { mockup_screens: screens });
     res.json({ success: true, screen: variantEntry, screens });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+// POST /prd/screens/:prdId/generate-missing — Generate a new independent screen (not variant)
+router.post('/prd/screens/:prdId/generate-missing', async (req, res) => {
+  const { prdId } = req.params;
+  const { title, prompt, projectId } = req.body;
+  if (!projectId || !title) { res.status(400).json({ error: 'projectId and title required' }); return; }
+  try {
+    const screen = await generateScreen(projectId, prompt || `Create a web page for: ${title}`, title);
+    if (!screen || !screen.screenId) { res.json({ screen: null }); return; }
+    screen.prompt = prompt;
+    // Download to cache
+    const { join } = await import('path');
+    const { homedir } = await import('os');
+    const { mkdirSync } = await import('fs');
+    const cacheDir = join(homedir(), '.openclaw', 'setfarm', 'stitch-cache', projectId);
+    mkdirSync(cacheDir, { recursive: true });
+    try {
+      const dl = await downloadScreen(projectId, screen.screenId, cacheDir);
+      if (dl) {
+        screen.screenshotUrl = `/stitch-cache/${projectId}/${screen.screenId}.png`;
+        screen.htmlUrl = `/stitch-cache/${projectId}/${screen.screenId}.html`;
+      }
+    } catch {}
+    const entry = {
+      id: screen.screenId, name: title, status: screen.status,
+      screenshotUrl: screen.screenshotUrl, htmlUrl: screen.htmlUrl,
+      width: screen.width, height: screen.height, prompt, projectId,
+    };
+    // Save to DB
+    const prd = await getPrd(prdId);
+    if (prd) {
+      const screens = [...(prd.mockup_screens || []), entry];
+      await updatePrd(prdId, { mockup_screens: screens });
+    }
+    res.json({ screen: entry });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
