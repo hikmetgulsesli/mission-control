@@ -34,7 +34,7 @@ export const config = {
   cliPath: process.env.CLI_PATH || join(HOME, '.local/bin'),
   clawtabsConfig: process.env.CLAWTABS_CONFIG || join(HOME, '.openclaw/clawtabs-config.json'),
   gatewayToken: process.env.GATEWAY_TOKEN || '',
-  projectsJson: process.env.PROJECTS_JSON || join(HOME, 'mission-control/projects.json'),
+  projectsJson: process.env.PROJECTS_JSON || join(HOME, 'projects/mission-control/projects.json'),
   wsOrigin: process.env.WS_ORIGIN || '',
   authToken: process.env.AUTH_TOKEN || '',
 };
