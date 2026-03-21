@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useEffect } from 'react';
 import { api } from '../lib/api';
 import { usePrdStore } from '../store/prdStore';
 import { PrdChat } from '../components/prd/PrdChat';
@@ -52,6 +52,34 @@ function estimateCostLocal(content: string) {
 export function PrdGenerator() {
   const store = usePrdStore();
   const esRef = useRef<EventSource | null>(null);
+
+  // Sayfa acildiginda son PRD'yi DB'den otomatik yukle
+  useEffect(() => {
+    if (store.id) return; // zaten yuklu
+    api.prdHistory().then(prds => {
+      if (prds.length > 0 && !usePrdStore.getState().id) {
+        const last = prds[0];
+        setStore({
+          id: last.id,
+          title: last.title,
+          platform: last.platform || 'web',
+          urls: last.urls?.length ? last.urls : [''],
+          description: last.description || '',
+          prdContent: last.prd_content || '',
+          prdVersion: last.prd_version || 0,
+          score: last.score,
+          scoreDetails: last.score_details,
+          costEstimate: last.cost_estimate,
+          analysis: last.analysis,
+          research: last.research,
+          chatHistory: last.chat_history || [],
+          mockupScreens: last.mockup_screens || [],
+          runId: last.run_id,
+          projectName: last.title || '',
+        });
+      }
+    }).catch(() => {});
+  }, []);
   const { setState: setStore, addLog, setLoading, reset } = store;
 
   // URL veya aciklamadan otomatik proje adi onerisi
