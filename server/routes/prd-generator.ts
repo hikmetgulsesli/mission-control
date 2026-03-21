@@ -524,6 +524,17 @@ router.post('/prd/screen-coverage', async (req, res) => {
   }
 });
 
+// POST /prd/screens/:prdId/clear — Tum ekranlari sil
+router.post('/prd/screens/:prdId/clear', async (req, res) => {
+  try {
+    const { prdId } = req.params;
+    await updatePrd(prdId, { mockup_screens: [] });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /prd/compare — A/B PRD olustur
 router.post('/prd/compare', async (req, res) => {
   try {

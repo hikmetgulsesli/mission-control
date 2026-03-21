@@ -153,6 +153,8 @@ export const api = {
   prdComponents: (data: { content?: string; prdId?: string }) =>
     fetchApi<any>('/api/prd/components', { method: 'POST', headers: CT_JSON, body: JSON.stringify(data) }),
   // Faz 2: Screen gallery
+  prdClearScreens: (prdId: string) =>
+    fetchApi<any>(`/api/prd/screens/${prdId}/clear`, { method: 'POST' }),
   prdDeleteScreen: (prdId: string, screenId: string) =>
     fetchApi<any>(`/api/prd/screens/${prdId}/${screenId}`, { method: 'DELETE' }),
   prdRegenerateScreen: (prdId: string, screenId: string, data?: { prompt?: string }) =>

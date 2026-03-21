@@ -526,9 +526,12 @@ export function PrdGenerator() {
     addLog(`Uretim durduruldu — ${current.length} ekran mevcut`);
   };
 
-  // Toplu sil
-  const handleClearAllScreens = () => {
+  // Toplu sil (state + DB)
+  const handleClearAllScreens = async () => {
     setStore({ mockupScreens: [], screenCoverage: null, lightboxScreenId: null });
+    if (store.id) {
+      try { await api.prdClearScreens(store.id); } catch {}
+    }
     addLog('Tum ekranlar silindi');
   };
 
