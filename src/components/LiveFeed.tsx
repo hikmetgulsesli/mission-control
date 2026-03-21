@@ -243,7 +243,7 @@ export function LiveFeed() {
     setExpanded(new Set());
   }, [agentFilter, actionFilter, statusFilter, projectFilter, modelFilter, timeRange, debouncedSearch]);
 
-  const displayed = modelFilter === 'all' ? events : events.filter(e => e.model === modelFilter);
+  const displayed = (modelFilter === 'all' ? events : events.filter(e => e.model === modelFilter)).filter(e => !e.summary?.includes('step peek'));
 
   return (
     <div className="lf-page">
