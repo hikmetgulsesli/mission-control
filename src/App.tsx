@@ -13,6 +13,7 @@ import { Workflows } from './pages/Workflows';
 import { Tasks } from './pages/Tasks';
 import { RunDetail } from './pages/RunDetail';
 import { PrdGenerator } from './pages/PrdGenerator';
+import { Agents } from './pages/Agents';
 import { NotFound } from "./pages/NotFound";
 import { Scrape } from "./pages/Scrape";
 import { Rules } from "./pages/Rules";
@@ -35,7 +36,7 @@ export default function App() {
           <Route path="office" element={<Navigate to="/" replace />} />
           <Route path="setfarm" element={<SetfarmActivity />} />
           <Route path="setfarm/runs/:id" element={<RunDetailRoute />} />
-          <Route path="agents" element={<Navigate to="/setfarm" replace />} />
+          <Route path="agents" element={<Agents />} />
           <Route path="chat" element={<Chat />} />
           <Route path="ops" element={<Ops />} />
           <Route path="costs" element={<Costs />} />

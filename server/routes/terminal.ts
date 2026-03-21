@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { spawn } from 'child_process';
+import { homedir } from 'os';
+
 import { config } from '../config.js';
 
 const router = Router();
@@ -11,8 +13,8 @@ const ALLOWED_COMMANDS = new Set([
 ]);
 
 const SAFE_PATHS = [
-  '/home/setrox/.openclaw/',
-  '/home/setrox/mission-control/',
+  `${homedir()}/.openclaw/`,
+  `${homedir()}/projects/mission-control/`,
   '/var/log/',
   '/tmp/',
 ];
@@ -82,10 +84,10 @@ router.post('/terminal/exec', async (req, res) => {
     const env = {
       ...process.env,
       PATH: `${config.cliPath}:/usr/local/bin:/usr/bin:/bin:${process.env.PATH || ''}`,
-      HOME: '/home/setrox',
+      HOME: homedir(),
     };
 
-    const child = spawn(command, args, { env, timeout: TIMEOUT, cwd: '/home/setrox' });
+    const child = spawn(command, args, { env, timeout: TIMEOUT, cwd: homedir()});
 
     child.stdout.on('data', (data: Buffer) => {
       if (output.length < MAX_OUTPUT) output += data.toString();

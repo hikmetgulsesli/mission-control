@@ -79,7 +79,7 @@ export function Projects() {
   const [showCreate, setShowCreate] = useState(false);
   const [createForm, setCreateForm] = useState({ name: "", description: "", emoji: "", category: "own", type: "web" as string });
   const [createLoading, setCreateLoading] = useState(false);
-  const [sortBy, setSortBy] = useState<'date' | 'port' | 'name' | 'status'>('name');
+  const [sortBy, setSortBy] = useState<'date' | 'port' | 'name' | 'status' | 'run'>('run');
   const importRef = useRef<HTMLInputElement>(null);
   const [toggling, setToggling] = useState<string | null>(null);
   const [bulkAction, setBulkAction] = useState<string | null>(null);
@@ -236,6 +236,9 @@ export function Projects() {
       case 'date': return (b.createdAt || '').localeCompare(a.createdAt || '');
       case 'port': return (a.ports?.frontend || 9999) - (b.ports?.frontend || 9999);
       case 'name': return a.name.localeCompare(b.name);
+      case 'run': {
+        return (b.latestRunNumber || 0) - (a.latestRunNumber || 0);
+      }
       case 'status': {
         const order: Record<string, number> = { building: 0, active: 1, failed: 2 };
         return (order[a.status || 'active'] ?? 1) - (order[b.status || 'active'] ?? 1);
@@ -291,9 +294,9 @@ export function Projects() {
       {/* Sort controls */}
       <div className="projects-sort">
         <span className="projects-sort__label">SIRALA:</span>
-        {(['date', 'port', 'name', 'status'] as const).map((s) => (
+        {(['run', 'date', 'port', 'name', 'status'] as const).map((s) => (
           <button key={s} className={`projects-sort__btn ${sortBy === s ? 'projects-sort__btn--active' : ''}`} onClick={() => setSortBy(s)}>
-            {s === 'date' ? 'TARIH' : s === 'port' ? 'PORT' : s === 'name' ? 'AD' : 'DURUM'}
+            {s === 'run' ? 'RUN' : s === 'date' ? 'TARIH' : s === 'port' ? 'PORT' : s === 'name' ? 'AD' : 'DURUM'}
           </button>
         ))}
       </div>

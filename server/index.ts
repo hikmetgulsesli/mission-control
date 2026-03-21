@@ -1,6 +1,7 @@
 import express from 'express';
 import { readFileSync } from 'fs';
 import helmet from 'helmet';
+import { homedir } from 'os';
 import { createServer } from 'http';
 import { resolve, join } from 'path';
 import { existsSync } from 'fs';
@@ -38,18 +39,66 @@ import rateLimit from 'express-rate-limit';
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
+// Serve Stitch design cache BEFORE helmet (no CSP for design previews)
+const stitchCacheDir = join(homedir(), ".openclaw", "setfarm", "stitch-cache");
+app.use("/stitch-cache", express.static(stitchCacheDir));
+
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      connectSrc: ["'self'", "ws:", "wss:"],
-      imgSrc: ["'self'", "data:", "blob:"],
-      fontSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      connectSrc: ["'self'", "ws:", "wss:", "https://fonts.googleapis.com"],
+      imgSrc: ["'self'", "data:", "blob:", "https://cdn.simpleicons.org"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
     }
   }
 }));
+
+
+// Health check endpoint (before auth)
+app.get('/api/health', async (_req, res) => {
+  const checks: Record<string, { status: string; detail?: string }> = {};
+  
+  // 1. Gateway check
+  try {
+    const gwRes = await fetch(config.gatewayWs.replace('ws', 'http').replace(':18789', ':18789'));
+    checks.gateway = { status: 'up' };
+  } catch {
+    try {
+      const { execSync } = await import('child_process');
+      const result = execSync('systemctl --user is-active openclaw-gateway', { timeout: 3000 }).toString().trim();
+      checks.gateway = { status: result === 'active' ? 'up' : 'down', detail: result };
+    } catch { checks.gateway = { status: 'down' }; }
+  }
+  
+  // 2. Setfarm DB check
+  try {
+    const { execSync } = await import('child_process');
+    const dbPath = join(homedir(), '.openclaw', 'setfarm', 'setfarm.db');
+    const result = execSync(`sqlite3 "${dbPath}" "SELECT COUNT(*) FROM runs"`, { timeout: 3000 }).toString().trim();
+    checks.database = { status: 'up', detail: `${result} runs` };
+  } catch (e: any) { checks.database = { status: 'down', detail: e.message }; }
+  
+  // 3. Disk space
+  try {
+    const { execSync } = await import('child_process');
+    const df = execSync('df -h / --output=pcent | tail -1', { timeout: 3000 }).toString().trim();
+    const pct = parseInt(df);
+    checks.disk = { status: pct < 90 ? 'up' : 'warning', detail: df };
+  } catch { checks.disk = { status: 'unknown' }; }
+  
+  // 4. Memory
+  try {
+    const { execSync } = await import('child_process');
+    const mem = execSync("free -m | awk '/Mem:/{printf \"%.0f%%\", $3/$2*100}'", { timeout: 3000 }).toString().trim();
+    checks.memory = { status: 'up', detail: mem };
+  } catch { checks.memory = { status: 'unknown' }; }
+  
+  const allUp = Object.values(checks).every(c => c.status !== 'down');
+  res.status(allUp ? 200 : 503).json({ status: allUp ? 'healthy' : 'degraded', checks, timestamp: new Date().toISOString() });
+});
 
 // Auth middleware
 app.use('/api', authMiddleware);
@@ -91,9 +140,6 @@ if (existsSync(config.avatarsDir)) {
   app.use('/avatars', express.static(config.avatarsDir));
 }
 
-// Serve Stitch design cache (screenshots + HTML)
-const stitchCacheDir = resolve(import.meta.dirname || __dirname, "stitch-cache");
-app.use("/stitch-cache", express.static(stitchCacheDir));
 
 // Serve uploads (task images)
 const uploadsDir = resolve(import.meta.dirname || __dirname, '..', 'uploads');

@@ -57,6 +57,17 @@ export function Performance() {
     <div className="performance-page">
       <GlitchText text="AGENT PERFORMANCE" tag="h2" />
 
+      {/* Trend indicator */}
+      <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "4px", padding: "12px", marginBottom: "12px", display: "flex", alignItems: "center", gap: "12px" }}>
+        <span style={{ fontSize: "18px" }}>📈</span>
+        <div>
+          <div style={{ fontSize: "11px", color: "var(--neon-cyan)", fontFamily: "var(--font)", fontWeight: 700, letterSpacing: "1px" }}>HAFTALIK TREND</div>
+          <div style={{ fontSize: "11px", color: "var(--text-dim)", fontFamily: "var(--font)", marginTop: "2px" }} id="trendNote">
+            Session ve maliyet verileri step_metrics tablosundan hesaplanacak
+          </div>
+        </div>
+      </div>
+
       <div className="stat-cards">
         <div className="stat-card stat-card--green">
           <div className="stat-card__value">${data.totalCostToday.toFixed(2)}</div>

@@ -127,6 +127,9 @@ SIMDI HEMEN PRD YAZ. "# PRD — ${title}" ile basla. Soru sorma, aciklama yapma,
 function cleanPrdOutput(raw: string): string {
   let text = raw;
 
+  // Strip <think>...</think> blocks (LLM reasoning output)
+  text = text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+
   // "The user wants me to..." gibi meta-thinking bloklarini kaldir
   // Bu bloklar genelde PRD'den once gelir
   const prdStart = text.search(/^#\s+PRD/m);
@@ -279,9 +282,16 @@ Sadece JSON döndür, başka açıklama yapma.`,
 
   const response = await callLlm(messages, 2000);
   try {
-    return JSON.parse(response.replace(/```json\n?/g, '').replace(/```\n?/g, ''));
+    // Strip <think> blocks before parsing
+    const cleaned = response.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+    return JSON.parse(cleaned.replace(/```json\n?/g, '').replace(/```\n?/g, ''));
   } catch {
-    return { raw: response, url };
+    // Try to extract JSON from mixed output
+    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      try { return JSON.parse(jsonMatch[0]); } catch {}
+    }
+    return { raw: response.slice(0, 500), url };
   }
 }
 
@@ -329,9 +339,12 @@ Sadece JSON dondur, baska aciklama yapma.`
         const data = await res.json() as any;
         const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
         try {
-          return JSON.parse(text.replace(/```json\n?/g, '').replace(/```\n?/g, ''));
+          const cleaned2 = text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+          return JSON.parse(cleaned2.replace(/```json\n?/g, '').replace(/```\n?/g, ''));
         } catch {
-          return { raw: text, filename, source: 'gemini' };
+          const jsonMatch2 = text.match(/\{[\s\S]*\}/);
+          if (jsonMatch2) { try { return JSON.parse(jsonMatch2[0]); } catch {} }
+          return { raw: text.slice(0, 500), filename, source: 'gemini' };
         }
       }
     } catch (err: any) {

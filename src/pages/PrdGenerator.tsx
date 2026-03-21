@@ -14,6 +14,16 @@ import { AnalysisLog } from '../components/prd/AnalysisLog';
 import { CompetitiveTable } from '../components/prd/CompetitiveTable';
 import { ProgressBar } from '../components/prd/ProgressBar';
 
+const PRD_TEMPLATES = [
+  { id: "landing", name: "Landing Page", icon: "🚀", desc: "Hero, features, pricing, CTA" },
+  { id: "dashboard", name: "Dashboard", icon: "📊", desc: "Charts, tables, sidebar, metrics" },
+  { id: "ecommerce", name: "E-Commerce", icon: "🛒", desc: "Products, cart, checkout, user account" },
+  { id: "blog", name: "Blog / Portfolio", icon: "✍️", desc: "Posts, categories, author pages" },
+  { id: "saas", name: "SaaS App", icon: "⚡", desc: "Auth, settings, billing, team management" },
+  { id: "game", name: "Game UI", icon: "🎮", desc: "Menu, HUD, leaderboard, settings" },
+];
+
+
 // Client-side PRD scoring (mirrors backend logic for instant template preview)
 function scorePrdLocal(content: string) {
   const lower = content.toLowerCase();

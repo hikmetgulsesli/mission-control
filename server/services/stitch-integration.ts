@@ -302,8 +302,28 @@ function extractDesignContext(prdContent: string): string {
   return (designLines.join("\n").slice(0, 1500) + extra).trim();
 }
 
-export function extractScreenPrompts(prdContent: string, platform: string): { title: string; prompt: string; device: string }[] {
+export function extractScreenPrompts(prdContent: string, platform: string, analysis?: any): { title: string; prompt: string; device: string }[] {
   const designContext = extractDesignContext(prdContent);
+
+  // Build visual context from URL analysis
+  let analysisContext = "";
+  if (analysis && typeof analysis === "object") {
+    const parts: string[] = [];
+    if (analysis.colors) {
+      const c = analysis.colors;
+      const entries = Object.entries(c).filter(([,v]) => v).map(([k,v]) => k + "=" + v);
+      if (entries.length) parts.push("COLORS: " + entries.join(", "));
+    }
+    if (analysis.fonts?.length) parts.push("FONTS: " + analysis.fonts.join(", "));
+    if (analysis.style) parts.push("STYLE: " + analysis.style);
+    if (analysis.layout) parts.push("LAYOUT: " + analysis.layout);
+    if (analysis.sections?.length) parts.push("SECTIONS: " + analysis.sections.join(", "));
+    if (analysis.components?.length) parts.push("UI: " + analysis.components.join(", "));
+    if (analysis.title) parts.push("SITE: " + analysis.title);
+    if (analysis.description) parts.push("ABOUT: " + analysis.description);
+    analysisContext = parts.join(" | ");
+  }
+
   const device = platform === "mobile" ? "MOBILE" : "DESKTOP";
   const screenPrompts: { title: string; prompt: string; device: string }[] = [];
 
@@ -396,24 +416,29 @@ export function extractScreenPrompts(prdContent: string, platform: string): { ti
     }
     if (!sectionContent) sectionContent = pageName;
 
-    // Build rich prompt with full context
+    // Build rich prompt with FULL PRD context (like Setfarm pipeline does)
+    const prdTruncated = prdContent.length > 12000 ? prdContent.slice(0, 12000) + "\n[...truncated]" : prdContent;
     let prompt = `Build a complete, production-ready ${platform === "mobile" ? "mobile app" : "web page"} design for: "${pageName}"
 
-PAGE SPECIFICATION:
+FULL PROJECT PRD (use this as your primary reference for ALL design decisions):
+${prdTruncated}
+
+TARGET PAGE: "${pageName}"
+PAGE-SPECIFIC DETAILS:
 ${sectionContent}
 
-DESIGN SYSTEM (use these EXACT values):
-${designContext || "Use modern dark theme with neon accents"}
+${analysisContext ? "REFERENCE SITE ANALYSIS (match this style): " + analysisContext : ""}
 
-REQUIREMENTS:
-- This must look like a REAL production website, not a wireframe or placeholder
-- Use the EXACT colors, fonts, and spacing from the design system above
-- Include real-looking content (not lorem ipsum) — use realistic text, names, numbers
-- All UI components must be fully styled (buttons, cards, inputs, navigation)
-- Include hover states, shadows, gradients as specified
-- Responsive layout with proper spacing and alignment
-- Include header/navigation and footer if this is a full page
-- Make interactive elements look clickable (proper cursor, hover effects)`;
+CRITICAL RULES:
+- Use the EXACT colors, fonts, spacing, and design tokens from the PRD above
+- This page must look like it belongs to the SAME project described in the PRD
+- Use the SAME visual language, theme, typography as the PRD specifies
+- Include REAL content matching the project's context — not lorem ipsum or generic text
+- All components must be FULLY styled — buttons, cards, inputs, nav, footer
+- Include hover states, shadows, gradients, animations as specified in the PRD
+- The design must be production-ready, not a wireframe
+- Responsive layout matching PRD breakpoints
+- Keep consistent navigation/header/footer across all pages`;
     screenPrompts.push({ title: pageName, prompt, device });
   }
   return screenPrompts;

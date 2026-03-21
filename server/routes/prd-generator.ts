@@ -321,7 +321,9 @@ router.get("/prd/mockups/stream", async (req, res) => {
     const projectId = existingProjectId || await createStitchProject("PRD: " + prdTitle);
     if (!projectId) { clearInterval(keepalive); send("error", { message: "Failed to create Stitch project" }); res.end(); return; }
 
-    const allPrompts = extractScreenPrompts(content, platform);
+    // Fetch analysis data from PRD record to enrich Stitch prompts
+    const prdAnalysis = prd?.analysis || null;
+    const allPrompts = extractScreenPrompts(content, platform, prdAnalysis);
     const prompts = skipCount > 0 ? allPrompts.slice(skipCount) : allPrompts;
     const totalAll = allPrompts.length;
     send("start", { projectId, total: totalAll, remaining: prompts.length, resumed: skipCount > 0 });

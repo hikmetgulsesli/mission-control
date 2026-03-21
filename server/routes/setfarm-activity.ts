@@ -3,6 +3,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 
 import { join } from 'path';
 import { execSync, execFileSync } from 'child_process';
 import { cached } from '../utils/cache.js';
+import { getBatchStoryProgress } from '../utils/setfarm-db.js';
 import { PATHS } from '../config.js';
 import { readFileSync as readSync, writeFileSync as writeSync, renameSync } from 'fs';
 import { tmpdir } from 'os';
@@ -101,20 +102,15 @@ router.get('/setfarm/pipeline', async (_req, res) => {
       lastSeenRunningIds = runningIds;
       saveSyncState(lastSeenFinishedIds, lastSeenRunningIds);
 
-      return Promise.all([...running, ...recent].map(async (r: any) => {
-        let storyProgress: any = { completed: 0, total: 0, verified: 0, skipped: 0, running: 0, pending: 0, done: 0 };
-        try {
-          const stories = await getRunStories(r.id);
-          if (stories && stories.length > 0) {
-            const done = r.status === 'completed' ? stories.length : stories.filter((s: any) => ['done', 'verified', 'skipped'].includes(s.status)).length;
-            const v = stories.filter((s: any) => s.status === "verified").length;
-            const sk = stories.filter((s: any) => s.status === "skipped").length;
-            const ru = stories.filter((s: any) => s.status === "running").length;
-            const pe = stories.filter((s: any) => s.status === "pending").length;
-            const dn = stories.filter((s: any) => s.status === "done").length;
-            storyProgress = { completed: done, total: stories.length, verified: v, skipped: sk, running: ru, pending: pe, done: dn };
-          }
-        } catch (e: any) { console.warn('getRunStories failed:', e?.message || e); }
+      // D2: Batch story progress (1 query instead of N)
+      const allDisplayRuns = [...running, ...recent];
+      const batchProgress = await getBatchStoryProgress(allDisplayRuns.map((r: any) => String(r.id))).catch(() => ({}));
+
+      return allDisplayRuns.map((r: any) => {
+        let storyProgress = (batchProgress as any)[r.id] || { completed: 0, total: 0, verified: 0, skipped: 0, running: 0, pending: 0, done: 0 };
+        if (r.status === 'completed' && storyProgress.total > 0) {
+          storyProgress = { ...storyProgress, completed: storyProgress.total };
+        }
         return {
           id: r.id,
           runNumber: r.run_number,
@@ -134,7 +130,7 @@ router.get('/setfarm/pipeline', async (_req, res) => {
           })),
           storyProgress,
         };
-      }));
+      });
     });
     res.json(data);
   } catch (err: any) {

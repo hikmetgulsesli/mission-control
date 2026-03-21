@@ -11,6 +11,8 @@ import { AgentChatFeed } from "../components/AgentChatFeed";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 
 export function SetfarmActivity() {
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filterSearch, setFilterSearch] = useState("");
   const { toast } = useToast();
   const initialLoading = useAppStore(s => s.initialLoading);
   const agents = useAppStore(s => s.agents);
@@ -95,6 +97,26 @@ export function SetfarmActivity() {
       <div className="af-page__header">
         <div className="af-page__header-left">
           <GlitchText text="SETFARM" />
+
+        <div style={{ display: "flex", gap: "8px", marginBottom: "8px", flexWrap: "wrap" }}>
+          <input
+            placeholder="Ara (proje, gorev)..."
+            value={filterSearch}
+            onChange={e => setFilterSearch(e.target.value)}
+            style={{ flex: 1, minWidth: "150px", background: "var(--bg-card)", border: "1px solid var(--border)", color: "var(--text-primary)", padding: "4px 8px", fontSize: "11px", fontFamily: "var(--font)" }}
+          />
+          <select
+            value={filterStatus}
+            onChange={e => setFilterStatus(e.target.value)}
+            style={{ background: "var(--bg-card)", border: "1px solid var(--border)", color: "var(--text-primary)", padding: "4px 8px", fontSize: "11px", fontFamily: "var(--font)" }}
+          >
+            <option value="">Tum durumlar</option>
+            <option value="running">Running</option>
+            <option value="completed">Completed</option>
+            <option value="failed">Failed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
           <div className="af-page__subtitle">Agent Activity &amp; Workflow Pipeline</div>
         </div>
         <CompactStatsBar alerts={alerts} agents={wfAgents || []} />

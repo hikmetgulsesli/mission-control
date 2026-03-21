@@ -1,5 +1,8 @@
 import { Router } from 'express';
 import { readFileSync } from 'fs';
+import { homedir } from 'os';
+import { join } from 'path';
+
 import { config } from '../config.js';
 import { cached } from '../utils/cache.js';
 
@@ -21,7 +24,7 @@ function normalizeModel(raw: string): string {
 
 function loadAgentModels(): Record<string, string> {
   try {
-    const ocPath = '/home/setrox/.openclaw/openclaw.json';
+    const ocPath = `${homedir()}/.openclaw/openclaw.json`;
     const raw = readFileSync(ocPath, 'utf-8');
     const oc = JSON.parse(raw);
     const agents = oc.agents || {};

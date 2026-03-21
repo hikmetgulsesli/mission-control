@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
+import { homedir } from 'os';
+
 import { cached } from '../utils/cache.js';
 import { getRuns } from '../utils/setfarm.js';
 
@@ -44,7 +46,7 @@ const CRON_AGENTS: Record<string, string[]> = {
   'daily-standup': ['lux'],
 };
 
-const SESSIONS_BASE = '/home/setrox/.openclaw/agents';
+const SESSIONS_BASE = join(homedir(), '.openclaw', 'agents');
 
 interface AgentStatus {
   id: string;

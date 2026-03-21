@@ -15,6 +15,8 @@ interface Project {
   createdBy: string;
   workflowRunId?: string;
   runNumber?: number;
+  latestRunNumber?: number;
+  setfarmRunIds?: string[];
   createdAt: string;
   completedAt?: string;
   status?: string;
@@ -56,6 +58,9 @@ export const ProjectCard = React.memo(function ProjectCard({
     >
       <div className="project-card__header">
         <span className="project-card__emoji">{p.emoji}</span>
+        {(p.latestRunNumber || p.runNumber) ? (
+          <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--neon-cyan, #0ff)", background: "rgba(0,255,255,0.12)", border: "1px solid rgba(0,255,255,0.3)", padding: "1px 7px", borderRadius: "3px", marginRight: "8px", fontFamily: "var(--font)", letterSpacing: "0.5px" }}>#{p.latestRunNumber || p.runNumber}</span>
+        ) : null}
         <span className="project-card__name">{p.name}</span>
         {p.type === "mobile" ? (
           <span className="project-card__status project-card__status--mobile">MOBILE</span>
@@ -121,12 +126,7 @@ export const ProjectCard = React.memo(function ProjectCard({
             <span className="project-card__value">{p.stories.done}/{p.stories.total}</span>
           </div>
         )}
-        {p.runNumber && (
-          <div className="project-card__meta-row">
-            <span className="project-card__label">RUN</span>
-            <span className="project-card__value">#{p.runNumber}</span>
-          </div>
-        )}
+
         {(p.createdAt || p.completedAt) && (
           <div className="project-card__meta-row">
             <span className="project-card__label">TARIH</span>

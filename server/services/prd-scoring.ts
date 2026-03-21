@@ -106,23 +106,45 @@ export function checkScreenCoverage(
   screens: { title: string; id?: string }[],
 ): { covered: string[]; missing: string[]; coverage: number } {
   const lines = prdContent.split('\n');
-  // Extract visual section headings (skip technical/api/data sections)
+  // Extract PAGE headings from PRD (h3 with route paths or "Sayfa" in name)
   const sectionHeadings: string[] = [];
+
+  // Strategy 1: Find pages from "Sayfalar" section (h3 items under h2 "Sayfalar")
+  let inPagesSection = false;
   for (const line of lines) {
-    // Only h1/h2 — skip h3+ (CSS details, sub-properties)
-    const match = line.match(/^#{1,2}\s+(.+)/);
-    if (!match) continue;
-    const heading = match[1].trim();
-    // Skip non-page sections
-    if (/teknik|api|veri\s*modeli|technical|data\s*model|deployment/i.test(heading)) continue;
-    if (/komponent|component|eslestirme|library/i.test(heading)) continue;
-    if (/proje\s*genel|genel\s*bak|overview|giris/i.test(heading)) continue;
-    if (/tasarim\s*sistemi|design\s*system|tipografi|typography|renkler|colors|fonts|tema|theme/i.test(heading)) continue;
-    if (/responsive|breakpoint|animasyon|animation|transition|spacing|border|shadow|cursor|skeleton|hover|fade|pulse|seo|performance|accessibility|analytics/i.test(heading)) continue;
-    if (/kullanim|typescript|interface|prd\s/i.test(heading)) continue;
-    // Skip numbered sub-sections like "3.1 Ana Sayfa"
-    if (/^\d+\.\d+\s/.test(heading)) continue;
-    sectionHeadings.push(heading);
+    if (/^##\s+.*sayfalar/i.test(line)) { inPagesSection = true; continue; }
+    if (inPagesSection && /^##\s/.test(line) && !/sayfa/i.test(line)) { inPagesSection = false; continue; }
+    if (inPagesSection) {
+      const m = line.match(/^###\s+(?:\d+\.\d+\s+)?(.+)/);
+      if (m) {
+        let name = m[1].trim().replace(/\s*\([\/][^)]*\)\s*$/, '').trim(); // Remove (/route)
+        if (name.length > 2) sectionHeadings.push(name);
+      }
+    }
+  }
+
+  // Strategy 2: If no pages found, look for h2/h3 with route paths like (/path)
+  if (sectionHeadings.length < 2) {
+    for (const line of lines) {
+      const m = line.match(/^#{2,3}\s+(?:\d+\.?\d*\s+)?(.+?)\s*\(\/[^)]*\)/);
+      if (m) {
+        const name = m[1].trim();
+        if (name.length > 2 && !sectionHeadings.includes(name)) sectionHeadings.push(name);
+      }
+    }
+  }
+
+  // Strategy 3: Bullet list pages ("- Ana Sayfa — desc")
+  if (sectionHeadings.length < 2) {
+    let inPageList = false;
+    for (const line of lines) {
+      if (/^#{1,3}\s+.*(?:sayfa\s*listesi|sayfalar)/i.test(line)) { inPageList = true; continue; }
+      if (inPageList && /^#{1,2}\s/.test(line)) { inPageList = false; continue; }
+      if (inPageList) {
+        const m = line.match(/^[-*]\s+(?:\*\*)?([^*\n]+?)(?:\*\*)?\s*[—–-]\s/);
+        if (m && m[1].trim().length > 2) sectionHeadings.push(m[1].trim());
+      }
+    }
   }
 
   const screenTitles = screens.map(s => s.title.toLowerCase());

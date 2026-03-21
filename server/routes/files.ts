@@ -2,10 +2,12 @@ import { Router } from 'express';
 import { readdir, stat, readFile, writeFile, rm, mkdir, rename } from 'fs/promises';
 import { resolve, normalize, join, basename, dirname } from 'path';
 import { existsSync, realpathSync } from 'fs';
+import { homedir } from 'os';
+
 
 const router = Router();
 
-const ALLOWED_BASES = ['/home/setrox', '/var/log', '/etc/systemd/system'];
+const ALLOWED_BASES = [homedir(), '/var/log', '/etc/systemd/system'];
 
 const BLOCKED_NAMES = new Set([
   '.env', '.ssh', '.gnupg', 'credentials', 'secrets',
@@ -51,7 +53,7 @@ function validatePath(path: string): { ok: true; resolved: string } | { ok: fals
 // GET /files/list
 router.get('/files/list', async (req, res) => {
   try {
-    const dirPath = (req.query.path as string) || '/home/setrox/';
+    const dirPath = (req.query.path as string) || `${homedir()}/`;
     const showHidden = req.query.hidden === 'true';
     const resolved = resolve(normalize(dirPath));
 

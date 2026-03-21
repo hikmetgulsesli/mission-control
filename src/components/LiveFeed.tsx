@@ -341,7 +341,7 @@ export function LiveFeed() {
       <div className="lf-feed" ref={feedRef}>
         {displayed.length === 0 && (
           <div className="lf-empty">
-            {hasActivity ? 'Loading...' : 'No active agent sessions. Events will appear here when agents are working.'}
+            {hasActivity ? 'Agentlar aktif ama su an sadece polling yapiyor. Yeni gorev basladiginda burada gorunecek.' : 'Aktif agent oturumu yok. Agentlar calistiginda eventler burada gorunecek.'}
           </div>
         )}
         {displayed.map((ev, i) => {

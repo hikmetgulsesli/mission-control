@@ -738,3 +738,28 @@ export async function deleteRunsByProject(projectName: string): Promise<{ delete
   return { deleted: matchingRuns.length, log };
 }
 
+
+
+// D2: Batch story progress (single query replaces N getRunStories calls)
+export async function getBatchStoryProgress(runIds: string[]): Promise<Record<string, { completed: number; total: number; verified: number; skipped: number; running: number; pending: number; done: number }>> {
+  if (runIds.length === 0) return {};
+  const idList = runIds.map(id => "'" + id.replace(/'/g, "''") + "'").join(",");
+  const rows = await querySetfarmDb(
+    "SELECT run_id, status, COUNT(*) as cnt FROM stories WHERE run_id IN (" + idList + ") GROUP BY run_id, status"
+  );
+  const result: Record<string, any> = {};
+  for (const id of runIds) {
+    result[id] = { completed: 0, total: 0, verified: 0, skipped: 0, running: 0, pending: 0, done: 0 };
+  }
+  for (const row of (rows || [])) {
+    if (!result[row.run_id]) continue;
+    result[row.run_id].total += row.cnt;
+    if (row.status === "verified") { result[row.run_id].verified += row.cnt; result[row.run_id].completed += row.cnt; }
+    else if (row.status === "skipped") { result[row.run_id].skipped += row.cnt; result[row.run_id].completed += row.cnt; }
+    else if (row.status === "done") { result[row.run_id].done += row.cnt; result[row.run_id].completed += row.cnt; }
+    else if (row.status === "running") result[row.run_id].running += row.cnt;
+    else if (row.status === "pending") result[row.run_id].pending += row.cnt;
+    else if (row.status === "failed") result[row.run_id].completed += row.cnt;
+  }
+  return result;
+}
