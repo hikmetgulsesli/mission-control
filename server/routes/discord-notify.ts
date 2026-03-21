@@ -29,8 +29,8 @@ function isDuplicate(key: string): boolean {
   const last = recentEvents.get(key);
   if (last && now - last < DEBOUNCE_MS) return true;
   recentEvents.set(key, now);
-  if (recentEvents.size > 200) {
-    const cutoff = now - DEBOUNCE_MS * 2;
+  if (recentEvents.size > 50) {
+    const cutoff = now - 5 * 60_000;
     for (const [k, t] of recentEvents) {
       if (t < cutoff) recentEvents.delete(k);
     }

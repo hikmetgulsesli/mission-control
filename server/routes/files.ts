@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { readdir, stat, readFile, writeFile, rm, mkdir, rename } from 'fs/promises';
 import { resolve, normalize, join, basename, dirname } from 'path';
-import { existsSync } from 'fs';
+import { existsSync, realpathSync } from 'fs';
 
 const router = Router();
 
@@ -17,7 +17,9 @@ const BLOCKED_PATTERNS = [/\.pem$/, /\.key$/, /id_rsa/, /id_ed25519/];
 const MAX_FILE_SIZE = 1 * 1024 * 1024; // 1MB
 
 function isPathAllowed(requestedPath: string): boolean {
-  const resolved = resolve(normalize(requestedPath));
+  let resolved: string;
+  try { resolved = realpathSync(resolve(normalize(requestedPath))); }
+  catch { resolved = resolve(normalize(requestedPath)); }
   return ALLOWED_BASES.some(base =>
     resolved === base || resolved.startsWith(base + '/')
   );

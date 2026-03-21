@@ -250,6 +250,9 @@ router.post("/projects/import", async (req, res) => {
 });
 
 function systemctlAction(action: string, service: string) {
+  if (!/^[a-zA-Z0-9_@.-]+$/.test(service)) {
+    throw new Error("Invalid service name: " + service);
+  }
   // "start" → use "restart" to handle stale processes
   const cmd = action === "start" ? "restart" : action;
   // Try user-level first, then system-level
