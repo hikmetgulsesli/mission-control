@@ -280,7 +280,7 @@ function extractDesignContext(prdContent: string): string {
   const designLines: string[] = [];
   let inDesignSection = false;
   for (const line of lines) {
-    if (/^#{1,3}\s.*(tasarim\s*sistemi|design\s*system|renkler|colors|tipografi|typography|fonts)/i.test(line)) {
+    if (/^#{1,3}\s.*(tasar[ıi]m\s*sistemi|design\s*system|renkler|colors|tipografi|typography|fonts)/i.test(line)) {
       inDesignSection = true;
       designLines.push(line);
       continue;
@@ -327,56 +327,50 @@ export function extractScreenPrompts(prdContent: string, platform: string, analy
   const device = platform === "mobile" ? "MOBILE" : "DESKTOP";
   const screenPrompts: { title: string; prompt: string; device: string }[] = [];
 
-  // Extract page names from PRD — multiple strategies
+  // Extract page names from PRD — find actual page sections
   const pageNames: string[] = [];
   const lines = prdContent.split("\n");
 
-  // Strategy 1: Find "Sayfa Listesi" or "Sayfalar" section, parse bullet list
-  let inPageList = false;
+  // Strategy 1: Find h2 headings with route paths like ## 4. Ana Sayfa (`/`) or ## Ana Sayfa (/)
   for (const line of lines) {
-    if (/^#{1,3}\s+.*(?:sayfa\s*listesi|sayfalar)/i.test(line)) {
-      inPageList = true;
-      continue;
+    // Match: ## N. Page Name (`/path`) or ## Page Name (/path)
+    const m = line.match(/^##\s+(?:\d+\.?\s+)?(.+?)\s*\([\`]?\/[^)]*[\`]?\)/);
+    if (!m) continue;
+    let name = m[1].trim().replace(/[\`]/g, "");
+    // Skip technical sections
+    if (/tasar[ıi]m|design|renk|font|spacing|shadow|z-index|animasyon|animation|responsive|breakpoint|komponent\s*k|veri\s*model|api\s*endpoint|teknik|browser|polyfill|dependencies|tailwind|edge\s*case|sayfa\s*listesi|^sayfalar$/i.test(name)) continue;
+    // Route path required (regex already filters), just add to list
+    if (name.length > 2) {
+      if (name.length > 2 && !pageNames.includes(name)) pageNames.push(name);
     }
-    if (inPageList) {
-      if (/^#{1,2}\s/.test(line)) { inPageList = false; continue; }
-      // Parse formats:
-      // "- **/** — Ana Sayfa: desc" → "Ana Sayfa"
-      // "- /projects — Projeler: desc" → "Projeler"
-      // "- **Ana Sayfa** — desc" → "Ana Sayfa"
-      const m = line.match(/^[-*]\s+\*\*[^*]*\*\*\s*[——–-]\s*(.+?)(?:\s*[:]\s|$)/)
-            || line.match(/^[-*]\s+\/\S*\s*[——–-]\s*(.+?)(?:\s*[:]\s|$)/)
-            || line.match(/^[-*]\s+\*\*(.+?)\*\*/)
-            || line.match(/^[-*]\s+(.+?)\s*[——–-]\s/)
-            || line.match(/^[-*]\s+(.+)/);
-      if (m && m[1].trim().length > 2) {
-        let name = m[1].trim().replace(/\s*\(.*?\)\s*$/, "").replace(/\s*\/\S*\s*$/, "");
-        // Remove trailing colon content
-        name = name.replace(/:.+$/, "").trim();
-        if (name.length > 2 && !/^[\/\-*]/.test(name)) pageNames.push(name);
+  }
+
+  // Strategy 2: If not enough, find numbered items in "Sayfalar" bullet list
+  if (pageNames.length < 3) {
+    let inPageList = false;
+    for (const line of lines) {
+      if (/^##\s+.*sayfalar/i.test(line) || /^##\s+\d+\.\s+sayfalar/i.test(line)) { inPageList = true; continue; }
+      if (inPageList && /^##\s/.test(line)) { inPageList = false; continue; }
+      if (inPageList) {
+        // Match: 1. **Ana Sayfa** (`/`) or - Ana Sayfa (/) or - **Ana Sayfa** — desc
+        const m = line.match(/(?:\d+\.\s+)?\*\*(.+?)\*\*|^[-*]\s+(.+?)\s*[—–(]/);
+        if (m) {
+          let name = (m[1] || m[2] || "").trim().replace(/[\`]/g, "");
+          if (name.length > 2 && !pageNames.includes(name)) pageNames.push(name);
+        }
       }
     }
   }
 
-  // Strategy 2: Find h3 headings under "Sayfa Detaylari" section
-  if (pageNames.length < 2) {
-    let inDetailSection = false;
+  // Strategy 3: h3 under page sections (### 3.1 Ana Sayfa (/))
+  if (pageNames.length < 3) {
     for (const line of lines) {
-      if (/^##\s+.*(?:sayfa\s*detay|page\s*detail)/i.test(line)) { inDetailSection = true; continue; }
-      if (inDetailSection && /^##\s/.test(line) && !/sayfa/i.test(line)) { inDetailSection = false; continue; }
-      if (inDetailSection && /^###\s/.test(line)) {
-        let name = line.replace(/^###\s+/, "").replace(/\s*\(.*?\)\s*/g, "").replace(/^\d+\.\s*/, "").trim();
-        if (name.length > 2) pageNames.push(name);
-      }
-    }
-  }
-
-  // Strategy 3: Find h2/h3 headings that look like page names (have route paths)
-  if (pageNames.length < 2) {
-    for (const line of lines) {
-      if (/^#{2,3}\s+.+\(\//.test(line)) {
-        let name = line.replace(/^#{2,3}\s+/, "").replace(/\s*\(.*?\)\s*/g, "").replace(/^\d+\.\s*/, "").trim();
-        if (name.length > 2) pageNames.push(name);
+      if (/^###\s+(?:\d+\.\d+\s+)?(.+?)\s*\([\`]?\//.test(line)) {
+        const m = line.match(/^###\s+(?:\d+\.\d+\s+)?(.+?)\s*\(/);
+        if (m) {
+          let name = m[1].trim().replace(/[\`]/g, "");
+          if (name.length > 2 && !pageNames.includes(name)) pageNames.push(name);
+        }
       }
     }
   }
@@ -396,7 +390,7 @@ export function extractScreenPrompts(prdContent: string, platform: string, analy
 
   // Fallback: filter sectionMap keys
   if (targets.length < 2) {
-    const skipRe = /proje\s*genel|genel\s*bak|overview|tasarim|design\s*system|renkler|tipografi|fonts|sayfalar|sayfa\s*listesi|sayfa\s*detay|teknik|api\b|veri\s*modeli|deployment|komponent|animasyon|responsive|breakpoint|seo|performance|accessibility|browser|gereksinim|eslestirme|shadow|border|spacing|timing|keyframe|stagger/i;
+    const skipRe = /proje\s*genel|genel\s*bak[ıi]|overview|tasar[ıi]m\s*sistemi|design\s*system|renkler|renk\s*paleti|tipografi|typography\s*scale|fonts|sayfalar$|sayfa\s*listesi|teknik\s*gereksinim|teknik\s*mimari|api\s*endpoint|veri\s*modeli|komponent\s*k[uü]t[uü]phane|animasyon\s*sistemi|animasyonlar$|responsive\s*breakpoint|breakpoint\s*tan|spacing|z-index|shadow|browser\s*deste|polyfill|dependencies|tailwind\s*config/i
     for (const [heading] of sectionMap) {
       if (!skipRe.test(heading) && targets.length < 8) targets.push(heading);
     }
