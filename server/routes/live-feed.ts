@@ -435,17 +435,8 @@ function filterAndRespond(events: LiveEvent[], req: any, res: any) {
 
 router.get('/live-feed/projects', async (_req, res) => {
   try {
-    const now = Date.now();
-    let events: LiveEvent[];
-    if (now - feedCache.ts < CACHE_TTL_MS && feedCache.data.length > 0) {
-      events = feedCache.data;
-    } else {
-      events = scanSessions();
-      persistEvents(events);
-      feedCache = { data: events, ts: now };
-    }
-    const projects = [...new Set(events.map(e => e.project).filter(Boolean))].sort();
-    res.json(projects);
+    const rows = db.prepare("SELECT DISTINCT project FROM live_events WHERE project IS NOT NULL AND project != ? ORDER BY project").all("") as any[];
+    res.json(rows.map((r: any) => r.project));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

@@ -41,6 +41,7 @@ export const config = {
 
 // A1 fix: PATHS export — setfarm-activity.ts bunu import ediyor
 export const PATHS = {
+  setfarmDb: process.env.SETFARM_DB_PATH || join(HOME, ".openclaw/setfarm/setfarm.db"),
   setfarmDir: process.env.SETFARM_DIR || join(HOME, '.openclaw/setfarm'),
   setfarmRepoDir: process.env.SETFARM_REPO_DIR || join(HOME, '.openclaw/setfarm-repo'),
   projectsDir: process.env.PROJECTS_DIR || join(HOME, 'projects'),
