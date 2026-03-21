@@ -396,10 +396,24 @@ export function extractScreenPrompts(prdContent: string, platform: string): { ti
     }
     if (!sectionContent) sectionContent = pageName;
 
-    let prompt = "Create a " + (platform === "mobile" ? "mobile app" : "web page") + " screen for: " + pageName;
-    prompt += "\n\nPage details:\n" + sectionContent;
-    if (designContext) prompt += "\n\nIMPORTANT - Use this exact design system (colors, fonts, spacing):\n" + designContext;
-    prompt += "\n\nMake the design pixel-perfect, modern, and production-ready.";
+    // Build rich prompt with full context
+    let prompt = `Build a complete, production-ready ${platform === "mobile" ? "mobile app" : "web page"} design for: "${pageName}"
+
+PAGE SPECIFICATION:
+${sectionContent}
+
+DESIGN SYSTEM (use these EXACT values):
+${designContext || "Use modern dark theme with neon accents"}
+
+REQUIREMENTS:
+- This must look like a REAL production website, not a wireframe or placeholder
+- Use the EXACT colors, fonts, and spacing from the design system above
+- Include real-looking content (not lorem ipsum) — use realistic text, names, numbers
+- All UI components must be fully styled (buttons, cards, inputs, navigation)
+- Include hover states, shadows, gradients as specified
+- Responsive layout with proper spacing and alignment
+- Include header/navigation and footer if this is a full page
+- Make interactive elements look clickable (proper cursor, hover effects)`;
     screenPrompts.push({ title: pageName, prompt, device });
   }
   return screenPrompts;
