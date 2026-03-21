@@ -11,7 +11,7 @@ const tabs: { to: string; label: string; key?: string }[] = [
   { to: '/performance', label: 'PERF', key: '5' },
   { to: '/projects', label: 'PROJECTS', key: '6' },
   { to: '/files', label: 'FILES', key: '7' },
-  { to: "/prd", label: "PRD", key: "p" },
+  { to: '/prd', label: 'PRD', key: 'P' },
   { to: '/scrape', label: 'SCRAPE', key: '9' },
   { to: '/rules', label: 'RULES', key: 'R' },
   { to: '/live', label: 'LIVE', key: 'L' },

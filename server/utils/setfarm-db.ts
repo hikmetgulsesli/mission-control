@@ -1,14 +1,14 @@
+import { homedir } from 'os';
+import { PATHS } from '../config.js';
+import path from 'path';
 import { createHash } from 'crypto';
 import { execFile as execFileCb } from 'child_process';
 import { promisify } from 'util';
 import { readFile } from 'fs/promises';
-import { homedir } from 'os';
-import { join } from 'path';
 
 const execFileAsync = promisify(execFileCb);
 
-const HOME = homedir();
-const DB_PATH = process.env.SETFARM_DB_PATH || join(HOME, '.openclaw/setfarm/setfarm.db');
+const DB_PATH = PATHS.setfarmDb;
 const STUCK_DETECTION_MS = 10 * 60 * 1000;  // 10min - show in UI
 const STUCK_THRESHOLD_MS = 15 * 60 * 1000;  // 15min - auto-unstick
 const MAX_AUTO_UNSTICK = 3;
@@ -154,14 +154,14 @@ export async function resumeLimboRun(runId: string) {
   }
 }
 
-const ANTFARM_CLI_ENV = {
+const SETFARM_CLI_ENV = {
   ...process.env,
-  PATH: `${join(HOME, '.local/bin')}:/usr/local/bin:/usr/bin:/bin:${process.env.PATH || ''}`,
+  PATH: `${homedir()}/.local/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH || ''}`,
 };
 
 async function setfarmCli(args: string[]): Promise<string> {
   const { stdout } = await execFileAsync('setfarm', args, {
-    env: ANTFARM_CLI_ENV,
+    env: SETFARM_CLI_ENV,
     timeout: 30000,
     maxBuffer: 1024 * 1024,
   });
@@ -301,7 +301,7 @@ export async function diagnoseStuckStep(runId: string, stepId?: string) {
 
   // 2. Check recent setfarm logs
   try {
-    const logPath = join(HOME, '.openclaw/setfarm/logs/setfarm.log');
+    const logPath = path.join(homedir(), '.openclaw/setfarm/logs/setfarm.log');
     const logContent = await readFile(logPath, 'utf-8');
     const logTail = logContent.split('\n').slice(-100).join('\n');
     textToAnalyze += '\n' + logTail;
@@ -312,7 +312,7 @@ export async function diagnoseStuckStep(runId: string, stepId?: string) {
   // 3. Try reading session transcript if we have a story id
   if (step.current_story_id) {
     try {
-      const sessionsDir = join(HOME, '.openclaw/sessions');
+      const sessionsDir = path.join(homedir(), '.openclaw/sessions');
       const { stdout } = await execFileAsync('bash', ['-c',
         `ls -t "${sessionsDir}" 2>/dev/null | head -5`
       ], { timeout: 5000 });
@@ -392,8 +392,8 @@ export async function tryAutoFix(runId: string, cause: string, storyId?: string 
       try {
         await execFileAsync('npm', ['install'], {
           timeout: 60000,
-          cwd: join(HOME, '.openclaw/setfarm'),
-          env: ANTFARM_CLI_ENV,
+          cwd: path.join(homedir(), '.openclaw/setfarm'),
+          env: SETFARM_CLI_ENV,
         });
         console.log(`[MEDIC] Auto-fix: dependency_error -> npm install ok`);
         return { success: true, message: 'npm install basarili' };
@@ -529,9 +529,9 @@ export async function failEntireRun(runId: string, reason: string) {
 
   // Discord alert
   try {
-    await execFileAsync('bash', [join(HOME, '.openclaw/scripts/discord-log.sh'),
+    await execFileAsync('bash', [path.join(homedir(), '.openclaw/scripts/discord-log.sh'),
       `Pipeline FAILED: Run ${runId} - ${reason}`
-    ], { timeout: 10000, env: ANTFARM_CLI_ENV });
+    ], { timeout: 10000, env: SETFARM_CLI_ENV });
   } catch {
     // Discord alert is best-effort
   }
@@ -590,19 +590,151 @@ export async function pruneAgentFeed(keep = 5000): Promise<void> {
 
 export async function clearAgentFeed(): Promise<void> {
   await execSetfarmDb(`DELETE FROM agent_feed;`);
+  await execSetfarmDb(`PRAGMA wal_checkpoint(TRUNCATE);`);
 }
 
-export async function deleteRun(runId: string) {
+export async function deleteRun(runId: string, cleanupProject = false) {
   const safeId = validateId(runId, 'runId');
-  // Delete in dependency order: stories → steps → events → runs
+
+  // Get run info before deleting (need task text for cleanup)
+  const runs = await querySetfarmDb(`SELECT * FROM runs WHERE id = '${safeId}';`);
+  const run = runs[0];
+
+  // Delete from DB (including claim_log)
   await execSetfarmDb(`
     BEGIN;
+    DELETE FROM claim_log WHERE run_id = '${safeId}';
     DELETE FROM stories WHERE run_id = '${safeId}';
     DELETE FROM steps WHERE run_id = '${safeId}';
-    DELETE FROM events WHERE run_id = '${safeId}';
     DELETE FROM runs WHERE id = '${safeId}';
     COMMIT;
   `);
   await execSetfarmDb('PRAGMA wal_checkpoint(TRUNCATE);');
-  return { deleted: true, runId };
+
+  const log: string[] = ['DB records deleted'];
+
+  // If cleanupProject requested, parse task for repo/path info and cleanup
+  if (cleanupProject && run?.task) {
+    const ghMatch = run.task.match(/(?:REPO|Repo):\s*(https:\/\/github\.com\/[^\s|]+)/i);
+    const localMatch = run.task.match(/(?:REPO|Lokal):\s*((?:~\/|\/)[^\s|]+)/i);
+    const ghRepo = ghMatch?.[1];
+    let localPath = localMatch?.[1];
+
+    // Expand ~ to home directory
+    if (localPath?.startsWith('~/')) {
+      localPath = homedir() + localPath.slice(1);
+    }
+
+    // Guard: if another run uses the same repo, skip project cleanup
+    if (localPath) {
+      const otherRuns = await querySetfarmDb(`SELECT id, run_number, status, task FROM runs WHERE id != '${safeId}';`);
+      const projectName = localPath.split('/').pop() || '';
+      const sameRepoRun = otherRuns.find((r: any) => r.task?.includes(projectName));
+      if (sameRepoRun) {
+        log.push(`Skipped project cleanup: run #${sameRepoRun.run_number} (${sameRepoRun.status}) uses same repo`);
+        return { deleted: true, runId, log };
+      }
+    }
+
+    // Delete GitHub repo
+    if (ghRepo) {
+      try {
+        const repoSlug = ghRepo.replace('https://github.com/', '');
+        await execFileAsync('gh', ['repo', 'delete', repoSlug, '--yes'], { timeout: 15000, env: SETFARM_CLI_ENV });
+        log.push('GitHub repo deleted: ' + repoSlug);
+      } catch (err: any) {
+        log.push('GitHub delete failed: ' + err.message);
+      }
+    }
+
+    // Delete local project files
+    if (localPath) {
+      try {
+        const { rmSync, existsSync } = await import('fs');
+        if (existsSync(localPath)) {
+          rmSync(localPath, { recursive: true, force: true });
+          log.push('Local repo deleted: ' + localPath);
+        }
+      } catch (err: any) {
+        log.push('Local delete failed: ' + err.message);
+      }
+    }
+
+    // Stop & disable service if exists
+    if (localPath) {
+      const name = localPath.split('/').pop() || '';
+      if (name) {
+        for (const svc of [name, name + '-server', name + '-client']) {
+          try {
+            await execFileAsync('systemctl', ['--user', 'stop', svc], { timeout: 5000 });
+            await execFileAsync('systemctl', ['--user', 'disable', svc], { timeout: 5000 });
+            log.push('Service stopped: ' + svc);
+          } catch (e: any) { console.warn("exec failed:", e?.message || e); }
+        }
+      }
+    }
+
+    // Remove from projects.json
+    if (localPath) {
+      try {
+        const { readFileSync, writeFileSync } = await import('fs');
+        const pjPath = homedir() + '/projects/mission-control/projects.json';
+        const projects = JSON.parse(readFileSync(pjPath, 'utf-8'));
+        const name = localPath.split('/').pop() || '';
+        const filtered = projects.filter((p: any) => p.id !== name && !p.repo?.includes(name));
+        if (filtered.length < projects.length) {
+          writeFileSync(pjPath, JSON.stringify(filtered, null, 2));
+          log.push('Removed from projects.json');
+        }
+      } catch (err: any) {
+        log.push('projects.json cleanup failed: ' + err.message);
+      }
+    }
+
+    // Remove tunnel entry via tunnel-remove.sh (YAML-safe + DNS cleanup)
+    if (localPath) {
+      const name = localPath.split('/').pop() || '';
+      const hostname = name + '.setrox.com.tr';
+      try {
+        const tunnelScript = homedir() + '/.openclaw/scripts/tunnel-remove.sh';
+        const { stdout: tunnelOut } = await execFileAsync('bash', [tunnelScript, hostname], { timeout: 30000 });
+        log.push('Tunnel: ' + tunnelOut.trim());
+      } catch (err: any) {
+        log.push('Tunnel cleanup failed: ' + err.message);
+      }
+    }
+  }
+
+  return { deleted: true, runId, log };
 }
+
+export async function deleteRunsByProject(projectName: string): Promise<{ deleted: number; log: string[] }> {
+  const safeName = projectName.replace(/[^a-zA-Z0-9_\-]/g, '');
+  if (!safeName) return { deleted: 0, log: ['Invalid project name'] };
+
+  // Find all runs that reference this project
+  const allRuns = await querySetfarmDb(`SELECT id, run_number, task FROM runs;`);
+  const matchingRuns = allRuns.filter((r: any) =>
+    r.task?.includes('/' + safeName + ' ') || r.task?.includes('/' + safeName + '|') || r.task?.endsWith('/' + safeName)
+  );
+
+  if (matchingRuns.length === 0) return { deleted: 0, log: ['No matching runs found for ' + safeName] };
+
+  const log: string[] = [];
+  for (const run of matchingRuns) {
+    const safeId = validateId(run.id, 'runId');
+    await execSetfarmDb(`
+      BEGIN;
+      DELETE FROM claim_log WHERE run_id = '${safeId}';
+      DELETE FROM stories WHERE run_id = '${safeId}';
+      DELETE FROM steps WHERE run_id = '${safeId}';
+      DELETE FROM runs WHERE id = '${safeId}';
+      COMMIT;
+    `);
+    log.push(`Run #${run.run_number} DB records deleted`);
+  }
+  await execSetfarmDb('PRAGMA wal_checkpoint(TRUNCATE);');
+
+  return { deleted: matchingRuns.length, log };
+}
+

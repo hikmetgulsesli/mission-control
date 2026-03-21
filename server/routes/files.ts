@@ -1,13 +1,11 @@
 import { Router } from 'express';
-import { readdir, stat, readFile, writeFile, rm, mkdir, rename, realpath } from 'fs/promises';
+import { readdir, stat, readFile, writeFile, rm, mkdir, rename } from 'fs/promises';
 import { resolve, normalize, join, basename, dirname } from 'path';
-import { existsSync, realpathSync } from 'fs';
-import { homedir } from 'os';
+import { existsSync } from 'fs';
 
 const router = Router();
 
-const HOME = homedir();
-const ALLOWED_BASES = [HOME, '/var/log', '/etc/systemd/system'];
+const ALLOWED_BASES = ['/home/setrox', '/var/log', '/etc/systemd/system'];
 
 const BLOCKED_NAMES = new Set([
   '.env', '.ssh', '.gnupg', 'credentials', 'secrets',
@@ -19,14 +17,7 @@ const BLOCKED_PATTERNS = [/\.pem$/, /\.key$/, /id_rsa/, /id_ed25519/];
 const MAX_FILE_SIZE = 1 * 1024 * 1024; // 1MB
 
 function isPathAllowed(requestedPath: string): boolean {
-  // C1 fix: resolve symlinks to prevent symlink-based path traversal
-  let resolved: string;
-  try {
-    resolved = realpathSync(resolve(normalize(requestedPath)));
-  } catch {
-    // Path doesn't exist yet (new file) — resolve without symlink follow
-    resolved = resolve(normalize(requestedPath));
-  }
+  const resolved = resolve(normalize(requestedPath));
   return ALLOWED_BASES.some(base =>
     resolved === base || resolved.startsWith(base + '/')
   );
@@ -72,23 +63,28 @@ router.get('/files/list', async (req, res) => {
     }
 
     const entries = await readdir(resolved, { withFileTypes: true });
-    const items = [];
-    for (const entry of entries) {
-      if (!showHidden && entry.name.startsWith('.')) continue;
-      if (isBlocked(entry.name)) continue;
-      try {
-        const fullPath = join(resolved, entry.name);
-        const s = await stat(fullPath);
-        items.push({
-          name: entry.name,
-          type: entry.isDirectory() ? 'directory' : 'file',
-          size: s.size,
-          mtime: s.mtime.toISOString(),
-        });
-      } catch {
-        // Skip entries we can't stat
-      }
-    }
+    const filtered = entries.filter(entry => {
+      if (!showHidden && entry.name.startsWith('.')) return false;
+      if (isBlocked(entry.name)) return false;
+      return true;
+    });
+    const results = await Promise.all(
+      filtered.map(async (entry) => {
+        try {
+          const fullPath = join(resolved, entry.name);
+          const s = await stat(fullPath);
+          return {
+            name: entry.name,
+            type: entry.isDirectory() ? 'directory' : 'file',
+            size: s.size,
+            mtime: s.mtime.toISOString(),
+          };
+        } catch {
+          return null;
+        }
+      })
+    );
+    const items = results.filter((r): r is NonNullable<typeof r> => r !== null);
     items.sort((a, b) => {
       if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
       return a.name.localeCompare(b.name);
@@ -129,7 +125,7 @@ router.put('/files/write', async (req, res) => {
   try {
     const { path: filePath, content } = req.body;
     const v = validatePath(filePath);
-    if (!v.ok) { res.status(v.status).json({ error: v.error }); return; }
+    if (!v.ok) { res.status((v as any).status).json({ error: (v as any).error }); return; }
     if (typeof content !== 'string') { res.status(400).json({ error: 'content must be a string' }); return; }
     const buf = Buffer.from(content, 'utf-8');
     if (buf.length > MAX_FILE_SIZE) { res.status(413).json({ error: 'Content too large. Max: 1MB' }); return; }
@@ -148,7 +144,7 @@ router.delete('/files/delete', async (req, res) => {
   try {
     const { path: filePath } = req.body;
     const v = validatePath(filePath);
-    if (!v.ok) { res.status(v.status).json({ error: v.error }); return; }
+    if (!v.ok) { res.status((v as any).status).json({ error: (v as any).error }); return; }
     if (isRootPath(v.resolved)) { res.status(403).json({ error: 'Cannot delete root directory' }); return; }
 
     await rm(v.resolved, { recursive: true });
@@ -165,7 +161,7 @@ router.post('/files/mkdir', async (req, res) => {
   try {
     const { path: dirPath } = req.body;
     const v = validatePath(dirPath);
-    if (!v.ok) { res.status(v.status).json({ error: v.error }); return; }
+    if (!v.ok) { res.status((v as any).status).json({ error: (v as any).error }); return; }
     if (existsSync(v.resolved)) { res.status(409).json({ error: 'Already exists' }); return; }
 
     await mkdir(v.resolved);
@@ -181,9 +177,9 @@ router.post('/files/rename', async (req, res) => {
   try {
     const { oldPath, newPath } = req.body;
     const vOld = validatePath(oldPath);
-    if (!vOld.ok) { res.status(vOld.status).json({ error: vOld.error }); return; }
+    if (!vOld.ok) { res.status((vOld as any).status).json({ error: (vOld as any).error }); return; }
     const vNew = validatePath(newPath);
-    if (!vNew.ok) { res.status(vNew.status).json({ error: vNew.error }); return; }
+    if (!vNew.ok) { res.status((vNew as any).status).json({ error: (vNew as any).error }); return; }
 
     if (dirname(vOld.resolved) !== dirname(vNew.resolved)) {
       res.status(400).json({ error: 'Rename must stay in the same directory' }); return;
@@ -209,7 +205,7 @@ router.post('/files/upload', async (req, res) => {
     if (/[/\\]|\.\./.test(filename)) { res.status(400).json({ error: 'Invalid filename' }); return; }
 
     const vDir = validatePath(directory);
-    if (!vDir.ok) { res.status(vDir.status).json({ error: vDir.error }); return; }
+    if (!vDir.ok) { res.status((vDir as any).status).json({ error: (vDir as any).error }); return; }
 
     const fullPath = join(vDir.resolved, filename);
     if (isBlockedPath(fullPath)) { res.status(403).json({ error: 'Access denied: blocked path' }); return; }

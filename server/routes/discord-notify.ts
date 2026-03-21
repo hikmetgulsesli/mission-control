@@ -15,6 +15,7 @@ const CHANNELS = {
   'daily-reports': process.env.DISCORD_CH_REPORTS || '',
   'alerts': process.env.DISCORD_CH_ALERTS || '',
   'logs': process.env.DISCORD_CH_LOGS || '',
+  'design-reviews': process.env.DISCORD_CH_DESIGN_REVIEWS || '',
 };
 
 const GUILD_ID = '1469860814398816397';
@@ -28,9 +29,8 @@ function isDuplicate(key: string): boolean {
   const last = recentEvents.get(key);
   if (last && now - last < DEBOUNCE_MS) return true;
   recentEvents.set(key, now);
-  // B7 fix: TTL-based cleanup — always prune entries older than 5 min
-  if (recentEvents.size > 50) {
-    const cutoff = now - 5 * 60_000;
+  if (recentEvents.size > 200) {
+    const cutoff = now - DEBOUNCE_MS * 2;
     for (const [k, t] of recentEvents) {
       if (t < cutoff) recentEvents.delete(k);
     }
@@ -108,6 +108,8 @@ function formatMessage(ev: NotifyEvent): { channel: string; message: string }[] 
         msgs.push({ channel: 'code-changes', message: `🤖 External review: ${detail || 'tamamlandi'} — ${wf} ${num}` });
       } else if (stepId === 'merge') {
         msgs.push({ channel: 'code-changes', message: `✅ Merged: ${detail || wf + ' ' + num}` });
+      } else if (stepId === 'design') {
+        msgs.push({ channel: 'design-reviews', message: `🎨 Design tamamlandi: ${wf} ${num}${title}\n${detail || 'Stitch screens generated'}` });
       }
       return msgs;
     }

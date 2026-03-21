@@ -12,11 +12,11 @@ import { Files } from './pages/Files';
 import { Workflows } from './pages/Workflows';
 import { Tasks } from './pages/Tasks';
 import { RunDetail } from './pages/RunDetail';
+import { PrdGenerator } from './pages/PrdGenerator';
 import { NotFound } from "./pages/NotFound";
 import { Scrape } from "./pages/Scrape";
 import { Rules } from "./pages/Rules";
 import { Live } from "./pages/Live";
-import { PrdGenerator } from "./pages/PrdGenerator";
 
 function RunDetailRoute() {
   const { id } = useParams<{ id: string }>();

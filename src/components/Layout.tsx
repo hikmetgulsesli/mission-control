@@ -20,7 +20,6 @@ const KEY_MAP: Record<string, string | null> = {
   '9': '/scrape',
   'r': '/rules',
   'l': '/live',
-  'p': '/prd',
 };
 
 export function Layout() {

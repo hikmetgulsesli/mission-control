@@ -1,9 +1,14 @@
 import type { OverviewData, Agent, Session, CronJob, Workflow, Run, SystemMetrics, DockerContainer, CostData, Task, ProjectData, TaskCreateData } from './types';
 
 const BASE = '';
+const AUTH_TOKEN = (document.querySelector('meta[name="mc-token"]') as HTMLMetaElement)?.content || '';
 
 async function fetchApi<T>(path: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, opts);
+  const headers: Record<string, string> = {
+    ...(AUTH_TOKEN ? { 'X-MC-Token': AUTH_TOKEN } : {}),
+    ...((opts?.headers as Record<string, string>) || {}),
+  };
+  const res = await fetch(`${BASE}${path}`, { ...opts, headers });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`API ${res.status}: ${text}`);
@@ -33,8 +38,12 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ workflow, task }),
     }),
-  deleteRun: (id: string) =>
-    fetchApi<any>(`/api/runs/${id}`, { method: 'DELETE' }),
+  deleteRun: (id: string, cleanupProject = false) =>
+    fetchApi<any>(`/api/runs/${id}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cleanupProject }) }),
+  stopRun: (id: string) =>
+    fetchApi<any>(`/api/runs/${id}/stop`, { method: 'POST' }),
+  resumeRun: (id: string) =>
+    fetchApi<any>(`/api/runs/${id}/resume`, { method: 'POST' }),
   retryRun: (id: string, step_id?: string, message?: string) =>
     fetchApi<any>(`/api/runs/${id}/retry`, {
       method: 'POST',
@@ -53,7 +62,6 @@ export const api = {
   toggleProject: (id: string, action: "start" | "stop") =>
     fetchApi<any>(`/api/projects/${id}/toggle`, { method: "POST", headers: CT_JSON, body: JSON.stringify({ action }) }),
   stopAllProjects: () => fetchApi<any>("/api/projects/stop-all", { method: "POST" }),
-  startAllProjects: () => fetchApi<any>("/api/projects/start-all", { method: "POST" }),
   exportProject: (id: string) => fetchApi<any>(`/api/projects/${id}/export`),
   importProject: (data: any) => fetchApi<any>("/api/projects/import", { method: "POST", headers: CT_JSON, body: JSON.stringify(data) }),
   // Tasks
@@ -76,9 +84,11 @@ export const api = {
   setfarmPipeline: () => fetchApi<any[]>('/api/setfarm/pipeline'),
   setfarmAgentFeed: (limit = 100) => fetchApi<any[]>("/api/setfarm/agent-feed?limit=" + limit),
   clearAgentFeed: () => fetchApi<any>("/api/setfarm/agent-feed", { method: "DELETE" }),
+  clearActivity: () => fetchApi<any>("/api/setfarm/activity", { method: "DELETE" }),
   // New: Stories + Plan for runs
   runStories: (id: string) => fetchApi<any[]>(`/api/setfarm/runs/${id}/stories`),
   runPlan: (id: string) => fetchApi<any>(`/api/setfarm/runs/${id}/plan`),
+  runDesign: (id: string) => fetchApi<any>(`/api/setfarm/runs/${id}/design`),
   // Terminal
   terminalExec: (command: string, args: string[]) =>
     fetchApi<{ output: string; exitCode: number; command: string }>('/api/terminal/exec', {
@@ -124,6 +134,35 @@ export const api = {
       headers: CT_JSON,
       body: JSON.stringify({ storyId, reason }),
     }),
+  // Rules
+  rules: (params?: Record<string, string>) => {
+    const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+    return fetchApi<any[]>('/api/rules' + qs);
+  },
+  createRule: (data: any) => fetchApi<any>('/api/rules', { method: 'POST', headers: CT_JSON, body: JSON.stringify(data) }),
+  updateRule: (id: string, data: any) => fetchApi<any>(`/api/rules/${id}`, { method: 'PUT', headers: CT_JSON, body: JSON.stringify(data) }),
+  deleteRule: (id: string) => fetchApi<any>(`/api/rules/${id}`, { method: 'DELETE' }),
+  toggleRule: (id: string) => fetchApi<any>(`/api/rules/${id}/toggle`, { method: 'PUT' }),
+  exportRules: () => fetchApi<any>('/api/rules/export'),
+  // Live Feed
+  liveFeed: (since?: string, agent?: string) => {
+    const params: string[] = [];
+    if (since) params.push('since=' + encodeURIComponent(since));
+    if (agent) params.push('agent=' + agent);
+    const qs = params.length ? '?' + params.join('&') : '';
+    return fetchApi<any[]>('/api/live-feed' + qs);
+  },
+  importRules: (data: any) => fetchApi<any>('/api/rules/import', { method: 'POST', headers: CT_JSON, body: JSON.stringify(data) }),
+  // Performance
+  performance: () => fetchApi<any>('/api/performance'),
+  modelLimits: () => fetchApi<any[]>('/api/model-limits'),
+  quota: () => fetchApi<any>('/api/quota'),
+  // Scrape
+  scrapeHistory: () => fetchApi<any[]>('/api/scrape/history'),
+  scrape: (data: { url: string; adaptor?: string; format?: string }) => fetchApi<any>('/api/scrape', { method: 'POST', headers: CT_JSON, body: JSON.stringify(data) }),
+  // Agent update
+  updateAgent: (id: string, data: any) => fetchApi<any>(`/api/agents/${id}`, { method: 'PATCH', headers: CT_JSON, body: JSON.stringify(data) }),
+
   // PRD Generator
   prdAnalyze: (data: { url?: string; screenshot?: string; filename?: string }) =>
     fetchApi<any>('/api/prd/analyze', { method: 'POST', headers: CT_JSON, body: JSON.stringify(data) }),
@@ -152,7 +191,6 @@ export const api = {
   prdAnalytics: () => fetchApi<any>('/api/prd/analytics'),
   prdComponents: (data: { content?: string; prdId?: string }) =>
     fetchApi<any>('/api/prd/components', { method: 'POST', headers: CT_JSON, body: JSON.stringify(data) }),
-  // Faz 2: Screen gallery
   prdClearScreens: (prdId: string) =>
     fetchApi<any>(`/api/prd/screens/${prdId}/clear`, { method: 'POST' }),
   prdDeleteScreen: (prdId: string, screenId: string) =>

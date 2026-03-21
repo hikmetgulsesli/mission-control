@@ -28,8 +28,8 @@ import setfarmActivityRouter from "./routes/setfarm-activity.js";
 import officeRouter from "./routes/office.js";
 import terminalRouter from "./routes/terminal.js";
 import filesRouter from "./routes/files.js";
-import discordNotifyRouter from "./routes/discord-notify.js";
 import prdGeneratorRouter from "./routes/prd-generator.js";
+import discordNotifyRouter from "./routes/discord-notify.js";
 import scrapeRouter from "./routes/scrape.js";
 import rulesRouter from "./routes/rules.js";
 import liveFeedRouter from "./routes/live-feed.js";
@@ -42,11 +42,11 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com"],
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
       connectSrc: ["'self'", "ws:", "wss:"],
-      imgSrc: ["'self'", "data:", "blob:", "https://cdn.simpleicons.org", "https://lh3.googleusercontent.com"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      imgSrc: ["'self'", "data:", "blob:"],
+      fontSrc: ["'self'"],
     }
   }
 }));
@@ -92,8 +92,7 @@ if (existsSync(config.avatarsDir)) {
 }
 
 // Serve Stitch design cache (screenshots + HTML)
-import { homedir } from "os";
-const stitchCacheDir = join(homedir(), ".openclaw", "setfarm", "stitch-cache");
+const stitchCacheDir = resolve(import.meta.dirname || __dirname, "stitch-cache");
 app.use("/stitch-cache", express.static(stitchCacheDir));
 
 // Serve uploads (task images)
