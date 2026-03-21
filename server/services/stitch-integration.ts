@@ -320,13 +320,20 @@ export function extractScreenPrompts(prdContent: string, platform: string): { ti
     }
     if (inPageList) {
       if (/^#{1,2}\s/.test(line)) { inPageList = false; continue; }
-      // Parse: "/ — Ana Sayfa: desc" or "- Ana Sayfa — desc" or "- **Ana Sayfa**"
-      const m = line.match(/^[-*]\s+(?:\/\S*\s*[—\u2014-]\s*)?(.+?)(?:\s*[:—\u2014-]\s|$)/)
+      // Parse formats:
+      // "- **/** — Ana Sayfa: desc" → "Ana Sayfa"
+      // "- /projects — Projeler: desc" → "Projeler"
+      // "- **Ana Sayfa** — desc" → "Ana Sayfa"
+      const m = line.match(/^[-*]\s+\*\*[^*]*\*\*\s*[——–-]\s*(.+?)(?:\s*[:]\s|$)/)
+            || line.match(/^[-*]\s+\/\S*\s*[——–-]\s*(.+?)(?:\s*[:]\s|$)/)
             || line.match(/^[-*]\s+\*\*(.+?)\*\*/)
+            || line.match(/^[-*]\s+(.+?)\s*[——–-]\s/)
             || line.match(/^[-*]\s+(.+)/);
       if (m && m[1].trim().length > 2) {
         let name = m[1].trim().replace(/\s*\(.*?\)\s*$/, "").replace(/\s*\/\S*\s*$/, "");
-        if (name.length > 2 && !/^[\/\-]/.test(name)) pageNames.push(name);
+        // Remove trailing colon content
+        name = name.replace(/:.+$/, "").trim();
+        if (name.length > 2 && !/^[\/\-*]/.test(name)) pageNames.push(name);
       }
     }
   }
