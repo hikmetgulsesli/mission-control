@@ -160,7 +160,10 @@ export async function getSetfarmAgentStats() {
                 }
             } catch { /* step_metrics may not have data */ }
 
-            return Object.entries(stats).map(([name, s]) => ({
+            const KNOWN_AGENTS = new Set(['planner','designer','setup','developer','reviewer','security-gate','tester','deployer','collector','reporter','setup-repo','setup-build','qa-tester']);
+            return Object.entries(stats)
+                .filter(([name]) => KNOWN_AGENTS.has(name))
+                .map(([name, s]) => ({
                 name,
                 runs: s.runs,
                 successRate: s.runs > 0 ? Math.min(100, Math.round((s.done / s.runs) * 100)) : 0,
