@@ -27,7 +27,7 @@ function rateBg(rate: number): string {
 
 function shortName(name: string): string {
   const parts = name.split('_');
-  return parts.length > 1 ? parts[parts.length - 1] : name.replace(/^.*?-/, '');
+  return parts.length > 1 ? parts[parts.length - 1] : (name || "").replace(/^.*?-/, '');
 }
 
 export function CompactStatsBar({ alerts, agents }: { alerts?: AlertData | null; agents: WfAgent[] }) {

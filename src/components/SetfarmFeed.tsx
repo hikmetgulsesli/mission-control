@@ -38,7 +38,7 @@ function formatDate(ts: string): string {
 }
 
 function eventLabel(event: string): string {
-  return event.replace('.', ' ').toUpperCase();
+  return (event || "").replace('.', ' ').toUpperCase();
 }
 
 export function SetfarmFeed({ events }: { events: SetfarmEvent[] }) {
