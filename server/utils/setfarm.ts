@@ -19,7 +19,7 @@ export async function getWorkflows() {
 }
 export async function getRuns() {
     if (USE_PG) {
-        return sql`SELECT id, workflow_id, task, status, created_at, updated_at, run_number, meta FROM runs ORDER BY created_at DESC LIMIT 50`;
+        return sql`SELECT * FROM runs ORDER BY created_at DESC LIMIT 50`;
     }
     return setfarmFetch('/api/runs');
 }
