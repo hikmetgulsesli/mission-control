@@ -1,4 +1,7 @@
 import { config } from '../config.js';
+import { sql } from './pg.js';
+
+const USE_PG = process.env.DB_BACKEND === 'postgres';
 import { readFile } from "fs/promises";
 const BASE = config.setfarmUrl;
 async function setfarmFetch(path: string): Promise<any> {
@@ -11,12 +14,21 @@ export async function getWorkflows() {
     return setfarmFetch('/api/workflows');
 }
 export async function getRuns() {
+    if (USE_PG) {
+        return sql`SELECT id, workflow_id, task, status, created_at, updated_at, run_number, meta FROM runs ORDER BY created_at DESC LIMIT 50`;
+    }
     return setfarmFetch('/api/runs');
 }
 export async function getStories() {
+    if (USE_PG) {
+        return sql`SELECT * FROM stories ORDER BY created_at DESC LIMIT 200`;
+    }
     return setfarmFetch('/api/stories');
 }
 export async function getRunStories(runId: string) {
+    if (USE_PG) {
+        return sql`SELECT * FROM stories WHERE run_id = ${runId} ORDER BY story_index`;
+    }
     return setfarmFetch('/api/runs/' + runId + '/stories');
 }
 export async function getEvents(runId?: string) {
