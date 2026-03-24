@@ -4,9 +4,12 @@
  */
 import postgres from 'postgres';
 
-const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://setrox:k7z6*n4u4@localhost:5432/setfarm';
-
-const sql = postgres(DATABASE_URL, {
+const sql = postgres({
+  host: process.env.PGHOST || 'localhost',
+  port: Number(process.env.PGPORT || 5432),
+  database: process.env.PGDATABASE || 'setfarm',
+  username: process.env.PGUSER || 'setrox',
+  password: process.env.PGPASSWORD || 'k7z6*n4u4',
   max: 10,
   idle_timeout: 30,
   connect_timeout: 10,

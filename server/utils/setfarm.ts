@@ -19,7 +19,39 @@ export async function getWorkflows() {
 }
 export async function getRuns() {
     if (USE_PG) {
-        return sql`SELECT * FROM runs ORDER BY created_at DESC LIMIT 50`;
+      try {
+        const runs = await sql`SELECT * FROM runs ORDER BY created_at DESC LIMIT 50`;
+        // Attach steps and story progress to each run (frontend expects run.steps array)
+        if (runs.length > 0) {
+            const runIds = runs.map((r: any) => r.id);
+            const steps = await sql`SELECT * FROM steps WHERE run_id = ANY(${runIds}) ORDER BY step_index`;
+            const stories = await sql`SELECT run_id, status, COUNT(*)::int as cnt FROM stories WHERE run_id = ANY(${runIds}) GROUP BY run_id, status`;
+
+            const stepMap: Record<string, any[]> = {};
+            for (const s of steps) {
+                if (!stepMap[s.run_id]) stepMap[s.run_id] = [];
+                stepMap[s.run_id].push(s);
+            }
+
+            const storyMap: Record<string, any> = {};
+            for (const s of stories) {
+                if (!storyMap[s.run_id]) storyMap[s.run_id] = { total: 0, done: 0, verified: 0, running: 0 };
+                storyMap[s.run_id].total += s.cnt;
+                if (s.status === 'done' || s.status === 'verified') storyMap[s.run_id].done += s.cnt;
+                if (s.status === 'verified') storyMap[s.run_id].verified += s.cnt;
+                if (s.status === 'running') storyMap[s.run_id].running += s.cnt;
+            }
+
+            for (const r of runs) {
+                (r as any).steps = stepMap[r.id] || [];
+                (r as any).storyProgress = storyMap[r.id] || { total: 0, done: 0, verified: 0, running: 0 };
+            }
+        }
+        return runs;
+      } catch (e: any) {
+        console.error('[getRuns PG error]', e.message);
+        // Fall through to HTTP
+      }
     }
     return setfarmFetch('/api/runs');
 }

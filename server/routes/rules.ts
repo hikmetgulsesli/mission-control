@@ -4,7 +4,7 @@ import { config } from "../config.js";
 import { sql } from "../utils/pg.js";
 
 const router = Router();
-const USE_PG = process.env.DB_BACKEND === 'postgres';
+const USE_PG = false; // Rules come from workflow fragments via :3333, not PG
 
 async function proxy(url: string, opts?: RequestInit) {
   const ctrl = new AbortController();
