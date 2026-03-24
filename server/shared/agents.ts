@@ -11,8 +11,8 @@ export const AGENT_DEFINITIONS = {
   iris: { name: 'Iris', emoji: '\u{1F50D}', role: 'Research Lead', model: 'minimax-m2.7', color: '#ff44ff' },
   sentinel: { name: 'Sentinel', emoji: '\u{1F6E1}\uFE0F', role: 'QA Lead', model: 'minimax-m2.7', color: '#ffaa00' },
   cipher: { name: 'Cipher', emoji: '\u{1F4BB}', role: 'Backend Dev', model: 'kimi-k2p5', color: '#44ff88' },
-  lux: { name: 'Lux', emoji: '\u270D\uFE0F', role: 'Content Writer', model: 'minimax-m2.7', color: '#ff8844' },
-  nexus: { name: 'Nexus', emoji: '\u{1F504}', role: 'SRE / Monitoring', model: 'minimax-m2.7', color: '#8844ff' },
+  lux: { name: 'Lux', emoji: '\u270D\uFE0F', role: 'Dev / Writer', model: 'kimi-k2p5', color: '#ff8844' },
+  nexus: { name: 'Nexus', emoji: '\u{1F504}', role: 'Dev / SRE', model: 'kimi-k2p5', color: '#8844ff' },
   prism: { name: 'Prism', emoji: '\u{1F3A8}', role: 'UI Designer', model: 'kimi-k2p5', color: '#ff4488' },
 } as const;
 
@@ -25,3 +25,40 @@ export const AGENTS_ARRAY = REAL_AGENT_IDS.map(id => ({ id, ...AGENT_DEFINITIONS
 
 /** Map from agent ID to full definition */
 export const AGENT_MAP = Object.fromEntries(AGENTS_ARRAY.map(a => [a.id, a])) as Record<AgentId, typeof AGENTS_ARRAY[number]>;
+
+/**
+ * Step-to-agent mapping — single source of truth.
+ * Must match workflow.yml agent_mapping.
+ */
+export const STEP_MAPPING: Record<string, Record<string, string[]>> = {
+  'feature-dev': {
+    plan:            ['main'],
+    design:          ['mert'],
+    stories:         ['main'],
+    'setup-repo':    ['atlas'],
+    'setup-build':   ['atlas'],
+    implement:       ['koda', 'flux', 'cipher', 'prism', 'lux', 'nexus'],
+    verify:          ['sentinel', 'iris'],
+    'security-gate': ['sentinel'],
+    'qa-test':       ['sentinel'],
+    'final-test':    ['sentinel'],
+    deploy:          ['atlas'],
+  },
+  'bug-fix': {
+    triage:      ['iris'],
+    investigate: ['koda'],
+    setup:       ['atlas'],
+    fix:         ['cipher', 'koda'],
+    verify:      ['sentinel'],
+    pr:          ['flux'],
+  },
+  'security-audit': {
+    scan:       ['iris'],
+    prioritize: ['main'],
+    setup:      ['atlas'],
+    fix:        ['koda', 'cipher'],
+    verify:     ['sentinel'],
+    test:       ['nexus'],
+    pr:         ['flux'],
+  },
+};

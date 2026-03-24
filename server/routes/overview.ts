@@ -1,4 +1,4 @@
-import { REAL_AGENT_IDS } from '../shared/agents.js';
+import { REAL_AGENT_IDS, STEP_MAPPING } from '../shared/agents.js';
 import { Router } from 'express';
 import { readFileSync } from 'fs';
 import { config } from '../config.js';
@@ -73,21 +73,6 @@ async function fetchAgentSummary(dataFile: any): Promise<any[]> {
     const working = new Map<string, string>();
     working.set('main', 'CEO orchestration');
 
-    const STEP_MAPPING: Record<string, Record<string, string[]>> = {
-      'feature-dev': {
-          plan:            ['iris'],
-          design:          ['prism'],
-          stories:         ['iris'],
-          setup:           ['atlas'],
-          implement:       ['koda', 'cipher'],
-          verify:          ['sentinel'],
-          'security-gate': ['sentinel', 'iris'],
-          'final-test':    ['nexus', 'flux'],
-          deploy:          ['atlas'],
-        },
-      'bug-fix': { triage: ['iris'], investigate: ['koda'], setup: ['atlas'], fix: ['cipher'], verify: ['sentinel'], pr: ['flux', 'lux'] },
-      'security-audit': { scan: ['iris'], prioritize: ['main'], setup: ['atlas'], fix: ['koda'], verify: ['sentinel'], test: ['nexus', 'prism'], pr: ['flux', 'lux'] },
-    };
 
     for (const run of activeRuns) {
       const wf = run.workflow_id || run.workflow || '';

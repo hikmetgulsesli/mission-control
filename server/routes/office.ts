@@ -5,41 +5,12 @@ import { homedir } from 'os';
 
 import { cached } from '../utils/cache.js';
 import { getRuns } from '../utils/setfarm.js';
+import { STEP_MAPPING } from '../shared/agents.js';
 
 const router = Router();
 
 // Setfarm step agent → named agent mapping
 // Lives here so setfarm updates don't break it
-const STEP_MAPPING: Record<string, Record<string, string[]>> = {
-  'feature-dev': {
-    plan:            ['iris'],
-    design:          ['prism'],
-    stories:         ['iris'],
-    setup:           ['atlas'],
-    implement:       ['koda', 'cipher'],
-    verify:          ['sentinel'],
-    'security-gate': ['sentinel', 'iris'],
-    'final-test':    ['nexus', 'flux'],
-    deploy:          ['atlas'],
-  },
-  'bug-fix': {
-    triage:      ['iris'],
-    investigate: ['koda'],
-    setup:       ['atlas'],
-    fix:         ['cipher'],
-    verify:      ['sentinel'],
-    pr:          ['flux', 'lux'],
-  },
-  'security-audit': {
-    scan:       ['iris'],
-    prioritize: ['main'],
-    setup:      ['atlas'],
-    fix:        ['koda'],
-    verify:     ['sentinel'],
-    test:       ['nexus', 'prism'],
-    pr:         ['flux', 'lux'],
-  },
-};
 
 // Cron-based agent activity
 const CRON_AGENTS: Record<string, string[]> = {
