@@ -5,6 +5,7 @@ import { createHash } from 'crypto';
 import { execFile as execFileCb } from 'child_process';
 import { promisify } from 'util';
 import { readFile } from 'fs/promises';
+import { sql } from './pg.js';
 
 const execFileAsync = promisify(execFileCb);
 
@@ -14,6 +15,9 @@ const STUCK_THRESHOLD_MS = 15 * 60 * 1000;  // 15min - auto-unstick
 const MAX_AUTO_UNSTICK = 3;
 
 export { STUCK_DETECTION_MS, STUCK_THRESHOLD_MS, MAX_AUTO_UNSTICK };
+
+// DB_BACKEND toggle: 'sqlite' keeps old behavior, 'postgres' (default) uses pg.ts pool
+const DB_BACKEND = (process.env.DB_BACKEND || 'postgres') as 'sqlite' | 'postgres';
 
 // Whitelist validation: IDs must be alphanumeric/dash/underscore (setfarm uses UUIDs and slugs)
 const SAFE_ID_RE = /^[a-zA-Z0-9_-]+$/;
@@ -30,14 +34,12 @@ function escapeStr(value: string): string {
   return value.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '').replace(/'/g, "''");
 }
 
-// Note: sqlite3 CLI doesn't support ? parameterized queries.
-// Safety: All IDs go through validateId() (alphanumeric whitelist).
-// Free-text strings go through escapeStr() (null byte strip + quote escape).
-// execFileAsync prevents shell injection (no shell expansion).
-async function sqlite3(sql: string, json = true): Promise<any> {
+// === SQLite backend (legacy, used when DB_BACKEND === 'sqlite') ===
+
+async function sqlite3(sqlStr: string, json = true): Promise<any> {
   const args = [DB_PATH];
   if (json) args.push('-json');
-  args.push(sql);
+  args.push(sqlStr);
 
   const { stdout } = await execFileAsync('sqlite3', args, {
     timeout: 10000,
@@ -51,42 +53,76 @@ async function sqlite3(sql: string, json = true): Promise<any> {
   return JSON.parse(trimmed);
 }
 
-export async function querySetfarmDb(sql: string): Promise<any[]> {
-  return sqlite3(sql, true);
+export async function querySetfarmDb(sqlStr: string): Promise<any[]> {
+  if (DB_BACKEND === 'sqlite') return sqlite3(sqlStr, true);
+  return sql.unsafe(sqlStr) as Promise<any[]>;
 }
 
-export async function execSetfarmDb(sql: string): Promise<string> {
-  return sqlite3(sql, false);
+export async function execSetfarmDb(sqlStr: string): Promise<string> {
+  if (DB_BACKEND === 'sqlite') return sqlite3(sqlStr, false);
+  await sql.unsafe(sqlStr);
+  return '';
 }
 
 export async function getStuckRuns(thresholdMs = STUCK_DETECTION_MS) {
   const thresholdSec = Math.floor(Number(thresholdMs) / 1000);
   if (!Number.isFinite(thresholdSec) || thresholdSec < 0) throw new Error('Invalid threshold');
-  const rows = await querySetfarmDb(`
-    SELECT
-      r.id as run_id,
-      r.workflow_id,
-      r.status as run_status,
-      s.id as sid,
-      s.step_id as step_name,
-      s.status as step_status,
-      s.updated_at,
-      s.created_at,
-      s.abandoned_count,
-      CAST((strftime('%s','now') - strftime('%s', s.updated_at)) AS INTEGER) as stuck_seconds,
-      CAST((strftime('%s','now') - strftime('%s', s.created_at)) AS INTEGER) as total_elapsed_seconds
-    FROM runs r
-    JOIN steps s ON s.run_id = r.id
-    WHERE r.status = 'running'
-      AND s.status = 'running'
-      AND s.updated_at IS NOT NULL
-      AND (
-        (strftime('%s','now') - strftime('%s', s.updated_at)) > ${thresholdSec}
-        OR COALESCE(s.abandoned_count, 0) >= 3
-        OR (strftime('%s','now') - strftime('%s', s.created_at)) > 1800
-      )
-    ORDER BY stuck_seconds DESC;
-  `);
+
+  let rows: any[];
+
+  if (DB_BACKEND === 'sqlite') {
+    rows = await querySetfarmDb(`
+      SELECT
+        r.id as run_id,
+        r.workflow_id,
+        r.status as run_status,
+        s.id as sid,
+        s.step_id as step_name,
+        s.status as step_status,
+        s.updated_at,
+        s.created_at,
+        s.abandoned_count,
+        CAST((strftime('%s','now') - strftime('%s', s.updated_at)) AS INTEGER) as stuck_seconds,
+        CAST((strftime('%s','now') - strftime('%s', s.created_at)) AS INTEGER) as total_elapsed_seconds
+      FROM runs r
+      JOIN steps s ON s.run_id = r.id
+      WHERE r.status = 'running'
+        AND s.status = 'running'
+        AND s.updated_at IS NOT NULL
+        AND (
+          (strftime('%s','now') - strftime('%s', s.updated_at)) > ${thresholdSec}
+          OR COALESCE(s.abandoned_count, 0) >= 3
+          OR (strftime('%s','now') - strftime('%s', s.created_at)) > 1800
+        )
+      ORDER BY stuck_seconds DESC;
+    `);
+  } else {
+    rows = await sql`
+      SELECT
+        r.id as run_id,
+        r.workflow_id,
+        r.status as run_status,
+        s.id as sid,
+        s.step_id as step_name,
+        s.status as step_status,
+        s.updated_at,
+        s.created_at,
+        s.abandoned_count,
+        EXTRACT(EPOCH FROM NOW() - s.updated_at)::INTEGER as stuck_seconds,
+        EXTRACT(EPOCH FROM NOW() - s.created_at)::INTEGER as total_elapsed_seconds
+      FROM runs r
+      JOIN steps s ON s.run_id = r.id
+      WHERE r.status = 'running'
+        AND s.status = 'running'
+        AND s.updated_at IS NOT NULL
+        AND (
+          EXTRACT(EPOCH FROM NOW() - s.updated_at) > ${thresholdSec}
+          OR COALESCE(s.abandoned_count, 0) >= 3
+          OR EXTRACT(EPOCH FROM NOW() - s.created_at) > 1800
+        )
+      ORDER BY stuck_seconds DESC
+    `;
+  }
 
   const grouped: Record<string, any> = {};
   for (const row of rows) {
@@ -120,8 +156,25 @@ export async function getStuckRuns(thresholdMs = STUCK_DETECTION_MS) {
  * gateway restarts or cancel+resume operations.
  */
 export async function getLimboRuns() {
-  // No user input — static query
-  const rows = await querySetfarmDb(`
+  if (DB_BACKEND === 'sqlite') {
+    return querySetfarmDb(`
+      SELECT
+        r.id as run_id,
+        r.workflow_id,
+        r.status as run_status,
+        r.updated_at,
+        (SELECT COUNT(*) FROM steps s WHERE s.run_id = r.id AND s.status = 'running') as running_steps,
+        (SELECT COUNT(*) FROM steps s WHERE s.run_id = r.id AND s.status = 'failed') as failed_steps,
+        (SELECT COUNT(*) FROM steps s WHERE s.run_id = r.id AND s.status = 'done') as done_steps,
+        (SELECT MIN(s.step_id) FROM steps s WHERE s.run_id = r.id AND s.status = 'failed') as first_failed_step
+      FROM runs r
+      WHERE r.status = 'running'
+        AND (SELECT COUNT(*) FROM steps s WHERE s.run_id = r.id AND s.status = 'running') = 0
+        AND (SELECT COUNT(*) FROM steps s WHERE s.run_id = r.id AND s.status = 'failed') > 0;
+    `);
+  }
+
+  return sql`
     SELECT
       r.id as run_id,
       r.workflow_id,
@@ -134,9 +187,8 @@ export async function getLimboRuns() {
     FROM runs r
     WHERE r.status = 'running'
       AND (SELECT COUNT(*) FROM steps s WHERE s.run_id = r.id AND s.status = 'running') = 0
-      AND (SELECT COUNT(*) FROM steps s WHERE s.run_id = r.id AND s.status = 'failed') > 0;
-  `);
-  return rows;
+      AND (SELECT COUNT(*) FROM steps s WHERE s.run_id = r.id AND s.status = 'failed') > 0
+  `;
 }
 
 /**
@@ -144,8 +196,14 @@ export async function getLimboRuns() {
  */
 export async function resumeLimboRun(runId: string) {
   const safeId = validateId(runId, 'runId');
-  await execSetfarmDb(`UPDATE runs SET status = 'failed', updated_at = datetime('now') WHERE id = '${safeId}';`);
-  await execSetfarmDb('PRAGMA wal_checkpoint(TRUNCATE);');
+
+  if (DB_BACKEND === 'sqlite') {
+    await execSetfarmDb(`UPDATE runs SET status = 'failed', updated_at = datetime('now') WHERE id = '${safeId}';`);
+    await execSetfarmDb('PRAGMA wal_checkpoint(TRUNCATE);');
+  } else {
+    await sql`UPDATE runs SET status = 'failed', updated_at = NOW() WHERE id = ${safeId}`;
+  }
+
   try {
     const result = await setfarmCli(['workflow', 'resume', safeId]);
     return { success: true, message: result || 'Resumed' };
@@ -170,39 +228,68 @@ async function setfarmCli(args: string[]): Promise<string> {
 
 export async function unstickRun(runId: string, stepId?: string) {
   const safeRunId = validateId(runId, 'runId');
-  const whereStep = stepId
-    ? `AND s.id = '${validateId(stepId, 'stepId')}'`
-    : '';
 
-  const stuckSteps = await querySetfarmDb(`
-    SELECT s.id, s.step_id as step_name FROM steps s
-    WHERE s.run_id = '${safeRunId}'
-      AND s.status = 'running'
-      ${whereStep};
-  `);
+  let stuckSteps: any[];
+
+  if (DB_BACKEND === 'sqlite') {
+    const whereStep = stepId
+      ? `AND s.id = '${validateId(stepId, 'stepId')}'`
+      : '';
+    stuckSteps = await querySetfarmDb(`
+      SELECT s.id, s.step_id as step_name FROM steps s
+      WHERE s.run_id = '${safeRunId}'
+        AND s.status = 'running'
+        ${whereStep};
+    `);
+  } else {
+    if (stepId) {
+      const safeStepId = validateId(stepId, 'stepId');
+      stuckSteps = await sql`
+        SELECT s.id, s.step_id as step_name FROM steps s
+        WHERE s.run_id = ${safeRunId}
+          AND s.status = 'running'
+          AND s.id = ${safeStepId}
+      `;
+    } else {
+      stuckSteps = await sql`
+        SELECT s.id, s.step_id as step_name FROM steps s
+        WHERE s.run_id = ${safeRunId}
+          AND s.status = 'running'
+      `;
+    }
+  }
 
   if (stuckSteps.length === 0) {
     return { success: false, message: 'No stuck steps found', unstuckedSteps: [] };
   }
 
-  const stepIds = stuckSteps.map((s: any) => `'${validateId(s.id, 'step.id')}'`).join(',');
+  const stepIds = stuckSteps.map((s: any) => s.id);
 
-  // Mark stuck steps as failed
-  await execSetfarmDb(`
-    UPDATE steps
-    SET status = 'failed', updated_at = datetime('now')
-    WHERE id IN (${stepIds});
-  `);
-
-  // Mark the run as failed
-  await execSetfarmDb(`
-    UPDATE runs
-    SET status = 'failed', updated_at = datetime('now')
-    WHERE id = '${safeRunId}';
-  `);
-
-  // WAL checkpoint so setfarm CLI sees the changes
-  await execSetfarmDb('PRAGMA wal_checkpoint(TRUNCATE);');
+  if (DB_BACKEND === 'sqlite') {
+    const stepIdsSql = stepIds.map((id: string) => `'${validateId(id, 'step.id')}'`).join(',');
+    await execSetfarmDb(`
+      UPDATE steps
+      SET status = 'failed', updated_at = datetime('now')
+      WHERE id IN (${stepIdsSql});
+    `);
+    await execSetfarmDb(`
+      UPDATE runs
+      SET status = 'failed', updated_at = datetime('now')
+      WHERE id = '${safeRunId}';
+    `);
+    await execSetfarmDb('PRAGMA wal_checkpoint(TRUNCATE);');
+  } else {
+    await sql`
+      UPDATE steps
+      SET status = 'failed', updated_at = NOW()
+      WHERE id = ANY(${stepIds})
+    `;
+    await sql`
+      UPDATE runs
+      SET status = 'failed', updated_at = NOW()
+      WHERE id = ${safeRunId}
+    `;
+  }
 
   // Resume via setfarm CLI
   try {
@@ -225,14 +312,23 @@ export async function unstickRun(runId: string, stepId?: string) {
 export async function getRunDetail(runId: string) {
   const safeId = validateId(runId, 'runId');
 
+  if (DB_BACKEND === 'sqlite') {
+    const [runs, steps, stories] = await Promise.all([
+      querySetfarmDb(`SELECT * FROM runs WHERE id = '${safeId}';`),
+      querySetfarmDb(`SELECT * FROM steps WHERE run_id = '${safeId}' ORDER BY step_index;`),
+      querySetfarmDb(`SELECT id, run_id, status FROM stories WHERE run_id = '${safeId}';`),
+    ]);
+    if (runs.length === 0) return null;
+    return { run: runs[0], steps, stories };
+  }
+
   const [runs, steps, stories] = await Promise.all([
-    querySetfarmDb(`SELECT * FROM runs WHERE id = '${safeId}';`),
-    querySetfarmDb(`SELECT * FROM steps WHERE run_id = '${safeId}' ORDER BY step_index;`),
-    querySetfarmDb(`SELECT id, run_id, status FROM stories WHERE run_id = '${safeId}';`),
+    sql`SELECT * FROM runs WHERE id = ${safeId}`,
+    sql`SELECT * FROM steps WHERE run_id = ${safeId} ORDER BY step_index`,
+    sql`SELECT id, run_id, status FROM stories WHERE run_id = ${safeId}`,
   ]);
 
   if (runs.length === 0) return null;
-
   return { run: runs[0], steps, stories };
 }
 
@@ -277,15 +373,35 @@ const KNOWN_PATTERNS = [
 
 export async function diagnoseStuckStep(runId: string, stepId?: string) {
   const safeRunId = validateId(runId, 'runId');
-  const stepFilter = stepId ? `AND s.id = '${validateId(stepId, 'stepId')}'` : '';
 
-  // Get step details
-  const steps = await querySetfarmDb(`
-    SELECT s.*, r.workflow_id FROM steps s
-    JOIN runs r ON r.id = s.run_id
-    WHERE s.run_id = '${safeRunId}' ${stepFilter}
-    ORDER BY s.updated_at ASC LIMIT 1;
-  `);
+  let steps: any[];
+
+  if (DB_BACKEND === 'sqlite') {
+    const stepFilter = stepId ? `AND s.id = '${validateId(stepId, 'stepId')}'` : '';
+    steps = await querySetfarmDb(`
+      SELECT s.*, r.workflow_id FROM steps s
+      JOIN runs r ON r.id = s.run_id
+      WHERE s.run_id = '${safeRunId}' ${stepFilter}
+      ORDER BY s.updated_at ASC LIMIT 1;
+    `);
+  } else {
+    if (stepId) {
+      const safeStepId = validateId(stepId, 'stepId');
+      steps = await sql`
+        SELECT s.*, r.workflow_id FROM steps s
+        JOIN runs r ON r.id = s.run_id
+        WHERE s.run_id = ${safeRunId} AND s.id = ${safeStepId}
+        ORDER BY s.updated_at ASC LIMIT 1
+      `;
+    } else {
+      steps = await sql`
+        SELECT s.*, r.workflow_id FROM steps s
+        JOIN runs r ON r.id = s.run_id
+        WHERE s.run_id = ${safeRunId}
+        ORDER BY s.updated_at ASC LIMIT 1
+      `;
+    }
+  }
 
   if (steps.length === 0) {
     return { stepId, cause: 'not_found', fixable: false, description: 'Step bulunamadi', excerpt: '', suggestedFix: null };
@@ -406,10 +522,17 @@ export async function tryAutoFix(runId: string, cause: string, storyId?: string 
     rate_limit: async () => {
       if (storyId) {
         const safeStoryId = validateId(storyId, 'storyId');
-        await execSetfarmDb(`
-          UPDATE stories SET status = 'done', output = 'SKIPPED: rate limit'
-          WHERE id = '${safeStoryId}';
-        `);
+        if (DB_BACKEND === 'sqlite') {
+          await execSetfarmDb(`
+            UPDATE stories SET status = 'done', output = 'SKIPPED: rate limit'
+            WHERE id = '${safeStoryId}';
+          `);
+        } else {
+          await sql`
+            UPDATE stories SET status = 'done', output = 'SKIPPED: rate limit'
+            WHERE id = ${safeStoryId}
+          `;
+        }
         console.log(`[MEDIC] Auto-fix: rate_limit -> story ${storyId} skipped`);
         return { success: true, message: `Story ${storyId} skip edildi (rate limit)` };
       }
@@ -435,10 +558,20 @@ export async function tryAutoFix(runId: string, cause: string, storyId?: string 
 export async function skipStory(runId: string, storyId: string, reason: string) {
   const safeStoryId = validateId(storyId, 'storyId');
   const safeReason = escapeStr(reason).slice(0, 200);
-  await execSetfarmDb(`
-    UPDATE stories SET status = 'done', output = 'SKIPPED: ${safeReason}'
-    WHERE id = '${safeStoryId}';
-  `);
+
+  if (DB_BACKEND === 'sqlite') {
+    await execSetfarmDb(`
+      UPDATE stories SET status = 'done', output = 'SKIPPED: ${safeReason}'
+      WHERE id = '${safeStoryId}';
+    `);
+  } else {
+    const output = `SKIPPED: ${safeReason}`;
+    await sql`
+      UPDATE stories SET status = 'done', output = ${output}
+      WHERE id = ${safeStoryId}
+    `;
+  }
+
   await unstickRun(runId);
   console.log(`[MEDIC] Skip story: ${storyId} reason=${reason}, run ${runId} unsticked`);
   return { success: true, message: `Story ${storyId} skip edildi: ${reason}` };
@@ -450,18 +583,36 @@ const CLAIM_LOOP_THRESHOLD = 5;
 
 export async function detectInfiniteLoop(runId: string) {
   const safeId = validateId(runId, 'runId');
-  const rows = await querySetfarmDb(`
-    SELECT
-      s.id as step_id,
-      s.step_id as step_name,
-      s.status,
-      COALESCE(s.abandoned_count, 0) as abandoned_count,
-      COALESCE(s.retry_count, 0) as retry_count
-    FROM steps s
-    WHERE s.run_id = '${safeId}'
-      AND s.status IN ('running', 'pending')
-      AND (COALESCE(s.abandoned_count, 0) + COALESCE(s.retry_count, 0)) >= ${CLAIM_LOOP_THRESHOLD}
-  `);
+
+  let rows: any[];
+
+  if (DB_BACKEND === 'sqlite') {
+    rows = await querySetfarmDb(`
+      SELECT
+        s.id as step_id,
+        s.step_id as step_name,
+        s.status,
+        COALESCE(s.abandoned_count, 0) as abandoned_count,
+        COALESCE(s.retry_count, 0) as retry_count
+      FROM steps s
+      WHERE s.run_id = '${safeId}'
+        AND s.status IN ('running', 'pending')
+        AND (COALESCE(s.abandoned_count, 0) + COALESCE(s.retry_count, 0)) >= ${CLAIM_LOOP_THRESHOLD}
+    `);
+  } else {
+    rows = await sql`
+      SELECT
+        s.id as step_id,
+        s.step_id as step_name,
+        s.status,
+        COALESCE(s.abandoned_count, 0) as abandoned_count,
+        COALESCE(s.retry_count, 0) as retry_count
+      FROM steps s
+      WHERE s.run_id = ${safeId}
+        AND s.status IN ('running', 'pending')
+        AND (COALESCE(s.abandoned_count, 0) + COALESCE(s.retry_count, 0)) >= ${CLAIM_LOOP_THRESHOLD}
+    `;
+  }
 
   if (rows.length === 0) {
     return { isLooping: false };
@@ -480,16 +631,32 @@ export async function detectInfiniteLoop(runId: string) {
 
 export async function checkMissingInput(runId: string) {
   const safeId = validateId(runId, 'runId');
-  const rows = await querySetfarmDb(`
-    SELECT
-      s.id as step_id,
-      s.step_id as step_name,
-      s.input_template,
-      s.status
-    FROM steps s
-    WHERE s.run_id = '${safeId}'
-      AND s.status IN ('running', 'pending')
-  `);
+
+  let rows: any[];
+
+  if (DB_BACKEND === 'sqlite') {
+    rows = await querySetfarmDb(`
+      SELECT
+        s.id as step_id,
+        s.step_id as step_name,
+        s.input_template,
+        s.status
+      FROM steps s
+      WHERE s.run_id = '${safeId}'
+        AND s.status IN ('running', 'pending')
+    `);
+  } else {
+    rows = await sql`
+      SELECT
+        s.id as step_id,
+        s.step_id as step_name,
+        s.input_template,
+        s.status
+      FROM steps s
+      WHERE s.run_id = ${safeId}
+        AND s.status IN ('running', 'pending')
+    `;
+  }
 
   for (const step of rows) {
     const template = step.input_template || '';
@@ -512,20 +679,30 @@ export async function failEntireRun(runId: string, reason: string) {
   const safeId = validateId(runId, 'runId');
   const safeReason = escapeStr(reason).slice(0, 500);
 
-  // Fail all non-done steps
-  await execSetfarmDb(`
-    UPDATE steps SET status = 'failed', output = '${safeReason}', updated_at = datetime('now')
-    WHERE run_id = '${safeId}' AND status NOT IN ('done', 'failed');
-  `);
-
-  // Fail the run itself
-  await execSetfarmDb(`
-    UPDATE runs SET status = 'failed', updated_at = datetime('now')
-    WHERE id = '${safeId}';
-  `);
-
-  // WAL checkpoint
-  await execSetfarmDb('PRAGMA wal_checkpoint(TRUNCATE);');
+  if (DB_BACKEND === 'sqlite') {
+    // Fail all non-done steps
+    await execSetfarmDb(`
+      UPDATE steps SET status = 'failed', output = '${safeReason}', updated_at = datetime('now')
+      WHERE run_id = '${safeId}' AND status NOT IN ('done', 'failed');
+    `);
+    // Fail the run itself
+    await execSetfarmDb(`
+      UPDATE runs SET status = 'failed', updated_at = datetime('now')
+      WHERE id = '${safeId}';
+    `);
+    // WAL checkpoint
+    await execSetfarmDb('PRAGMA wal_checkpoint(TRUNCATE);');
+  } else {
+    const outputText = safeReason;
+    await sql`
+      UPDATE steps SET status = 'failed', output = ${outputText}, updated_at = NOW()
+      WHERE run_id = ${safeId} AND status NOT IN ('done', 'failed')
+    `;
+    await sql`
+      UPDATE runs SET status = 'failed', updated_at = NOW()
+      WHERE id = ${safeId}
+    `;
+  }
 
   // Discord alert
   try {
@@ -543,18 +720,33 @@ export async function failEntireRun(runId: string, reason: string) {
 // === Agent Feed (chat-style agent output log) ===
 
 export async function ensureAgentFeedTable(): Promise<void> {
-  await execSetfarmDb(`
-    CREATE TABLE IF NOT EXISTS agent_feed (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      agent_id TEXT NOT NULL,
-      agent_name TEXT NOT NULL,
-      message TEXT NOT NULL,
-      session_id TEXT,
-      msg_hash TEXT UNIQUE,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-  `);
-  await execSetfarmDb(`CREATE INDEX IF NOT EXISTS idx_agent_feed_created ON agent_feed(created_at DESC);`);
+  if (DB_BACKEND === 'sqlite') {
+    await execSetfarmDb(`
+      CREATE TABLE IF NOT EXISTS agent_feed (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        agent_id TEXT NOT NULL,
+        agent_name TEXT NOT NULL,
+        message TEXT NOT NULL,
+        session_id TEXT,
+        msg_hash TEXT UNIQUE,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+    `);
+    await execSetfarmDb(`CREATE INDEX IF NOT EXISTS idx_agent_feed_created ON agent_feed(created_at DESC);`);
+  } else {
+    await sql`
+      CREATE TABLE IF NOT EXISTS agent_feed (
+        id SERIAL PRIMARY KEY,
+        agent_id TEXT NOT NULL,
+        agent_name TEXT NOT NULL,
+        message TEXT NOT NULL,
+        session_id TEXT,
+        msg_hash TEXT UNIQUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `;
+    await sql`CREATE INDEX IF NOT EXISTS idx_agent_feed_created ON agent_feed(created_at DESC)`;
+  }
 }
 
 export async function insertFeedEntry(agentId: string, agentName: string, message: string, sessionId?: string): Promise<boolean> {
@@ -563,11 +755,20 @@ export async function insertFeedEntry(agentId: string, agentName: string, messag
   const safeMessage = escapeStr(message).slice(0, 500);
   const safeSessionId = sessionId ? escapeStr(sessionId).slice(0, 100) : '';
   const hash = createHash('md5').update(safeAgentId + safeSessionId + safeMessage).digest('hex');
+
   try {
-    await execSetfarmDb(`
-      INSERT OR IGNORE INTO agent_feed (agent_id, agent_name, message, session_id, msg_hash)
-      VALUES ('${safeAgentId}', '${safeAgentName}', '${safeMessage}', '${safeSessionId}', '${hash}');
-    `);
+    if (DB_BACKEND === 'sqlite') {
+      await execSetfarmDb(`
+        INSERT OR IGNORE INTO agent_feed (agent_id, agent_name, message, session_id, msg_hash)
+        VALUES ('${safeAgentId}', '${safeAgentName}', '${safeMessage}', '${safeSessionId}', '${hash}');
+      `);
+    } else {
+      await sql`
+        INSERT INTO agent_feed (agent_id, agent_name, message, session_id, msg_hash)
+        VALUES (${safeAgentId}, ${safeAgentName}, ${safeMessage}, ${safeSessionId}, ${hash})
+        ON CONFLICT (msg_hash) DO NOTHING
+      `;
+    }
     return true;
   } catch {
     return false;
@@ -576,40 +777,72 @@ export async function insertFeedEntry(agentId: string, agentName: string, messag
 
 export async function getAgentFeed(limit = 100): Promise<any[]> {
   const safeLimit = Math.min(Math.max(1, Number(limit) || 100), 500);
-  return querySetfarmDb(`SELECT * FROM agent_feed ORDER BY created_at DESC LIMIT ${safeLimit};`);
+
+  if (DB_BACKEND === 'sqlite') {
+    return querySetfarmDb(`SELECT * FROM agent_feed ORDER BY created_at DESC LIMIT ${safeLimit};`);
+  }
+
+  return sql`SELECT * FROM agent_feed ORDER BY created_at DESC LIMIT ${safeLimit}`;
 }
 
 export async function pruneAgentFeed(keep = 5000): Promise<void> {
   const safeKeep = Math.max(100, Number(keep) || 5000);
-  await execSetfarmDb(`
-    DELETE FROM agent_feed WHERE id NOT IN (
-      SELECT id FROM agent_feed ORDER BY created_at DESC LIMIT ${safeKeep}
-    );
-  `);
+
+  if (DB_BACKEND === 'sqlite') {
+    await execSetfarmDb(`
+      DELETE FROM agent_feed WHERE id NOT IN (
+        SELECT id FROM agent_feed ORDER BY created_at DESC LIMIT ${safeKeep}
+      );
+    `);
+  } else {
+    await sql`
+      DELETE FROM agent_feed WHERE id NOT IN (
+        SELECT id FROM agent_feed ORDER BY created_at DESC LIMIT ${safeKeep}
+      )
+    `;
+  }
 }
 
 export async function clearAgentFeed(): Promise<void> {
-  await execSetfarmDb(`DELETE FROM agent_feed;`);
-  await execSetfarmDb(`PRAGMA wal_checkpoint(TRUNCATE);`);
+  if (DB_BACKEND === 'sqlite') {
+    await execSetfarmDb(`DELETE FROM agent_feed;`);
+    await execSetfarmDb(`PRAGMA wal_checkpoint(TRUNCATE);`);
+  } else {
+    await sql`DELETE FROM agent_feed`;
+  }
 }
 
 export async function deleteRun(runId: string, cleanupProject = false) {
   const safeId = validateId(runId, 'runId');
 
   // Get run info before deleting (need task text for cleanup)
-  const runs = await querySetfarmDb(`SELECT * FROM runs WHERE id = '${safeId}';`);
+  let runs: any[];
+  if (DB_BACKEND === 'sqlite') {
+    runs = await querySetfarmDb(`SELECT * FROM runs WHERE id = '${safeId}';`);
+  } else {
+    runs = await sql`SELECT * FROM runs WHERE id = ${safeId}`;
+  }
   const run = runs[0];
 
   // Delete from DB (including claim_log)
-  await execSetfarmDb(`
-    BEGIN;
-    DELETE FROM claim_log WHERE run_id = '${safeId}';
-    DELETE FROM stories WHERE run_id = '${safeId}';
-    DELETE FROM steps WHERE run_id = '${safeId}';
-    DELETE FROM runs WHERE id = '${safeId}';
-    COMMIT;
-  `);
-  await execSetfarmDb('PRAGMA wal_checkpoint(TRUNCATE);');
+  if (DB_BACKEND === 'sqlite') {
+    await execSetfarmDb(`
+      BEGIN;
+      DELETE FROM claim_log WHERE run_id = '${safeId}';
+      DELETE FROM stories WHERE run_id = '${safeId}';
+      DELETE FROM steps WHERE run_id = '${safeId}';
+      DELETE FROM runs WHERE id = '${safeId}';
+      COMMIT;
+    `);
+    await execSetfarmDb('PRAGMA wal_checkpoint(TRUNCATE);');
+  } else {
+    await sql.begin(async (tx: any) => {
+      await tx`DELETE FROM claim_log WHERE run_id = ${safeId}`;
+      await tx`DELETE FROM stories WHERE run_id = ${safeId}`;
+      await tx`DELETE FROM steps WHERE run_id = ${safeId}`;
+      await tx`DELETE FROM runs WHERE id = ${safeId}`;
+    });
+  }
 
   const log: string[] = ['DB records deleted'];
 
@@ -627,7 +860,12 @@ export async function deleteRun(runId: string, cleanupProject = false) {
 
     // Guard: if another run uses the same repo, skip project cleanup
     if (localPath) {
-      const otherRuns = await querySetfarmDb(`SELECT id, run_number, status, task FROM runs WHERE id != '${safeId}';`);
+      let otherRuns: any[];
+      if (DB_BACKEND === 'sqlite') {
+        otherRuns = await querySetfarmDb(`SELECT id, run_number, status, task FROM runs WHERE id != '${safeId}';`);
+      } else {
+        otherRuns = await sql`SELECT id, run_number, status, task FROM runs WHERE id != ${safeId}`;
+      }
       const projectName = localPath.split('/').pop() || '';
       const sameRepoRun = otherRuns.find((r: any) => r.task?.includes(projectName));
       if (sameRepoRun) {
@@ -713,7 +951,13 @@ export async function deleteRunsByProject(projectName: string): Promise<{ delete
   if (!safeName) return { deleted: 0, log: ['Invalid project name'] };
 
   // Find all runs that reference this project
-  const allRuns = await querySetfarmDb(`SELECT id, run_number, task FROM runs;`);
+  let allRuns: any[];
+  if (DB_BACKEND === 'sqlite') {
+    allRuns = await querySetfarmDb(`SELECT id, run_number, task FROM runs;`);
+  } else {
+    allRuns = await sql`SELECT id, run_number, task FROM runs`;
+  }
+
   const matchingRuns = allRuns.filter((r: any) =>
     r.task?.includes('/' + safeName + ' ') || r.task?.includes('/' + safeName + '|') || r.task?.endsWith('/' + safeName)
   );
@@ -721,19 +965,33 @@ export async function deleteRunsByProject(projectName: string): Promise<{ delete
   if (matchingRuns.length === 0) return { deleted: 0, log: ['No matching runs found for ' + safeName] };
 
   const log: string[] = [];
-  for (const run of matchingRuns) {
-    const safeId = validateId(run.id, 'runId');
-    await execSetfarmDb(`
-      BEGIN;
-      DELETE FROM claim_log WHERE run_id = '${safeId}';
-      DELETE FROM stories WHERE run_id = '${safeId}';
-      DELETE FROM steps WHERE run_id = '${safeId}';
-      DELETE FROM runs WHERE id = '${safeId}';
-      COMMIT;
-    `);
-    log.push(`Run #${run.run_number} DB records deleted`);
+
+  if (DB_BACKEND === 'sqlite') {
+    for (const run of matchingRuns) {
+      const safeId = validateId(run.id, 'runId');
+      await execSetfarmDb(`
+        BEGIN;
+        DELETE FROM claim_log WHERE run_id = '${safeId}';
+        DELETE FROM stories WHERE run_id = '${safeId}';
+        DELETE FROM steps WHERE run_id = '${safeId}';
+        DELETE FROM runs WHERE id = '${safeId}';
+        COMMIT;
+      `);
+      log.push(`Run #${run.run_number} DB records deleted`);
+    }
+    await execSetfarmDb('PRAGMA wal_checkpoint(TRUNCATE);');
+  } else {
+    for (const run of matchingRuns) {
+      const safeId = validateId(run.id, 'runId');
+      await sql.begin(async (tx: any) => {
+        await tx`DELETE FROM claim_log WHERE run_id = ${safeId}`;
+        await tx`DELETE FROM stories WHERE run_id = ${safeId}`;
+        await tx`DELETE FROM steps WHERE run_id = ${safeId}`;
+        await tx`DELETE FROM runs WHERE id = ${safeId}`;
+      });
+      log.push(`Run #${run.run_number} DB records deleted`);
+    }
   }
-  await execSetfarmDb('PRAGMA wal_checkpoint(TRUNCATE);');
 
   return { deleted: matchingRuns.length, log };
 }
@@ -743,10 +1001,23 @@ export async function deleteRunsByProject(projectName: string): Promise<{ delete
 // D2: Batch story progress (single query replaces N getRunStories calls)
 export async function getBatchStoryProgress(runIds: string[]): Promise<Record<string, { completed: number; total: number; verified: number; skipped: number; running: number; pending: number; done: number }>> {
   if (runIds.length === 0) return {};
-  const idList = runIds.map(id => "'" + id.replace(/'/g, "''") + "'").join(",");
-  const rows = await querySetfarmDb(
-    "SELECT run_id, status, COUNT(*) as cnt FROM stories WHERE run_id IN (" + idList + ") GROUP BY run_id, status"
-  );
+
+  let rows: any[];
+
+  if (DB_BACKEND === 'sqlite') {
+    const idList = runIds.map(id => "'" + id.replace(/'/g, "''") + "'").join(",");
+    rows = await querySetfarmDb(
+      "SELECT run_id, status, COUNT(*) as cnt FROM stories WHERE run_id IN (" + idList + ") GROUP BY run_id, status"
+    );
+  } else {
+    rows = await sql`
+      SELECT run_id, status, COUNT(*)::INTEGER as cnt
+      FROM stories
+      WHERE run_id = ANY(${runIds})
+      GROUP BY run_id, status
+    `;
+  }
+
   const result: Record<string, any> = {};
   for (const id of runIds) {
     result[id] = { completed: 0, total: 0, verified: 0, skipped: 0, running: 0, pending: 0, done: 0 };
