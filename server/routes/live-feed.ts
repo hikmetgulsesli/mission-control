@@ -175,6 +175,14 @@ async function pgPersistEvents(events: LiveEvent[]): Promise<void> {
 }
 
 async function persistEvents(events: LiveEvent[]): Promise<void> {
+  // Filter out step peek/claim noise — these are polling heartbeats, not real work
+  events = events.filter(e => {
+    if (e.action === 'bash' && e.summary) {
+      const s = e.summary.toLowerCase();
+      if (s.includes('step peek') || s.includes('step claim') || s.includes('heartbeat')) return false;
+    }
+    return true;
+  });
   if (events.length === 0) return;
   try {
     if (USE_PG) {

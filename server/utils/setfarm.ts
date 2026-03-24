@@ -105,15 +105,26 @@ export async function getSetfarmAgentStats() {
     {
         try {
             const content = await readFile(EVENTS_PATH, 'utf-8');
-            const events = parseEventsFile(content).filter((e: any) => ['step.running','step.done','step.failed','step.timeout'].includes(e.event));
+            const events = parseEventsFile(content).filter((e: any) => ['step.running','step.done','step.failed','step.timeout'].includes(e.event || e.action));
             const stats: Record<string, any> = {};
             const stepStart: Record<string, string> = {};
 
             for (const e of events) {
-                const agent = e.agent ? (e.agent.includes('/') ? e.agent.split('/').pop() : e.agent) : null;
+                // Map agentId or stepId to agent name
+                const STEP_TO_AGENT: Record<string, string> = {
+                    plan: 'planner', design: 'designer', stories: 'planner',
+                    'setup-repo': 'setup-repo', 'setup-build': 'setup-build',
+                    implement: 'developer', verify: 'reviewer',
+                    'security-gate': 'security-gate', 'qa-test': 'qa-tester',
+                    'final-test': 'tester', deploy: 'deployer',
+                    collect: 'collector', report: 'reporter',
+                };
+                let rawAgent = e.agentId || e.agent || null;
+                if (!rawAgent && e.stepId) rawAgent = STEP_TO_AGENT[e.stepId] || e.stepId;
+                const agent = rawAgent ? (rawAgent.includes('/') ? rawAgent.split('/').pop() : rawAgent.includes('_') ? rawAgent.split('_').pop() : rawAgent) : null;
                 if (!agent) continue;
 
-                if (e.action === 'step.running') {
+                if ((e.event || e.action) === 'step.running') {
                     if (!stats[agent]) stats[agent] = { runs: 0, done: 0, failed: 0, timeout: 0, lastActive: '', durations: [] };
                     stats[agent].runs++;
                     stats[agent].lastActive = e.ts;
@@ -121,17 +132,17 @@ export async function getSetfarmAgentStats() {
                     const key = agent + ':' + e.ts;
                     stepStart[key] = e.ts;
                 }
-                if (e.action === 'step.done') {
+                if ((e.event || e.action) === 'step.done') {
                     if (!stats[agent]) stats[agent] = { runs: 0, done: 0, failed: 0, timeout: 0, lastActive: '', durations: [] };
                     stats[agent].done++;
                     stats[agent].lastActive = e.ts;
                 }
-                if (e.action === 'step.failed') {
+                if ((e.event || e.action) === 'step.failed') {
                     if (!stats[agent]) stats[agent] = { runs: 0, done: 0, failed: 0, timeout: 0, lastActive: '', durations: [] };
                     stats[agent].failed++;
                     stats[agent].lastActive = e.ts;
                 }
-                if (e.action === 'step.timeout') {
+                if ((e.event || e.action) === 'step.timeout') {
                     if (!stats[agent]) stats[agent] = { runs: 0, done: 0, failed: 0, timeout: 0, lastActive: '', durations: [] };
                     stats[agent].timeout++;
                     stats[agent].lastActive = e.ts;
