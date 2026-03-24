@@ -11,6 +11,10 @@ async function setfarmFetch(path: string): Promise<any> {
     return res.json();
 }
 export async function getWorkflows() {
+    if (USE_PG) {
+        // Workflows are defined in YAML files, not DB. Return static list.
+        return [{ id: 'feature-dev', name: 'Feature Development' }, { id: 'bug-fix', name: 'Bug Fix' }, { id: 'daily-standup', name: 'Daily Standup' }, { id: 'security-audit', name: 'Security Audit' }, { id: 'ui-refactor', name: 'UI Refactor' }];
+    }
     return setfarmFetch('/api/workflows');
 }
 export async function getRuns() {
@@ -32,6 +36,12 @@ export async function getRunStories(runId: string) {
     return setfarmFetch('/api/runs/' + runId + '/stories');
 }
 export async function getEvents(runId?: string) {
+    if (USE_PG) {
+        if (runId) {
+            return sql`SELECT * FROM live_events WHERE project = ${runId} OR detail LIKE ${'%' + runId + '%'} ORDER BY ts DESC LIMIT 100`;
+        }
+        return sql`SELECT * FROM live_events ORDER BY ts DESC LIMIT 100`;
+    }
     const path = runId ? `/api/events?runId=${runId}` : '/api/events';
     return setfarmFetch(path);
 }

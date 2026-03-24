@@ -76,8 +76,14 @@ app.get('/api/health', async (_req, res) => {
   // 2. Setfarm DB check
   try {
     const { execSync } = await import('child_process');
-    const dbPath = join(homedir(), '.openclaw', 'setfarm', 'setfarm.db');
-    const result = execSync(`sqlite3 "${dbPath}" "SELECT COUNT(*) FROM runs"`, { timeout: 3000 }).toString().trim();
+    const usePg = process.env.DB_BACKEND === 'postgres';
+    let result: string;
+    if (usePg) {
+      result = execSync('psql -h localhost -U setrox -d setfarm -t -c "SELECT COUNT(*) FROM runs"', { timeout: 3000 }).toString().trim();
+    } else {
+      const dbPath = join(homedir(), '.openclaw', 'setfarm', 'setfarm.db');
+      result = execSync(`sqlite3 "${dbPath}" "SELECT COUNT(*) FROM runs"`, { timeout: 3000 }).toString().trim();
+    }
     checks.database = { status: 'up', detail: `${result} runs` };
   } catch (e: any) { checks.database = { status: 'down', detail: e.message }; }
   
