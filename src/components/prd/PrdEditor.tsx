@@ -47,6 +47,7 @@ export function PrdEditor({ content, editMode, onChange, previousContent }: PrdE
         className="prd-editor__textarea"
         value={content}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => e.stopPropagation()}
         spellCheck={false}
       />
     );

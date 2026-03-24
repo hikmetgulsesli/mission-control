@@ -846,7 +846,7 @@ export function PrdGenerator() {
             )}
 
             <div className="prd-actions">
-              {!store.prdContent ? (
+              {!store.prdContent && !store.editMode ? (
                 <>
                   <div className="prd-input-group" style={{ flex: 1 }}>
                     <input type="text" className="prd-input" placeholder="Proje Adi" value={store.title} onChange={(e) => setStore({ title: e.target.value })} />
