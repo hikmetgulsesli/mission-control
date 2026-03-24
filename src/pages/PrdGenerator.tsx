@@ -6,7 +6,6 @@ import { PrdEditor } from '../components/prd/PrdEditor';
 import { PrdScore } from '../components/prd/PrdScore';
 import { PrdMockups } from '../components/prd/PrdMockups';
 import { ScreenLightbox } from '../components/prd/ScreenLightbox';
-import { PrdCompare } from '../components/prd/PrdCompare';
 import { PrdHistory } from '../components/prd/PrdHistory';
 import { CostEstimate } from '../components/prd/CostEstimate';
 import { ScreenshotUpload } from '../components/prd/ScreenshotUpload';
@@ -84,10 +83,24 @@ export function PrdGenerator() {
           analysis: last.analysis,
           research: last.research,
           chatHistory: last.chat_history || [],
-          mockupScreens: last.mockup_screens || [],
-          runId: last.run_id,
+          stitchProjectId: (last as any).stitch_project_id || (last.mockup_screens || []).find((s: any) => s.projectId)?.projectId || null,
+          mockupScreens: (() => {
+            const pid = (last as any).stitch_project_id || (last.mockup_screens || []).find((s: any) => s.projectId)?.projectId;
+            return pid ? (last.mockup_screens || []).filter((s: any) => s.projectId === pid) : (last.mockup_screens || []);
+          })(),
+          runId: null, // Will be set below if run is still active
           projectName: last.title || '',
         });
+      }
+      // Check if last run is still active — if not, clear runId
+      if (Z.run_id) {
+        fetch('/api/setfarm/pipeline').then(r => r.json()).then((pipe: any) => {
+          const running = [...(pipe.running || []), ...(pipe.recent || [])];
+          const run = running.find((r: any) => r.id === Z.run_id);
+          if (run && run.status === 'running') {
+            i({ runId: Z.run_id });
+          }
+        }).catch(() => {});
       }
     }).catch(() => {});
   }, []);
@@ -265,7 +278,7 @@ export function PrdGenerator() {
       const currentScreens = usePrdStore.getState().mockupScreens;
       if (currentScreens.length > 0 && result.prd_content) {
         try {
-          const cov = await api.prdScreenCoverage({ prdContent: result.prd_content, screens: currentScreens });
+          const cov = await api.prdScreenCoverage({ prdContent: result.prd_content, screens: currentScreens, prdId: store.id || undefined });
           setStore({ screenCoverage: cov });
           if (cov.missing.length > 0) {
             addLog(`${cov.missing.length} yeni/eksik sayfa tespit edildi`);
@@ -341,7 +354,7 @@ export function PrdGenerator() {
       // Coverage check
       const prdContent = usePrdStore.getState().prdContent;
       if (data.screens.length > 0 && prdContent) {
-        api.prdScreenCoverage({ prdContent, screens: data.screens })
+        api.prdScreenCoverage({ prdContent, screens: data.screens, prdId: store.id || undefined })
           .then(cov => setStore({ screenCoverage: cov }))
           .catch(() => {});
       }
@@ -358,7 +371,7 @@ export function PrdGenerator() {
           // Coverage check — eksik sayfalari goster
           const prdContent = usePrdStore.getState().prdContent;
           if (prdContent) {
-            api.prdScreenCoverage({ prdContent, screens: current })
+            api.prdScreenCoverage({ prdContent, screens: current, prdId: store.id || undefined })
               .then(cov => {
                 setStore({ screenCoverage: cov });
                 if (cov.missing.length > 0) addLog(`${cov.missing.length} eksik sayfa var — tiklayarak uretebilirsiniz`);
@@ -374,82 +387,78 @@ export function PrdGenerator() {
     es.onerror = () => { closeEs(); };
   };
 
-  // Mockup devam et (kesilmisse kalan ekranlari uret)
+  // Mockup devam et — coverage'daki eksik sayfalari sirayla uret
   const handleResumeMockups = async () => {
     if (!store.prdContent || !store.id) return;
     const existingCount = store.mockupScreens.length;
     if (existingCount === 0) { handleMockups(); return; }
 
-    setLoading('mockups', true);
-    addLog(`Kalan ekranlar uretiliyor (${existingCount} mevcut)...`);
-
-    const params = new URLSearchParams({ prdId: store.id });
-    if (store.title) params.set('title', store.title);
-    params.set('skipCount', String(existingCount));
-    if (store.stitchProjectId) params.set('projectId', store.stitchProjectId);
-
-    const es = new EventSource(`/api/prd/mockups/stream?${params.toString()}`);
-    let closed = false;
-    const closeEs = () => { if (!closed) { closed = true; es.close(); setLoading('mockups', false); } };
-
-    es.addEventListener('start', (e) => {
-      const data = JSON.parse(e.data);
-      if (!store.stitchProjectId) setStore({ stitchProjectId: data.projectId || null });
-      addLog(`${data.remaining} ekran daha uretilecek`);
-    });
-
-    es.addEventListener('progress', (e) => {
-      const data = JSON.parse(e.data);
-      addLog(`[${data.index + 1}/${data.total}] ${data.title} uretiliyor...`);
-    });
-
-    es.addEventListener('screen', (e) => {
-      const data = JSON.parse(e.data);
-      const current = usePrdStore.getState().mockupScreens;
-      setStore({ mockupScreens: [...current, data.screen] });
-      addLog(`[${data.index + 1}/${data.total}] ${data.screen.name} tamamlandi`);
-    });
-
-    es.addEventListener('done', (e) => {
-      const data = JSON.parse(e.data);
-      // Merge existing + new
-      const existing = usePrdStore.getState().mockupScreens;
-      setStore({ mockupScreens: existing, stitchProjectId: data.projectId });
-      addLog(`Tamamlandi! Toplam ${existing.length} ekran`);
-      closeEs();
-      const prdContent = usePrdStore.getState().prdContent;
-      if (existing.length > 0 && prdContent) {
-        api.prdScreenCoverage({ prdContent, screens: existing })
-          .then(cov => setStore({ screenCoverage: cov }))
-          .catch(() => {});
-      }
-    });
-
-    es.addEventListener('error', (e) => {
-      try { const data = JSON.parse((e as MessageEvent).data); addLog(`Hata: ${data.message}`); } catch {
-        const current = usePrdStore.getState().mockupScreens;
-        addLog(`Baglanti kesildi — ${current.length} ekran mevcut`);
-      }
-      closeEs();
-    });
-
-    es.onerror = () => { closeEs(); };
-  };
-
-  // A/B karsilastirma
-  const handleCompare = async () => {
-    if (!store.id) return;
-    setLoading('compare', true);
-    addLog('A/B karsilastirma olusturuluyor...');
-    try {
-      const result = await api.prdCompare({ prdId: store.id });
-      setStore({ compareData: result, activeTab: 'compare' });
-      addLog('A/B karsilastirma hazir');
-    } catch (err: any) {
-      addLog(`Karsilastirma hatasi: ${err.message}`);
+    // Coverage varsa eksik sayfalari kullan, yoksa once coverage hesapla
+    let missingPages = store.screenCoverage?.missing || [];
+    if (missingPages.length === 0) {
+      try {
+        const cov = await api.prdScreenCoverage({ prdContent: store.prdContent, screens: store.mockupScreens, prdId: store.id || undefined });
+        setStore({ screenCoverage: cov });
+        missingPages = cov.missing || [];
+      } catch {}
     }
-    setLoading('compare', false);
+
+    if (missingPages.length === 0) {
+      addLog('Tum sayfalar zaten kapsaniyor — eksik sayfa yok');
+      return;
+    }
+
+    // Recover stitchProjectId from existing screens if lost (e.g. page reload)
+    let projectId = store.stitchProjectId;
+    if (!projectId && store.mockupScreens.length > 0) {
+      projectId = store.mockupScreens.find((s: any) => s.projectId)?.projectId || null;
+      if (projectId) setStore({ stitchProjectId: projectId });
+    }
+    if (!projectId) {
+      addLog('Stitch project ID bulunamadi — once "Mockup Uret" ile yeni uretim yapin');
+      return;
+    }
+
+    setLoading('mockups', true);
+
+    addLog(`${missingPages.length} eksik sayfa icin mockup uretiliyor...`);
+
+    // Generate missing pages one by one
+    for (let i = 0; i < missingPages.length; i++) {
+      const title = missingPages[i];
+      addLog(`[${i + 1}/${missingPages.length}] "${title}" uretiliyor...`);
+      try {
+        const prdTruncated = store.prdContent.length > 12000 ? store.prdContent.slice(0, 12000) : store.prdContent;
+        const prompt = `Build a complete, production-ready web page design for: "${title}"\n\nFULL PROJECT PRD:\n${prdTruncated}\n\nTARGET PAGE: "${title}"\nUse the EXACT design system from the PRD. Match existing screens style.`;
+        const res = await fetch('/api/prd/screens/' + store.id + '/generate-missing', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title, prompt, projectId }),
+        });
+        if (!res.ok) { addLog(`"${title}" uretim hatasi: ${res.status}`); continue; }
+        const result = await res.json();
+        if (result.screen) {
+          const updated = [...usePrdStore.getState().mockupScreens, result.screen];
+          setStore({ mockupScreens: updated });
+          addLog(`[${i + 1}/${missingPages.length}] "${title}" tamamlandi`);
+        }
+        // Rate limit
+        if (i < missingPages.length - 1) await new Promise(r => setTimeout(r, 2000));
+      } catch (err: any) {
+        addLog(`"${title}" hatasi: ${err.message}`);
+      }
+    }
+
+    // Final coverage update
+    const finalScreens = usePrdStore.getState().mockupScreens;
+    addLog(`Tamamlandi! Toplam ${finalScreens.length} ekran`);
+    try {
+      const cov = await api.prdScreenCoverage({ prdContent: store.prdContent, screens: finalScreens, prdId: store.id || undefined });
+      setStore({ screenCoverage: cov });
+    } catch {}
+    setLoading('mockups', false);
   };
+
 
   // Pipeline'a gonder
   const handleStartRun = async () => {
@@ -531,7 +540,7 @@ export function PrdGenerator() {
       const res = await fetch('/api/prd/screens/' + store.id + '/generate-missing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, prompt, projectId: store.stitchProjectId }),
+        body: JSON.stringify({ title, prompt, projectId }),
       });
       if (!res.ok) throw new Error('Generation failed: ' + res.status);
       const result = await res.json();
@@ -540,7 +549,7 @@ export function PrdGenerator() {
         setStore({ mockupScreens: updated });
         addLog(`"${title}" mockup'i uretildi`);
         // Coverage guncelle
-        api.prdScreenCoverage({ prdContent: store.prdContent, screens: updated })
+        api.prdScreenCoverage({ prdContent: store.prdContent, screens: updated, prdId: store.id || undefined })
           .then(cov => setStore({ screenCoverage: cov }))
           .catch(() => {});
       } else {
@@ -586,7 +595,7 @@ export function PrdGenerator() {
       // Refresh coverage
       if (store.prdContent && result.screens.length > 0) {
         try {
-          const cov = await api.prdScreenCoverage({ prdContent: store.prdContent, screens: result.screens });
+          const cov = await api.prdScreenCoverage({ prdContent: store.prdContent, screens: result.screens, prdId: store.id || undefined });
           setStore({ screenCoverage: cov });
         } catch { /* optional */ }
       } else {
@@ -609,6 +618,20 @@ export function PrdGenerator() {
       addLog(`Yeniden uretim hatasi: ${err.message}`);
     }
     setLoading('screenAction', false);
+  };
+
+  const handleSavePrd = async () => {
+    if (!store.prdId || !store.prdContent) return;
+    try {
+      await fetch('/api/prd/' + store.prdId, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prd_content: store.prdContent }),
+      });
+      setStore({ editMode: false });
+    } catch (err: any) {
+      console.error('PRD save failed:', err);
+    }
   };
 
   const handleEditPromptScreen = async (screenId: string, newPrompt: string) => {
@@ -656,7 +679,6 @@ export function PrdGenerator() {
       research: prd.research,
       chatHistory: prd.chat_history || [],
       mockupScreens: prd.mockup_screens || [],
-      compareData: null,
       runId: prd.run_id,
       projectName: prd.title,
       showHistory: false,
@@ -759,20 +781,24 @@ export function PrdGenerator() {
         {/* SAG PANEL */}
         <div className="prd-page__right">
           <div className="prd-tabs">
-            {(['prd', 'mockup', 'compare', 'analysis'] as const).map(tab => (
-              <button key={tab} className={`prd-tab ${store.activeTab === tab ? 'prd-tab--active' : ''}`} onClick={() => setStore({ activeTab: tab })}>{tab === 'prd' ? 'PRD' : tab === 'mockup' ? 'Mockup' : tab === 'compare' ? 'A/B' : 'Analiz'}</button>
+            {(['prd', 'mockup', 'analysis'] as const).map(tab => (
+              <button key={tab} className={`prd-tab ${store.activeTab === tab ? 'prd-tab--active' : ''}`} onClick={() => setStore({ activeTab: tab })}>{tab === 'prd' ? 'PRD' : tab === 'mockup' ? 'Mockup' : 'Analiz'}</button>
             ))}
             {store.prdVersion > 0 && <span className="prd-version-badge">v{store.prdVersion}</span>}
           </div>
 
-          <div className="prd-tab-content">
-            <ProgressBar active={!!store.loading.analyze} startedAt={store.loadingStartedAt.analyze || 0} label="Site Analiz Ediliyor" steps={['HTML indiriliyor...', 'Sayfa yapisi inceleniyor...', 'Renkler ve fontlar cikariliyor...', 'Komponentler tespit ediliyor...', 'Analiz tamamlaniyor...']} />
+          {/* Sticky progress bar — scroll'da kaybolmaz */}
+          {Object.values(store.loading).some(v => v) && (
+            <div className="prd-progress-sticky">
+              <ProgressBar active={!!store.loading.analyze} startedAt={store.loadingStartedAt.analyze || 0} label="Site Analiz Ediliyor" steps={['HTML indiriliyor...', 'Sayfa yapisi inceleniyor...', 'Renkler ve fontlar cikariliyor...', 'Komponentler tespit ediliyor...', 'Analiz tamamlaniyor...']} />
             <ProgressBar active={!!store.loading.generate} startedAt={store.loadingStartedAt.generate || 0} label="PRD Olusturuluyor" steps={['Veriler hazirlaniyor...', 'Analiz entegre ediliyor...', 'PRD yaziliyor...', 'Sayfalar tanimlaniyor...', 'Komponentler eslestiriliyor...', 'Puanlama yapiliyor...']} />
             <ProgressBar active={!!store.loading.enhance} startedAt={store.loadingStartedAt.enhance || 0} label="PRD Gelistiriliyor" steps={['Mevcut PRD analiz ediliyor...', 'Eksik bolumler tespit ediliyor...', 'Detaylar ekleniyor...', 'Animasyonlar tanimlaniyor...', 'Puanlama yapiliyor...']} />
             <ProgressBar active={!!store.loading.mockups} startedAt={store.loadingStartedAt.mockups || 0} label={`Mockup Uretiliyor (${store.mockupScreens.length} ekran hazir)`} steps={["Ekranlar uretiliyor...", "Indiriliyor...", "Tamamlaniyor..."]} />
-            <ProgressBar active={!!store.loading.compare} startedAt={store.loadingStartedAt.compare || 0} label="A/B Karsilastirma" steps={['Minimal versiyon yaziliyor...', 'Detayli versiyon yaziliyor...', 'Puanlama yapiliyor...']} />
             <ProgressBar active={!!store.loading.research} startedAt={store.loadingStartedAt.research || 0} label="Web Arastirmasi" steps={['Konu arastiriliyor...', 'Best practice\'ler toplanilyor...', 'UX pattern\'lar analiz ediliyor...', 'Sonuclar derleniyor...']} />
+            </div>
+          )}
 
+          <div className="prd-tab-content">
             {store.activeTab === 'prd' && (
               store.prdContent ? (
                 <PrdEditor content={store.prdContent} editMode={store.editMode} onChange={(c) => setStore({ prdContent: c })} previousContent={previousPrd} />
@@ -791,9 +817,9 @@ export function PrdGenerator() {
                 onClearAll={handleClearAllScreens}
                 onGenerateMissing={handleGenerateMissing}
                 onDeleteScreen={handleDeleteScreen}
+                stitchProjectId={store.stitchProjectId}
               />
             )}
-            {store.activeTab === 'compare' && <PrdCompare data={store.compareData} />}
             {store.activeTab === 'analysis' && (
               <>
                 {store.analyses.length > 1 ? (
@@ -830,15 +856,15 @@ export function PrdGenerator() {
               ) : (
                 <>
                   <button className="btn btn--small" onClick={() => setStore({ editMode: !store.editMode })}>{store.editMode ? 'Onizle' : 'Duzenle'}</button>
+                  {store.editMode && <button className="btn btn--small btn--primary" onClick={handleSavePrd}>Kaydet</button>}
                   <button className="btn btn--small btn--primary" onClick={handleEnhance} disabled={store.loading.enhance}>{store.loading.enhance ? 'Gelistiriliyor...' : 'Gelistir'}</button>
                   <button className="btn btn--small" onClick={handleMockups} disabled={store.loading.mockups}>{store.loading.mockups ? 'Uretiliyor...' : 'Mockup Uret'}</button>
                   {store.loading.mockups && (
                     <button className="btn btn--small btn--danger" onClick={handleStopMockups}>Durdur</button>
                   )}
-                  {store.mockupScreens.length > 0 && !store.loading.mockups && (
-                    <button className="btn btn--small btn--primary" onClick={handleResumeMockups}>Devam Et</button>
+                  {store.mockupScreens.length > 0 && !store.loading.mockups && store.screenCoverage && store.screenCoverage.missing.length > 0 && (
+                    <button className="btn btn--small btn--primary" onClick={handleResumeMockups}>Tamamla</button>
                   )}
-                  <button className="btn btn--small" onClick={handleCompare} disabled={store.loading.compare}>A/B</button>
                   <button className="btn btn--small" onClick={() => {
                     const blob = new Blob([store.prdContent], { type: 'text/markdown' });
                     const url = URL.createObjectURL(blob);
@@ -863,7 +889,7 @@ export function PrdGenerator() {
                   </select>
                 </div>
                 <button className="btn btn--primary prd-launch__btn" onClick={handleStartRun} disabled={store.loading.startRun}>
-                  {store.loading.startRun ? 'Baslatiliyor...' : store.runId ? `Pipeline Basladi (${store.runId})` : 'Gorevi Baslat'}
+                  {store.loading.startRun ? 'Baslatiliyor...' : store.runId ? 'Yeniden Baslat' : 'Gorevi Baslat'}
                 </button>
               </div>
             )}

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { createPrd, getPrd, listPrds, updatePrd, deletePrd, listTemplates, getTemplate } from '../services/prd-db.js';
-import { scorePrd, estimateCost, checkScreenCoverage } from '../services/prd-scoring.js';
-import { generatePrd, enhancePrd, generateChatQuestions, generateAbComparison, analyzeSite, analyzeScreenshot } from '../services/prd-llm.js';
+import { scorePrd, estimateCost, checkScreenCoverage, extractPages } from '../services/prd-scoring.js';
+import { generatePrd, enhancePrd, generateChatQuestions, analyzeSite, analyzeScreenshot } from '../services/prd-llm.js';
 import { generateMockupsFromPrd, deleteScreenFromCache, regenerateScreen, generateScreen, downloadScreen, prepareDesignFilesForRepo, createStitchProject, extractScreenPrompts } from '../services/stitch-integration.js';
 import { mapComponentsFromPrd, generateComponentSection } from '../services/component-mapper.js';
 import { getRunBenchmark, analyzePrdFormats } from '../services/benchmark.js';
@@ -183,6 +183,7 @@ router.post('/prd/generate', async (req, res) => {
       });
     }
 
+    const pages = extractPages(prdContent);
     await updatePrd(prd.id, {
       prd_content: prdContent,
       prd_version: (prd.prd_version || 0) + 1,
@@ -191,6 +192,7 @@ router.post('/prd/generate', async (req, res) => {
       cost_estimate: costResult,
       analysis: analysis || prd.analysis,
       research: research || prd.research,
+      pages,
     });
 
     const updated = await getPrd(prd.id);
@@ -218,14 +220,36 @@ router.post('/prd/enhance', async (req, res) => {
   (async () => {
     try {
       const enhanced = await enhancePrd(prd.prd_content, prd.prd_version);
+
+      // Enhance validasyon: sayfa silme/format bozma kontrolu
+      const newPages = extractPages(enhanced);
+      const oldPages = prd.pages || extractPages(prd.prd_content);
+      if (oldPages.length > 0) {
+        if (newPages.length === 0) {
+          enhanceJobs.set(prdId, { status: 'error', error: 'Gelistirme sayfa formatini bozdu. Orijinal korundu.' });
+          return;
+        }
+        const newRoutes = new Set(newPages.map((p: any) => p.route));
+        const removed = oldPages.filter((p: any) => !newRoutes.has(p.route));
+        if (removed.length > 0) {
+          enhanceJobs.set(prdId, {
+            status: 'error',
+            error: `Gelistirme ${removed.map((p: any) => p.name).join(', ')} sayfalarini sildi. Orijinal korundu.`
+          });
+          return;
+        }
+      }
+
       const scoreResult = scorePrd(enhanced);
       const costResult = estimateCost(enhanced);
+      const pages = newPages;
       await updatePrd(prdId, {
         prd_content: enhanced,
         prd_version: prd.prd_version + 1,
         score: scoreResult.total,
         score_details: scoreResult,
         cost_estimate: costResult,
+        pages,
       });
       const updated = await getPrd(prdId);
       enhanceJobs.set(prdId, { status: 'done', result: updated });
@@ -339,11 +363,14 @@ router.get("/prd/mockups/stream", async (req, res) => {
 
   try {
     const projectId = existingProjectId || await createStitchProject("PRD: " + prdTitle);
+    // Persist stitch_project_id to DB
+    if (prdId && projectId) { try { await updatePrd(prdId, { stitch_project_id: projectId } as any); } catch {} }
     if (!projectId) { clearInterval(keepalive); send("error", { message: "Failed to create Stitch project" }); res.end(); return; }
 
     // Fetch analysis data from PRD record to enrich Stitch prompts
     const prdAnalysis = prd?.analysis || null;
-    const allPrompts = extractScreenPrompts(content, platform, prdAnalysis);
+    const savedPages = prd?.pages || null;
+    const allPrompts = extractScreenPrompts(content, platform, prdAnalysis, savedPages);
     const prompts = skipCount > 0 ? allPrompts.slice(skipCount) : allPrompts;
     const totalAll = allPrompts.length;
     send("start", { projectId, total: totalAll, remaining: prompts.length, resumed: skipCount > 0 });
@@ -375,15 +402,14 @@ router.get("/prd/mockups/stream", async (req, res) => {
           id: screen.screenId, name: screen.title, status: screen.status,
           screenshotUrl: screen.screenshotUrl, htmlUrl: screen.htmlUrl,
           localHtml: screen.localHtml, width: screen.width, height: screen.height,
-          prompt: sp.prompt, projectId,
+          prompt: sp.prompt, projectId, pageRoute: (sp as any).pageRoute || '', pageIndex: (sp as any).pageIndex || 0, pageName: sp.title,
         };
         allScreens.push(entry);
         send("screen", { index: globalIndex, total: totalAll, screen: entry });
         // Save incrementally — DB always has latest screens even if connection drops
         if (prdId) {
           const existingPrd = await getPrd(prdId);
-          const existingScreens = existingPrd?.mockup_screens || [];
-          // Merge: keep existing (from previous sessions) + add new
+          const existingScreens = (existingPrd?.mockup_screens || []).filter((s: any) => s.projectId === projectId);
           const merged = [...existingScreens.filter((s: any) => !allScreens.some((n: any) => n.id === s.id)), ...allScreens];
           await updatePrd(prdId, { mockup_screens: merged });
         }
@@ -394,7 +420,7 @@ router.get("/prd/mockups/stream", async (req, res) => {
     // Final save with merged screens
     if (prdId) {
       const existingPrd = await getPrd(prdId);
-      const existingScreens = existingPrd?.mockup_screens || [];
+      const existingScreens = (existingPrd?.mockup_screens || []).filter((s: any) => s.projectId === projectId);
       const merged = [...existingScreens.filter((s: any) => !allScreens.some((n: any) => n.id === s.id)), ...allScreens];
       await updatePrd(prdId, { mockup_screens: merged });
     }
@@ -408,6 +434,19 @@ router.get("/prd/mockups/stream", async (req, res) => {
 });
 
 // DELETE /prd/screens/:prdId/:screenId — Ekrani sil
+// Save edited PRD content
+router.patch('/prd/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { prd_content } = req.body;
+    if (!prd_content) return res.status(400).json({ error: 'prd_content required' });
+    const updated = await updatePrd(id, { prd_content, prd_version: Date.now() });
+    res.json(updated || { ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.delete('/prd/screens/:prdId/:screenId', async (req, res) => {
   try {
     const { prdId, screenId } = req.params;
@@ -553,13 +592,18 @@ router.post('/prd/screens/:prdId/generate-missing', async (req, res) => {
         screen.htmlUrl = `/stitch-cache/${projectId}/${screen.screenId}.html`;
       }
     } catch {}
+    // Save to DB + look up route from saved pages
+    const prd = await getPrd(prdId);
+    const savedPages = prd?.pages || [];
+    const matchingPage = savedPages.find((p: any) => p.name === title);
     const entry = {
       id: screen.screenId, name: title, status: screen.status,
       screenshotUrl: screen.screenshotUrl, htmlUrl: screen.htmlUrl,
       width: screen.width, height: screen.height, prompt, projectId,
+      pageRoute: matchingPage?.route || '',
+      pageIndex: matchingPage ? savedPages.indexOf(matchingPage) + 1 : 0,
+      pageName: title,
     };
-    // Save to DB
-    const prd = await getPrd(prdId);
     if (prd) {
       const screens = [...(prd.mockup_screens || []), entry];
       await updatePrd(prdId, { mockup_screens: screens });
@@ -576,9 +620,16 @@ router.post('/prd/screen-coverage', async (req, res) => {
     const { prdContent, screens } = req.body;
     if (!prdContent || !screens) { res.status(400).json({ error: 'prdContent and screens required' }); return; }
 
+    // Use saved pages from DB if available
+    let savedPages = null;
+    if (req.body.prdId) {
+      const prd = await getPrd(req.body.prdId);
+      savedPages = prd?.pages || null;
+    }
     const coverage = checkScreenCoverage(
       prdContent,
       screens.map((s: any) => ({ title: s.name || s.title, id: s.id })),
+      savedPages,
     );
     res.json(coverage);
   } catch (err: any) {
@@ -597,30 +648,6 @@ router.post('/prd/screens/:prdId/clear', async (req, res) => {
   }
 });
 
-// POST /prd/compare — A/B PRD olustur
-router.post('/prd/compare', async (req, res) => {
-  try {
-    const { prdId } = req.body;
-    if (!prdId) { res.status(400).json({ error: 'prdId required' }); return; }
-
-    const prd = await getPrd(prdId);
-    if (!prd?.prd_content) { res.status(404).json({ error: 'PRD not found or empty' }); return; }
-
-    const { prdA, prdB } = await generateAbComparison(prd.prd_content, prd.title);
-
-    const scoreA = scorePrd(prdA);
-    const scoreB = scorePrd(prdB);
-    const costA = estimateCost(prdA);
-    const costB = estimateCost(prdB);
-
-    res.json({
-      prdA: { content: prdA, score: scoreA, cost: costA },
-      prdB: { content: prdB, score: scoreB, cost: costB },
-    });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 // POST /prd/estimate — Maliyet/sure tahmin et
 router.post('/prd/estimate', async (req, res) => {
@@ -689,6 +716,18 @@ router.post('/prd/start-run', async (req, res) => {
             repoPath,
           );
           screenMapStr = JSON.stringify(screenMap);
+          // Commit design files to git so pipeline doesn't lose them
+          // Also update .stitch updatedAt to NOW so stale check passes
+          try {
+            const _fs = await import('fs');
+            const _path = await import('path');
+            const stitchMeta = { projectId: stitchProjectId, name: 'PRD Design', updatedAt: new Date().toISOString() };
+            _fs.writeFileSync(_path.join(repoPath, '.stitch'), JSON.stringify(stitchMeta, null, 2), 'utf8');
+            const { execFileSync } = await import('child_process');
+            const gitOpts = { cwd: repoPath, stdio: 'pipe' as const };
+            execFileSync('git', ['add', 'stitch/', '.stitch'], gitOpts);
+            execFileSync('git', ['commit', '-m', 'design: add Stitch mockup screens'], gitOpts);
+          } catch {}
         } catch (err: any) {
           console.warn('[PRD] prepareDesignFilesForRepo failed:', err.message);
         }
@@ -701,20 +740,38 @@ router.post('/prd/start-run', async (req, res) => {
     if (screenMapStr) task += `\nSCREEN_MAP: ${screenMapStr}`;
     task += `\n\n${prd.prd_content}`;
 
-    // 4. Start workflow via setfarm
-    const { runCli } = await import('../utils/cli.js');
-    const out = await runCli('setfarm', ['workflow', 'run', wf, task]);
+    // 4. Start workflow via setfarm (write task to temp file to avoid E2BIG)
+    const nodefs = await import('fs');
+    const nodepath = await import('path');
+    const nodeos = await import('os');
+    const tmpTask = nodepath.join(nodeos.homedir(), '.openclaw', 'setfarm', '.tmp-task-' + Date.now() + '.txt');
+    nodefs.writeFileSync(tmpTask, task, 'utf8');
+    // Fire-and-forget: spawn setfarm, don't wait for stdout (avoids timeout)
+    const { spawn } = await import('child_process');
+    const child = spawn('setfarm', ['workflow', 'run', wf, '@' + tmpTask], {
+      env: { ...process.env, PATH: '/usr/local/bin:/usr/bin:/bin:' + (process.env.PATH || '') },
+      detached: true,
+      stdio: 'ignore',
+    });
+    child.unref();
 
-    // Extract run ID from output
-    // Parse run ID — UUID format (8-4-4-4-12)
-    const runIdMatch = out.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
-    const runId = runIdMatch?.[1] || null;
+    // Wait briefly then find the new run ID from DB
+    await new Promise(r => setTimeout(r, 5000));
+    try { nodefs.unlinkSync(tmpTask); } catch {}
+
+    // Find latest run for this repo
+    const { getRuns } = await import('../utils/setfarm.js');
+    const allRuns = (await getRuns()) as any[];
+    const matching = allRuns
+      .filter((r: any) => r.status === 'running' && r.task?.includes(repoPath))
+      .sort((a: any, b: any) => (b.run_number || 0) - (a.run_number || 0));
+    const runId = matching[0]?.id || null;
 
     if (runId) {
       await updatePrd(prdId, { run_id: runId });
     }
 
-    res.json({ success: true, runId, output: out, repoPath });
+    res.json({ success: true, runId, output: 'Pipeline baslatildi', repoPath });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -730,11 +787,31 @@ router.get('/prd/history', async (_req, res) => {
   }
 });
 
-// GET /prd/history/:id — Tek PRD detay
+// GET /prd/history/:id — Tek PRD detay (auto-migrate eski PRD'ler)
 router.get('/prd/history/:id', async (req, res) => {
   try {
-    const prd = await getPrd(req.params.id);
+    let prd = await getPrd(req.params.id);
     if (!prd) { res.status(404).json({ error: 'PRD not found' }); return; }
+
+    // Auto-migrate: pages yoksa extract et ve kaydet
+    let migrated = false;
+    if (prd.prd_content && (!prd.pages || (prd.pages as any[]).length === 0)) {
+      const pages = extractPages(prd.prd_content);
+      if (pages.length > 0) {
+        await updatePrd(prd.id, { pages });
+        migrated = true;
+      }
+    }
+    // Auto-migrate: stitch_project_id yoksa ekranlardan recover et
+    if (!prd.stitch_project_id && prd.mockup_screens?.length > 0) {
+      const pid = (prd.mockup_screens as any[]).find((s: any) => s.projectId)?.projectId;
+      if (pid) {
+        await updatePrd(prd.id, { stitch_project_id: pid } as any);
+        migrated = true;
+      }
+    }
+    if (migrated) prd = await getPrd(prd.id) as any;
+
     res.json(prd);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
