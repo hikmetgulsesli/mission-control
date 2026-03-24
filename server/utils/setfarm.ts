@@ -57,6 +57,14 @@ function parseEventsFile(content: string) {
     }).filter(Boolean);
 }
 export async function getSetfarmActivity(limit = 50) {
+    if (USE_PG) {
+        try {
+            const rows = await sql`SELECT * FROM live_events ORDER BY ts DESC LIMIT ${limit}`;
+            return rows;
+        } catch {
+            // fall through to JSONL
+        }
+    }
     try {
         const content = await readFile(EVENTS_PATH, 'utf-8');
         const events = parseEventsFile(content);
@@ -67,6 +75,66 @@ export async function getSetfarmActivity(limit = 50) {
     }
 }
 export async function getSetfarmAgentStats() {
+    if (USE_PG) {
+        try {
+            // Build agent stats from live_events table
+            const events = await sql`SELECT action, agent, ts, detail FROM live_events WHERE action IN ('step.running','step.done','step.failed','step.timeout') ORDER BY ts ASC`;
+            const stats: Record<string, any> = {};
+            const stepStart: Record<string, string> = {};
+
+            for (const e of events) {
+                const agent = e.agent ? (e.agent.includes('/') ? e.agent.split('/').pop() : e.agent) : null;
+                if (!agent) continue;
+
+                if (e.action === 'step.running') {
+                    if (!stats[agent]) stats[agent] = { runs: 0, done: 0, failed: 0, timeout: 0, lastActive: '', durations: [] };
+                    stats[agent].runs++;
+                    stats[agent].lastActive = e.ts;
+                    // Use agent+ts as key for duration tracking
+                    const key = agent + ':' + e.ts;
+                    stepStart[key] = e.ts;
+                }
+                if (e.action === 'step.done') {
+                    if (!stats[agent]) stats[agent] = { runs: 0, done: 0, failed: 0, timeout: 0, lastActive: '', durations: [] };
+                    stats[agent].done++;
+                    stats[agent].lastActive = e.ts;
+                }
+                if (e.action === 'step.failed') {
+                    if (!stats[agent]) stats[agent] = { runs: 0, done: 0, failed: 0, timeout: 0, lastActive: '', durations: [] };
+                    stats[agent].failed++;
+                    stats[agent].lastActive = e.ts;
+                }
+                if (e.action === 'step.timeout') {
+                    if (!stats[agent]) stats[agent] = { runs: 0, done: 0, failed: 0, timeout: 0, lastActive: '', durations: [] };
+                    stats[agent].timeout++;
+                    stats[agent].lastActive = e.ts;
+                }
+            }
+
+            // Also get duration stats from step_metrics if available
+            try {
+                const metrics = await sql`SELECT agent_id, AVG(duration_ms) as avg_dur FROM step_metrics GROUP BY agent_id`;
+                for (const m of metrics) {
+                    const agent = m.agent_id ? (m.agent_id.includes('/') ? m.agent_id.split('/').pop() : m.agent_id) : null;
+                    if (agent && stats[agent]) {
+                        stats[agent].avgDurationOverride = Math.round((m.avg_dur || 0) / 1000);
+                    }
+                }
+            } catch { /* step_metrics may not have data */ }
+
+            return Object.entries(stats).map(([name, s]) => ({
+                name,
+                runs: s.runs,
+                successRate: s.runs > 0 ? Math.min(100, Math.round((s.done / s.runs) * 100)) : 0,
+                failed: s.failed,
+                timeout: s.timeout,
+                avgDuration: s.avgDurationOverride || (s.durations.length > 0 ? Math.round(s.durations.reduce((a: number, b: number) => a + b, 0) / s.durations.length) : 0),
+                lastActive: s.lastActive,
+            }));
+        } catch {
+            // fall through to JSONL
+        }
+    }
     try {
         const content = await readFile(EVENTS_PATH, 'utf-8');
         const events = parseEventsFile(content);
@@ -131,6 +199,25 @@ export async function getSetfarmAgentStats() {
     }
 }
 export async function getSetfarmAlerts() {
+    if (USE_PG) {
+        try {
+            const abandoned = await sql`SELECT COUNT(*) as cnt FROM live_events WHERE detail LIKE '%abandoned%'`;
+            const timeout = await sql`SELECT COUNT(*) as cnt FROM live_events WHERE action = 'step.timeout'`;
+            const failed = await sql`SELECT COUNT(*) as cnt FROM live_events WHERE action IN ('step.failed','run.failed')`;
+            const recent = await sql`SELECT * FROM live_events WHERE action IN ('step.timeout','step.failed','run.failed') ORDER BY ts DESC LIMIT 20`;
+
+            return {
+                counts: {
+                    abandoned: Number(abandoned[0]?.cnt || 0),
+                    timeout: Number(timeout[0]?.cnt || 0),
+                    failed: Number(failed[0]?.cnt || 0),
+                },
+                recent,
+            };
+        } catch {
+            // fall through to JSONL
+        }
+    }
     try {
         const content = await readFile(EVENTS_PATH, 'utf-8');
         const events = parseEventsFile(content);

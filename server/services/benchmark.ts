@@ -9,13 +9,15 @@ import { execFile as execFileCb } from 'child_process';
 import { promisify } from 'util';
 import { homedir } from 'os';
 import { join } from 'path';
+import { sql } from '../utils/pg.js';
 
 const execFileAsync = promisify(execFileCb);
 
+const USE_PG = process.env.DB_BACKEND === 'postgres';
 const SETFARM_DB = join(homedir(), '.openclaw', 'setfarm', 'setfarm.db');
 
-async function querySetfarm(sql: string): Promise<any[]> {
-  const { stdout } = await execFileAsync('sqlite3', [SETFARM_DB, '-json', sql], {
+async function querySetfarm(sqlStr: string): Promise<any[]> {
+  const { stdout } = await execFileAsync('sqlite3', [SETFARM_DB, '-json', sqlStr], {
     timeout: 10000,
     maxBuffer: 2 * 1024 * 1024,
   });
@@ -47,19 +49,30 @@ export async function getRunBenchmark(runId: string): Promise<RunBenchmark | nul
     throw new Error('Invalid runId');
   }
 
-  // Run details
-  const runs = await querySetfarm(`SELECT id, workflow_id, status, created_at, updated_at FROM runs WHERE id = '${runId}'`);
-  if (runs.length === 0) return null;
-  const run = runs[0];
+  let run: any;
+  let steps: any[];
+  let stories: any[];
+  let claims: any[];
 
-  // Steps
-  const steps = await querySetfarm(`SELECT id, step_id, status, retry_count, abandoned_count, created_at, updated_at FROM steps WHERE run_id = '${runId}'`);
+  if (USE_PG) {
+    // PG path
+    const runs = await sql`SELECT id, workflow_id, status, created_at, updated_at FROM runs WHERE id = ${runId}`;
+    if (runs.length === 0) return null;
+    run = runs[0];
 
-  // Stories
-  const stories = await querySetfarm(`SELECT id, status, retry_count, abandoned_count, output, created_at, updated_at FROM stories WHERE run_id = '${runId}'`);
+    steps = await sql`SELECT id, step_id, status, retry_count, abandoned_count, created_at, updated_at FROM steps WHERE run_id = ${runId}`;
+    stories = await sql`SELECT id, status, retry_count, abandoned_count, output, created_at, updated_at FROM stories WHERE run_id = ${runId}`;
+    claims = await sql`SELECT outcome, diagnostic, duration_ms FROM claim_log WHERE run_id = ${runId}`;
+  } else {
+    // SQLite path
+    const runs = await querySetfarm(`SELECT id, workflow_id, status, created_at, updated_at FROM runs WHERE id = '${runId}'`);
+    if (runs.length === 0) return null;
+    run = runs[0];
 
-  // Claim log for error analysis
-  const claims = await querySetfarm(`SELECT outcome, diagnostic, duration_ms FROM claim_log WHERE run_id = '${runId}'`);
+    steps = await querySetfarm(`SELECT id, step_id, status, retry_count, abandoned_count, created_at, updated_at FROM steps WHERE run_id = '${runId}'`);
+    stories = await querySetfarm(`SELECT id, status, retry_count, abandoned_count, output, created_at, updated_at FROM stories WHERE run_id = '${runId}'`);
+    claims = await querySetfarm(`SELECT outcome, diagnostic, duration_ms FROM claim_log WHERE run_id = '${runId}'`);
+  }
 
   // Calculate metrics
   const totalSteps = steps.length;
@@ -141,8 +154,12 @@ export interface PrdFormatAnalysis {
 }
 
 export async function analyzePrdFormats(): Promise<PrdFormatAnalysis> {
-  // Analyze all recent runs for PRD quality correlation
-  const runs = await querySetfarm(`SELECT id, status, created_at, updated_at FROM runs ORDER BY created_at DESC LIMIT 50`);
+  let runs: any[];
+  if (USE_PG) {
+    runs = await sql`SELECT id, status, created_at, updated_at FROM runs ORDER BY created_at DESC LIMIT 50`;
+  } else {
+    runs = await querySetfarm(`SELECT id, status, created_at, updated_at FROM runs ORDER BY created_at DESC LIMIT 50`);
+  }
 
   let successCount = 0;
   let totalDuration = 0;

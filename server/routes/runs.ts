@@ -3,9 +3,11 @@ import { getRuns, getEvents } from '../utils/setfarm.js';
 import { cached } from '../utils/cache.js';
 import { runCli } from '../utils/cli.js';
 import { config } from '../config.js';
+import { sql } from '../utils/pg.js';
 import { getStuckRuns, unstickRun, getRunDetail, diagnoseStuckStep, tryAutoFix, skipStory, deleteRun } from '../utils/setfarm-db.js';
 
 const router = Router();
+const USE_PG = process.env.DB_BACKEND === 'postgres';
 
 router.get('/runs', async (_req, res) => {
   try {
@@ -54,8 +56,28 @@ router.post('/runs/:id/retry', async (req, res) => {
       console.log(`[RETRY] CLI success: run=${id} step=${step_id || 'all'}`);
       res.json({ success: true, source: 'cli', output: out });
     } catch (cliErr: any) {
-      console.warn(`[RETRY] CLI failed: run=${id} err=${cliErr.message}, falling back to API`);
-      // Fallback: if setfarm CLI doesn't have retry, try via API
+      console.warn(`[RETRY] CLI failed: run=${id} err=${cliErr.message}, falling back`);
+
+      // PG path: reset failed step/story status directly
+      if (USE_PG) {
+        try {
+          if (step_id) {
+            await sql`UPDATE steps SET status = 'waiting', retry_count = retry_count + 1, updated_at = now() WHERE run_id = ${id} AND step_id = ${step_id} AND status = 'failed'`;
+            await sql`UPDATE stories SET status = 'pending', retry_count = retry_count + 1, updated_at = now() WHERE run_id = ${id} AND status = 'failed'`;
+          } else {
+            await sql`UPDATE steps SET status = 'waiting', retry_count = retry_count + 1, updated_at = now() WHERE run_id = ${id} AND status = 'failed'`;
+            await sql`UPDATE stories SET status = 'pending', retry_count = retry_count + 1, updated_at = now() WHERE run_id = ${id} AND status = 'failed'`;
+          }
+          await sql`UPDATE runs SET status = 'running', updated_at = now() WHERE id = ${id}`;
+          console.log(`[RETRY] PG fallback success: run=${id}`);
+          res.json({ success: true, source: 'pg', output: 'Reset failed steps/stories via PG' });
+          return;
+        } catch (pgErr: any) {
+          console.warn(`[RETRY] PG fallback failed: ${pgErr.message}`);
+        }
+      }
+
+      // HTTP API fallback
       try {
         const body: any = { step_id };
         if (message) body.message = message;
@@ -70,7 +92,7 @@ router.post('/runs/:id/retry', async (req, res) => {
         console.log(`[RETRY] API fallback success: run=${id}`);
         res.json({ success: true, source: 'api', output: data });
       } catch (apiErr: any) {
-        console.error(`[RETRY] Both CLI and API failed: run=${id} cli=${cliErr.message} api=${apiErr.message}`);
+        console.error(`[RETRY] All fallbacks failed: run=${id} cli=${cliErr.message} api=${apiErr.message}`);
         res.status(500).json({ error: `Retry failed (CLI: ${cliErr.message}, API: ${apiErr.message})` });
       }
     }
@@ -176,4 +198,3 @@ router.delete('/runs/:id', async (req, res) => {
   }
 });
 export default router;
-
