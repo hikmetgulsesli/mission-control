@@ -57,14 +57,8 @@ function parseEventsFile(content: string) {
     }).filter(Boolean);
 }
 export async function getSetfarmActivity(limit = 50) {
-    if (USE_PG) {
-        try {
-            const rows = await sql`SELECT * FROM live_events ORDER BY ts DESC LIMIT ${limit}`;
-            return rows;
-        } catch {
-            // fall through to JSONL
-        }
-    }
+    // Always read from events.jsonl — these are pipeline events (run.started, step.done, story.started)
+    // live_events table has agent tool calls (bash, read, write) which are noise
     try {
         const content = await readFile(EVENTS_PATH, 'utf-8');
         const events = parseEventsFile(content);
@@ -75,10 +69,11 @@ export async function getSetfarmActivity(limit = 50) {
     }
 }
 export async function getSetfarmAgentStats() {
-    if (USE_PG) {
+    // Use events.jsonl for pipeline agent stats (not live_events which has tool calls)
+    {
         try {
-            // Build agent stats from live_events table
-            const events = await sql`SELECT action, agent, ts, detail FROM live_events WHERE action IN ('step.running','step.done','step.failed','step.timeout') ORDER BY ts ASC`;
+            const content = await readFile(EVENTS_PATH, 'utf-8');
+            const events = parseEventsFile(content).filter((e: any) => ['step.running','step.done','step.failed','step.timeout'].includes(e.event));
             const stats: Record<string, any> = {};
             const stepStart: Record<string, string> = {};
 
@@ -199,25 +194,7 @@ export async function getSetfarmAgentStats() {
     }
 }
 export async function getSetfarmAlerts() {
-    if (USE_PG) {
-        try {
-            const abandoned = await sql`SELECT COUNT(*) as cnt FROM live_events WHERE detail LIKE '%abandoned%'`;
-            const timeout = await sql`SELECT COUNT(*) as cnt FROM live_events WHERE action = 'step.timeout'`;
-            const failed = await sql`SELECT COUNT(*) as cnt FROM live_events WHERE action IN ('step.failed','run.failed')`;
-            const recent = await sql`SELECT * FROM live_events WHERE action IN ('step.timeout','step.failed','run.failed') ORDER BY ts DESC LIMIT 20`;
-
-            return {
-                counts: {
-                    abandoned: Number(abandoned[0]?.cnt || 0),
-                    timeout: Number(timeout[0]?.cnt || 0),
-                    failed: Number(failed[0]?.cnt || 0),
-                },
-                recent,
-            };
-        } catch {
-            // fall through to JSONL
-        }
-    }
+    // Use events.jsonl for pipeline alerts (not live_events which has tool calls)
     try {
         const content = await readFile(EVENTS_PATH, 'utf-8');
         const events = parseEventsFile(content);
