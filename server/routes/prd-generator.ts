@@ -370,7 +370,7 @@ router.get("/prd/mockups/stream", async (req, res) => {
     // Fetch analysis data from PRD record to enrich Stitch prompts
     const prdAnalysis = prd?.analysis || null;
     const savedPages = prd?.pages || null;
-    const allPrompts = extractScreenPrompts(content, platform, prdAnalysis, savedPages);
+    const allPrompts = extractScreenPrompts(content, platform, prdAnalysis);
     const prompts = skipCount > 0 ? allPrompts.slice(skipCount) : allPrompts;
     const totalAll = allPrompts.length;
     send("start", { projectId, total: totalAll, remaining: prompts.length, resumed: skipCount > 0 });
@@ -749,7 +749,7 @@ router.post('/prd/start-run', async (req, res) => {
     // Fire-and-forget: spawn setfarm, don't wait for stdout (avoids timeout)
     const { spawn } = await import('child_process');
     const child = spawn('setfarm', ['workflow', 'run', wf, '@' + tmpTask], {
-      env: { ...process.env, PATH: '/usr/local/bin:/usr/bin:/bin:' + (process.env.PATH || '') },
+      env: { ...process.env, DB_BACKEND: "postgres", SETFARM_PG_URL: process.env.SETFARM_PG_URL || process.env.DATABASE_URL || "", PATH: '/home/setrox/.local/bin:/usr/local/bin:/usr/bin:/bin:' + (process.env.PATH || '') },
       detached: true,
       stdio: 'ignore',
     });

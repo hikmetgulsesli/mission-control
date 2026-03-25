@@ -237,7 +237,7 @@ export function Projects() {
       case 'port': return (a.ports?.frontend || 9999) - (b.ports?.frontend || 9999);
       case 'name': return a.name.localeCompare(b.name);
       case 'run': {
-        return (b.latestRunNumber || 0) - (a.latestRunNumber || 0);
+        return (b.runNumber || 0) - (a.runNumber || 0);
       }
       case 'status': {
         const order: Record<string, number> = { building: 0, active: 1, failed: 2 };

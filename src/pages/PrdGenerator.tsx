@@ -93,12 +93,12 @@ export function PrdGenerator() {
         });
       }
       // Check if last run is still active — if not, clear runId
-      if (Z.run_id) {
+      if (prds.length > 0 && (prds[0] as any).run_id) {
         fetch('/api/setfarm/pipeline').then(r => r.json()).then((pipe: any) => {
           const running = [...(pipe.running || []), ...(pipe.recent || [])];
-          const run = running.find((r: any) => r.id === Z.run_id);
+          const run = running.find((r: any) => r.id === prds[0]?.run_id);
           if (run && run.status === 'running') {
-            i({ runId: Z.run_id });
+            setStore({ runId: prds[0]?.run_id });
           }
         }).catch(() => {});
       }
@@ -433,7 +433,7 @@ export function PrdGenerator() {
         const res = await fetch('/api/prd/screens/' + store.id + '/generate-missing', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title, prompt, projectId }),
+          body: JSON.stringify({ title, prompt, projectId: store.stitchProjectId }),
         });
         if (!res.ok) { addLog(`"${title}" uretim hatasi: ${res.status}`); continue; }
         const result = await res.json();
@@ -540,7 +540,7 @@ export function PrdGenerator() {
       const res = await fetch('/api/prd/screens/' + store.id + '/generate-missing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, prompt, projectId }),
+        body: JSON.stringify({ title, prompt, projectId: store.stitchProjectId }),
       });
       if (!res.ok) throw new Error('Generation failed: ' + res.status);
       const result = await res.json();
@@ -621,9 +621,9 @@ export function PrdGenerator() {
   };
 
   const handleSavePrd = async () => {
-    if (!store.prdId || !store.prdContent) return;
+    if (!store.id || !store.prdContent) return;
     try {
-      await fetch('/api/prd/' + store.prdId, {
+      await fetch('/api/prd/' + store.id, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prd_content: store.prdContent }),
