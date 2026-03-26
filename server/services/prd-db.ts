@@ -1,56 +1,18 @@
-import { execFile as execFileCb } from 'child_process';
-import { promisify } from 'util';
+/**
+ * PRD Database Service — PostgreSQL
+ * Replaces the old SQLite CLI-based implementation.
+ */
 import { randomUUID } from 'crypto';
-import { homedir } from 'os';
-import { join } from 'path';
+import sql from '../utils/pg.js';
 
-const execFileAsync = promisify(execFileCb);
-
-const DB_PATH = join(homedir(), '.openclaw', 'setfarm', 'prd-history.db');
-
-const SAFE_ID_RE = /^[a-zA-Z0-9_-]+$/;
-
-function validateId(value: string, name: string): string {
-  if (!value || !SAFE_ID_RE.test(value)) {
-    throw new Error(`Invalid ${name}: must be alphanumeric/dash/underscore`);
-  }
-  return value;
-}
-
-function escapeStr(value: string): string {
-  return value.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '').replace(/'/g, "''");
-}
-
-async function sqlite3(sql: string, json = true): Promise<any> {
-  const args = [DB_PATH];
-  if (json) args.push('-json');
-  args.push(sql);
-
-  const { stdout } = await execFileAsync('sqlite3', args, {
-    timeout: 10000,
-    maxBuffer: 2 * 1024 * 1024,
-  });
-
-  if (!json) return stdout.trim();
-  const trimmed = stdout.trim();
-  if (!trimmed) return [];
-  return JSON.parse(trimmed);
-}
-
-async function query(sql: string): Promise<any[]> {
-  return sqlite3(sql, true);
-}
-
-async function exec(sql: string): Promise<string> {
-  return sqlite3(sql, false);
-}
+// ── Schema ──────────────────────────────────────────────────────────
 
 let schemaInitialized = false;
 
 async function ensureSchema(): Promise<void> {
   if (schemaInitialized) return;
 
-  await exec(`
+  await sql`
     CREATE TABLE IF NOT EXISTS prds (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
@@ -65,13 +27,17 @@ async function ensureSchema(): Promise<void> {
       score INTEGER,
       score_details TEXT,
       mockup_screens TEXT,
+      pages TEXT,
       cost_estimate TEXT,
       run_id TEXT,
       template_id TEXT,
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now'))
-    );
+      stitch_project_id TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
 
+  await sql`
     CREATE TABLE IF NOT EXISTS prd_templates (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -79,13 +45,13 @@ async function ensureSchema(): Promise<void> {
       platform TEXT DEFAULT 'web',
       prd_content TEXT,
       description TEXT,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-  `);
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
 
   // Seed templates if empty
-  const rows = await query('SELECT COUNT(*) as c FROM prd_templates');
-  if (rows[0]?.c === 0) {
+  const [{ count }] = await sql`SELECT COUNT(*)::int as count FROM prd_templates`;
+  if (count === 0) {
     await seedTemplates();
   }
 
@@ -108,9 +74,15 @@ async function seedTemplates(): Promise<void> {
 
   for (const t of templates) {
     const content = TEMPLATE_CONTENTS[t.id] || '';
-    await exec(`INSERT OR IGNORE INTO prd_templates (id, name, category, platform, description, prd_content) VALUES ('${escapeStr(t.id)}', '${escapeStr(t.name)}', '${escapeStr(t.category)}', '${escapeStr(t.platform)}', '${escapeStr(t.description)}', '${escapeStr(content)}')`);
+    await sql`
+      INSERT INTO prd_templates (id, name, category, platform, description, prd_content)
+      VALUES (${t.id}, ${t.name}, ${t.category}, ${t.platform}, ${t.description}, ${content})
+      ON CONFLICT (id) DO NOTHING
+    `;
   }
 }
+
+// ── Types ───────────────────────────────────────────────────────────
 
 export interface PrdRecord {
   id: string;
@@ -126,11 +98,18 @@ export interface PrdRecord {
   score: number | null;
   score_details: any;
   mockup_screens: any;
+  pages: any;
   cost_estimate: any;
+  stitch_project_id: string | null;
   run_id: string | null;
   template_id: string | null;
   created_at: string;
   updated_at: string;
+}
+
+function safeJsonParse(str: string | null | undefined, fallback: any): any {
+  if (!str) return fallback;
+  try { return JSON.parse(str); } catch { return fallback; }
 }
 
 function deserializePrd(row: any): PrdRecord {
@@ -142,14 +121,13 @@ function deserializePrd(row: any): PrdRecord {
     chat_history: safeJsonParse(row.chat_history, []),
     score_details: safeJsonParse(row.score_details, null),
     mockup_screens: safeJsonParse(row.mockup_screens, null),
+    pages: safeJsonParse(row.pages, null),
     cost_estimate: safeJsonParse(row.cost_estimate, null),
+    stitch_project_id: row.stitch_project_id || null,
   };
 }
 
-function safeJsonParse(str: string | null | undefined, fallback: any): any {
-  if (!str) return fallback;
-  try { return JSON.parse(str); } catch { return fallback; }
-}
+// ── CRUD ────────────────────────────────────────────────────────────
 
 export async function createPrd(data: {
   title: string;
@@ -160,27 +138,25 @@ export async function createPrd(data: {
 }): Promise<PrdRecord> {
   await ensureSchema();
   const id = `prd-${randomUUID().slice(0, 8)}`;
-  const title = escapeStr(data.title);
-  const platform = escapeStr(data.platform || 'web');
-  const urls = escapeStr(JSON.stringify(data.urls || []));
-  const description = escapeStr(data.description || '');
-  const templateId = data.template_id ? escapeStr(data.template_id) : '';
+  const urls = JSON.stringify(data.urls || []);
 
-  await exec(`INSERT INTO prds (id, title, platform, urls, description, template_id) VALUES ('${id}', '${title}', '${platform}', '${urls}', '${description}', '${templateId}')`);
+  await sql`
+    INSERT INTO prds (id, title, platform, urls, description, template_id)
+    VALUES (${id}, ${data.title}, ${data.platform || 'web'}, ${urls}, ${data.description || ''}, ${data.template_id || ''})
+  `;
   return (await getPrd(id))!;
 }
 
 export async function getPrd(id: string): Promise<PrdRecord | null> {
   await ensureSchema();
-  validateId(id, 'prdId');
-  const rows = await query(`SELECT * FROM prds WHERE id = '${id}'`);
+  const rows = await sql`SELECT * FROM prds WHERE id = ${id}`;
   return rows.length > 0 ? deserializePrd(rows[0]) : null;
 }
 
 export async function listPrds(limit = 50): Promise<PrdRecord[]> {
   await ensureSchema();
   const safeLimit = Math.max(1, Math.min(200, Number(limit) || 50));
-  const rows = await query(`SELECT * FROM prds ORDER BY updated_at DESC LIMIT ${safeLimit}`);
+  const rows = await sql`SELECT * FROM prds ORDER BY updated_at DESC LIMIT ${safeLimit}`;
   return rows.map(deserializePrd);
 }
 
@@ -197,43 +173,50 @@ export async function updatePrd(id: string, updates: Partial<{
   score: number;
   score_details: any;
   mockup_screens: any;
+  pages: any;
   cost_estimate: any;
+  stitch_project_id: string;
   run_id: string;
 }>): Promise<PrdRecord | null> {
   await ensureSchema();
-  validateId(id, 'prdId');
 
-  const jsonFields = ['urls', 'analysis', 'research', 'chat_history', 'score_details', 'mockup_screens', 'cost_estimate'];
+  const jsonFields = new Set(['urls', 'analysis', 'research', 'chat_history', 'score_details', 'mockup_screens', 'pages', 'cost_estimate']);
+
+  // Build dynamic update using unsafe (porsager/postgres doesn't support dynamic column names in tagged templates)
   const sets: string[] = [];
+  const vals: any[] = [];
+  let paramIdx = 1;
 
   for (const [key, val] of Object.entries(updates)) {
     if (val === undefined) continue;
-    const serialized = jsonFields.includes(key) ? JSON.stringify(val) : String(val);
-    sets.push(`${key} = '${escapeStr(serialized)}'`);
+    const serialized = jsonFields.has(key) ? JSON.stringify(val) : val;
+    sets.push(`${key} = $${paramIdx++}`);
+    vals.push(serialized);
   }
 
   if (sets.length === 0) return getPrd(id);
 
-  sets.push("updated_at = datetime('now')");
-  await exec(`UPDATE prds SET ${sets.join(', ')} WHERE id = '${id}'`);
+  sets.push(`updated_at = NOW()`);
+  vals.push(id);
+  await sql.unsafe(`UPDATE prds SET ${sets.join(', ')} WHERE id = $${paramIdx}`, vals);
   return getPrd(id);
 }
 
 export async function deletePrd(id: string): Promise<boolean> {
   await ensureSchema();
-  validateId(id, 'prdId');
-  await exec(`DELETE FROM prds WHERE id = '${id}'`);
+  await sql`DELETE FROM prds WHERE id = ${id}`;
   return true;
 }
 
+// ── Templates ───────────────────────────────────────────────────────
+
 export async function listTemplates(): Promise<any[]> {
   await ensureSchema();
-  return query('SELECT * FROM prd_templates ORDER BY name');
+  return sql`SELECT * FROM prd_templates ORDER BY name`;
 }
 
 export async function getTemplate(id: string): Promise<any> {
   await ensureSchema();
-  validateId(id, 'templateId');
-  const rows = await query(`SELECT * FROM prd_templates WHERE id = '${id}'`);
+  const rows = await sql`SELECT * FROM prd_templates WHERE id = ${id}`;
   return rows[0] || null;
 }
