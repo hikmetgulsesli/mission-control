@@ -552,6 +552,7 @@ async function createBuildingProject(run: any): Promise<void> {
     emoji: '🏗',
     createdBy: 'setfarm-workflow',
     setfarmRunId: run.id,
+    runNumber: run.run_number,
     task: run.task.split('\n').slice(0, 3).join(' ').slice(0, 200),
     status: 'building',
     port: port || undefined,
@@ -703,6 +704,7 @@ async function syncProjectsFromRuns(): Promise<{ synced: any[]; skipped: string[
       emoji: mobile ? '\u{1F4F1}' : '\u{1F527}',
       createdBy: 'setfarm-workflow',
       setfarmRunId: run.id,
+      runNumber: run.run_number,
       task: run.task.split('\n').slice(0, 3).join(' ').slice(0, 200),
       type: mobile ? 'mobile' : 'web',
     });

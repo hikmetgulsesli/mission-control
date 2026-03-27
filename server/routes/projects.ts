@@ -588,6 +588,7 @@ export function createProjectProgrammatic(data: {
   emoji?: string;
   createdBy?: string;
   setfarmRunId?: string;
+  runNumber?: number;
   task?: string;
   status?: string;
   port?: number;
@@ -677,6 +678,7 @@ export function createProjectProgrammatic(data: {
     category: "own",
     checklist: DEFAULT_CHECKLIST.map(c => ({ ...c })),
     setfarmRunIds: data.setfarmRunId ? [data.setfarmRunId] : [],
+    runNumber: data.runNumber || undefined,
   };
 
   projects.push(project);
