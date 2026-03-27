@@ -189,7 +189,26 @@ router.get('/setfarm/runs/:id/plan', async (req, res) => {
       projectMemory = ctx.project_memory || '';
     } catch { /* context parse failed */ }
 
-    res.json({ prd, stories, rawOutput, projectMemory });
+    // Step durations and stats for Memory tab
+    const stepDurations = (run.steps || []).map((s: any) => ({
+      stepId: s.step_id,
+      status: s.status,
+      durationMs: s.updated_at && s.created_at ? Date.parse(s.updated_at) - Date.parse(s.created_at) : 0,
+      abandonedCount: s.abandoned_count || 0,
+    }));
+
+    // Story stats from run's stories
+    let storyStats: Record<string, number> = {};
+    try {
+      const runStories2 = await getRunStories(req.params.id);
+      if (runStories2 && runStories2.length > 0) {
+        for (const s of runStories2) {
+          storyStats[s.status] = (storyStats[s.status] || 0) + 1;
+        }
+      }
+    } catch { /* story stats failed */ }
+
+    res.json({ prd, stories, rawOutput, projectMemory, stepDurations, storyStats });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Plan fetch failed' });
   }
@@ -262,19 +281,22 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
       try {
         const ctx = JSON.parse(run.context || '{}');
         const repo = ctx.repo || '';
-        if (repo) {
-          const manifestPath = join(repo, 'stitch', 'DESIGN_MANIFEST.json');
-          if (existsSync(manifestPath)) {
-            const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
-            if (Array.isArray(manifest)) {
-              screenMap = manifest.map((s: any) => ({
-                screenId: s.screenId || s.id || (s.name || 'screen').replace(/\s+/g, '-').toLowerCase(),
-                name: s.title || s.name || s.screenName || 'Screen',
-                description: s.description || '',
-                type: s.type || s.category || s.deviceType?.toLowerCase() || 'page',
-                htmlFile: s.htmlFile || null
-              }));
-            }
+        // Try original repo path, then fallback to projects/ basename (worktree may be deleted)
+        const candidatePaths = repo ? [
+          join(repo, 'stitch', 'DESIGN_MANIFEST.json'),
+          join('/home/setrox/projects', repo.split('/').pop() || '', 'stitch', 'DESIGN_MANIFEST.json'),
+        ] : [];
+        const manifestPath = candidatePaths.find(p => existsSync(p)) || '';
+        if (manifestPath) {
+          const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+          if (Array.isArray(manifest)) {
+            screenMap = manifest.map((s: any) => ({
+              screenId: s.screenId || s.id || (s.name || 'screen').replace(/\s+/g, '-').toLowerCase(),
+              name: s.title || s.name || s.screenName || 'Screen',
+              description: s.description || '',
+              type: s.type || s.category || s.deviceType?.toLowerCase() || 'page',
+              htmlFile: s.htmlFile || null
+            }));
           }
         }
       } catch { /* manifest read failed */ }
@@ -304,15 +326,18 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
       try {
         const ctx3 = JSON.parse(run.context || '{}');
         const repo3 = ctx3.repo || '';
-        if (repo3) {
-          const stitchDir3 = join(repo3, 'stitch');
-          if (existsSync(stitchDir3)) {
-            const htmlFiles = readdirSync(stitchDir3).filter((f: string) => f.endsWith('.html') && f !== 'DESIGN_MANIFEST.json');
-            screenMap = htmlFiles.map((f: string) => {
-              const screenId = f.replace('.html', '');
-              return { screenId, name: 'Screen', description: '', type: 'page', htmlFile: f };
-            });
-          }
+        // Try original path, then projects/ basename fallback
+        const stitchDir3Candidates = repo3 ? [
+          join(repo3, 'stitch'),
+          join('/home/setrox/projects', repo3.split('/').pop() || '', 'stitch'),
+        ] : [];
+        const stitchDir3 = stitchDir3Candidates.find(d => existsSync(d));
+        if (stitchDir3) {
+          const htmlFiles = readdirSync(stitchDir3).filter((f: string) => f.endsWith('.html') && f !== 'DESIGN_MANIFEST.json');
+          screenMap = htmlFiles.map((f: string) => {
+            const screenId = f.replace('.html', '');
+            return { screenId, name: 'Screen', description: '', type: 'page', htmlFile: f };
+          });
         }
       } catch { /* stitch dir scan failed */ }
     }
@@ -341,10 +366,20 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
       try {
         const ctx = JSON.parse(run.context || '{}');
         const repo = ctx.repo || '';
+        let populated = false;
         if (repo) {
           const repoStitchDir = join(repo, 'stitch');
           if (existsSync(repoStitchDir)) {
             execFileSync('node', [STITCH_SCRIPT, 'populate-cache', repoStitchDir, cacheDir], { timeout: 15_000, stdio: 'pipe' });
+            populated = true;
+          }
+        }
+        // Fallback: worktree deleted — try projects/ dir with basename
+        if (!populated && repo) {
+          const { basename } = await import('path');
+          const altRepoStitch = join('/home/setrox/projects', basename(repo), 'stitch');
+          if (existsSync(altRepoStitch)) {
+            execFileSync('node', [STITCH_SCRIPT, 'populate-cache', altRepoStitch, cacheDir], { timeout: 15_000, stdio: 'pipe' });
           }
         }
       } catch { /* best effort */ }

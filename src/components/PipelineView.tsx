@@ -6,8 +6,8 @@ import { DeleteRunModal } from "./pipeline/DeleteRunModal";
 
 const STEP_ORDER = ["plan", "design", "stories", "setup-repo", "setup-build", "implement", "verify", "security-gate", "qa-test", "final-test", "deploy"];
 const STEP_LABELS: Record<string, string> = {
-  plan: "PLAN", design: "DESIGN", stories: "STORIES", "setup-repo": "SETUP", "setup-build": "BUILD", implement: "IMPL", deploy: "DEPLOY",
-  verify: "VERIFY", "security-gate": "SEC GATE", "qa-test": "QA TEST", "final-test": "FINAL TEST",
+  plan: "PLAN", design: "DSG", stories: "STR", "setup-repo": "REPO", "setup-build": "BLD", implement: "IMPL", deploy: "DEP",
+  verify: "VRF", "security-gate": "SEC", "qa-test": "QA", "final-test": "TEST",
   test: "TEST", pr: "PR", review: "REVIEW",
   triage: "TRIAGE", investigate: "INVEST", fix: "FIX",
   collect: "COLLECT", report: "REPORT",
@@ -83,11 +83,9 @@ const RunCardInline = memo(function RunCardInline({
 
   const wfSteps = WORKFLOW_STEPS[run.workflow] || STEP_ORDER;
   const stepMap = new Map(uniqueSteps.map(s => [s.stepId, s]));
-  const allSteps = wfSteps
-    .filter(stepId => run.status === "running" || stepMap.has(stepId))
-    .map(stepId => stepMap.get(stepId) || {
-      stepId, agent: "", status: "pending", retryCount: 0, type: "step", abandonedCount: 0
-    });
+  const allSteps = wfSteps.map(stepId => stepMap.get(stepId) || {
+    stepId, agent: "", status: "pending", retryCount: 0, type: "step", abandonedCount: 0
+  });
 
   const progressPct = run.storyProgress.total > 0
     ? Math.round((run.storyProgress.completed / run.storyProgress.total) * 100)

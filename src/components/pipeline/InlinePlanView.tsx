@@ -2,12 +2,39 @@ import React, { useState, useEffect, useCallback } from "react";
 import { StoryChecklist } from "../StoryChecklist";
 import { api } from "../../lib/api";
 
+interface StepDuration {
+  stepId: string;
+  status: string;
+  durationMs: number;
+  abandonedCount: number;
+}
+
 interface PlanData {
   prd: string;
   stories: any[];
   rawOutput: string;
   projectMemory?: string;
+  stepDurations?: StepDuration[];
+  storyStats?: Record<string, number>;
 }
+
+function formatDuration(ms: number): string {
+  if (ms <= 0) return "-";
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ${s % 60}s`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  done: "#00ff41",
+  running: "#4488ff",
+  failed: "#ff0040",
+  pending: "#555570",
+  verified: "#22c55e",
+  skipped: "#6b7280",
+};
 
 export interface InlinePlanViewProps {
   runId: string;
@@ -141,7 +168,99 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
         )}
 
         {tab === "memory" && (
-          <pre className="af-inline-plan__raw">{planData.projectMemory || "(no project memory yet)"}</pre>
+          <div className="af-inline-plan__memory">
+            {/* Step Timeline */}
+            {planData.stepDurations && planData.stepDurations.length > 0 && (
+              <div className="af-memory-section">
+                <h4 className="af-memory-section__title">Step Timeline</h4>
+                <div className="af-memory-timeline">
+                  {(() => {
+                    const maxDur = Math.max(...planData.stepDurations.map(s => s.durationMs), 1);
+                    return planData.stepDurations.map((step) => (
+                      <div key={step.stepId} className="af-memory-timeline__row">
+                        <span className="af-memory-timeline__label" style={{ color: STATUS_COLORS[step.status] || "#888" }}>
+                          {step.stepId.toUpperCase()}
+                        </span>
+                        <div className="af-memory-timeline__bar-wrap">
+                          <div
+                            className="af-memory-timeline__bar"
+                            style={{
+                              width: `${Math.max((step.durationMs / maxDur) * 100, 2)}%`,
+                              background: STATUS_COLORS[step.status] || "#555",
+                              opacity: step.status === "pending" ? 0.3 : 0.8,
+                            }}
+                          />
+                        </div>
+                        <span className="af-memory-timeline__dur">{formatDuration(step.durationMs)}</span>
+                        {step.abandonedCount > 0 && (
+                          <span className="af-memory-timeline__abandon" title="Abandon count">
+                            {step.abandonedCount}x
+                          </span>
+                        )}
+                      </div>
+                    ));
+                  })()}
+                </div>
+              </div>
+            )}
+
+            {/* Story Stats */}
+            {planData.storyStats && Object.keys(planData.storyStats).length > 0 && (
+              <div className="af-memory-section">
+                <h4 className="af-memory-section__title">Story Stats</h4>
+                <div className="af-memory-stats">
+                  {Object.entries(planData.storyStats).map(([status, count]) => (
+                    <span key={status} className="af-memory-stat" style={{ color: STATUS_COLORS[status] || "#888" }}>
+                      <span className="af-memory-stat__count">{count}</span>
+                      <span className="af-memory-stat__label">{status}</span>
+                    </span>
+                  ))}
+                  <span className="af-memory-stat" style={{ color: "#aaa" }}>
+                    <span className="af-memory-stat__count">
+                      {Object.values(planData.storyStats).reduce((a, b) => a + b, 0)}
+                    </span>
+                    <span className="af-memory-stat__label">total</span>
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Total Abandon Count */}
+            {planData.stepDurations && (() => {
+              const totalAbandons = planData.stepDurations.reduce((sum, s) => sum + s.abandonedCount, 0);
+              const totalDur = planData.stepDurations.reduce((sum, s) => sum + s.durationMs, 0);
+              return totalAbandons > 0 || totalDur > 0 ? (
+                <div className="af-memory-section">
+                  <h4 className="af-memory-section__title">Summary</h4>
+                  <div className="af-memory-stats">
+                    {totalDur > 0 && (
+                      <span className="af-memory-stat" style={{ color: "#4488ff" }}>
+                        <span className="af-memory-stat__count">{formatDuration(totalDur)}</span>
+                        <span className="af-memory-stat__label">total time</span>
+                      </span>
+                    )}
+                    {totalAbandons > 0 && (
+                      <span className="af-memory-stat" style={{ color: "#ff6600" }}>
+                        <span className="af-memory-stat__count">{totalAbandons}</span>
+                        <span className="af-memory-stat__label">abandons</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ) : null;
+            })()}
+
+            {/* Project Memory */}
+            {planData.projectMemory && (
+              <div className="af-memory-section">
+                <h4 className="af-memory-section__title">Project Memory</h4>
+                <pre className="af-inline-plan__raw">{planData.projectMemory}</pre>
+              </div>
+            )}
+            {!planData.projectMemory && !planData.stepDurations?.length && (
+              <pre className="af-inline-plan__raw">(no project memory yet)</pre>
+            )}
+          </div>
         )}
       </div>
     </div>

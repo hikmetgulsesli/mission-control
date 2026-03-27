@@ -3199,22 +3199,26 @@ html, body, #root {
 }
 .af-step {
   position: relative;
-  padding: 5px 6px;
+  padding: 4px 5px;
   border-radius: 4px;
   text-align: center;
-  min-width: 44px;
+  min-width: 32px;
   flex-shrink: 1;
 }
 .af-step__label {
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 700;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
   white-space: nowrap;
 }
 .af-step__agent {
   font-size: 7px;
   color: rgba(255, 255, 255, 0.4);
   margin-top: 1px;
+  display: none;
+}
+.af-step:hover .af-step__agent {
+  display: block;
 }
 .af-step--pending {
   background: rgba(102, 102, 128, 0.05);
@@ -4213,6 +4217,77 @@ html, body, #root {
   border: none;
   font-family: var(--font);
   margin: 0;
+}
+
+/* ── Memory Tab ── */
+.af-inline-plan__memory { padding: 8px 0; }
+.af-memory-section { margin-bottom: 12px; }
+.af-memory-section__title {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--neon-cyan);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin: 0 0 6px 0;
+}
+.af-memory-timeline { display: flex; flex-direction: column; gap: 3px; }
+.af-memory-timeline__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9px;
+}
+.af-memory-timeline__label {
+  min-width: 60px;
+  font-weight: 600;
+  font-size: 8px;
+  letter-spacing: 0.3px;
+  text-align: right;
+}
+.af-memory-timeline__bar-wrap {
+  flex: 1;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.af-memory-timeline__bar {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s;
+}
+.af-memory-timeline__dur {
+  min-width: 40px;
+  color: var(--text-dim);
+  font-size: 9px;
+  font-family: var(--font-mono);
+}
+.af-memory-timeline__abandon {
+  font-size: 8px;
+  color: var(--neon-orange);
+  font-weight: 700;
+}
+.af-memory-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.af-memory-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+.af-memory-stat__count {
+  font-size: 16px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+.af-memory-stat__label {
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.7;
 }
 
 /* ── Project Checklist ── */
@@ -6753,6 +6828,15 @@ html, body, #root {
 }
 
 /* Tab content */
+.prd-progress-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 15;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 12px;
+}
+
 .prd-tab-content {
   flex: 1;
   overflow-y: auto;
@@ -7195,6 +7279,21 @@ html, body, #root {
 
 .prd-mockup-card:hover {
   border-color: var(--neon-cyan);
+}
+
+.prd-mockup-card__page-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  padding: 2px 6px;
+  border-radius: 4px;
+  z-index: 5;
+  line-height: 1.2;
 }
 
 .prd-mockup-card__preview {
