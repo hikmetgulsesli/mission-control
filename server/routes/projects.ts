@@ -52,6 +52,28 @@ function saveProjects(projects: any[]) {
 }
 
 async function enrichWithStatus(projects: any[]) {
+  // Enrich with latest run number from setfarm DB
+  try {
+    const { getRuns } = await import('../utils/setfarm.js');
+    const allRuns = (await getRuns()) as any[];
+    for (const p of projects) {
+      const repoPath = p.repoPath || p.repo || '';
+      const matching = allRuns
+        .filter((r: any) => {
+          // Guard: empty strings match everything via .includes('') — skip them
+          const matchRepo = repoPath && r.task?.includes(repoPath);
+          const matchId = p.id && p.id.length > 2 && r.task?.includes(p.id);
+          return matchRepo || matchId;
+        })
+        .sort((a: any, b: any) => (b.run_number || 0) - (a.run_number || 0));
+      if (matching.length > 0) {
+        p.latestRunNumber = matching[0].run_number || 0;
+        p.latestRunId = matching[0].id;
+        p.latestRunStatus = matching[0].status;
+      }
+    }
+  } catch {}
+
   for (const p of projects) {
     // Respect manually disabled state — don't override with port check
     if (p.manuallyDisabled) {
@@ -71,6 +93,12 @@ async function enrichWithStatus(projects: any[]) {
 router.get("/projects", async (_req, res) => {
   try {
     const projects = await enrichWithStatus(loadProjects());
+    // Sort by createdAt descending — newest first
+    projects.sort((a: any, b: any) => {
+      const da = a.createdAt || '1970-01-01';
+      const db = b.createdAt || '1970-01-01';
+      return db.localeCompare(da);
+    });
     res.json(projects);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
