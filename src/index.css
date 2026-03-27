@@ -3199,26 +3199,22 @@ html, body, #root {
 }
 .af-step {
   position: relative;
-  padding: 4px 6px;
+  padding: 5px 6px;
   border-radius: 4px;
   text-align: center;
-  min-width: 36px;
+  min-width: 44px;
   flex-shrink: 1;
 }
 .af-step__label {
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.5px;
   white-space: nowrap;
 }
 .af-step__agent {
   font-size: 7px;
   color: rgba(255, 255, 255, 0.4);
   margin-top: 1px;
-  display: none;
-}
-.af-step:hover .af-step__agent {
-  display: block;
 }
 .af-step--pending {
   background: rgba(102, 102, 128, 0.05);
