@@ -42,6 +42,8 @@ app.use(express.json({ limit: "2mb" }));
 // Serve Stitch design cache BEFORE helmet (no CSP for design previews)
 const stitchCacheDir = join(homedir(), ".openclaw", "setfarm", "stitch-cache");
 app.use("/stitch-cache", express.static(stitchCacheDir));
+// Serve stitch files directly from project directories
+app.use("/projects-stitch", express.static("/home/setrox/projects", { index: false }));
 
 app.use(helmet({
   contentSecurityPolicy: {

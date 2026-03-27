@@ -6,8 +6,8 @@ import { DeleteRunModal } from "./pipeline/DeleteRunModal";
 
 const STEP_ORDER = ["plan", "design", "stories", "setup-repo", "setup-build", "implement", "verify", "security-gate", "qa-test", "final-test", "deploy"];
 const STEP_LABELS: Record<string, string> = {
-  plan: "PLAN", design: "DSG", stories: "STR", "setup-repo": "REPO", "setup-build": "BLD", implement: "IMPL", deploy: "DEP",
-  verify: "VRF", "security-gate": "SEC", "qa-test": "QA", "final-test": "TEST",
+  plan: "PLAN", design: "DESIGN", stories: "STORIES", "setup-repo": "REPO", "setup-build": "BUILD", implement: "IMPL", deploy: "DEPLOY",
+  verify: "VERIFY", "security-gate": "SEC", "qa-test": "QA", "final-test": "TEST",
   test: "TEST", pr: "PR", review: "REVIEW",
   triage: "TRIAGE", investigate: "INVEST", fix: "FIX",
   collect: "COLLECT", report: "REPORT",

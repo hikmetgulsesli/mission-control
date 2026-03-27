@@ -3108,7 +3108,7 @@ html, body, #root {
 /* Bottom 3-column layout */
 .af-bottom {
   display: grid;
-  grid-template-columns: 1.2fr 1fr 0.8fr;
+  grid-template-columns: 1.5fr 0.8fr 0.7fr;
   gap: 12px;
   flex: 1;
   min-height: 0;
@@ -3199,10 +3199,10 @@ html, body, #root {
 }
 .af-step {
   position: relative;
-  padding: 4px 5px;
+  padding: 4px 6px;
   border-radius: 4px;
   text-align: center;
-  min-width: 32px;
+  min-width: 36px;
   flex-shrink: 1;
 }
 .af-step__label {

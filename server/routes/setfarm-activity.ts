@@ -255,22 +255,25 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
     const notesMatch = output.match(/DESIGN_NOTES:\s*(.+)/);
     const designNotes = notesMatch ? notesMatch[1] : '';
 
-    // ENRICH: If screenMap exists but lacks htmlFile, merge from DESIGN_MANIFEST.json
+    // ENRICH: If screenMap exists but lacks htmlFile/screenshot, merge from DESIGN_MANIFEST.json
     if (screenMap.length > 0 && projectId) {
       try {
         const ctx0 = JSON.parse(run.context || '{}');
         const repo0 = ctx0.repo || '';
-        if (repo0) {
-          const mp = join(repo0, 'stitch', 'DESIGN_MANIFEST.json');
-          if (existsSync(mp)) {
-            const mf = JSON.parse(readFileSync(mp, 'utf-8'));
-            if (Array.isArray(mf)) {
-              const byId = new Map(mf.map((s: any) => [s.screenId, s]));
-              screenMap = screenMap.map((s: any) => {
-                const m = byId.get(s.screenId);
-                return m ? { ...s, htmlFile: m.htmlFile || null, title: m.title || s.name } : s;
-              });
-            }
+        const manifestCandidates = repo0 ? [
+          join(repo0, 'stitch', 'DESIGN_MANIFEST.json'),
+          join('/home/setrox/projects', repo0.split('/').pop() || '', 'stitch', 'DESIGN_MANIFEST.json'),
+        ] : [];
+        const mp = manifestCandidates.find(p => existsSync(p));
+        if (mp) {
+          const mfRaw = JSON.parse(readFileSync(mp, 'utf-8'));
+          const mfScreens: any[] = Array.isArray(mfRaw) ? mfRaw : (mfRaw.screens || []);
+          if (mfScreens.length > 0) {
+            const byId = new Map(mfScreens.map((s: any) => [s.screenId || s.id, s]));
+            screenMap = screenMap.map((s: any) => {
+              const m = byId.get(s.screenId);
+              return m ? { ...s, htmlFile: m.htmlFile || m.file || null, screenshotFile: m.screenshot || null, title: m.title || s.name } : s;
+            });
           }
         }
       } catch { /* enrich failed */ }
@@ -288,14 +291,16 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
         ] : [];
         const manifestPath = candidatePaths.find(p => existsSync(p)) || '';
         if (manifestPath) {
-          const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8'));
-          if (Array.isArray(manifest)) {
-            screenMap = manifest.map((s: any) => ({
+          const manifestRaw = JSON.parse(readFileSync(manifestPath, 'utf-8'));
+          const manifestScreens: any[] = Array.isArray(manifestRaw) ? manifestRaw : (manifestRaw.screens || []);
+          if (manifestScreens.length > 0) {
+            screenMap = manifestScreens.map((s: any) => ({
               screenId: s.screenId || s.id || (s.name || 'screen').replace(/\s+/g, '-').toLowerCase(),
               name: s.title || s.name || s.screenName || 'Screen',
               description: s.description || '',
               type: s.type || s.category || s.deviceType?.toLowerCase() || 'page',
-              htmlFile: s.htmlFile || null
+              htmlFile: s.htmlFile || s.file || null,
+              screenshotFile: s.screenshot || null,
             }));
           }
         }
@@ -351,7 +356,8 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
 
     // Cache dir for this project's screenshots
 
-    const cacheDir = join(import.meta.dirname || __dirname, '..', 'stitch-cache', projectId);
+    const homeDir = process.env.HOME || '/home/setrox';
+    const cacheDir = join(homeDir, '.openclaw', 'setfarm', 'stitch-cache', projectId);
     mkdirSync(cacheDir, { recursive: true });
 
     const STITCH_SCRIPT = join(PATHS.setfarmRepoDir, 'scripts/stitch-api.mjs');
@@ -406,20 +412,50 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
       }
     }
 
-    const screens = screenMap.map((screen: any) => {
-      // Try screenId-based files first, then htmlFile from manifest
-      const screenshotPath = join(cacheDir, screen.screenId + '.png');
-      const htmlById = join(cacheDir, screen.screenId + '.html');
-      const htmlByName = screen.htmlFile ? join(cacheDir, screen.htmlFile) : '';
+    // Resolve stitch dir: prefer project repo dir, fallback to stitch-cache
+    let stitchBase = '';
+    let stitchUrlBase = '';
+    try {
+      const ctxRaw = run.context || '{}';
+      const ctx = typeof ctxRaw === 'string' ? JSON.parse(ctxRaw) : ctxRaw;
+      const repo = ctx.repo || '';
+      const projName = repo ? repo.split('/').pop() : '';
+      const projStitch = projName ? join('/home/setrox/projects', projName, 'stitch') : '';
+      if (projStitch && existsSync(projStitch)) {
+        stitchBase = projStitch;
+        stitchUrlBase = `/projects-stitch/${projName}/stitch`;
+      } else if (repo && existsSync(join(repo, 'stitch'))) {
+        stitchBase = join(repo, 'stitch');
+        stitchUrlBase = `/projects-stitch/${projName}/stitch`;
+      }
+    } catch { /* context parse */ }
+    // Fallback to stitch-cache
+    if (!stitchBase) {
+      stitchBase = cacheDir;
+      stitchUrlBase = `/stitch-cache/${projectId}`;
+    }
 
-      const hasScreenshot = existsSync(screenshotPath);
-      const htmlPath = existsSync(htmlById) ? htmlById : (htmlByName && existsSync(htmlByName) ? htmlByName : '');
-      const htmlFileName = htmlPath ? htmlPath.split('/').pop() : null;
+    const screens = screenMap.map((screen: any) => {
+      // Try: manifest screenshot field, screenId.png, htmlFile-based
+      const candidates = [
+        screen.screenshotFile || '',
+        screen.screenId + '.png',
+        screen.htmlFile ? screen.htmlFile.replace('.html', '.png') : '',
+      ].filter(Boolean);
+      const screenshotName = candidates.find(f => existsSync(join(stitchBase, f))) || null;
+
+      const htmlCandidates = [
+        screen.htmlFile || '',
+        screen.screenId + '.html',
+      ].filter(Boolean);
+      const htmlName = htmlCandidates.find(f => existsSync(join(stitchBase, f))) || null;
 
       return {
         ...screen,
-        screenshotUrl: hasScreenshot ? `/stitch-cache/${projectId}/${screen.screenId}.png` : null,
-        htmlUrl: htmlFileName ? `/stitch-cache/${projectId}/${htmlFileName}` : null,
+        screenshotUrl: screenshotName ? `${stitchUrlBase}/${encodeURIComponent(screenshotName)}` : null,
+        htmlUrl: htmlName ? `${stitchUrlBase}/${encodeURIComponent(htmlName)}` : null,
+        width: screen.width || null,
+        height: screen.height || null,
       };
     });
 
