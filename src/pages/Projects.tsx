@@ -237,7 +237,13 @@ export function Projects() {
       case 'port': return (a.ports?.frontend || 9999) - (b.ports?.frontend || 9999);
       case 'name': return a.name.localeCompare(b.name);
       case 'run': {
-        return (b.runNumber || 0) - (a.runNumber || 0);
+        // runNumber yoksa createdAt'e göre sırala (en yeni üstte)
+        const aRun = a.runNumber || 0;
+        const bRun = b.runNumber || 0;
+        if (aRun === 0 && bRun === 0) return (b.createdAt || '').localeCompare(a.createdAt || '');
+        if (aRun === 0) return -1;
+        if (bRun === 0) return 1;
+        return bRun - aRun;
       }
       case 'status': {
         const order: Record<string, number> = { building: 0, active: 1, failed: 2 };
