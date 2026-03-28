@@ -109,29 +109,80 @@ export function scorePrd(content: string): ScoreDetails {
 export function checkScreenCoverage(
   prdContent: string,
   screens: { title: string; id?: string }[],
+  savedPages?: { name: string; route: string; description: string }[] | null,
 ): { covered: string[]; missing: string[]; coverage: number } {
   const lines = prdContent.split('\n');
-  // Extract PAGE headings from PRD (h3 with route paths or "Sayfa" in name)
+  // If pages are already extracted and saved in DB, use them directly (no regex)
+  if (savedPages && savedPages.length > 0) {
+    const stopWords = new Set(['bir', 've', 'ile', 'icin', 'the', 'and', 'for', 'with', 'prd', 'sayfa', 'ekran', 'page', 'screen', 'view']);
+    const covered: string[] = [];
+    const missing: string[] = [];
+    const normalize = (r: string) => r.replace(/\/+$/, ''); // strip trailing slash
+
+    for (const page of savedPages) {
+      // 1. Route-based exact match (yeni ekranlar — pageRoute field'i var)
+      const pageRoute = normalize(page.route || '');
+      if (pageRoute) {
+        const routeMatch = screens.some(s =>
+          (s as any).pageRoute && normalize((s as any).pageRoute) === pageRoute
+        );
+        if (routeMatch) { covered.push(page.name); continue; }
+      }
+
+      // 2. Fuzzy title match (eski ekranlar — pageRoute yok)
+      const screenTitles = screens.map(s => s.title.toLowerCase());
+      const headingWords = page.name.toLowerCase().split(/\s+/).filter(w => w.length > 2 && !stopWords.has(w));
+      if (headingWords.length === 0) { missing.push(page.name); continue; }
+      const titleMatch = screenTitles.some(st => {
+        const matchCount = headingWords.filter(w => st.includes(w)).length;
+        if (headingWords.length === 1) return st.includes(headingWords[0]);
+        return matchCount >= 2 || (matchCount / headingWords.length) >= 0.5;
+      });
+      if (titleMatch) covered.push(page.name);
+      else missing.push(page.name);
+    }
+    const total = covered.length + missing.length;
+    return { covered, missing, coverage: total > 0 ? Math.round((covered.length / total) * 100) : 100 };
+  }
+
+  // Fallback: extract pages from PRD via regex (for old PRDs without saved pages)
   const sectionHeadings: string[] = [];
 
-  // Strategy 1: Find pages from "Sayfalar" section (h3 items under h2 "Sayfalar")
+  // Strategy 1: Find pages from "Sayfalar" section — numbered/bullet/h3 list items
+  // Exit on the NEXT h2 heading after entering (don't stay open for ## X. ... Sayfası)
   let inPagesSection = false;
   for (const line of lines) {
-    if (/^##\s+.*sayfalar/i.test(line)) { inPagesSection = true; continue; }
-    if (inPagesSection && /^##\s/.test(line) && !/sayfa/i.test(line)) { inPagesSection = false; continue; }
+    if (/^##\s+.*sayfalar/i.test(line) && !inPagesSection) { inPagesSection = true; continue; }
+    if (inPagesSection && /^##\s/.test(line)) { inPagesSection = false; break; }
     if (inPagesSection) {
-      const m = line.match(/^###\s+(?:\d+\.\d+\s+)?(.+)/);
-      if (m) {
-        let name = m[1].trim().replace(/\s*\([\/][^)]*\)\s*$/, '').trim(); // Remove (/route)
+      // Numbered list: "1. **Ana Sayfa** (`/`) — desc"
+      const mNum = line.match(/^\d+\.\s+\*\*(.+?)\*\*\s*/);
+      if (mNum) {
+        let name = mNum[1].trim().replace(/\s*\(`[^`]*`\)\s*$/, '').trim();
+        if (name.length > 2) sectionHeadings.push(name);
+        continue;
+      }
+      // Bullet list: "- **Ana Sayfa** — desc"
+      const mBullet = line.match(/^[-*]\s+\*\*(.+?)\*\*\s*/);
+      if (mBullet) {
+        let name = mBullet[1].trim().replace(/\s*\(`[^`]*`\)\s*$/, '').trim();
+        if (name.length > 2) sectionHeadings.push(name);
+        continue;
+      }
+      // h3 items: "### Page Name (/route)"
+      const mH3 = line.match(/^###\s+(?:\d+\.?\d*\s+)?(.+)/);
+      if (mH3) {
+        let name = mH3[1].trim().replace(/\s*\(?`?\/[^`)]*`?\)?\s*$/, '').trim();
         if (name.length > 2) sectionHeadings.push(name);
       }
     }
   }
 
-  // Strategy 2: If no pages found, look for h2/h3 with route paths like (/path)
+  // Strategy 2: If few pages found, look for h2 with route paths like (/path) or (`/path`)
   if (sectionHeadings.length < 2) {
     for (const line of lines) {
-      const m = line.match(/^#{2,3}\s+(?:\d+\.?\d*\s+)?(.+?)\s*\(\/[^)]*\)/);
+      // Match h2 page sections: "## 4. Ana Sayfa (`/`)" or "## 4. Ana Sayfa (/)"
+      const m = line.match(/^##\s+(?:\d+\.?\d*\s+)?(.+?)\s*\(`?\/[^)]*`?\)/);
       if (m) {
         const name = m[1].trim();
         if (name.length > 2 && !sectionHeadings.includes(name)) sectionHeadings.push(name);
@@ -139,15 +190,27 @@ export function checkScreenCoverage(
     }
   }
 
-  // Strategy 3: Bullet list pages ("- Ana Sayfa — desc")
-  if (sectionHeadings.length < 2) {
-    let inPageList = false;
+  // Strategy 3: Also check h3 with route paths (e.g. Blog Post Detail subpage)
+  // Dedup by route path — if same route already found via Strategy 1, skip
+  if (sectionHeadings.length > 0) {
+    // Extract routes from Strategy 1 headings for dedup
+    const existingRoutes = new Set<string>();
     for (const line of lines) {
-      if (/^#{1,3}\s+.*(?:sayfa\s*listesi|sayfalar)/i.test(line)) { inPageList = true; continue; }
-      if (inPageList && /^#{1,2}\s/.test(line)) { inPageList = false; continue; }
-      if (inPageList) {
-        const m = line.match(/^[-*]\s+(?:\*\*)?([^*\n]+?)(?:\*\*)?\s*[—–-]\s/);
-        if (m && m[1].trim().length > 2) sectionHeadings.push(m[1].trim());
+      if (/^\d+\.\s+\*\*/.test(line)) {
+        const rm = line.match(/\(`([^`]+)`\)/);
+        if (rm) existingRoutes.add(rm[1].trim());
+      }
+    }
+    for (const line of lines) {
+      const m = line.match(/^###\s+(?:\d+\.?\d*\s+)?(.+?)\s*\(`?\/[^)]*`?\)/);
+      if (m) {
+        const name = m[1].trim();
+        // Extract route from this h3
+        const rm = line.match(/\(`([^`]+)`\)/);
+        const route = rm ? rm[1].trim() : '';
+        // Skip if route already covered by Strategy 1
+        if (route && existingRoutes.has(route)) continue;
+        if (name.length > 2 && !sectionHeadings.includes(name)) sectionHeadings.push(name);
       }
     }
   }
@@ -182,6 +245,37 @@ export function checkScreenCoverage(
   const coverage = total > 0 ? Math.round((covered.length / total) * 100) : 100;
 
   return { covered, missing, coverage };
+}
+
+
+// Extract page list from PRD content - returns structured array
+// Called once when PRD is generated/enhanced, result saved to DB
+export function extractPages(prdContent: string): { name: string; route: string; description: string }[] {
+  const lines = prdContent.split('\n');
+  const pages: { name: string; route: string; description: string }[] = [];
+
+  // Find "Sayfalar" section and parse numbered/bullet list
+  let inPagesSection = false;
+  for (const line of lines) {
+    if (/^##\s+.*sayfalar/i.test(line) && !inPagesSection) { inPagesSection = true; continue; }
+    if (inPagesSection && /^##\s/.test(line)) break;
+    if (!inPagesSection) continue;
+
+    // Numbered: '1. **Name** (`/route`) - description'
+    let m = line.match(/^\d+\.\s+\*\*(.+?)\*\*\s*\(`([^`]+)`[^)]*\)\s*[\u2014\u2013-]\s*(.+)/);
+    if (m) { pages.push({ name: m[1].trim(), route: m[2].trim(), description: m[3].trim() }); continue; }
+    // Numbered without desc
+    m = line.match(/^\d+\.\s+\*\*(.+?)\*\*\s*\(`([^`]+)`[^)]*\)/);
+    if (m) { pages.push({ name: m[1].trim(), route: m[2].trim(), description: '' }); continue; }
+    // Bullet: '- **Name** (`/route`) - description'
+    m = line.match(/^[-*]\s+\*\*(.+?)\*\*\s*\(`([^`]+)`[^)]*\)\s*[\u2014\u2013-]\s*(.+)/);
+    if (m) { pages.push({ name: m[1].trim(), route: m[2].trim(), description: m[3].trim() }); continue; }
+    // h3: '### Name (`/route`)'
+    m = line.match(/^###\s+(?:\d+\.?\d*\s+)?(.+?)\s*\(`([^`]+)`[^)]*\)/);
+    if (m) { pages.push({ name: m[1].trim(), route: m[2].trim(), description: '' }); }
+  }
+
+  return pages;
 }
 
 export function estimateCost(prd: string): {

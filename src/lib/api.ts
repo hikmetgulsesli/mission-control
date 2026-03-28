@@ -178,8 +178,6 @@ export const api = {
     fetchApi<any>('/api/prd/score', { method: 'POST', headers: CT_JSON, body: JSON.stringify(data) }),
   prdMockups: (data: { prdId?: string | null; prdContent?: string; title?: string }) =>
     fetchApi<any>('/api/prd/mockups', { method: 'POST', headers: CT_JSON, body: JSON.stringify(data) }),
-  prdCompare: (data: { prdId: string }) =>
-    fetchApi<any>('/api/prd/compare', { method: 'POST', headers: CT_JSON, body: JSON.stringify(data) }),
   prdEstimate: (data: { content?: string; prdId?: string }) =>
     fetchApi<any>('/api/prd/estimate', { method: 'POST', headers: CT_JSON, body: JSON.stringify(data) }),
   prdStartRun: (data: { prdId: string; projectName?: string; workflow?: string }) =>
@@ -199,6 +197,6 @@ export const api = {
     fetchApi<any>(`/api/prd/screens/${prdId}/${screenId}/regenerate`, { method: 'POST', headers: CT_JSON, body: JSON.stringify(data || {}) }),
   prdVariantScreen: (prdId: string, data: { sourceScreenId: string; prompt?: string }) =>
     fetchApi<any>(`/api/prd/screens/${prdId}/variant`, { method: 'POST', headers: CT_JSON, body: JSON.stringify(data) }),
-  prdScreenCoverage: (data: { prdContent: string; screens: any[] }) =>
+  prdScreenCoverage: (data: { prdContent: string; screens: any[]; prdId?: string }) =>
     fetchApi<any>('/api/prd/screen-coverage', { method: 'POST', headers: CT_JSON, body: JSON.stringify(data) }),
 };

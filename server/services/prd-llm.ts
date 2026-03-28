@@ -61,19 +61,26 @@ KURALLAR:
 PRD FORMATI:
 1. Proje Genel Bakis (1 paragraf)
 2. Tasarim Sistemi: renkler (hex kodlari), fontlar, spacing degerleri
-3. Sayfa Listesi: projedeki TUM sayfalari/ekranlari listele (## Sayfalar basligiyla). Her sayfa icin:
-   - Sayfa adi (benzersiz, net)
-   - 1 satirlik aciklama
-   Ornek: "Ana Sayfa — Hero section, ozellikler grid, CTA"
+3. Sayfa Listesi: "## Sayfalar" basligiyla. Her sayfa su EXACT formatta:
+   N. **Sayfa Adi** (\`/route\`) — Kisa aciklama
+   
+   Ornek:
+   1. **Ana Sayfa** (\`/\`) — Hero section, ozellikler grid, CTA
+   2. **Hakkimizda** (\`/about\`) — Takim tanitimi, sirket hikayesi
+   3. **Blog** (\`/blog\`) — Yazi listesi, kategoriler, arama
+   
+   ZORUNLU: Backtick icinde route (\`/path\`), bold isim (**Ad**), tire ile aciklama. Bu format DEGISTIRILEMEZ.
 4. Her sayfa icin ayri detay bolumu (## [Sayfa Adi]) — layout, komponentler, davranislar, exact CSS degerleri
 5. Animasyonlar: timing (ms), easing, duration
 6. Responsive breakpoint'ler (mobile/tablet/desktop)
 7. Veri modeli (interface/type tanimlari)
 8. API endpoint'leri
 
-ONEMLI: "## Sayfalar" bolumunde TUM sayfalari/ekranlari ac acik listele. Her sayfa sonra ayri ## bolum olarak detaylandirilacak. Sayfa sayisi en az 3, projenin buyuklugune gore 4-8 arasi.
+ONEMLI: "## Sayfalar" bolumunde TUM sayfalari EXACT formatta listele: N. **Ad** (\`/route\`) — Aciklama. Her sayfa sonra ayri ## bolum olarak detaylandirilacak. Sayfa sayisi en az 3, projenin buyuklugune gore 4-8 arasi.
 
 Tech stack: ${platform === 'mobile' ? 'React Native + Expo + TypeScript' : 'React + TypeScript + Tailwind CSS + shadcn/ui'}
+
+ISIM KURALI: Domain adindaki, kullanicinin verdigi isimleri/kelimeleri ASLA degistirme veya tahminle duzeltme — oldugu gibi kullan. Ornek: "gulsesli" ise "gulesli" yapma.
 
 DETAY SEVIYESI: "Modern goruntum" YAZMA → exact hex renk yaz. "Guzel animasyon" YAZMA → "300ms ease-out opacity 0→1" yaz.`;
 
@@ -165,7 +172,11 @@ KRITIK KURALLAR:
 - Responsive breakpoint'ler ekle (eksikse)
 - Edge case'leri tanimla
 - CIKTI: Onceki PRD'nin TAMAMI + eklenen detaylar. Hicbir bolum cikarilmamali.
-- Eger PRD zaten 100 puan aliyorsa, sadece kucuk iyilestirmeler yap, bolum silme`,
+- Eger PRD zaten 100 puan aliyorsa, sadece kucuk iyilestirmeler yap, bolum silme
+- "## Sayfalar" bolumundeki format: N. **Sayfa Adi** (\`/route\`) — Aciklama. Bu format ASLA degistirilmez.
+- Yeni sayfa EKLENEBILIR ama AYNI formatta olmali. Mevcut sayfalarin adi ve route'u DEGISTIRILEMEZ.
+- Tasarim sistemi degerlerini (font-family, hex renk kodlari, spacing, shadows) DEGISTIRME — sadece eksik olanlari EKLE.
+- Mevcut fontlar, renkler ve diger design token'lar oldugu gibi KORUNMALI.`,
     },
     {
       role: 'user',
@@ -227,31 +238,6 @@ Bir sonraki soruyu sor.`,
   return callLlm(messages, 500);
 }
 
-export async function generateAbComparison(prd: string, title: string): Promise<{ prdA: string; prdB: string }> {
-  const messages = [
-    {
-      role: 'system',
-      content: `İki farklı PRD versiyonu oluştur:
-PRD-A: Minimal — az story, hızlı implementasyon, temel özellikler
-PRD-B: Detaylı — çok story, yüksek kalite, tüm edge case'ler
-
-Her ikisini de tam PRD formatında yaz. Aralarına "---PRD-B---" ayracı koy.`,
-    },
-    {
-      role: 'user',
-      content: `"${title}" projesi için mevcut PRD'yi baz alarak A/B karşılaştırma PRD'leri oluştur:
-
-${prd}`,
-    },
-  ];
-
-  const response = await callLlm(messages, 12000);
-  const parts = response.split('---PRD-B---');
-  return {
-    prdA: parts[0]?.trim() || response,
-    prdB: parts[1]?.trim() || '',
-  };
-}
 
 export async function analyzeSite(html: string, url: string): Promise<any> {
   const truncatedHtml = html.slice(0, 15000);

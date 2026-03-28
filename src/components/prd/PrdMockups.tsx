@@ -9,6 +9,8 @@ interface Screen {
   height?: number;
   prompt?: string;
   parentScreenId?: string;
+  pageIndex?: number;
+  pageName?: string;
 }
 
 interface PrdMockupsProps {
@@ -18,6 +20,7 @@ interface PrdMockupsProps {
   onClearAll?: () => void;
   onGenerateMissing?: (title: string) => void;
   onDeleteScreen?: (screenId: string) => void;
+  stitchProjectId?: string | null;
 }
 
 function getCoverageBadgeClass(coverage: number): string {
@@ -26,7 +29,7 @@ function getCoverageBadgeClass(coverage: number): string {
   return 'prd-mockups__coverage--poor';
 }
 
-export function PrdMockups({ screens, coverage, onScreenClick, onClearAll, onGenerateMissing, onDeleteScreen }: PrdMockupsProps) {
+export function PrdMockups({ screens, coverage, onScreenClick, onClearAll, onGenerateMissing, onDeleteScreen, stitchProjectId }: PrdMockupsProps) {
   if (!screens || screens.length === 0) {
     return (
       <div className="prd-empty">
@@ -36,11 +39,23 @@ export function PrdMockups({ screens, coverage, onScreenClick, onClearAll, onGen
     );
   }
 
+  // Filter by active stitch project (don't mix old/new generations)
+  const filtered = stitchProjectId
+    ? screens.filter(s => (s as any).projectId === stitchProjectId)
+    : screens;
+
+  // Sort by pageIndex (PRD page order), fallback to original order
+  const sorted = [...filtered].sort((a, b) => {
+    const ai = (a as any).pageIndex || 999;
+    const bi = (b as any).pageIndex || 999;
+    return ai - bi;
+  });
+
   return (
     <div className="prd-mockups">
       {/* Header with count and coverage */}
       <div className="prd-mockups__header">
-        <span className="prd-mockups__count">{screens.length} ekran</span>
+        <span className="prd-mockups__count">{filtered.length} ekran</span>
         {screens.length > 0 && onClearAll && (
           <button className="btn btn--small btn--danger" onClick={onClearAll}>Tumunu Sil</button>
         )}
@@ -62,48 +77,55 @@ export function PrdMockups({ screens, coverage, onScreenClick, onClearAll, onGen
         </div>
       )}
 
-      {/* Screen grid */}
+      {/* Screen grid — sorted by PRD page order */}
       <div className="prd-mockups__grid">
-        {screens.map((screen) => (
-          <div
-            key={screen.id}
-            className={`prd-mockup-card ${screen.parentScreenId ? 'prd-mockup-card--variant' : ''}`}
-            onClick={() => onScreenClick(screen.id)}
-          >
-            <div className="prd-mockup-card__preview">
-              {screen.screenshotUrl ? (
-                <img src={screen.screenshotUrl} alt={screen.name} />
-              ) : (
-                <div className="prd-mockup-card__placeholder">
-                  <span className="prd-mockup-card__icon">
-                    {screen.status === 'pending' ? '\u23F3' : screen.status === 'done' ? '\u2713' : '\u26A1'}
-                  </span>
-                </div>
+        {sorted.map((screen) => {
+          const pageIdx = (screen as any).pageIndex;
+          const displayName = (screen as any).pageName || screen.name;
+          return (
+            <div
+              key={screen.id}
+              className={`prd-mockup-card ${screen.parentScreenId ? 'prd-mockup-card--variant' : ''}`}
+              onClick={() => onScreenClick(screen.id)}
+            >
+              {pageIdx > 0 && (
+                <span className="prd-mockup-card__page-badge">#{pageIdx}</span>
               )}
-            </div>
-            <div className="prd-mockup-card__info">
-              <h4 className="prd-mockup-card__name">{screen.name}</h4>
-              <div className="prd-mockup-card__badges">
-                <span className={`prd-mockup-card__status prd-mockup-card__status--${screen.status}`}>
-                  {screen.status}
-                </span>
-                {screen.parentScreenId && (
-                  <span className="prd-mockup-card__variant-tag">varyant</span>
+              <div className="prd-mockup-card__preview">
+                {screen.screenshotUrl ? (
+                  <img src={screen.screenshotUrl} alt={displayName} />
+                ) : (
+                  <div className="prd-mockup-card__placeholder">
+                    <span className="prd-mockup-card__icon">
+                      {screen.status === 'pending' ? '\u23F3' : screen.status === 'done' ? '\u2713' : '\u26A1'}
+                    </span>
+                  </div>
                 )}
               </div>
+              <div className="prd-mockup-card__info">
+                <h4 className="prd-mockup-card__name">{displayName}</h4>
+                <div className="prd-mockup-card__badges">
+                  <span className={`prd-mockup-card__status prd-mockup-card__status--${screen.status}`}>
+                    {screen.status}
+                  </span>
+                  {screen.parentScreenId && (
+                    <span className="prd-mockup-card__variant-tag">varyant</span>
+                  )}
+                </div>
+              </div>
+              {screen.width && screen.height && (
+                <div className="prd-mockup-card__size">{screen.width}x{screen.height}</div>
+              )}
+              {onDeleteScreen && (
+                <button
+                  className="prd-mockup-card__delete"
+                  onClick={(e) => { e.stopPropagation(); onDeleteScreen(screen.id); }}
+                  title="Bu ekrani sil"
+                >SIL</button>
+              )}
             </div>
-            {screen.width && screen.height && (
-              <div className="prd-mockup-card__size">{screen.width}x{screen.height}</div>
-            )}
-            {onDeleteScreen && (
-              <button
-                className="prd-mockup-card__delete"
-                onClick={(e) => { e.stopPropagation(); onDeleteScreen(screen.id); }}
-                title="Bu ekrani sil"
-              >SIL</button>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

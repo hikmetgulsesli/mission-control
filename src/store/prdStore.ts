@@ -15,10 +15,9 @@ interface PrdState {
   research: any;
   chatHistory: { role: string; content: string }[];
   mockupScreens: any[];
-  compareData: any;
   runId: string | null;
   // UI state
-  activeTab: 'prd' | 'mockup' | 'compare' | 'analysis';
+  activeTab: 'prd' | 'mockup' | 'analysis';
   loading: Record<string, boolean>;
   loadingStartedAt: Record<string, number>; // timestamp when loading started
   logs: string[];
@@ -56,7 +55,6 @@ const initialState: PrdState = {
   research: null,
   chatHistory: [],
   mockupScreens: [],
-  compareData: null,
   runId: null,
   activeTab: 'prd',
   loading: {},

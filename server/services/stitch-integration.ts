@@ -251,10 +251,15 @@ export async function prepareDesignFilesForRepo(
   for (const screen of screens) {
     if (!screen.screenId || screen.status !== 'done') continue;
     const srcHtml = join(cacheDir, `${screen.screenId}.html`);
-    const destHtml = join(stitchDir, `${screen.screenId}.html`);
+    const srcPng = join(cacheDir, `${screen.screenId}.png`);
+    // Readable filename: "Ana Sayfa" → "Ana-Sayfa.html"
+    const safeName = (screen.title || screen.screenId).replace(/[^a-zA-Z0-9\u00C0-\u024F\u0400-\u04FF -]/g, '').replace(/\s+/g, '-');
+    const destHtml = join(stitchDir, `${safeName}.html`);
+    const destPng = join(stitchDir, `${safeName}.png`);
     try { if (existsSync(srcHtml)) await copyFile(srcHtml, destHtml); } catch { /* ok */ }
+    try { if (existsSync(srcPng)) await copyFile(srcPng, destPng); } catch { /* ok */ }
     screenMap[screen.title] = screen.screenId;
-    manifestScreens.push({ id: screen.screenId, title: screen.title, file: `${screen.screenId}.html`, width: screen.width, height: screen.height });
+    manifestScreens.push({ id: screen.screenId, title: screen.title, file: `${safeName}.html`, screenshot: `${safeName}.png`, width: screen.width, height: screen.height });
   }
 
   await writeFile(join(repoPath, '.stitch'), JSON.stringify({ projectId, name: 'PRD Design', updatedAt: new Date().toISOString() }, null, 2));

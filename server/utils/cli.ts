@@ -13,7 +13,7 @@ export async function runCli(cmd: string, args: string[]): Promise<string> {
   try {
     const { stdout } = await execFileAsync(cmd, args, {
       env,
-      timeout: 15000,
+      timeout: 60000,
       maxBuffer: 1024 * 1024,
     });
     return stdout.trim();
