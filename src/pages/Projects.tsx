@@ -241,8 +241,8 @@ export function Projects() {
         const aRun = a.runNumber || 0;
         const bRun = b.runNumber || 0;
         if (aRun === 0 && bRun === 0) return (b.createdAt || '').localeCompare(a.createdAt || '');
-        if (aRun === 0) return -1;
-        if (bRun === 0) return 1;
+        if (aRun === 0) return 1;
+        if (bRun === 0) return -1;
         return bRun - aRun;
       }
       case 'status': {
