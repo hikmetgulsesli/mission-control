@@ -13,7 +13,7 @@ import { sql } from '../utils/pg.js';
 
 const execFileAsync = promisify(execFileCb);
 
-const USE_PG = process.env.DB_BACKEND === 'postgres';
+const USE_PG = true; // Faz7: PG-only
 const SETFARM_DB = join(homedir(), '.openclaw', 'setfarm', 'setfarm.db');
 
 async function querySetfarm(sqlStr: string): Promise<any[]> {

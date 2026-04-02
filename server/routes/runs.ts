@@ -7,7 +7,7 @@ import { sql } from '../utils/pg.js';
 import { getStuckRuns, unstickRun, getRunDetail, diagnoseStuckStep, tryAutoFix, skipStory, deleteRun } from '../utils/setfarm-db.js';
 
 const router = Router();
-const USE_PG = process.env.DB_BACKEND === 'postgres';
+const USE_PG = true; // Faz7: PG-only
 
 router.get('/runs', async (_req, res) => {
   try {
@@ -61,12 +61,23 @@ router.post('/runs/:id/retry', async (req, res) => {
       // PG path: reset failed step/story status directly
       if (USE_PG) {
         try {
+          // P1-08: Add max_retries guard to prevent infinite retries
           if (step_id) {
+            const stepCheck = await sql`SELECT retry_count, max_retries FROM steps WHERE run_id = ${id} AND step_id = ${step_id} AND status = 'failed'`;
+            if (stepCheck.length > 0 && stepCheck[0].retry_count >= stepCheck[0].max_retries + 2) {
+              res.status(400).json({ error: `Step ${step_id} has exceeded max retries (${stepCheck[0].retry_count}/${stepCheck[0].max_retries})` });
+              return;
+            }
             await sql`UPDATE steps SET status = 'waiting', retry_count = retry_count + 1, updated_at = now() WHERE run_id = ${id} AND step_id = ${step_id} AND status = 'failed'`;
-            await sql`UPDATE stories SET status = 'pending', retry_count = retry_count + 1, updated_at = now() WHERE run_id = ${id} AND status = 'failed'`;
+            // Only reset stories for this specific step's loop (not ALL stories)
+            const loopStep = await sql`SELECT id, type FROM steps WHERE run_id = ${id} AND step_id = ${step_id}`;
+            if (loopStep.length > 0 && loopStep[0].type === 'loop') {
+              await sql`UPDATE stories SET status = 'pending', retry_count = retry_count + 1, updated_at = now() WHERE run_id = ${id} AND status = 'failed'`;
+            }
           } else {
-            await sql`UPDATE steps SET status = 'waiting', retry_count = retry_count + 1, updated_at = now() WHERE run_id = ${id} AND status = 'failed'`;
-            await sql`UPDATE stories SET status = 'pending', retry_count = retry_count + 1, updated_at = now() WHERE run_id = ${id} AND status = 'failed'`;
+            // No step_id: require explicit step_id for safety
+            res.status(400).json({ error: 'step_id required for PG retry — use CLI for full run retry' });
+            return;
           }
           await sql`UPDATE runs SET status = 'running', updated_at = now() WHERE id = ${id}`;
           console.log(`[RETRY] PG fallback success: run=${id}`);

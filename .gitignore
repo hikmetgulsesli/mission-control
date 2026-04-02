@@ -31,3 +31,5 @@ Thumbs.db
 stitch/
 .stitch-screens-*
 DESIGN.md
+server/.env
+dist-server/

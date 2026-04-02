@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import Database from 'better-sqlite3';
+// import Database from 'better-sqlite3'; // Faz7: SQLite removed
 import { readdirSync, statSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
@@ -8,8 +8,8 @@ import pgSql from '../utils/pg.js';
 const router = Router();
 
 // DB backend toggle: 'sqlite' for legacy, 'postgres' (default) for PG
-const DB_BACKEND = (process.env.LIVE_EVENTS_BACKEND || 'postgres').toLowerCase();
-const USE_PG = DB_BACKEND !== 'sqlite';
+const DB_BACKEND = 'postgres'; // Faz7: PG-only
+const USE_PG = true; // Faz7: PG-only
 
 // Agent name/emoji mapping
 const AGENT_MAP: Record<string, { name: string; emoji: string }> = {
@@ -56,13 +56,13 @@ interface LiveEvent {
 
 
 // ── SQLite persistence (legacy, when LIVE_EVENTS_BACKEND=sqlite) ──
-let db: InstanceType<typeof Database> | null = null;
+let db: any = null; // Faz7: SQLite type removed
 let insertStmt: any = null;
 let insertMany: any = null;
 
 if (!USE_PG) {
   const DB_PATH = join(homedir(), '.openclaw', 'setfarm', 'live-events.db');
-  db = new Database(DB_PATH);
+  db = null; // Faz7: new Database(DB_PATH) removed — PG-only
   db.pragma('journal_mode = WAL');
   db.pragma('busy_timeout = 5000');
 
@@ -288,11 +288,30 @@ function truncate(s: string | undefined | null, max: number): string | null {
   return s.length > max ? s.slice(0, max) + '\n... (truncated)' : s;
 }
 
+// Cache real project dirs (refreshed every 60s)
+let _realProjectsCache: Set<string> | null = null;
+let _realProjectsCacheTs = 0;
+function getRealProjects(): Set<string> {
+  const now = Date.now();
+  if (_realProjectsCache && now - _realProjectsCacheTs < 60000) return _realProjectsCache;
+  try {
+    _realProjectsCache = new Set(
+      readdirSync(join(homedir(), 'projects'))
+        .filter(d => { try { return statSync(join(homedir(), 'projects', d)).isDirectory(); } catch { return false; } })
+    );
+  } catch {
+    _realProjectsCache = new Set();
+  }
+  _realProjectsCacheTs = now;
+  return _realProjectsCache;
+}
+
 function extractProject(cwd: string | null, summary?: string | null, file?: string | null, detail?: string | null): string | null {
+  const realProjects = getRealProjects();
   const sources = [cwd, summary, file, detail].filter(Boolean) as string[];
   for (const src of sources) {
     const m = src.match(/\/projects\/([a-zA-Z0-9_-]+)/);
-    if (m) return m[1];
+    if (m && realProjects.has(m[1])) return m[1];
   }
   return null;
 }
@@ -519,13 +538,16 @@ function filterAndRespond(events: LiveEvent[], req: any, res: any) {
 
 router.get('/live-feed/projects', async (_req, res) => {
   try {
+    // Cross-check with real ~/projects/ dirs to filter partial-path artifacts
+    const realProjects = getRealProjects();
+
     if (USE_PG) {
       await ensurePgReady();
       const rows = await pgSql`SELECT DISTINCT project FROM live_events WHERE project IS NOT NULL AND project != '' ORDER BY project`;
-      res.json(rows.map((r: any) => r.project));
+      res.json(rows.map((r: any) => r.project).filter((p: string) => realProjects.has(p)));
     } else {
       const rows = db!.prepare("SELECT DISTINCT project FROM live_events WHERE project IS NOT NULL AND project != ? ORDER BY project").all("") as any[];
-      res.json(rows.map((r: any) => r.project));
+      res.json(rows.map((r: any) => r.project).filter((p: string) => realProjects.has(p)));
     }
   } catch (err: any) {
     res.status(500).json({ error: err.message });

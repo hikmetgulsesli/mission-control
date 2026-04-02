@@ -78,7 +78,7 @@ app.get('/api/health', async (_req, res) => {
   // 2. Setfarm DB check
   try {
     const { execSync } = await import('child_process');
-    const usePg = process.env.DB_BACKEND === 'postgres';
+    const usePg = true; // Faz7: PG-only
     let result: string;
     if (usePg) {
       result = execSync('psql -h localhost -U setrox -d setfarm -t -c "SELECT COUNT(*) FROM runs"', { timeout: 3000 }).toString().trim();
@@ -206,7 +206,9 @@ server.listen(config.port, '127.0.0.1', () => {
 
 // Medic cron v4: diagnose -> LOOP CHECK -> MISSING CHECK -> auto-fix -> unstick
 const MEDIC_INTERVAL_MS = 5 * 60 * 1000;
-setInterval(async () => {
+// P1-07: MC medic disabled — all stuck detection delegated to Setfarm medic
+const MC_MEDIC_DISABLED = true;
+if (!MC_MEDIC_DISABLED) setInterval(async () => {
   try {
     const stuckRuns = await getStuckRuns(STUCK_THRESHOLD_MS);
     for (const run of stuckRuns) {

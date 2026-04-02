@@ -9,7 +9,7 @@ const sql = postgres({
   port: Number(process.env.PGPORT || 5432),
   database: process.env.PGDATABASE || 'setfarm',
   username: process.env.PGUSER || 'setrox',
-  password: process.env.PGPASSWORD || 'k7z6*n4u4',
+  password: process.env.PGPASSWORD || '',
   max: 10,
   idle_timeout: 30,
   connect_timeout: 10,

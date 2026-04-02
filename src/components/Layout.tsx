@@ -3,7 +3,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { StatusBar } from './StatusBar';
 import { TabNav } from './TabNav';
 import { ScanlineOverlay } from './ScanlineOverlay';
-import { TerminalDrawer } from './TerminalWidget';
+import { TerminalDrawer } from './TerminalDrawer';
 import { PixelOffice } from '../pages/PixelOffice';
 import { useDataSync } from '../hooks/useDataSync';
 

@@ -1,7 +1,7 @@
 import { config } from '../config.js';
 import { sql } from './pg.js';
 
-const USE_PG = process.env.DB_BACKEND === 'postgres';
+const USE_PG = true; // Faz7: PG-only
 import { readFile } from "fs/promises";
 const BASE = config.setfarmUrl;
 async function setfarmFetch(path: string): Promise<any> {

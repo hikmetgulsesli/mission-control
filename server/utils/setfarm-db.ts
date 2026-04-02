@@ -17,7 +17,7 @@ const MAX_AUTO_UNSTICK = 3;
 export { STUCK_DETECTION_MS, STUCK_THRESHOLD_MS, MAX_AUTO_UNSTICK };
 
 // DB_BACKEND toggle: 'sqlite' keeps old behavior, 'postgres' (default) uses pg.ts pool
-const DB_BACKEND = (process.env.DB_BACKEND || 'postgres') as 'sqlite' | 'postgres';
+const DB_BACKEND: string = 'postgres'; // Faz7: PG-only (always postgres)
 
 // Whitelist validation: IDs must be alphanumeric/dash/underscore (setfarm uses UUIDs and slugs)
 const SAFE_ID_RE = /^[a-zA-Z0-9_-]+$/;

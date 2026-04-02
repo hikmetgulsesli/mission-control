@@ -8,7 +8,7 @@ import { sql } from "../utils/pg.js";
 
 const router = Router();
 const UPLOADS_DIR = resolve(import.meta.dirname || __dirname, "..", "..", "uploads");
-const USE_PG = process.env.DB_BACKEND === 'postgres';
+const USE_PG = true; // Faz7: PG-only (SQLite removed)
 
 async function proxy(url: string, opts?: RequestInit) {
   const ctrl = new AbortController();
