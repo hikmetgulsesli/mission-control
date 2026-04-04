@@ -391,6 +391,99 @@ router.get('/agents/:id/live', async (req, res) => {
   }
 });
 
+// GET /api/agents/:id/stats — Per-agent performance metrics from pipeline data
+router.get('/agents/:id/stats', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { sql } = await import('../utils/pg.js');
+
+    // Map MC agent IDs to their workflow step agent_ids
+    // Steps use "workflow/role" format (e.g. "feature-dev/developer")
+    // We need to find all step agent_ids that map to this MC agent
+    const WORKFLOW_AGENT_MAP: Record<string, string[]> = {
+      'main': ['main'],
+      'flux': ['feature-dev/planner', 'feature-dev_planner'],
+      'prism': ['feature-dev/designer', 'feature-dev_designer'],
+      'iris': ['feature-dev/story-writer', 'feature-dev_story-writer', 'feature-dev/reviewer', 'feature-dev_reviewer', 'bug-fix/triager', 'bug-fix_triager', 'security-audit/verifier', 'security-audit_verifier'],
+      'atlas': ['feature-dev/setup', 'feature-dev_setup', 'feature-dev/merge', 'feature-dev_merge', 'feature-dev/deployer', 'feature-dev_deployer', 'bug-fix/setup', 'bug-fix_setup'],
+      'koda': ['feature-dev/developer', 'feature-dev_developer', 'bug-fix/pr', 'bug-fix_pr', 'security-audit/pr', 'security-audit_pr'],
+      'sentinel': ['feature-dev/verifier', 'feature-dev_verifier', 'feature-dev/security', 'feature-dev_security', 'feature-dev/qa-tester', 'feature-dev_qa-tester', 'security-audit/scanner', 'security-audit_scanner', 'security-audit/tester', 'security-audit_tester'],
+      'cipher': ['bug-fix/fixer', 'bug-fix_fixer', 'security-audit/fixer', 'security-audit_fixer'],
+      'lux': [],
+      'nexus': ['feature-dev/tester', 'feature-dev_tester'],
+    };
+
+    const stepAgentIds = WORKFLOW_AGENT_MAP[id] || [id];
+
+    if (stepAgentIds.length === 0) {
+      // Agent has no mapped workflow roles — return zeros
+      res.json({
+        agentId: id,
+        storiesCompleted: 0,
+        storiesFailed: 0,
+        successRate: 0,
+        avgDurationMs: 0,
+        errorCount: 0,
+        totalSteps: 0,
+      });
+      return;
+    }
+
+    // Query steps table for this agent's workflow roles
+    const stepStats = await sql`
+      SELECT
+        COUNT(*)::int as total_steps,
+        COUNT(*) FILTER (WHERE status IN ('done', 'completed'))::int as completed_steps,
+        COUNT(*) FILTER (WHERE status = 'failed')::int as failed_steps,
+        COALESCE(AVG(
+          CASE WHEN updated_at IS NOT NULL AND created_at IS NOT NULL
+          THEN EXTRACT(EPOCH FROM (updated_at - created_at)) * 1000
+          END
+        )::int, 0) as avg_duration_ms
+      FROM steps
+      WHERE agent_id = ANY(${stepAgentIds})
+    `;
+
+    // Also query stories linked to runs where this agent participated
+    const storyStats = await sql`
+      SELECT
+        COUNT(*)::int as total_stories,
+        COUNT(*) FILTER (WHERE st.status IN ('done', 'completed', 'verified'))::int as completed_stories,
+        COUNT(*) FILTER (WHERE st.status = 'failed')::int as failed_stories
+      FROM stories st
+      WHERE st.run_id IN (
+        SELECT DISTINCT run_id FROM steps WHERE agent_id = ANY(${stepAgentIds})
+      )
+    `;
+
+    const stats = stepStats[0] || { total_steps: 0, completed_steps: 0, failed_steps: 0, avg_duration_ms: 0 };
+    const stories = storyStats[0] || { total_stories: 0, completed_stories: 0, failed_stories: 0 };
+    const totalDone = stats.completed_steps + stats.failed_steps;
+    const successRate = totalDone > 0 ? Math.round((stats.completed_steps / totalDone) * 100) : 0;
+
+    res.json({
+      agentId: id,
+      storiesCompleted: stories.completed_stories,
+      storiesFailed: stories.failed_stories,
+      successRate,
+      avgDurationMs: stats.avg_duration_ms,
+      errorCount: stats.failed_steps,
+      totalSteps: stats.total_steps,
+    });
+  } catch (err: any) {
+    console.error('[Agent Stats]', err.message);
+    res.json({
+      agentId: req.params.id,
+      storiesCompleted: 0,
+      storiesFailed: 0,
+      successRate: 0,
+      avgDurationMs: 0,
+      errorCount: 0,
+      totalSteps: 0,
+    });
+  }
+});
+
 export default router;
 
 // GET /api/agents/:id/activity — Get all runs and activities for an agent

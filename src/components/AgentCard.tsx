@@ -15,6 +15,16 @@ function normalizeModel(raw: string): string {
   const slash = raw.indexOf('/');
   return slash >= 0 ? raw.slice(slash + 1) : raw;
 }
+export interface AgentStats {
+  agentId: string;
+  storiesCompleted: number;
+  storiesFailed: number;
+  successRate: number;
+  avgDurationMs: number;
+  errorCount: number;
+  totalSteps: number;
+}
+
 interface AgentCardProps {
   agent: {
     id: string;
@@ -28,12 +38,23 @@ interface AgentCardProps {
   };
   sessions?: any[];
   compact?: boolean;
+  stats?: AgentStats | null;
   onChat?: (agent: any) => void;
   onActivity?: (agent: any) => void;
   onEdit?: (agent: any) => void;
 }
 
-export const AgentCard = React.memo(function AgentCard({ agent, sessions = [], compact = false, onChat, onActivity, onEdit }: AgentCardProps) {
+function formatDuration(ms: number): string {
+  if (ms <= 0) return '-';
+  if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
+  const minutes = Math.round(ms / 60_000);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const rem = minutes % 60;
+  return rem > 0 ? `${hours}h ${rem}m` : `${hours}h`;
+}
+
+export const AgentCard = React.memo(function AgentCard({ agent, sessions = [], compact = false, stats, onChat, onActivity, onEdit }: AgentCardProps) {
   const meta = AGENT_MAP[agent.id];
   const name = agent.identityName || agent.name || meta?.name || agent.id;
   const emoji = agent.identityEmoji || meta?.emoji || '?';
@@ -150,6 +171,37 @@ export const AgentCard = React.memo(function AgentCard({ agent, sessions = [], c
           <span>{agentSessions.length}</span>
         </div>
       </div>
+      {stats && stats.totalSteps > 0 && (
+        <div className="agent-card__stats">
+          <div className="agent-card__stats-row">
+            <div className="agent-card__stat">
+              <span className="agent-card__stat-value" style={{ color: 'var(--neon-green)' }}>{stats.storiesCompleted}</span>
+              <span className="agent-card__stat-label">done</span>
+            </div>
+            <div className="agent-card__stat">
+              <span className="agent-card__stat-value" style={{ color: stats.successRate >= 80 ? 'var(--neon-green)' : stats.successRate >= 50 ? 'var(--neon-orange, #ffaa00)' : 'var(--neon-red, #ff0040)' }}>{stats.successRate}%</span>
+              <span className="agent-card__stat-label">success</span>
+            </div>
+            <div className="agent-card__stat">
+              <span className="agent-card__stat-value">{formatDuration(stats.avgDurationMs)}</span>
+              <span className="agent-card__stat-label">avg</span>
+            </div>
+            {stats.errorCount > 0 && (
+              <div className="agent-card__stat">
+                <span className="agent-card__stat-value" style={{ color: 'var(--neon-red, #ff0040)' }}>{stats.errorCount}</span>
+                <span className="agent-card__stat-label">errors</span>
+              </div>
+            )}
+          </div>
+          {agent.tags && agent.tags.length > 0 && (
+            <div className="agent-card__tags">
+              {agent.tags.map((tag, i) => (
+                <span key={i} className="agent-card__tag">{tag}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 });

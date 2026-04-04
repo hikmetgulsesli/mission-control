@@ -39,11 +39,7 @@ import rateLimit from 'express-rate-limit';
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
-// Serve Stitch design cache BEFORE helmet (no CSP for design previews)
-const stitchCacheDir = join(homedir(), ".openclaw", "setfarm", "stitch-cache");
-app.use("/stitch-cache", express.static(stitchCacheDir));
-// Serve stitch files directly from project directories
-app.use("/projects-stitch", express.static("/home/setrox/projects", { index: false }));
+// Stitch static files — moved after auth middleware (see below)
 
 app.use(helmet({
   contentSecurityPolicy: {
@@ -110,6 +106,21 @@ app.get('/api/health', async (_req, res) => {
 
 // Auth middleware
 app.use('/api', authMiddleware);
+app.use('/stitch-cache', authMiddleware);
+app.use('/projects-stitch', authMiddleware);
+
+// Stitch static files (behind auth)
+const stitchCacheDir = join(homedir(), ".openclaw", "setfarm", "stitch-cache");
+app.use("/stitch-cache", express.static(stitchCacheDir));
+app.use("/projects-stitch", express.static("/home/setrox/projects", {
+  index: false,
+  setHeaders: (_res, filePath) => {
+    // Only allow stitch-related files
+    if (!filePath.includes('/stitch/') && !filePath.endsWith('.html') && !filePath.endsWith('.png') && !filePath.endsWith('.css')) {
+      _res.status(403).end();
+    }
+  },
+}));
 
 // Rate limiting
 app.use('/api', rateLimit({ windowMs: 60000, max: 200, standardHeaders: true }));

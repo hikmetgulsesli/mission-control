@@ -1,6 +1,7 @@
 import { useCallback, useRef, useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { usePrdStore } from '../store/prdStore';
+import type { RefinementState } from '../store/prdStore';
 import { PrdChat } from '../components/prd/PrdChat';
 import { PrdEditor } from '../components/prd/PrdEditor';
 import { PrdScore } from '../components/prd/PrdScore';
@@ -176,6 +177,41 @@ export function PrdGenerator() {
       }
     }
     setStore({ analyses: allAnalyses, analysis: allAnalyses.length === 1 ? allAnalyses[0] : allAnalyses });
+    // Auto-populate refinements from analysis data
+    const merged = allAnalyses.length === 1 ? allAnalyses[0] : allAnalyses[0] || {};
+    const detectedFeatures: { name: string; enabled: boolean }[] = [];
+    // Extract features from analysis fields
+    const featureKeys = ['features', 'sections', 'pages', 'components', 'navigation', 'capabilities'];
+    for (const key of featureKeys) {
+      const val = merged[key];
+      if (Array.isArray(val)) {
+        for (const item of val) {
+          const name = typeof item === 'string' ? item : (item?.name || item?.title || item?.label);
+          if (name && !detectedFeatures.some(f => f.name === name)) {
+            detectedFeatures.push({ name, enabled: true });
+          }
+        }
+      } else if (typeof val === 'object' && val) {
+        for (const k of Object.keys(val)) {
+          if (!detectedFeatures.some(f => f.name === k)) {
+            detectedFeatures.push({ name: k, enabled: true });
+          }
+        }
+      }
+    }
+    // Add generic features if none detected
+    if (detectedFeatures.length === 0) {
+      const fallback = ['Ana Sayfa', 'Navigasyon', 'Footer', 'Responsive Design', 'Dark Mode'];
+      for (const name of fallback) detectedFeatures.push({ name, enabled: true });
+    }
+    setStore({
+      refinements: {
+        features: detectedFeatures,
+        designDirection: 'detailed',
+        userGoals: '',
+        mobilePlatform: 'both',
+      }
+    });
     setLoading('analyze', false);
   };
 
@@ -206,6 +242,52 @@ export function PrdGenerator() {
       addLog(`Arastirma hatasi: ${err.message}`);
     }
     setLoading('research', false);
+  };
+
+  // PRD olustur (with optional refinements)
+  const handleGenerateWithRefinements = async () => {
+    if (!store.title.trim()) { addLog('Proje adi gerekli'); return; }
+    setLoading('generate', true);
+    addLog('PRD olusturuluyor (refinements ile)...');
+
+    // Build refinement context
+    const ref = store.refinements;
+    const refinementContext: Record<string, any> = {};
+    if (ref) {
+      const enabledFeatures = ref.features.filter(f => f.enabled).map(f => f.name);
+      const disabledFeatures = ref.features.filter(f => !f.enabled).map(f => f.name);
+      refinementContext.enabledFeatures = enabledFeatures;
+      refinementContext.disabledFeatures = disabledFeatures;
+      refinementContext.designDirection = ref.designDirection;
+      if (ref.userGoals.trim()) refinementContext.userGoals = ref.userGoals.trim();
+      if (store.platform === 'mobile') refinementContext.mobilePlatform = ref.mobilePlatform;
+    }
+
+    try {
+      const result = await api.prdGenerate({
+        prdId: store.id,
+        title: store.title,
+        platform: store.platform,
+        description: store.description,
+        analysis: store.analysis,
+        research: store.research,
+        chatHistory: store.chatHistory,
+        urls: store.urls.filter(u => u.trim()),
+        refinements: Object.keys(refinementContext).length > 0 ? refinementContext : undefined,
+      });
+      setStore({
+        id: result.id,
+        prdContent: result.prd_content,
+        prdVersion: result.prd_version,
+        score: result.score,
+        scoreDetails: result.score_details,
+        costEstimate: result.cost_estimate,
+      });
+      addLog(`PRD v${result.prd_version} olusturuldu — Skor: ${result.score}/100`);
+    } catch (err: any) {
+      addLog(`PRD olusturma hatasi: ${err.message}`);
+    }
+    setLoading('generate', false);
   };
 
   // PRD olustur
@@ -831,6 +913,93 @@ export function PrdGenerator() {
                 )}
                 {store.research && (
                   <div className="prd-analysis-result"><h3>Web Arastirmasi</h3><pre className="prd-analysis-json">{JSON.stringify(store.research, null, 2)}</pre></div>
+                )}
+
+                {/* Refinement Panel: shown when analysis exists but PRD not yet generated */}
+                {store.analysis && !store.prdContent && store.refinements && (
+                  <div className="prd-refinement-panel">
+                    <h3 className="prd-refinement-panel__title">PRD Refinements</h3>
+
+                    {/* Detected Features Toggles */}
+                    <div className="prd-refinement-section">
+                      <label className="prd-label">Tespit Edilen Ozellikler</label>
+                      <div className="prd-refinement-features">
+                        {store.refinements.features.map((feat, idx) => (
+                          <label key={idx} className="prd-refinement-feature">
+                            <input
+                              type="checkbox"
+                              checked={feat.enabled}
+                              onChange={() => {
+                                const updated = [...store.refinements!.features];
+                                updated[idx] = { ...updated[idx], enabled: !updated[idx].enabled };
+                                setStore({ refinements: { ...store.refinements!, features: updated } });
+                              }}
+                            />
+                            <span>{feat.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Design Direction */}
+                    <div className="prd-refinement-section">
+                      <label className="prd-label">Tasarim Yonu</label>
+                      <select
+                        className="prd-select"
+                        value={store.refinements.designDirection}
+                        onChange={(e) => setStore({ refinements: { ...store.refinements!, designDirection: e.target.value as RefinementState['designDirection'] } })}
+                      >
+                        <option value="minimal">Minimal</option>
+                        <option value="detailed">Detailed</option>
+                        <option value="playful">Playful</option>
+                        <option value="corporate">Corporate</option>
+                      </select>
+                    </div>
+
+                    {/* User Goals */}
+                    <div className="prd-refinement-section">
+                      <label className="prd-label">Ek Gereksinimler</label>
+                      <textarea
+                        className="prd-textarea"
+                        placeholder="Ozel isteklerinizi buraya yazin..."
+                        value={store.refinements.userGoals}
+                        onChange={(e) => setStore({ refinements: { ...store.refinements!, userGoals: e.target.value } })}
+                        rows={3}
+                      />
+                    </div>
+
+                    {/* Mobile Platform (only if platform is mobile) */}
+                    {store.platform === 'mobile' && (
+                      <div className="prd-refinement-section">
+                        <label className="prd-label">Mobil Platform</label>
+                        <div className="prd-platform-toggle">
+                          {(['both', 'ios', 'android'] as const).map(opt => (
+                            <button
+                              key={opt}
+                              className={`prd-platform-btn ${store.refinements!.mobilePlatform === opt ? 'prd-platform-btn--active' : ''}`}
+                              onClick={() => setStore({ refinements: { ...store.refinements!, mobilePlatform: opt } })}
+                            >
+                              {opt === 'both' ? 'Both' : opt === 'ios' ? 'iOS Only' : 'Android Only'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Generate with Refinements */}
+                    <div className="prd-refinement-actions">
+                      <div className="prd-input-group" style={{ flex: 1, marginBottom: 0 }}>
+                        <input type="text" className="prd-input" placeholder="Proje Adi" value={store.title} onChange={(e) => setStore({ title: e.target.value })} />
+                      </div>
+                      <button
+                        className="btn btn--primary"
+                        onClick={handleGenerateWithRefinements}
+                        disabled={store.loading.generate || !store.title.trim()}
+                      >
+                        {store.loading.generate ? 'Olusturuluyor...' : 'Refinements ile PRD Olustur'}
+                      </button>
+                    </div>
+                  </div>
                 )}
               </>
             )}

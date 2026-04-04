@@ -1,5 +1,12 @@
 import { create } from 'zustand';
 
+export interface RefinementState {
+  features: { name: string; enabled: boolean }[];
+  designDirection: 'minimal' | 'detailed' | 'playful' | 'corporate';
+  userGoals: string;
+  mobilePlatform: 'both' | 'ios' | 'android';
+}
+
 interface PrdState {
   id: string | null;
   title: string;
@@ -31,6 +38,8 @@ interface PrdState {
   stitchProjectId: string | null;
   screenCoverage: { covered: string[]; missing: string[]; coverage: number } | null;
   lightboxScreenId: string | null;
+  // Refinement panel (post-analysis, pre-generation)
+  refinements: RefinementState | null;
 }
 
 interface PrdActions {
@@ -69,6 +78,7 @@ const initialState: PrdState = {
   stitchProjectId: null,
   screenCoverage: null,
   lightboxScreenId: null,
+  refinements: null,
 };
 
 export const usePrdStore = create<PrdState & PrdActions>((set) => ({

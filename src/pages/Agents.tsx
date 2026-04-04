@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePolling } from '../hooks/usePolling';
 import { api } from '../lib/api';
 import { AgentCard } from '../components/AgentCard';
+import type { AgentStats } from '../components/AgentCard';
 import type { Agent, Session } from '../lib/types';
 import { AgentEditModal } from '../components/AgentEditModal';
 import { AgentActivityModal } from '../components/AgentActivityModal';
@@ -15,7 +16,29 @@ export function Agents() {
   const [editAgent, setEditAgent] = useState<Agent | null>(null);
   const [activityAgent, setActivityAgent] = useState<{ id: string; name: string } | null>(null);
   const [liveAgent, setLiveAgent] = useState<string | null>(null);
+  const [agentStatsMap, setAgentStatsMap] = useState<Record<string, AgentStats>>({});
   const navigate = useNavigate();
+
+  // Fetch stats for all agents (once on mount, then every 60s)
+  useEffect(() => {
+    if (!agents || agents.length === 0) return;
+    let cancelled = false;
+    const fetchStats = async () => {
+      const statsMap: Record<string, AgentStats> = {};
+      await Promise.all(
+        agents.map(async (agent) => {
+          try {
+            const s = await api.agentStats(agent.id);
+            if (!cancelled) statsMap[agent.id] = s;
+          } catch { /* ignore individual failures */ }
+        })
+      );
+      if (!cancelled) setAgentStatsMap(statsMap);
+    };
+    fetchStats();
+    const interval = setInterval(fetchStats, 60_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [agents]);
 
   if (loading || sessionsLoading) return <div className="page-loading">Loading agents...</div>;
 
@@ -78,6 +101,7 @@ export function Agents() {
                   <AgentCard
                     agent={agent}
                     sessions={sessions || []}
+                    stats={agentStatsMap[agent.id] || null}
                     onChat={handleChat}
                     onActivity={() => handleActivity(agent)}
                     onEdit={(a) => setEditAgent(a)}

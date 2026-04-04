@@ -5,9 +5,11 @@ import { generatePrd, enhancePrd, generateChatQuestions, analyzeSite, analyzeScr
 import { generateMockupsFromPrd, deleteScreenFromCache, regenerateScreen, generateScreen, downloadScreen, prepareDesignFilesForRepo, createStitchProject, extractScreenPrompts } from '../services/stitch-integration.js';
 import { mapComponentsFromPrd, generateComponentSection } from '../services/component-mapper.js';
 import { getRunBenchmark, analyzePrdFormats } from '../services/benchmark.js';
+import { checkSsrf } from '../utils/ssrf.js';
 import { homedir } from 'os';
 import { join } from 'path';
 import { mkdirSync, existsSync } from 'fs';
+import { execFileSync } from 'child_process';
 
 const router = Router();
 
@@ -27,13 +29,89 @@ router.post('/prd/analyze', async (req, res) => {
       return;
     }
 
+    // SSRF protection
+    const ssrfError = checkSsrf(url);
+    if (ssrfError) {
+      res.status(400).json({ error: ssrfError });
+      return;
+    }
+
     // Platform auto-detect
     let platform = 'web';
     if (/apps\.apple\.com|play\.google\.com|itunes\.apple\.com/.test(url)) {
       platform = 'mobile';
     }
 
-    // Fetch and analyze site
+    // --- App Store: use iTunes Lookup API (JS-rendered SPA workaround) ---
+    const appIdMatch = url.match(/\/id(\d+)/);
+    if (/apps\.apple\.com/.test(url) && appIdMatch) {
+      try {
+        // Extract country code from URL, default to 'tr'
+        const countryMatch = url.match(/apps\.apple\.com\/([a-z]{2})\//);
+        const country = countryMatch ? countryMatch[1] : 'tr';
+        const lookupUrl = `https://itunes.apple.com/lookup?id=${appIdMatch[1]}&country=${country}`;
+        const lookupRes = await fetch(lookupUrl, { signal: AbortSignal.timeout(10000) });
+        const lookupData = await lookupRes.json() as any;
+        if (lookupData.results?.length > 0) {
+          const app = lookupData.results[0];
+          const analysis = {
+            title: app.trackName,
+            description: app.description,
+            platform: 'mobile' as const,
+            category: app.primaryGenreName,
+            screenshots: app.screenshotUrls || [],
+            ipadScreenshots: app.ipadScreenshotUrls || [],
+            rating: app.averageUserRating,
+            ratingCount: app.userRatingCount,
+            developer: app.artistName,
+            price: app.formattedPrice,
+            bundleId: app.bundleId,
+            version: app.version,
+            releaseNotes: app.releaseNotes || '',
+            features: (app.description || '').split('\n').filter((l: string) => l.startsWith('•') || l.startsWith('-') || l.startsWith('*')),
+            icon: app.artworkUrl512 || app.artworkUrl100,
+            storeUrl: app.trackViewUrl,
+          };
+          res.json({ analysis, platform: 'mobile', url });
+          return;
+        }
+      } catch (lookupErr: any) {
+        // Fall through to generic fetch
+        console.warn('[PRD] iTunes lookup failed, falling back:', lookupErr.message);
+      }
+    }
+
+    // --- Play Store: try with mobile user-agent ---
+    if (/play\.google\.com/.test(url)) {
+      try {
+        const playRes = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+            'Accept-Language': 'tr-TR,tr;q=0.9,en;q=0.8',
+          },
+          signal: AbortSignal.timeout(15000),
+        });
+        const playHtml = await playRes.text();
+        if (playHtml.length < 1024) {
+          res.status(502).json({
+            error: 'Play Store sayfasi yuklenemedi (JS-rendered SPA). Lutfen uygulama aciklamasini manuel olarak girin veya App Store linkini deneyin.',
+            hint: 'Google Play Store sayfalari JavaScript gerektirdigi icin otomatik analiz basarisiz olabilir. PRD olusturucu ekraninda "Aciklama" alanina uygulamanin ozelliklerini yapistirin.',
+          });
+          return;
+        }
+        const analysis = await analyzeSite(playHtml, url);
+        res.json({ analysis, platform: 'mobile', url });
+        return;
+      } catch (playErr: any) {
+        res.status(502).json({
+          error: `Play Store fetch basarisiz: ${playErr.message}. Lutfen uygulama aciklamasini manuel girin.`,
+          hint: 'Google Play Store sayfalari JavaScript gerektirdigi icin otomatik analiz basarisiz olabilir.',
+        });
+        return;
+      }
+    }
+
+    // --- Generic web fetch ---
     let html = '';
     try {
       const fetchRes = await fetch(url, {
@@ -48,6 +126,126 @@ router.post('/prd/analyze', async (req, res) => {
 
     const analysis = await analyzeSite(html, url);
     res.json({ analysis, platform, url });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /prd/github-import — GitHub repo'dan analiz bilgisi cek
+router.post('/prd/github-import', async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url) {
+      res.status(400).json({ error: 'url required' });
+      return;
+    }
+
+    const match = url.match(/github\.com\/([^\/]+)\/([^\/\?#]+)/);
+    if (!match) {
+      res.status(400).json({ error: 'Invalid GitHub URL — expected https://github.com/owner/repo' });
+      return;
+    }
+
+    const [, owner, rawRepo] = match;
+    const repo = rawRepo.replace(/\.git$/, '');
+
+    function ghApi(endpoint: string): any {
+      try {
+        const out = execFileSync('gh', ['api', endpoint, '--cache', '1h'], {
+          timeout: 15_000,
+          maxBuffer: 2 * 1024 * 1024,
+          encoding: 'utf8',
+        });
+        return JSON.parse(out);
+      } catch {
+        return null;
+      }
+    }
+
+    // 1. Repo metadata
+    const repoData = ghApi(`repos/${owner}/${repo}`);
+    if (!repoData) {
+      res.status(404).json({ error: `GitHub repo ${owner}/${repo} bulunamadi veya gh CLI authenticate degil` });
+      return;
+    }
+
+    // 2. README
+    let readmeText = '';
+    const readmeData = ghApi(`repos/${owner}/${repo}/readme`);
+    if (readmeData?.content) {
+      try {
+        readmeText = Buffer.from(readmeData.content, 'base64').toString('utf8');
+      } catch {}
+    }
+
+    // 3. package.json (optional)
+    let dependencies: Record<string, string> = {};
+    let devDependencies: Record<string, string> = {};
+    let scripts: Record<string, string> = {};
+    const pkgData = ghApi(`repos/${owner}/${repo}/contents/package.json`);
+    if (pkgData?.content) {
+      try {
+        const pkg = JSON.parse(Buffer.from(pkgData.content, 'base64').toString('utf8'));
+        dependencies = pkg.dependencies || {};
+        devDependencies = pkg.devDependencies || {};
+        scripts = pkg.scripts || {};
+      } catch {}
+    }
+
+    // 4. Auto-detect tech stack from dependencies
+    const allDeps = { ...dependencies, ...devDependencies };
+    const techStack: string[] = [];
+    const stackMap: Record<string, string> = {
+      react: 'React', 'react-dom': 'React', next: 'Next.js', vue: 'Vue', nuxt: 'Nuxt',
+      svelte: 'Svelte', '@sveltejs/kit': 'SvelteKit', angular: 'Angular',
+      express: 'Express', fastify: 'Fastify', hono: 'Hono', koa: 'Koa', nestjs: 'NestJS',
+      tailwindcss: 'Tailwind CSS', typescript: 'TypeScript',
+      prisma: 'Prisma', '@prisma/client': 'Prisma', drizzle: 'Drizzle ORM',
+      mongoose: 'Mongoose', sequelize: 'Sequelize', typeorm: 'TypeORM',
+      'react-native': 'React Native', electron: 'Electron', expo: 'Expo',
+      vite: 'Vite', webpack: 'Webpack', esbuild: 'esbuild',
+      jest: 'Jest', vitest: 'Vitest', playwright: 'Playwright', cypress: 'Cypress',
+      'socket.io': 'Socket.IO', graphql: 'GraphQL', trpc: 'tRPC',
+      redis: 'Redis', ioredis: 'Redis',
+      stripe: 'Stripe', firebase: 'Firebase', supabase: 'Supabase',
+    };
+    for (const [dep, label] of Object.entries(stackMap)) {
+      if (allDeps[dep] && !techStack.includes(label)) techStack.push(label);
+    }
+
+    // 5. Detect platform
+    let platform = 'web';
+    if (techStack.includes('React Native') || techStack.includes('Expo')) {
+      platform = 'mobile';
+    } else if (techStack.includes('Electron')) {
+      platform = 'desktop';
+    }
+
+    // 6. Build analysis object
+    const analysis = {
+      title: repoData.name,
+      fullName: repoData.full_name,
+      description: repoData.description || '',
+      language: repoData.language || '',
+      topics: repoData.topics || [],
+      stars: repoData.stargazers_count ?? 0,
+      forks: repoData.forks_count ?? 0,
+      openIssues: repoData.open_issues_count ?? 0,
+      license: repoData.license?.spdx_id || '',
+      homepage: repoData.homepage || '',
+      defaultBranch: repoData.default_branch || 'main',
+      createdAt: repoData.created_at,
+      updatedAt: repoData.updated_at,
+      platform,
+      techStack,
+      dependencies,
+      devDependencies,
+      scripts,
+      readme: readmeText.slice(0, 5000),
+      url: repoData.html_url,
+    };
+
+    res.json({ analysis, platform, url: repoData.html_url });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

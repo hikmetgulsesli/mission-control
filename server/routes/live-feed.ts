@@ -7,9 +7,7 @@ import pgSql from '../utils/pg.js';
 
 const router = Router();
 
-// DB backend toggle: 'sqlite' for legacy, 'postgres' (default) for PG
-const DB_BACKEND = 'postgres'; // Faz7: PG-only
-const USE_PG = true; // Faz7: PG-only
+// Faz7: PG-only backend
 
 // Agent name/emoji mapping
 const AGENT_MAP: Record<string, { name: string; emoji: string }> = {
@@ -55,71 +53,7 @@ interface LiveEvent {
 }
 
 
-// ── SQLite persistence (legacy, when LIVE_EVENTS_BACKEND=sqlite) ──
-let db: any = null; // Faz7: SQLite type removed
-let insertStmt: any = null;
-let insertMany: any = null;
-
-if (!USE_PG) {
-  const DB_PATH = join(homedir(), '.openclaw', 'setfarm', 'live-events.db');
-  db = null; // Faz7: new Database(DB_PATH) removed — PG-only
-  db.pragma('journal_mode = WAL');
-  db.pragma('busy_timeout = 5000');
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS live_events (
-      id TEXT PRIMARY KEY,
-      ts TEXT NOT NULL,
-      agent TEXT NOT NULL,
-      model TEXT,
-      tool TEXT,
-      action TEXT NOT NULL,
-      summary TEXT,
-      file TEXT,
-      status TEXT NOT NULL DEFAULT 'completed',
-      duration_ms INTEGER,
-      exit_code INTEGER,
-      cwd TEXT,
-      project TEXT,
-      detail TEXT,
-      output TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    );
-    CREATE INDEX IF NOT EXISTS idx_live_events_ts ON live_events(ts);
-    CREATE INDEX IF NOT EXISTS idx_live_events_status ON live_events(status);
-    CREATE INDEX IF NOT EXISTS idx_live_events_project ON live_events(project);
-    CREATE INDEX IF NOT EXISTS idx_live_events_agent ON live_events(agent);
-    CREATE INDEX IF NOT EXISTS idx_live_events_action ON live_events(action);
-    CREATE INDEX IF NOT EXISTS idx_live_events_error ON live_events(exit_code) WHERE exit_code IS NOT NULL AND exit_code != 0;
-  `);
-
-  insertStmt = db.prepare(`
-    INSERT OR IGNORE INTO live_events (id, ts, agent, model, tool, action, summary, file, status, duration_ms, exit_code, cwd, project, detail, output)
-    VALUES (@id, @ts, @agent, @model, @tool, @action, @summary, @file, @status, @durationMs, @exitCode, @cwd, @project, @detail, @output)
-  `);
-
-  insertMany = db.transaction((events: LiveEvent[]) => {
-    for (const e of events) {
-      insertStmt.run({
-        id: e.id,
-        ts: e.ts,
-        agent: e.agent,
-        model: e.model || null,
-        tool: e.tool || null,
-        action: e.action,
-        summary: e.summary || null,
-        file: e.file,
-        status: e.status,
-        durationMs: e.durationMs,
-        exitCode: e.exitCode,
-        cwd: e.cwd,
-        project: e.project,
-        detail: e.detail,
-        output: e.output,
-      });
-    }
-  });
-}
+// SQLite persistence removed (Faz7: PG-only)
 
 // ── PostgreSQL persistence ──
 
@@ -185,28 +119,18 @@ async function persistEvents(events: LiveEvent[]): Promise<void> {
   });
   if (events.length === 0) return;
   try {
-    if (USE_PG) {
-      await pgPersistEvents(events);
-    } else {
-      insertMany!(events);
-    }
+    await pgPersistEvents(events);
   } catch (err: any) {
     console.error('[live-feed-db] Persist error:', err.message);
   }
 }
 
 // Cleanup events older than 30 days (runs once on startup)
-if (USE_PG) {
-  ensurePgReady().then(async () => {
-    try {
-      await pgSql`DELETE FROM live_events WHERE ts < NOW() - INTERVAL '30 days'`;
-    } catch {}
-  }).catch(() => {});
-} else {
+ensurePgReady().then(async () => {
   try {
-    db!.exec("DELETE FROM live_events WHERE ts < datetime('now', '-30 days')");
+    await pgSql`DELETE FROM live_events WHERE ts < NOW() - INTERVAL '30 days'`;
   } catch {}
-}
+}).catch(() => {});
 
 // Background scanner — keeps DB populated even when no client is viewing live feed
 setInterval(async () => {
@@ -541,14 +465,9 @@ router.get('/live-feed/projects', async (_req, res) => {
     // Cross-check with real ~/projects/ dirs to filter partial-path artifacts
     const realProjects = getRealProjects();
 
-    if (USE_PG) {
-      await ensurePgReady();
-      const rows = await pgSql`SELECT DISTINCT project FROM live_events WHERE project IS NOT NULL AND project != '' ORDER BY project`;
-      res.json(rows.map((r: any) => r.project).filter((p: string) => realProjects.has(p)));
-    } else {
-      const rows = db!.prepare("SELECT DISTINCT project FROM live_events WHERE project IS NOT NULL AND project != ? ORDER BY project").all("") as any[];
-      res.json(rows.map((r: any) => r.project).filter((p: string) => realProjects.has(p)));
-    }
+    await ensurePgReady();
+    const rows = await pgSql`SELECT DISTINCT project FROM live_events WHERE project IS NOT NULL AND project != '' ORDER BY project`;
+    res.json(rows.map((r: any) => r.project).filter((p: string) => realProjects.has(p)));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -563,50 +482,28 @@ router.get('/live-feed/errors', async (req, res) => {
     const since = req.query.since as string;
     const action = req.query.action as string;
 
-    if (USE_PG) {
-      await ensurePgReady();
-      const conditions: string[] = ["(status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0))"];
-      const params: any[] = [];
-      let paramIdx = 1;
+    await ensurePgReady();
+    const conditions: string[] = ["(status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0))"];
+    const params: any[] = [];
+    let paramIdx = 1;
 
-      if (project) { conditions.push(`project = $${paramIdx++}`); params.push(project); }
-      if (agent) { conditions.push(`agent = $${paramIdx++}`); params.push(agent.toLowerCase()); }
-      if (action) { conditions.push(`action = $${paramIdx++}`); params.push(action.toLowerCase()); }
-      if (since) { conditions.push(`ts > $${paramIdx++}`); params.push(since); }
+    if (project) { conditions.push(`project = $${paramIdx++}`); params.push(project); }
+    if (agent) { conditions.push(`agent = $${paramIdx++}`); params.push(agent.toLowerCase()); }
+    if (action) { conditions.push(`action = $${paramIdx++}`); params.push(action.toLowerCase()); }
+    if (since) { conditions.push(`ts > $${paramIdx++}`); params.push(since); }
 
-      const where = conditions.join(' AND ');
-      const query = `SELECT * FROM live_events WHERE ${where} ORDER BY ts DESC LIMIT $${paramIdx}`;
-      params.push(limit);
+    const where = conditions.join(' AND ');
+    const query = `SELECT * FROM live_events WHERE ${where} ORDER BY ts DESC LIMIT $${paramIdx}`;
+    params.push(limit);
 
-      const rows = await pgSql.unsafe(query, params);
-      const mapped = (rows as any[]).map(r => ({
-        ...r,
-        durationMs: r.duration_ms,
-        exitCode: r.exit_code,
-        agentEmoji: Object.values(AGENT_MAP).find(a => a.name.toLowerCase() === (r.agent || '').toLowerCase())?.emoji || '',
-      }));
-      res.json(mapped);
-    } else {
-      let query = `SELECT * FROM live_events WHERE (status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0))`;
-      const params: any[] = [];
-
-      if (project) { query += ' AND project = ?'; params.push(project); }
-      if (agent) { query += ' AND agent = ?'; params.push(agent.toLowerCase()); }
-      if (action) { query += ' AND action = ?'; params.push(action.toLowerCase()); }
-      if (since) { query += ' AND ts > ?'; params.push(since); }
-
-      query += ' ORDER BY ts DESC LIMIT ?';
-      params.push(limit);
-
-      const rows = db!.prepare(query).all(...params);
-      const mapped = (rows as any[]).map(r => ({
-        ...r,
-        durationMs: r.duration_ms,
-        exitCode: r.exit_code,
-        agentEmoji: Object.values(AGENT_MAP).find(a => a.name.toLowerCase() === (r.agent || '').toLowerCase())?.emoji || '',
-      }));
-      res.json(mapped);
-    }
+    const rows = await pgSql.unsafe(query, params);
+    const mapped = (rows as any[]).map(r => ({
+      ...r,
+      durationMs: r.duration_ms,
+      exitCode: r.exit_code,
+      agentEmoji: Object.values(AGENT_MAP).find(a => a.name.toLowerCase() === (r.agent || '').toLowerCase())?.emoji || '',
+    }));
+    res.json(mapped);
   } catch (err: any) {
     console.error('[live-feed-db] Errors query error:', err.message);
     res.status(500).json({ error: err.message });
@@ -625,75 +522,41 @@ router.get('/live-feed/history', async (req, res) => {
     const range = req.query.range as string;
     const q = req.query.q as string;
 
-    if (USE_PG) {
-      await ensurePgReady();
-      const conditions: string[] = ['1=1'];
-      const params: any[] = [];
-      let paramIdx = 1;
+    await ensurePgReady();
+    const conditions: string[] = ['1=1'];
+    const params: any[] = [];
+    let paramIdx = 1;
 
-      if (project) { conditions.push(`project = $${paramIdx++}`); params.push(project); }
-      if (agent) { conditions.push(`agent = $${paramIdx++}`); params.push(agent.toLowerCase()); }
-      if (action) { conditions.push(`action = $${paramIdx++}`); params.push(action.toLowerCase()); }
-      if (since) { conditions.push(`ts > $${paramIdx++}`); params.push(since); }
-      if (until) { conditions.push(`ts < $${paramIdx++}`); params.push(until); }
-      if (range && range !== 'all') {
-        const rangeMs: Record<string, number> = { '5m': 5*60e3, '15m': 15*60e3, '30m': 30*60e3, '1h': 60*60e3, '3h': 3*60*60e3 };
-        const cutoff = new Date(Date.now() - (rangeMs[range] || 60*60e3)).toISOString();
-        conditions.push(`ts > $${paramIdx++}`); params.push(cutoff);
-      }
-      if (status === 'error') { conditions.push("(status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0))"); }
-      if (q) {
-        const like = '%' + q + '%';
-        conditions.push(`(summary ILIKE $${paramIdx} OR detail ILIKE $${paramIdx + 1} OR output ILIKE $${paramIdx + 2} OR file ILIKE $${paramIdx + 3})`);
-        paramIdx += 4;
-        params.push(like, like, like, like);
-      }
-
-      const where = conditions.join(' AND ');
-      const query = `SELECT * FROM live_events WHERE ${where} ORDER BY ts DESC LIMIT $${paramIdx}`;
-      params.push(limit);
-
-      const rows = await pgSql.unsafe(query, params);
-      const mapped = (rows as any[]).map(r => ({
-        ...r,
-        durationMs: r.duration_ms,
-        exitCode: r.exit_code,
-        agentEmoji: Object.values(AGENT_MAP).find(a => a.name.toLowerCase() === (r.agent || '').toLowerCase())?.emoji || '',
-      }));
-      res.json(mapped);
-    } else {
-      let query = 'SELECT * FROM live_events WHERE 1=1';
-      const params: any[] = [];
-
-      if (project) { query += ' AND project = ?'; params.push(project); }
-      if (agent) { query += ' AND agent = ?'; params.push(agent.toLowerCase()); }
-      if (action) { query += ' AND action = ?'; params.push(action.toLowerCase()); }
-      if (since) { query += ' AND ts > ?'; params.push(since); }
-      if (until) { query += ' AND ts < ?'; params.push(until); }
-      if (range && range !== 'all') {
-        const rangeMs: Record<string, number> = { '5m': 5*60e3, '15m': 15*60e3, '30m': 30*60e3, '1h': 60*60e3, '3h': 3*60*60e3 };
-        const cutoff = new Date(Date.now() - (rangeMs[range] || 60*60e3)).toISOString();
-        query += ' AND ts > ?'; params.push(cutoff);
-      }
-      if (status === 'error') { query += " AND (status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0))"; }
-      if (q) {
-        query += ' AND (summary LIKE ? OR detail LIKE ? OR output LIKE ? OR file LIKE ?)';
-        const like = '%' + q + '%';
-        params.push(like, like, like, like);
-      }
-
-      query += ' ORDER BY ts DESC LIMIT ?';
-      params.push(limit);
-
-      const rows = db!.prepare(query).all(...params);
-      const mapped = (rows as any[]).map(r => ({
-        ...r,
-        durationMs: r.duration_ms,
-        exitCode: r.exit_code,
-        agentEmoji: Object.values(AGENT_MAP).find(a => a.name.toLowerCase() === (r.agent || '').toLowerCase())?.emoji || '',
-      }));
-      res.json(mapped);
+    if (project) { conditions.push(`project = $${paramIdx++}`); params.push(project); }
+    if (agent) { conditions.push(`agent = $${paramIdx++}`); params.push(agent.toLowerCase()); }
+    if (action) { conditions.push(`action = $${paramIdx++}`); params.push(action.toLowerCase()); }
+    if (since) { conditions.push(`ts > $${paramIdx++}`); params.push(since); }
+    if (until) { conditions.push(`ts < $${paramIdx++}`); params.push(until); }
+    if (range && range !== 'all') {
+      const rangeMs: Record<string, number> = { '5m': 5*60e3, '15m': 15*60e3, '30m': 30*60e3, '1h': 60*60e3, '3h': 3*60*60e3 };
+      const cutoff = new Date(Date.now() - (rangeMs[range] || 60*60e3)).toISOString();
+      conditions.push(`ts > $${paramIdx++}`); params.push(cutoff);
     }
+    if (status === 'error') { conditions.push("(status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0))"); }
+    if (q) {
+      const like = '%' + q + '%';
+      conditions.push(`(summary ILIKE $${paramIdx} OR detail ILIKE $${paramIdx + 1} OR output ILIKE $${paramIdx + 2} OR file ILIKE $${paramIdx + 3})`);
+      paramIdx += 4;
+      params.push(like, like, like, like);
+    }
+
+    const where = conditions.join(' AND ');
+    const query = `SELECT * FROM live_events WHERE ${where} ORDER BY ts DESC LIMIT $${paramIdx}`;
+    params.push(limit);
+
+    const rows = await pgSql.unsafe(query, params);
+    const mapped = (rows as any[]).map(r => ({
+      ...r,
+      durationMs: r.duration_ms,
+      exitCode: r.exit_code,
+      agentEmoji: Object.values(AGENT_MAP).find(a => a.name.toLowerCase() === (r.agent || '').toLowerCase())?.emoji || '',
+    }));
+    res.json(mapped);
   } catch (err: any) {
     console.error('[live-feed-db] History query error:', err.message);
     res.status(500).json({ error: err.message });
@@ -702,44 +565,25 @@ router.get('/live-feed/history', async (req, res) => {
 
 router.get('/live-feed/stats', async (_req, res) => {
   try {
-    if (USE_PG) {
-      await ensurePgReady();
-      const [totalRow] = await pgSql`SELECT COUNT(*) as count FROM live_events`;
-      const [errorsRow] = await pgSql`SELECT COUNT(*) as count FROM live_events WHERE status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0)`;
-      const byProject = await pgSql`SELECT project, COUNT(*)::int as count, SUM(CASE WHEN status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0) THEN 1 ELSE 0 END)::int as errors FROM live_events WHERE project IS NOT NULL GROUP BY project ORDER BY count DESC`;
-      const byAgent = await pgSql`SELECT agent, COUNT(*)::int as count, SUM(CASE WHEN status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0) THEN 1 ELSE 0 END)::int as errors FROM live_events GROUP BY agent ORDER BY count DESC`;
-      const byAction = await pgSql`SELECT action, COUNT(*)::int as count, SUM(CASE WHEN status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0) THEN 1 ELSE 0 END)::int as errors FROM live_events GROUP BY action ORDER BY count DESC`;
-      const [oldestRow] = await pgSql`SELECT MIN(ts) as oldest FROM live_events`;
+    await ensurePgReady();
+    const [totalRow] = await pgSql`SELECT COUNT(*) as count FROM live_events`;
+    const [errorsRow] = await pgSql`SELECT COUNT(*) as count FROM live_events WHERE status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0)`;
+    const byProject = await pgSql`SELECT project, COUNT(*)::int as count, SUM(CASE WHEN status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0) THEN 1 ELSE 0 END)::int as errors FROM live_events WHERE project IS NOT NULL GROUP BY project ORDER BY count DESC`;
+    const byAgent = await pgSql`SELECT agent, COUNT(*)::int as count, SUM(CASE WHEN status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0) THEN 1 ELSE 0 END)::int as errors FROM live_events GROUP BY agent ORDER BY count DESC`;
+    const byAction = await pgSql`SELECT action, COUNT(*)::int as count, SUM(CASE WHEN status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0) THEN 1 ELSE 0 END)::int as errors FROM live_events GROUP BY action ORDER BY count DESC`;
+    const [oldestRow] = await pgSql`SELECT MIN(ts) as oldest FROM live_events`;
 
-      const total = Number(totalRow.count);
-      const errors = Number(errorsRow.count);
-      res.json({
-        total,
-        errors,
-        errorRate: total > 0 ? ((errors / total) * 100).toFixed(1) + '%' : '0%',
-        oldestEvent: oldestRow.oldest,
-        byProject,
-        byAgent,
-        byAction,
-      });
-    } else {
-      const total = db!.prepare('SELECT COUNT(*) as count FROM live_events').get() as any;
-      const errors = db!.prepare("SELECT COUNT(*) as count FROM live_events WHERE status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0)").get() as any;
-      const byProject = db!.prepare("SELECT project, COUNT(*) as count, SUM(CASE WHEN status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0) THEN 1 ELSE 0 END) as errors FROM live_events WHERE project IS NOT NULL GROUP BY project ORDER BY count DESC").all();
-      const byAgent = db!.prepare("SELECT agent, COUNT(*) as count, SUM(CASE WHEN status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0) THEN 1 ELSE 0 END) as errors FROM live_events GROUP BY agent ORDER BY count DESC").all();
-      const byAction = db!.prepare("SELECT action, COUNT(*) as count, SUM(CASE WHEN status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0) THEN 1 ELSE 0 END) as errors FROM live_events GROUP BY action ORDER BY count DESC").all();
-      const oldest = db!.prepare('SELECT MIN(ts) as oldest FROM live_events').get() as any;
-
-      res.json({
-        total: total.count,
-        errors: errors.count,
-        errorRate: total.count > 0 ? ((errors.count / total.count) * 100).toFixed(1) + '%' : '0%',
-        oldestEvent: oldest.oldest,
-        byProject,
-        byAgent,
-        byAction,
-      });
-    }
+    const total = Number(totalRow.count);
+    const errors = Number(errorsRow.count);
+    res.json({
+      total,
+      errors,
+      errorRate: total > 0 ? ((errors / total) * 100).toFixed(1) + '%' : '0%',
+      oldestEvent: oldestRow.oldest,
+      byProject,
+      byAgent,
+      byAction,
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

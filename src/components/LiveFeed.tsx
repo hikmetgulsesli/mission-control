@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 
 interface LiveEvent {
   id: string;
@@ -17,6 +17,42 @@ interface LiveEvent {
   detail: string | null;
   output: string | null;
   project: string | null;
+}
+
+// Phase grouping definitions
+const PHASE_DEFINITIONS = [
+  { id: 'PLANNING', label: 'PLANNING', color: '#a78bfa', steps: ['plan', 'design', 'stories'] },
+  { id: 'BUILDING', label: 'BUILDING', color: '#4488ff', steps: ['setup-repo', 'setup-build', 'setup', 'implement'] },
+  { id: 'QUALITY', label: 'QUALITY', color: '#f59e0b', steps: ['verify', 'security-gate', 'sec-gate', 'qa-test', 'final-test'] },
+  { id: 'DEPLOY', label: 'DEPLOY', color: '#00ff41', steps: ['deploy'] },
+] as const;
+
+type PhaseId = typeof PHASE_DEFINITIONS[number]['id'];
+
+function classifyEventPhase(ev: LiveEvent): PhaseId | 'OTHER' {
+  const text = `${ev.summary || ''} ${ev.action || ''} ${ev.detail || ''}`.toLowerCase();
+  for (const phase of PHASE_DEFINITIONS) {
+    for (const step of phase.steps) {
+      // Match step names in summary like "step:plan", "step: design", "[plan]", "plan step"
+      if (
+        text.includes(`step:${step}`) ||
+        text.includes(`step: ${step}`) ||
+        text.includes(`[${step}]`) ||
+        text.includes(`${step} step`) ||
+        text.includes(`step=${step}`) ||
+        // Match step name at start of summary or surrounded by spaces/punctuation
+        new RegExp(`\\b${step.replace('-', '[-\\s]?')}\\b`).test(text)
+      ) {
+        return phase.id;
+      }
+    }
+  }
+  return 'OTHER';
+}
+
+interface PhaseGroup {
+  phase: typeof PHASE_DEFINITIONS[number] | { id: 'OTHER'; label: 'OTHER'; color: '#888888'; steps: string[] };
+  events: LiveEvent[];
 }
 
 const AGENTS = [
@@ -137,6 +173,9 @@ export function LiveFeed() {
   const [hasActivity, setHasActivity] = useState(false);
   const [lastEventTime, setLastEventTime] = useState(Date.now());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [focusMode, setFocusMode] = useState(false);
+  const [phaseGrouping, setPhaseGrouping] = useState(false);
+  const [collapsedPhases, setCollapsedPhases] = useState<Set<string>>(new Set());
   const feedRef = useRef<HTMLDivElement>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -145,6 +184,15 @@ export function LiveFeed() {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const togglePhaseCollapse = useCallback((phaseId: string) => {
+    setCollapsedPhases(prev => {
+      const next = new Set(prev);
+      if (next.has(phaseId)) next.delete(phaseId);
+      else next.add(phaseId);
       return next;
     });
   }, []);
@@ -243,7 +291,97 @@ export function LiveFeed() {
     setExpanded(new Set());
   }, [agentFilter, actionFilter, statusFilter, projectFilter, modelFilter, timeRange, debouncedSearch]);
 
-  const displayed = (modelFilter === 'all' ? events : events.filter(e => e.model === modelFilter)).filter(e => !e.summary?.includes('step peek'));
+  // Determine the currently running step for focus mode
+  const runningStep = useMemo(() => {
+    if (!focusMode) return null;
+    // Look through recent events to find the active step
+    for (let i = events.length - 1; i >= 0; i--) {
+      const ev = events[i];
+      const text = `${ev.summary || ''} ${ev.detail || ''}`.toLowerCase();
+      const stepMatch = text.match(/step[=:\s]+([a-z][-a-z]*)/);
+      if (stepMatch) return stepMatch[1];
+    }
+    return null;
+  }, [events, focusMode]);
+
+  const displayed = useMemo(() => {
+    let result = (modelFilter === 'all' ? events : events.filter(e => e.model === modelFilter))
+      .filter(e => !e.summary?.includes('step peek'));
+
+    // Focus mode: only show events from the currently running step
+    if (focusMode && runningStep) {
+      result = result.filter(ev => {
+        const text = `${ev.summary || ''} ${ev.action || ''} ${ev.detail || ''}`.toLowerCase();
+        return text.includes(runningStep);
+      });
+    }
+
+    return result;
+  }, [events, modelFilter, focusMode, runningStep]);
+
+  const renderEventRow = useCallback((ev: LiveEvent, i: number) => {
+    const isError = ev.status === 'error' || (ev.exitCode !== null && ev.exitCode !== 0);
+    const color = isError ? '#ff4444' : actionColor(ev.action, ev.status);
+    const expandable = hasDetailData(ev);
+    const isExpanded = expanded.has(ev.id);
+    const rowKey = ev.id + '-' + i;
+
+    return (
+      <div key={rowKey} className="lf-entry">
+        <div
+          className={'lf-row' + (expandable ? ' lf-row--expandable' : '')}
+          style={{ animationDelay: Math.min(i * 0.02, 0.5) + 's' }}
+          onClick={expandable ? () => toggleExpand(ev.id) : undefined}
+        >
+          <span className="lf-row__emoji">{ev.agentEmoji}</span>
+          <span className="lf-row__agent">{ev.agent}</span>
+          <span className="lf-row__time">{formatTime(ev.ts)}</span>
+          <span className="lf-row__action" style={{ color }}>
+            {ev.action}
+          </span>
+          <span className="lf-row__summary" style={{ color: isError ? '#ff4444' : undefined }}>
+            {ev.summary}
+          </span>
+          {ev.durationMs !== null && (
+            <span className="lf-row__duration">
+              {ev.durationMs < 1000 ? ev.durationMs + 'ms' : (ev.durationMs / 1000).toFixed(1) + 's'}
+            </span>
+          )}
+          {ev.project && (
+            <span className="lf-row__project" title={ev.project}>{ev.project}</span>
+          )}
+          {isError && <span className="lf-row__error">ERR</span>}
+          {expandable && (
+            <span className="lf-row__expand">{isExpanded ? '\u25BC' : '\u25B6'}</span>
+          )}
+        </div>
+        {isExpanded && (
+          <div className="lf-detail">
+            {renderDetailContent(ev)}
+          </div>
+        )}
+      </div>
+    );
+  }, [expanded, toggleExpand]);
+
+  // Group events by phase (only used when phaseGrouping is active)
+  const phaseGroups = useMemo((): PhaseGroup[] => {
+    if (!phaseGrouping) return [];
+    const groups = new Map<string, PhaseGroup>();
+    // Initialize all phases in order
+    for (const phase of PHASE_DEFINITIONS) {
+      groups.set(phase.id, { phase, events: [] });
+    }
+    groups.set('OTHER', { phase: { id: 'OTHER', label: 'OTHER', color: '#888888', steps: [] }, events: [] });
+
+    for (const ev of displayed) {
+      const phaseId = classifyEventPhase(ev);
+      groups.get(phaseId)!.events.push(ev);
+    }
+
+    // Return only non-empty groups
+    return [...groups.values()].filter(g => g.events.length > 0);
+  }, [displayed, phaseGrouping]);
 
   return (
     <div className="lf-page">
@@ -329,6 +467,22 @@ export function LiveFeed() {
             ))}
           </select>
           <button
+            className={`lf-btn ${phaseGrouping ? 'lf-btn--active' : ''}`}
+            onClick={() => setPhaseGrouping(p => !p)}
+            title={phaseGrouping ? 'Disable phase grouping' : 'Group by pipeline phase'}
+            style={phaseGrouping ? { color: '#a78bfa', borderColor: '#a78bfa' } : undefined}
+          >
+            PHASES
+          </button>
+          <button
+            className={`lf-btn ${focusMode ? 'lf-btn--active' : ''}`}
+            onClick={() => setFocusMode(f => !f)}
+            title={focusMode ? 'Show all events' : 'Focus on currently running step'}
+            style={focusMode ? { color: '#00ff41', borderColor: '#00ff41' } : undefined}
+          >
+            FOCUS
+          </button>
+          <button
             className={`lf-btn ${paused ? 'lf-btn--active' : ''}`}
             onClick={() => setPaused(p => !p)}
             title={paused ? 'Resume' : 'Pause'}
@@ -338,56 +492,48 @@ export function LiveFeed() {
         </div>
       </div>
 
+      {/* Focus mode indicator */}
+      {focusMode && (
+        <div className="lf-focus-bar">
+          <span className="lf-focus-bar__icon">&#9673;</span>
+          FOCUS MODE {runningStep ? `- Step: ${runningStep.toUpperCase()}` : '- No active step detected'}
+        </div>
+      )}
+
       <div className="lf-feed" ref={feedRef}>
         {displayed.length === 0 && (
           <div className="lf-empty">
-            {hasActivity ? 'Agentlar aktif ama su an sadece polling yapiyor. Yeni gorev basladiginda burada gorunecek.' : 'Aktif agent oturumu yok. Agentlar calistiginda eventler burada gorunecek.'}
+            {focusMode && !runningStep
+              ? 'Focus mode aktif ama calisan step bulunamadi. Aktif bir run basladiginda otomatik filtrelenecek.'
+              : hasActivity
+                ? 'Agentlar aktif ama su an sadece polling yapiyor. Yeni gorev basladiginda burada gorunecek.'
+                : 'Aktif agent oturumu yok. Agentlar calistiginda eventler burada gorunecek.'}
           </div>
         )}
-        {displayed.map((ev, i) => {
-          const isError = ev.status === 'error' || (ev.exitCode !== null && ev.exitCode !== 0);
-          const color = isError ? '#ff4444' : actionColor(ev.action, ev.status);
-          const expandable = hasDetailData(ev);
-          const isExpanded = expanded.has(ev.id);
-          const rowKey = ev.id + '-' + i;
 
+        {/* Phase-grouped rendering */}
+        {phaseGrouping && phaseGroups.length > 0 && phaseGroups.map(group => {
+          const isCollapsed = collapsedPhases.has(group.phase.id);
           return (
-            <div key={rowKey} className="lf-entry">
+            <div key={group.phase.id} className="lf-phase-group">
               <div
-                className={'lf-row' + (expandable ? ' lf-row--expandable' : '')}
-                style={{ animationDelay: Math.min(i * 0.02, 0.5) + 's' }}
-                onClick={expandable ? () => toggleExpand(ev.id) : undefined}
+                className="lf-phase-header"
+                style={{ borderLeftColor: group.phase.color }}
+                onClick={() => togglePhaseCollapse(group.phase.id)}
               >
-                <span className="lf-row__emoji">{ev.agentEmoji}</span>
-                <span className="lf-row__agent">{ev.agent}</span>
-                <span className="lf-row__time">{formatTime(ev.ts)}</span>
-                <span className="lf-row__action" style={{ color }}>
-                  {ev.action}
+                <span className="lf-phase-header__arrow">{isCollapsed ? '\u25B6' : '\u25BC'}</span>
+                <span className="lf-phase-header__label" style={{ color: group.phase.color }}>
+                  {group.phase.label}
                 </span>
-                <span className="lf-row__summary" style={{ color: isError ? '#ff4444' : undefined }}>
-                  {ev.summary}
-                </span>
-                {ev.durationMs !== null && (
-                  <span className="lf-row__duration">
-                    {ev.durationMs < 1000 ? ev.durationMs + 'ms' : (ev.durationMs / 1000).toFixed(1) + 's'}
-                  </span>
-                )}
-                {ev.project && (
-                  <span className="lf-row__project" title={ev.project}>{ev.project}</span>
-                )}
-                {isError && <span className="lf-row__error">ERR</span>}
-                {expandable && (
-                  <span className="lf-row__expand">{isExpanded ? '\u25BC' : '\u25B6'}</span>
-                )}
+                <span className="lf-phase-header__count">{group.events.length} events</span>
               </div>
-              {isExpanded && (
-                <div className="lf-detail">
-                  {renderDetailContent(ev)}
-                </div>
-              )}
+              {!isCollapsed && group.events.map((ev, i) => renderEventRow(ev, i))}
             </div>
           );
         })}
+
+        {/* Flat list rendering (default) */}
+        {!phaseGrouping && displayed.map((ev, i) => renderEventRow(ev, i))}
       </div>
     </div>
   );

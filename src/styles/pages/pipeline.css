@@ -761,3 +761,239 @@
 .af-stats__idle-emoji { font-size: 13px; }
 .af-stats__idle-name { color: var(--text-primary); }
 .af-stats__idle-role { color: var(--text-dim); margin-left: auto; font-size: 10px; }
+
+/* ── Pipeline Phase Grouping (Task 1) ── */
+.af-pipeline__steps-phased {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 6px 0;
+  scrollbar-width: thin;
+  flex-wrap: wrap;
+}
+.af-phase-group {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.af-phase-label {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: var(--neon-cyan);
+  text-transform: uppercase;
+  opacity: 0.6;
+  white-space: nowrap;
+  padding: 0 4px;
+  margin-bottom: 2px;
+}
+.af-phase-steps {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: rgba(0, 255, 255, 0.02);
+  border: 1px solid rgba(0, 255, 255, 0.06);
+}
+.af-phase-separator {
+  display: block;
+  width: 1px;
+  height: 32px;
+  background: linear-gradient(180deg, transparent, rgba(0, 255, 255, 0.2), transparent);
+  margin: 0 4px;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+/* ── Step Click & Selection (Task 2) ── */
+.af-step--selected {
+  outline: 2px solid var(--neon-cyan) !important;
+  outline-offset: 1px;
+  box-shadow: 0 0 8px rgba(0, 255, 255, 0.3);
+}
+
+/* ── Step Detail Drill-Down Panel (Task 2) ── */
+.af-step-detail {
+  margin: 6px 0 4px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(0, 255, 255, 0.15);
+  border-radius: 4px;
+  animation: af-detail-slide 0.15s ease-out;
+}
+.af-step-detail--failed {
+  border-color: rgba(255, 0, 64, 0.3);
+  background: rgba(255, 0, 64, 0.04);
+}
+@keyframes af-detail-slide {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.af-step-detail__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.af-step-detail__title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.5px;
+}
+.af-step-detail__status {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 2px;
+  letter-spacing: 0.5px;
+}
+.af-step-detail__status--done { background: rgba(0, 255, 65, 0.12); color: #00ff41; }
+.af-step-detail__status--running { background: rgba(68, 136, 255, 0.12); color: #4488ff; }
+.af-step-detail__status--failed { background: rgba(255, 0, 64, 0.15); color: #ff0040; }
+.af-step-detail__status--pending { background: rgba(102, 102, 128, 0.1); color: #666680; }
+.af-step-detail__agent {
+  font-size: 10px;
+  color: var(--neon-cyan);
+}
+.af-step-detail__close {
+  margin-left: auto;
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text-dim);
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: 3px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+.af-step-detail__close:hover { border-color: #ff0040; color: #ff0040; }
+.af-step-detail__body { display: flex; flex-direction: column; gap: 6px; }
+.af-step-detail__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.af-step-detail__meta-item {
+  font-size: 10px;
+  color: var(--text-dim);
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 2px;
+  white-space: nowrap;
+}
+.af-step-detail__meta-item--orange { color: var(--neon-orange); background: rgba(255, 102, 0, 0.1); }
+.af-step-detail__meta-item--red { color: #ff0040; background: rgba(255, 0, 64, 0.1); }
+.af-step-detail__loading {
+  font-size: 10px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+/* ── Error Display (Task 3) ── */
+.af-step-detail__error {
+  padding: 8px;
+  background: rgba(255, 0, 64, 0.08);
+  border: 1px solid rgba(255, 0, 64, 0.25);
+  border-radius: 3px;
+}
+.af-step-detail__error-label {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  color: #ff0040;
+  background: rgba(255, 0, 64, 0.15);
+  padding: 1px 5px;
+  border-radius: 2px;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+.af-step-detail__error-text {
+  font-size: 10px;
+  color: #ff6080;
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  line-height: 1.4;
+}
+.af-step-detail__output {
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 3px;
+}
+.af-step-detail__output-label {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--neon-green);
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+.af-step-detail__output-text {
+  font-size: 10px;
+  color: var(--text-primary);
+  margin: 2px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  line-height: 1.4;
+  opacity: 0.8;
+}
+.af-step-detail__empty {
+  font-size: 10px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+/* ── Failed Step Highlight (Task 3) ── */
+.af-step--failed-highlight {
+  box-shadow: 0 0 6px rgba(255, 0, 64, 0.25);
+}
+
+/* ── Inline Error Below Failed Steps (Task 3) ── */
+.af-step-inline-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  margin: 2px 0;
+  background: rgba(255, 0, 64, 0.06);
+  border-left: 2px solid rgba(255, 0, 64, 0.4);
+  border-radius: 0 3px 3px 0;
+  font-size: 10px;
+}
+.af-step-inline-error__icon {
+  color: #ff0040;
+  font-weight: 700;
+  font-size: 11px;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 0, 64, 0.15);
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.af-step-inline-error__step {
+  color: #ff6080;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.af-step-inline-error__msg {
+  color: var(--text-dim);
+}
+.af-step-inline-error__retry {
+  color: var(--neon-orange);
+  font-size: 9px;
+}

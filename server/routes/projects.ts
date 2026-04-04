@@ -149,8 +149,13 @@ router.get("/projects/:id", async (req, res) => {
 router.post("/projects", async (req, res) => {
   try {
     const projects = loadProjects();
-    const { name, description, emoji, ports, domain, repo, stack, service, github, category } = req.body;
-    if (!name) { res.status(400).json({ error: "name required" }); return; }
+    const { name: rawName, description, emoji, ports, domain: rawDomain, repo, stack, service, github, category } = req.body;
+    if (!rawName) { res.status(400).json({ error: "name required" }); return; }
+
+    // Derive clean project name from repo path (basename) when available
+    const repoBasename = repo ? String(repo).split("/").filter(Boolean).pop() || "" : "";
+    const name = repoBasename || rawName;
+    const domain = repoBasename ? repoBasename + ".setrox.com.tr" : (rawDomain || "");
 
     const id = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
     const normalizedId = normalizeProjectId(id);

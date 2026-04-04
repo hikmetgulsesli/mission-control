@@ -25,6 +25,15 @@ export const api = {
   agentHistory: (id: string, limit = 50) => fetchApi<{ messages: any[] }>(`/api/agents/${id}/history?limit=${limit}`),
   agentLive: (id: string) => fetchApi<any>(`/api/agents/${id}/live`),
   agentActivity: (id: string) => fetchApi<any>(`/api/agents/${id}/activity`),
+  agentStats: (id: string) => fetchApi<{
+    agentId: string;
+    storiesCompleted: number;
+    storiesFailed: number;
+    successRate: number;
+    avgDurationMs: number;
+    errorCount: number;
+    totalSteps: number;
+  }>(`/api/agents/${id}/stats`),
   sessions: () => fetchApi<Session[]>('/api/sessions'),
   cron: () => fetchApi<CronJob[]>('/api/cron'),
   cronToggle: (id: string) => fetchApi<{ success: boolean }>(`/api/cron/${id}/toggle`, { method: 'POST' }),

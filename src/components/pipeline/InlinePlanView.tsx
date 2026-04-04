@@ -18,6 +18,25 @@ interface PlanData {
   storyStats?: Record<string, number>;
 }
 
+interface StoryItem {
+  id: string;
+  title: string;
+  status: string;
+  priority?: string;
+  agent?: string;
+}
+
+const STORY_STATUS_BADGES: Record<string, { color: string; label: string }> = {
+  done: { color: "#00ff41", label: "DONE" },
+  running: { color: "#4488ff", label: "RUNNING" },
+  failed: { color: "#ff0040", label: "FAILED" },
+  pending: { color: "#555570", label: "PENDING" },
+  verified: { color: "#22c55e", label: "VERIFIED" },
+  skipped: { color: "#6b7280", label: "SKIPPED" },
+  "in-progress": { color: "#4488ff", label: "IN PROGRESS" },
+  blocked: { color: "#ff6600", label: "BLOCKED" },
+};
+
 function formatDuration(ms: number): string {
   if (ms <= 0) return "-";
   const s = Math.floor(ms / 1000);
@@ -42,18 +61,21 @@ export interface InlinePlanViewProps {
 }
 
 export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetry }: InlinePlanViewProps) {
-  const [tab, setTab] = useState<"prd" | "design" | "stories" | "raw" | "memory">("prd");
+  const [tab, setTab] = useState<"overview" | "prd" | "design" | "stories" | "raw" | "memory">("overview");
   const [planData, setPlanData] = useState<PlanData | null>(null);
   const [designData, setDesignData] = useState<any>(null);
+  const [storyList, setStoryList] = useState<StoryItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(() => {
     Promise.all([
       api.runPlan(runId),
       api.runDesign(runId).catch(() => null),
-    ]).then(([plan, design]) => {
+      api.runStories(runId).catch(() => []),
+    ]).then(([plan, design, stories]) => {
       setPlanData(plan);
       if (design) setDesignData(design);
+      if (Array.isArray(stories)) setStoryList(stories);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, [runId]);
@@ -70,10 +92,12 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
   }
 
   const storyCount = planData.stories.length;
+  const prdExcerpt = planData.prd ? planData.prd.slice(0, 500) + (planData.prd.length > 500 ? "..." : "") : "";
 
   return (
     <div className="af-inline-plan">
       <div className="af-inline-plan__tabs">
+        <button className={`af-inline-plan__tab ${tab === "overview" ? "af-inline-plan__tab--active" : ""}`} onClick={() => setTab("overview")}>OVERVIEW</button>
         <button className={`af-inline-plan__tab ${tab === "prd" ? "af-inline-plan__tab--active" : ""}`} onClick={() => setTab("prd")}>PRD</button>
         {designData && designData.screens && designData.screens.length > 0 && (
           <button className={`af-inline-plan__tab ${tab === "design" ? "af-inline-plan__tab--active" : ""}`} onClick={() => setTab("design")}>DESIGN ({designData.screens.length})</button>
@@ -84,6 +108,95 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
       </div>
 
       <div className="af-inline-plan__content">
+        {/* OVERVIEW — Plan Drill-Down */}
+        {tab === "overview" && (
+          <div className="af-plan-overview">
+            {/* PRD Excerpt */}
+            <div className="af-plan-overview__section">
+              <div className="af-plan-overview__section-header">
+                <h4 className="af-plan-overview__title">PRD Excerpt</h4>
+                {planData.prd && planData.prd.length > 500 && (
+                  <button className="af-plan-overview__more" onClick={() => setTab("prd")}>View Full PRD &rarr;</button>
+                )}
+              </div>
+              {prdExcerpt ? (
+                <pre className="af-plan-overview__excerpt">{prdExcerpt}</pre>
+              ) : (
+                <p className="af-plan-overview__empty">No PRD data available yet.</p>
+              )}
+            </div>
+
+            {/* Story List with Status Badges */}
+            <div className="af-plan-overview__section">
+              <div className="af-plan-overview__section-header">
+                <h4 className="af-plan-overview__title">
+                  Stories ({storyList.length || storyCount})
+                </h4>
+                <button className="af-plan-overview__more" onClick={() => setTab("stories")}>Full Details &rarr;</button>
+              </div>
+              {(storyList.length > 0 ? storyList : planData.stories).length > 0 ? (
+                <div className="af-plan-overview__story-list">
+                  {(storyList.length > 0 ? storyList : planData.stories).map((story: any, idx: number) => {
+                    const status = story.status || "pending";
+                    const badge = STORY_STATUS_BADGES[status] || { color: "#888", label: status.toUpperCase() };
+                    return (
+                      <div key={story.id || idx} className="af-plan-overview__story-row">
+                        <span className="af-plan-overview__story-idx">{idx + 1}</span>
+                        <span
+                          className="af-plan-overview__story-badge"
+                          style={{ color: badge.color, borderColor: badge.color }}
+                        >
+                          {badge.label}
+                        </span>
+                        <span className="af-plan-overview__story-title">
+                          {story.title || story.name || story.id || `Story ${idx + 1}`}
+                        </span>
+                        {story.agent && (
+                          <span className="af-plan-overview__story-agent">{story.agent}</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="af-plan-overview__empty">No stories decomposed yet.</p>
+              )}
+            </div>
+
+            {/* Design System Info */}
+            {designData && (
+              <div className="af-plan-overview__section">
+                <div className="af-plan-overview__section-header">
+                  <h4 className="af-plan-overview__title">Design System</h4>
+                  {designData.screens && designData.screens.length > 0 && (
+                    <button className="af-plan-overview__more" onClick={() => setTab("design")}>View Screens &rarr;</button>
+                  )}
+                </div>
+                {designData.designSystem ? (
+                  <div className="af-plan-overview__design-tokens">
+                    {Object.entries(designData.designSystem).map(([key, value]: [string, any]) => (
+                      <div key={key} className="af-plan-overview__token">
+                        <span className="af-plan-overview__token-key">{key}</span>
+                        <span className="af-plan-overview__token-val">{String(value)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="af-plan-overview__empty">No design system data available.</p>
+                )}
+                {designData.designNotes && (
+                  <p className="af-plan-overview__design-notes">{designData.designNotes}</p>
+                )}
+                {designData.screens && (
+                  <div className="af-plan-overview__screen-summary">
+                    {designData.screens.length} screen{designData.screens.length !== 1 ? "s" : ""} generated
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {tab === "prd" && (
           <div className="af-inline-plan__prd">
             {planData.prd.split("\n").map((line, i) => {
