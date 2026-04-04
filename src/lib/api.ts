@@ -173,6 +173,8 @@ export const api = {
   updateAgent: (id: string, data: any) => fetchApi<any>(`/api/agents/${id}`, { method: 'PATCH', headers: CT_JSON, body: JSON.stringify(data) }),
 
   // PRD Generator
+  prdGithubImport: (url: string) =>
+    fetchApi<{ analysis: any; platform: string; url: string }>('/api/prd/github-import', { method: 'POST', headers: CT_JSON, body: JSON.stringify({ url }) }),
   prdAnalyze: (data: { url?: string; screenshot?: string; filename?: string }) =>
     fetchApi<any>('/api/prd/analyze', { method: 'POST', headers: CT_JSON, body: JSON.stringify(data) }),
   prdResearch: (data: { query?: string; topic?: string }) =>

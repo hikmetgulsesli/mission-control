@@ -31,85 +31,12 @@ const SCRAPE_ADAPTORS = [
   { id: 'generic', name: 'Generic' },
 ];
 
-/** GitHub adaptor — fetch repo metadata via `gh api` CLI */
+/** GitHub adaptor — uses shared async service */
 async function scrapeGitHub(url: string): Promise<{ success: boolean; data?: any; error?: string }> {
-  const match = url.match(/github\.com\/([^\/]+)\/([^\/\?#]+)/);
-  if (!match) return { success: false, error: 'Could not parse owner/repo from GitHub URL' };
-  const [, owner, rawRepo] = match;
-  const repo = rawRepo.replace(/\.git$/, '');
-
-  function ghApi(endpoint: string): any {
-    try {
-      const out = execFileSync('gh', ['api', endpoint, '--cache', '1h'], {
-        timeout: 15_000,
-        maxBuffer: 2 * 1024 * 1024,
-        encoding: 'utf8',
-      });
-      return JSON.parse(out);
-    } catch {
-      return null;
-    }
-  }
-
-  const repoData = ghApi(`repos/${owner}/${repo}`);
-  if (!repoData) return { success: false, error: `GitHub repo ${owner}/${repo} not found or gh CLI not authenticated` };
-
-  // README
-  let readmeText = '';
-  const readmeData = ghApi(`repos/${owner}/${repo}/readme`);
-  if (readmeData?.content) {
-    try { readmeText = Buffer.from(readmeData.content, 'base64').toString('utf8'); } catch {}
-  }
-
-  // package.json (optional)
-  let dependencies: Record<string, string> = {};
-  let devDependencies: Record<string, string> = {};
-  const pkgData = ghApi(`repos/${owner}/${repo}/contents/package.json`);
-  if (pkgData?.content) {
-    try {
-      const pkg = JSON.parse(Buffer.from(pkgData.content, 'base64').toString('utf8'));
-      dependencies = pkg.dependencies || {};
-      devDependencies = pkg.devDependencies || {};
-    } catch {}
-  }
-
-  // Detect tech stack from dependencies
-  const allDeps = { ...dependencies, ...devDependencies };
-  const techStack: string[] = [];
-  const stackMap: Record<string, string> = {
-    react: 'React', next: 'Next.js', vue: 'Vue', nuxt: 'Nuxt', svelte: 'Svelte',
-    express: 'Express', fastify: 'Fastify', 'hono': 'Hono', koa: 'Koa',
-    tailwindcss: 'Tailwind CSS', typescript: 'TypeScript', prisma: 'Prisma',
-    drizzle: 'Drizzle', mongoose: 'Mongoose', sequelize: 'Sequelize',
-    'react-native': 'React Native', electron: 'Electron', vite: 'Vite',
-    webpack: 'Webpack', jest: 'Jest', vitest: 'Vitest', playwright: 'Playwright',
-  };
-  for (const [dep, label] of Object.entries(stackMap)) {
-    if (allDeps[dep]) techStack.push(label);
-  }
-
-  return {
-    success: true,
-    data: {
-      name: repoData.full_name,
-      description: repoData.description || '',
-      language: repoData.language || '',
-      topics: repoData.topics || [],
-      stars: repoData.stargazers_count ?? 0,
-      forks: repoData.forks_count ?? 0,
-      openIssues: repoData.open_issues_count ?? 0,
-      license: repoData.license?.spdx_id || '',
-      homepage: repoData.homepage || '',
-      defaultBranch: repoData.default_branch || 'main',
-      readme: readmeText.slice(0, 3000),
-      dependencies,
-      devDependencies,
-      techStack,
-      url: repoData.html_url,
-      adaptor: 'github',
-      source: 'gh-api',
-    },
-  };
+  const { scrapeGitHubRepo } = await import('../services/github-scraper.js');
+  const data = await scrapeGitHubRepo(url);
+  if (!data) return { success: false, error: 'GitHub repo not found or gh CLI not authenticated' };
+  return { success: true, data: { ...data, adaptor: 'github', source: 'gh-api' } };
 }
 
 function runScrape(input: string): Promise<{ stdout: string; stderr: string }> {

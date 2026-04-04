@@ -135,117 +135,18 @@ router.post('/prd/analyze', async (req, res) => {
 router.post('/prd/github-import', async (req, res) => {
   try {
     const { url } = req.body;
-    if (!url) {
-      res.status(400).json({ error: 'url required' });
-      return;
-    }
+    if (!url) { res.status(400).json({ error: 'url required' }); return; }
 
-    const match = url.match(/github\.com\/([^\/]+)\/([^\/\?#]+)/);
-    if (!match) {
-      res.status(400).json({ error: 'Invalid GitHub URL — expected https://github.com/owner/repo' });
-      return;
-    }
+    const { scrapeGitHubRepo, detectPlatform } = await import('../services/github-scraper.js');
+    const data = await scrapeGitHubRepo(url);
+    if (!data) { res.status(404).json({ error: 'GitHub repo bulunamadi veya gh CLI authenticate degil' }); return; }
 
-    const [, owner, rawRepo] = match;
-    const repo = rawRepo.replace(/\.git$/, '');
-
-    function ghApi(endpoint: string): any {
-      try {
-        const out = execFileSync('gh', ['api', endpoint, '--cache', '1h'], {
-          timeout: 15_000,
-          maxBuffer: 2 * 1024 * 1024,
-          encoding: 'utf8',
-        });
-        return JSON.parse(out);
-      } catch {
-        return null;
-      }
-    }
-
-    // 1. Repo metadata
-    const repoData = ghApi(`repos/${owner}/${repo}`);
-    if (!repoData) {
-      res.status(404).json({ error: `GitHub repo ${owner}/${repo} bulunamadi veya gh CLI authenticate degil` });
-      return;
-    }
-
-    // 2. README
-    let readmeText = '';
-    const readmeData = ghApi(`repos/${owner}/${repo}/readme`);
-    if (readmeData?.content) {
-      try {
-        readmeText = Buffer.from(readmeData.content, 'base64').toString('utf8');
-      } catch {}
-    }
-
-    // 3. package.json (optional)
-    let dependencies: Record<string, string> = {};
-    let devDependencies: Record<string, string> = {};
-    let scripts: Record<string, string> = {};
-    const pkgData = ghApi(`repos/${owner}/${repo}/contents/package.json`);
-    if (pkgData?.content) {
-      try {
-        const pkg = JSON.parse(Buffer.from(pkgData.content, 'base64').toString('utf8'));
-        dependencies = pkg.dependencies || {};
-        devDependencies = pkg.devDependencies || {};
-        scripts = pkg.scripts || {};
-      } catch {}
-    }
-
-    // 4. Auto-detect tech stack from dependencies
-    const allDeps = { ...dependencies, ...devDependencies };
-    const techStack: string[] = [];
-    const stackMap: Record<string, string> = {
-      react: 'React', 'react-dom': 'React', next: 'Next.js', vue: 'Vue', nuxt: 'Nuxt',
-      svelte: 'Svelte', '@sveltejs/kit': 'SvelteKit', angular: 'Angular',
-      express: 'Express', fastify: 'Fastify', hono: 'Hono', koa: 'Koa', nestjs: 'NestJS',
-      tailwindcss: 'Tailwind CSS', typescript: 'TypeScript',
-      prisma: 'Prisma', '@prisma/client': 'Prisma', drizzle: 'Drizzle ORM',
-      mongoose: 'Mongoose', sequelize: 'Sequelize', typeorm: 'TypeORM',
-      'react-native': 'React Native', electron: 'Electron', expo: 'Expo',
-      vite: 'Vite', webpack: 'Webpack', esbuild: 'esbuild',
-      jest: 'Jest', vitest: 'Vitest', playwright: 'Playwright', cypress: 'Cypress',
-      'socket.io': 'Socket.IO', graphql: 'GraphQL', trpc: 'tRPC',
-      redis: 'Redis', ioredis: 'Redis',
-      stripe: 'Stripe', firebase: 'Firebase', supabase: 'Supabase',
-    };
-    for (const [dep, label] of Object.entries(stackMap)) {
-      if (allDeps[dep] && !techStack.includes(label)) techStack.push(label);
-    }
-
-    // 5. Detect platform
-    let platform = 'web';
-    if (techStack.includes('React Native') || techStack.includes('Expo')) {
-      platform = 'mobile';
-    } else if (techStack.includes('Electron')) {
-      platform = 'desktop';
-    }
-
-    // 6. Build analysis object
-    const analysis = {
-      title: repoData.name,
-      fullName: repoData.full_name,
-      description: repoData.description || '',
-      language: repoData.language || '',
-      topics: repoData.topics || [],
-      stars: repoData.stargazers_count ?? 0,
-      forks: repoData.forks_count ?? 0,
-      openIssues: repoData.open_issues_count ?? 0,
-      license: repoData.license?.spdx_id || '',
-      homepage: repoData.homepage || '',
-      defaultBranch: repoData.default_branch || 'main',
-      createdAt: repoData.created_at,
-      updatedAt: repoData.updated_at,
+    const platform = detectPlatform(data.techStack);
+    res.json({
+      analysis: { ...data, platform },
       platform,
-      techStack,
-      dependencies,
-      devDependencies,
-      scripts,
-      readme: readmeText.slice(0, 5000),
-      url: repoData.html_url,
-    };
-
-    res.json({ analysis, platform, url: repoData.html_url });
+      url: data.url,
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

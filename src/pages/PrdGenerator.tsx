@@ -154,6 +154,28 @@ export function PrdGenerator() {
   const addUrl = () => setStore({ urls: [...store.urls, ''] });
   const removeUrl = (index: number) => setStore({ urls: store.urls.filter((_, i) => i !== index) });
 
+  // GitHub repo import
+  const handleGithubImport = async () => {
+    const githubUrl = store.urls.find(u => u.includes('github.com'));
+    if (!githubUrl) { addLog('GitHub URL gerekli (ornek: https://github.com/user/repo)'); return; }
+    setLoading('analyze', true);
+    addLog(`GitHub repo analiz ediliyor: ${githubUrl}`);
+    try {
+      const result = await api.prdGithubImport(githubUrl);
+      setStore({
+        analysis: result.analysis,
+        platform: result.platform as 'web' | 'mobile',
+        title: result.analysis?.title || store.title,
+        activeTab: 'analiz',
+      });
+      addLog(`GitHub import basarili: ${result.analysis?.fullName || githubUrl} (${result.analysis?.techStack?.join(', ') || 'stack bilinmiyor'})`);
+    } catch (err: any) {
+      addLog(`GitHub import hatasi: ${err.message}`);
+    } finally {
+      setLoading('analyze', false);
+    }
+  };
+
   // Site analiz et
   const handleAnalyze = async () => {
     const validUrls = store.urls.filter(u => u.trim());
@@ -845,6 +867,11 @@ export function PrdGenerator() {
             <div className="prd-url-actions">
               <button className="btn btn--small" onClick={addUrl}>+ URL ekle</button>
               <button className="btn btn--small btn--primary" onClick={handleAnalyze} disabled={store.loading.analyze}>{store.loading.analyze ? 'Analiz...' : 'Analiz Et'}</button>
+              {store.urls.some(u => u.includes('github.com')) && (
+                <button className="btn btn--small btn--success" onClick={handleGithubImport} disabled={store.loading.analyze}>
+                  {store.loading.analyze ? 'Import...' : 'GitHub Import'}
+                </button>
+              )}
             </div>
           </div>
 
