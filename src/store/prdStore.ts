@@ -51,6 +51,7 @@ interface PrdActions {
 
 const initialState: PrdState = {
   id: null,
+  skipAutoLoad: false,
   title: '',
   platform: 'web',
   urls: [''],
@@ -89,5 +90,5 @@ export const usePrdStore = create<PrdState & PrdActions>((set) => ({
     loading: { ...s.loading, [key]: val },
     loadingStartedAt: { ...s.loadingStartedAt, [key]: val ? (s.loadingStartedAt[key] || Date.now()) : 0 },
   })),
-  reset: () => set({ ...initialState, urls: [''], logs: [] }),
+  reset: () => set({ ...initialState, skipAutoLoad: true, urls: [''], logs: [] }),
 }));

@@ -121,6 +121,17 @@ DETAY SEVIYESI: "Modern goruntum" YAZMA → exact hex renk yaz. "Guzel animasyon
   if (analysis) {
     const a = typeof analysis === 'string' ? analysis : JSON.stringify(analysis, null, 2);
     contextBlock += `\n\nREFERANS SITE ANALIZI (bu bilgileri PRD'ye entegre et — renkler, fontlar, yapiyi aynen kullan):\n${a}`;
+
+    // Inject structured screenshot analysis as explicit design rules
+    if (typeof analysis === 'object' && analysis !== null) {
+      contextBlock += `\n\nSCREENSHOT ANALYSIS (follow these design rules):`;
+      if (analysis.colors) contextBlock += `\n- Colors: ${JSON.stringify(analysis.colors)}`;
+      if (analysis.typography) contextBlock += `\n- Typography: ${JSON.stringify(analysis.typography)}`;
+      if (analysis.components) contextBlock += `\n- Components: ${JSON.stringify(analysis.components)}`;
+      if (analysis.layout) contextBlock += `\n- Layout: ${analysis.layout}`;
+      if (analysis.sections) contextBlock += `\n- Sections: ${JSON.stringify(analysis.sections)}`;
+      if (analysis.style) contextBlock += `\n- Style: ${typeof analysis.style === 'string' ? analysis.style : JSON.stringify(analysis.style)}`;
+    }
   }
 
   if (research) {

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { api } from '../lib/api';
 
 interface ScrapeResult {
   success: boolean;
@@ -55,8 +56,7 @@ export function Scrape() {
     (async () => {
       try {
         setTrendingLoading(true);
-        const res = await fetch('/api/scrape/trending');
-        const data = await res.json();
+        const data = await api.scrapeTrending();
         setTrendingApps(data);
       } catch {}
       setTrendingLoading(false);

@@ -67,7 +67,7 @@ export function PrdGenerator() {
 
   // Sayfa acildiginda son PRD'yi DB'den otomatik yukle
   useEffect(() => {
-    if (store.id) return; // zaten yuklu
+    if (store.id || store.skipAutoLoad) return; // zaten yuklu veya kullanici yeni istedi
     api.prdHistory().then(prds => {
       if (prds.length > 0 && !usePrdStore.getState().id) {
         const last = prds[0];
