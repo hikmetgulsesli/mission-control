@@ -75,6 +75,19 @@ router.get('/scrape/trending', async (req, res) => {
   }
 });
 
+router.get('/scrape/app-details', async (req, res) => {
+  try {
+    const { appId, country } = req.query;
+    if (!appId) return res.status(400).json({ error: 'appId required' });
+    const { getAppDetails } = await import('../services/app-store-scraper.js');
+    const details = await getAppDetails(appId as string, (country as string) || 'tr');
+    if (!details) return res.status(404).json({ error: 'App not found' });
+    res.json(details);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/scrape', async (req, res) => {
   try {
     const { url, adaptor, selector, format } = req.body;

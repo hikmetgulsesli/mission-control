@@ -6,6 +6,9 @@ export interface AppInfo {
   category: string;
   url: string;
   description: string;
+  screenshots?: string[];
+  version?: string;
+  price?: string;
 }
 
 export async function getTrendingApps(platform: string = "ios", limit: number = 25): Promise<AppInfo[]> {
@@ -26,5 +29,31 @@ export async function getTrendingApps(platform: string = "ios", limit: number = 
     }));
   } catch (err) {
     return [];
+  }
+}
+
+export async function getAppDetails(appId: string, country: string = "tr"): Promise<AppInfo | null> {
+  try {
+    const res = await fetch(`https://itunes.apple.com/lookup?id=${appId}&country=${country}`, {
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json() as any;
+    const app = data.results?.[0];
+    if (!app) return null;
+    return {
+      name: app.trackName || "",
+      developer: app.artistName || "",
+      icon: app.artworkUrl100 || "",
+      rating: app.averageUserRating || 0,
+      category: app.primaryGenreName || "",
+      url: app.trackViewUrl || "",
+      description: app.description || "",
+      screenshots: app.screenshotUrls || [],
+      version: app.version || "",
+      price: app.formattedPrice || "Free",
+    };
+  } catch {
+    return null;
   }
 }

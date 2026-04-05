@@ -302,7 +302,7 @@ router.post('/prd/generate', async (req, res) => {
 });
 
 // Async enhance job storage
-const enhanceJobs = new Map<string, { status: string; result?: any; error?: string }>();
+const enhanceJobs = new Map<string, { status: string; result?: any; error?: string; startedAt: number }>();
 
 // POST /prd/enhance — Start async enhance job (returns immediately)
 router.post('/prd/enhance', async (req, res) => {
@@ -311,8 +311,16 @@ router.post('/prd/enhance', async (req, res) => {
   const prd = await getPrd(prdId);
   if (!prd?.prd_content) { res.status(404).json({ error: 'PRD not found' }); return; }
 
+  // Cleanup old jobs if map grows too large
+  if (enhanceJobs.size > 10) {
+    const oldest = [...enhanceJobs.entries()].sort((a, b) => (a[1].startedAt || 0) - (b[1].startedAt || 0));
+    for (let i = 0; i < oldest.length - 5; i++) {
+      enhanceJobs.delete(oldest[i][0]);
+    }
+  }
+
   // Start job in background
-  enhanceJobs.set(prdId, { status: 'running' });
+  enhanceJobs.set(prdId, { status: 'running', startedAt: Date.now() });
   res.json({ status: 'started', prdId });
 
   // Run enhance in background (no await — fire and forget)
@@ -325,7 +333,7 @@ router.post('/prd/enhance', async (req, res) => {
       const oldPages = prd.pages || extractPages(prd.prd_content);
       if (oldPages.length > 0) {
         if (newPages.length === 0) {
-          enhanceJobs.set(prdId, { status: 'error', error: 'Gelistirme sayfa formatini bozdu. Orijinal korundu.' });
+          enhanceJobs.set(prdId, { status: 'error', error: 'Gelistirme sayfa formatini bozdu. Orijinal korundu.', startedAt: Date.now() });
           return;
         }
         const newRoutes = new Set(newPages.map((p: any) => p.route));
@@ -333,7 +341,8 @@ router.post('/prd/enhance', async (req, res) => {
         if (removed.length > 0) {
           enhanceJobs.set(prdId, {
             status: 'error',
-            error: `Gelistirme ${removed.map((p: any) => p.name).join(', ')} sayfalarini sildi. Orijinal korundu.`
+            error: `Gelistirme ${removed.map((p: any) => p.name).join(', ')} sayfalarini sildi. Orijinal korundu.`,
+            startedAt: Date.now(),
           });
           return;
         }
@@ -351,9 +360,9 @@ router.post('/prd/enhance', async (req, res) => {
         pages,
       });
       const updated = await getPrd(prdId);
-      enhanceJobs.set(prdId, { status: 'done', result: updated });
+      enhanceJobs.set(prdId, { status: 'done', result: updated, startedAt: Date.now() });
     } catch (err: any) {
-      enhanceJobs.set(prdId, { status: 'error', error: err.message });
+      enhanceJobs.set(prdId, { status: 'error', error: err.message, startedAt: Date.now() });
     }
     // Clean up after 5 minutes
     setTimeout(() => enhanceJobs.delete(prdId), 300000);
