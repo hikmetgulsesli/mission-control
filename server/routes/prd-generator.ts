@@ -1039,4 +1039,21 @@ function getRecommendation(prdScore: number, run: any): string {
   return 'PRD kalitesi yeterli ama run basarisiz — agent loglarini kontrol edin';
 }
 
+// POST /prd/enhance-with-trends — Enhance PRD with 2026 trends
+router.post('/prd/enhance-with-trends', async (req, res) => {
+  try {
+    const { prdContent } = req.body;
+    if (!prdContent) { res.status(400).json({ error: 'prdContent required' }); return; }
+
+    const { TRENDS_2026, buildTrendEnhancementPrompt, callLlm } = await import('../services/prd-llm.js');
+    const prompt = buildTrendEnhancementPrompt(prdContent, TRENDS_2026);
+
+    const enhanced = await callLlm([{ role: 'user', content: prompt }], 16000);
+
+    res.json({ enhanced, trends: TRENDS_2026 });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

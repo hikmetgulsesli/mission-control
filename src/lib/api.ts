@@ -153,6 +153,9 @@ export const api = {
   deleteRule: (id: string) => fetchApi<any>(`/api/rules/${id}`, { method: 'DELETE' }),
   toggleRule: (id: string) => fetchApi<any>(`/api/rules/${id}/toggle`, { method: 'PUT' }),
   exportRules: () => fetchApi<any>('/api/rules/export'),
+  // Telemetry
+  telemetry: (runId: string) => fetchApi<any>(`/api/telemetry/${runId}`),
+  runErrors: (runId: string) => fetchApi<any[]>(`/api/runs/${runId}/errors`),
   // Live Feed
   liveFeed: (since?: string, agent?: string) => {
     const params: string[] = [];
@@ -210,4 +213,10 @@ export const api = {
     fetchApi<any>(`/api/prd/screens/${prdId}/variant`, { method: 'POST', headers: CT_JSON, body: JSON.stringify(data) }),
   prdScreenCoverage: (data: { prdContent: string; screens: any[]; prdId?: string }) =>
     fetchApi<any>('/api/prd/screen-coverage', { method: 'POST', headers: CT_JSON, body: JSON.stringify(data) }),
+  // Trend enhancement
+  enhanceWithTrends: (prdContent: string) =>
+    fetchApi<{ enhanced: string; trends: any }>("/api/prd/enhance-with-trends", { method: "POST", headers: CT_JSON, body: JSON.stringify({ prdContent }) }),
+  // Trending apps
+  scrapeTrending: (platform?: string, limit?: number) =>
+    fetchApi<any[]>(`/api/scrape/trending?platform=${platform || 'ios'}&limit=${limit || 25}`),
 };

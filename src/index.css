@@ -29,7 +29,25 @@
   --orange: var(--neon-orange);
   --red: var(--neon-red);
   --text: var(--text-primary);
+
+  /* Premium Glassmorphism */
+  --glass-bg: rgba(18, 18, 31, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-blur: 12px;
+  --glow-cyan: 0 0 15px rgba(0, 255, 255, 0.2);
+  --glow-green: 0 0 15px rgba(0, 255, 65, 0.2);
+  --glow-red: 0 0 15px rgba(255, 0, 64, 0.2);
 }
+
+/* Premium utility classes */
+.glass { backdrop-filter: blur(var(--glass-blur)); background: var(--glass-bg); border: 1px solid var(--glass-border); }
+.glow-active { box-shadow: var(--glow-cyan); }
+.glow-success { box-shadow: var(--glow-green); }
+.glow-error { box-shadow: var(--glow-red); }
+
+@keyframes pulse-glow { 0%, 100% { box-shadow: 0 0 5px rgba(0, 255, 255, 0.1); } 50% { box-shadow: 0 0 20px rgba(0, 255, 255, 0.3); } }
+@keyframes fade-in-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes slide-in { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -3129,14 +3147,16 @@ html, body, #root {
 /* Pipeline View */
 .af-pipeline { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; flex: 1; }
 .af-pipeline__run {
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 4px;
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
   padding: 10px;
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--glass-bg);
+  backdrop-filter: blur(8px);
+  animation: fade-in-up 0.2s ease-out;
 }
-.af-pipeline__run--running { border-color: rgba(0, 255, 65, 0.2); }
+.af-pipeline__run--running { border-color: rgba(0, 255, 65, 0.25); box-shadow: var(--glow-green); }
 .af-pipeline__run--completed { border-color: rgba(0, 255, 65, 0.1); }
-.af-pipeline__run--failed { border-color: rgba(255, 0, 64, 0.2); }
+.af-pipeline__run--failed { border-color: rgba(255, 0, 64, 0.25); box-shadow: var(--glow-red); }
 
 .af-pipeline__header {
   display: flex;

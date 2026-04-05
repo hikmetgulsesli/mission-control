@@ -3,6 +3,7 @@ import { api } from "../lib/api";
 import { GlitchText } from "../components/GlitchText";
 import { StoryList } from "../components/run-detail/StoryList";
 import { StepTimeline } from "../components/run-detail/StepTimeline";
+import { TelemetryChart } from "../components/run-detail/TelemetryChart";
 
 interface ChatMessage {
   role: string;
@@ -63,7 +64,7 @@ interface RunDetailData {
   progressLog: string;
 }
 
-type Tab = "overview" | "chat" | "files" | "stories";
+type Tab = "overview" | "chat" | "files" | "stories" | "telemetry";
 
 export function RunDetail({ runId, onBack }: { runId: string; onBack: () => void }) {
   const [data, setData] = useState<RunDetailData | null>(null);
@@ -104,6 +105,7 @@ export function RunDetail({ runId, onBack }: { runId: string; onBack: () => void
 
   const tabs: { id: Tab; label: string; count?: number }[] = [
     { id: "overview", label: "Pipeline" },
+    { id: "telemetry", label: "Telemetry" },
     { id: "chat", label: "Agent Chat", count: data.agentChats.length },
     { id: "files", label: "Files", count: data.fileTree.length },
     { id: "stories", label: "Stories", count: data.stories.length },
@@ -160,6 +162,9 @@ export function RunDetail({ runId, onBack }: { runId: string; onBack: () => void
       <div className="rd-content">
         {tab === "overview" && (
           <StepTimeline steps={data.fullSteps} progressLog={data.progressLog} />
+        )}
+        {tab === "telemetry" && (
+          <TelemetryChart runId={runId} />
         )}
         {tab === "chat" && (
           <ChatTab chats={data.agentChats} selectedAgent={selectedAgent} onSelectAgent={setSelectedAgent} />

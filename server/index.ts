@@ -34,6 +34,7 @@ import discordNotifyRouter from "./routes/discord-notify.js";
 import scrapeRouter from "./routes/scrape.js";
 import rulesRouter from "./routes/rules.js";
 import liveFeedRouter from "./routes/live-feed.js";
+import telemetryRouter from "./routes/telemetry.js";
 import { authMiddleware } from './middleware/auth.js';
 import rateLimit from 'express-rate-limit';
 
@@ -153,6 +154,7 @@ app.use("/api", prdGeneratorRouter);
 app.use("/api", scrapeRouter);
 app.use("/api", rulesRouter);
 app.use("/api", liveFeedRouter);
+app.use("/api", telemetryRouter);
 
 // Serve avatars
 if (existsSync(config.avatarsDir)) {

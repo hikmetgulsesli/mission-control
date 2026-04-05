@@ -63,6 +63,18 @@ function runScrape(input: string): Promise<{ stdout: string; stderr: string }> {
   });
 }
 
+router.get('/scrape/trending', async (req, res) => {
+  try {
+    const { getTrendingApps } = await import("../services/app-store-scraper.js");
+    const platform = (req.query.platform as string) || "ios";
+    const limit = Math.min(parseInt(req.query.limit as string) || 25, 50);
+    const apps = await getTrendingApps(platform, limit);
+    res.json(apps);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/scrape', async (req, res) => {
   try {
     const { url, adaptor, selector, format } = req.body;

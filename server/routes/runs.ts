@@ -197,6 +197,60 @@ router.post('/runs/:id/resume', async (req, res) => {
   }
 });
 
+// GET /runs/:id/errors — Classified error cards for failed steps
+router.get('/runs/:id/errors', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Query failed steps
+    const failedSteps = await sql`
+      SELECT step_id, agent_id, status, output, error, updated_at
+      FROM steps WHERE run_id = ${id} AND status = 'failed'
+      ORDER BY updated_at DESC`;
+
+    // Error classification patterns
+    const ERROR_PATTERNS: { category: string; severity: 'error' | 'warning' | 'info'; patterns: RegExp[]; suggestion: string }[] = [
+      { category: 'TIMEOUT', severity: 'error', patterns: [/timeout|timed out|ETIMEDOUT|AbortError/i], suggestion: 'Step suresi asimi. Agent modelini degistirmeyi veya gorev kapsamini daraltmayi deneyin.' },
+      { category: 'BUILD', severity: 'error', patterns: [/npm|build|vite|tsc|webpack|compile|TypeScript|SyntaxError/i], suggestion: 'Build hatasi. package.json bagimliklarini ve tsconfig ayarlarini kontrol edin.' },
+      { category: 'NETWORK', severity: 'error', patterns: [/ECONNREFUSED|ENOTFOUND|fetch failed|network|ECONNRESET|502|503/i], suggestion: 'Ag hatasi. Servis durumlarini ve DNS ayarlarini kontrol edin.' },
+      { category: 'PERMISSION', severity: 'error', patterns: [/EACCES|permission denied|EPERM|sudo/i], suggestion: 'Yetki hatasi. Dosya izinlerini ve kullanici yetkilerini kontrol edin.' },
+      { category: 'FILE', severity: 'warning', patterns: [/ENOENT|not found|no such file|missing/i], suggestion: 'Dosya bulunamadi. Path ve dosya adini kontrol edin.' },
+      { category: 'GIT', severity: 'warning', patterns: [/git|merge conflict|diverged|rejected/i], suggestion: 'Git hatasi. Branch durumunu ve conflict\'leri kontrol edin.' },
+      { category: 'MEMORY', severity: 'error', patterns: [/OOM|heap|memory|ENOMEM|killed/i], suggestion: 'Bellek yetersiz. MemoryMax limitini artirmayi veya paralel gorevleri azaltmayi deneyin.' },
+      { category: 'LLM', severity: 'warning', patterns: [/rate limit|429|quota|api key|token limit|context length/i], suggestion: 'LLM API hatasi. Kota, rate limit ve API anahtarini kontrol edin.' },
+      { category: 'TEST', severity: 'info', patterns: [/test fail|assertion|expect|jest|vitest|playwright/i], suggestion: 'Test hatasi. Test ciktisini inceleyip kodu veya testi duzeltmeyi deneyin.' },
+    ];
+
+    const errors = (failedSteps as any[]).map(step => {
+      const errorText = step.error || step.output || '';
+      let category = 'UNKNOWN';
+      let suggestion = 'Hata siniflandirilamadi. Step output\'unu inceleyin.';
+      let severity: 'error' | 'warning' | 'info' = 'error';
+
+      for (const pattern of ERROR_PATTERNS) {
+        if (pattern.patterns.some(p => p.test(errorText))) {
+          category = pattern.category;
+          suggestion = pattern.suggestion;
+          severity = pattern.severity;
+          break;
+        }
+      }
+
+      return {
+        stepId: step.step_id,
+        category,
+        message: errorText.slice(0, 2000),
+        suggestion,
+        severity,
+      };
+    });
+
+    res.json(errors);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // DELETE /runs/:id — Delete a workflow run from DB (optionally cleanup project)
 router.delete('/runs/:id', async (req, res) => {
   try {

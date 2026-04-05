@@ -50,6 +50,26 @@ interface LiveEvent {
   detail: string | null;
   output: string | null;
   project: string | null;
+  category: string | null;
+}
+
+// Category classification — matches client-side CATEGORY_DEFS
+const CATEGORY_PATTERNS: { id: string; patterns: RegExp[] }[] = [
+  { id: 'DATABASE', patterns: [/CREATE|INSERT|UPDATE|DELETE|migration|prisma|drizzle|\.sql|postgres|sqlite/i] },
+  { id: 'UI', patterns: [/\.tsx|\.css|component|styling|tailwind|font|style|scss|layout/i] },
+  { id: 'BUILD', patterns: [/npm|build|vite|tsc|webpack|compile|bundle|esbuild/i] },
+  { id: 'TEST', patterns: [/test|jest|vitest|playwright|spec|assert/i] },
+  { id: 'ERROR', patterns: [/error|fail|crash|ENOENT|EACCES|EPERM|panic/i] },
+  { id: 'GIT', patterns: [/git |commit|push|pull|merge|branch|checkout|rebase/i] },
+  { id: 'API', patterns: [/api\/|routes\/|fetch|curl|endpoint|express|router/i] },
+];
+
+function classifyCategory(summary: string | null, file: string | null, detail: string | null): string | null {
+  const text = `${summary || ''} ${file || ''} ${detail || ''}`;
+  for (const cat of CATEGORY_PATTERNS) {
+    if (cat.patterns.some(p => p.test(text))) return cat.id;
+  }
+  return null;
 }
 
 
@@ -378,6 +398,7 @@ function scanSessions(): LiveEvent[] {
             detail,
             output,
             project: extractProject(details.cwd || null, summary, filePath, typeof callBlock.arguments === "string" ? callBlock.arguments : null),
+            category: classifyCategory(summary, filePath, detail),
           };
           events.push(event);
         }
@@ -502,6 +523,7 @@ router.get('/live-feed/errors', async (req, res) => {
       durationMs: r.duration_ms,
       exitCode: r.exit_code,
       agentEmoji: Object.values(AGENT_MAP).find(a => a.name.toLowerCase() === (r.agent || '').toLowerCase())?.emoji || '',
+      category: r.category || classifyCategory(r.summary, r.file, r.detail),
     }));
     res.json(mapped);
   } catch (err: any) {
@@ -555,6 +577,7 @@ router.get('/live-feed/history', async (req, res) => {
       durationMs: r.duration_ms,
       exitCode: r.exit_code,
       agentEmoji: Object.values(AGENT_MAP).find(a => a.name.toLowerCase() === (r.agent || '').toLowerCase())?.emoji || '',
+      category: r.category || classifyCategory(r.summary, r.file, r.detail),
     }));
     res.json(mapped);
   } catch (err: any) {

@@ -62,6 +62,7 @@ function estimateCostLocal(content: string) {
 export function PrdGenerator() {
   const store = usePrdStore();
   const [previousPrd, setPreviousPrd] = useState('');
+  const [trendEnhancing, setTrendEnhancing] = useState(false);
   const esRef = useRef<EventSource | null>(null);
 
   // Sayfa acildiginda son PRD'yi DB'den otomatik yukle
@@ -243,8 +244,25 @@ export function PrdGenerator() {
     addLog(`Screenshot analiz ediliyor: ${filename}`);
     try {
       const result = await api.prdAnalyze({ screenshot: base64, filename });
-      setStore({ analysis: { ...store.analysis, ...result.analysis, screenshot: true } });
-      addLog('Screenshot analizi tamamlandi');
+      const visionData = result.analysis || {};
+      setStore({ analysis: { ...store.analysis, ...visionData, screenshot: true } });
+
+      // Auto-fill title from vision analysis if not already set
+      if (!store.title && visionData.suggestedTitle) {
+        setStore({ title: visionData.suggestedTitle });
+        addLog(`Onerilen baslik: ${visionData.suggestedTitle}`);
+      }
+
+      // Auto-fill description from vision data
+      if (!store.description && (visionData.style || visionData.layout)) {
+        const parts: string[] = [];
+        if (visionData.style) parts.push(`${visionData.style} stil`);
+        if (visionData.layout) parts.push(`${visionData.layout} layout`);
+        if (visionData.components?.length) parts.push(`${visionData.components.slice(0, 5).join(', ')} komponentleri`);
+        setStore({ description: parts.join(', ') + ' iceren UI tasarimi' });
+      }
+
+      addLog(`Screenshot analizi tamamlandi${visionData.components?.length ? ` — ${visionData.components.length} komponent tespit edildi` : ''}`);
     } catch (err: any) {
       addLog(`Screenshot hatasi: ${err.message}`);
     }
@@ -393,6 +411,24 @@ export function PrdGenerator() {
       addLog(`Gelistirme hatasi: ${err.message}`);
     }
     setLoading('enhance', false);
+  };
+
+  // PRD'yi 2026 trendleriyle gelistir
+  const handleTrendEnhance = async () => {
+    if (!store.prdContent) return;
+    setTrendEnhancing(true);
+    addLog('2026 trendleriyle gelistiriliyor...');
+    try {
+      const result = await api.enhanceWithTrends(store.prdContent);
+      if (result.enhanced) {
+        setPreviousPrd(store.prdContent);
+        setStore({ prdContent: result.enhanced });
+        addLog('PRD 2026 trendleriyle guncellendi');
+      }
+    } catch (err: any) {
+      addLog(`Trend enhancement hatasi: ${err.message}`);
+    }
+    setTrendEnhancing(false);
   };
 
 // Mockup uret (SSE streaming — ekranlar teker teker gelir)
@@ -875,7 +911,11 @@ export function PrdGenerator() {
             </div>
           </div>
 
-          <ScreenshotUpload onUpload={handleScreenshot} loading={!!store.loading.screenshot} />
+          <ScreenshotUpload
+            onUpload={handleScreenshot}
+            loading={!!store.loading.screenshot}
+            visionAnalysis={store.analysis?.screenshot ? store.analysis : null}
+          />
 
           <div className="prd-input-group">
             <label className="prd-label">Aciklama / Konu</label>
@@ -1054,6 +1094,7 @@ export function PrdGenerator() {
                   <button className="btn btn--small" onClick={() => setStore({ editMode: !store.editMode })}>{store.editMode ? 'Onizle' : 'Duzenle'}</button>
                   {store.editMode && <button className="btn btn--small btn--primary" onClick={handleSavePrd}>Kaydet</button>}
                   <button className="btn btn--small btn--primary" onClick={handleEnhance} disabled={store.loading.enhance}>{store.loading.enhance ? 'Gelistiriliyor...' : 'Gelistir'}</button>
+                  <button className="btn btn--small" style={{ background: 'var(--color-success, #10b981)', color: '#fff', borderColor: 'var(--color-success, #10b981)' }} onClick={handleTrendEnhance} disabled={trendEnhancing}>{trendEnhancing ? 'Enhancing with 2026 trends...' : '* AI Enhance'}</button>
                   <button className="btn btn--small" onClick={handleMockups} disabled={store.loading.mockups}>{store.loading.mockups ? 'Uretiliyor...' : 'Mockup Uret'}</button>
                   {store.loading.mockups && (
                     <button className="btn btn--small btn--danger" onClick={handleStopMockups}>Durdur</button>

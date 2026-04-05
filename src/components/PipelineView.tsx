@@ -1,8 +1,9 @@
-import React, { useState, useCallback, memo } from "react";
+import React, { useState, useCallback, useEffect, memo } from "react";
 import { api } from "../lib/api";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { InlinePlanView } from "./pipeline/InlinePlanView";
 import { DeleteRunModal } from "./pipeline/DeleteRunModal";
+import { ErrorCard } from "./pipeline/ErrorCard";
 
 const STEP_ORDER = ["plan", "design", "stories", "setup-repo", "setup-build", "implement", "verify", "security-gate", "qa-test", "final-test", "deploy"];
 const STEP_LABELS: Record<string, string> = {
@@ -72,6 +73,7 @@ interface StepDetailData {
   duration?: string;
   startedAt?: string;
   completedAt?: string;
+  implementPhase?: string;
 }
 
 function statusClass(s: string): string {
@@ -96,6 +98,14 @@ function truncate(s: string, n: number): string {
   return s.length > n ? s.slice(0, n) + "..." : s;
 }
 
+interface ClassifiedError {
+  stepId: string;
+  category: string;
+  message: string;
+  suggestion: string;
+  severity: "error" | "warning" | "info";
+}
+
 interface RunCardInlineProps {
   run: PipelineRun;
   isExpanded: boolean;
@@ -104,6 +114,7 @@ interface RunCardInlineProps {
   selectedStep: string | null;
   stepDetailData: StepDetailData | null;
   stepDetailLoading: boolean;
+  errorCards: ClassifiedError[];
   onToggleExpand: () => void;
   onRetry: (runId: string, stepId: string) => void;
   onStoryRetry: (runId: string, storyId: string) => void;
@@ -121,6 +132,7 @@ const RunCardInline = memo(function RunCardInline({
   selectedStep,
   stepDetailData,
   stepDetailLoading,
+  errorCards,
   onToggleExpand,
   onRetry,
   onStoryRetry,
@@ -233,6 +245,11 @@ const RunCardInline = memo(function RunCardInline({
           </div>
           <div className="af-step-detail__body">
             <div className="af-step-detail__meta">
+              {stepDetailData?.implementPhase && (
+                <span className="af-step-detail__meta-item af-step-detail__meta-item--phase">
+                  Phase: {stepDetailData.implementPhase === "foundation" ? "1/3 Foundation" : stepDetailData.implementPhase === "core" ? "2/3 Core" : stepDetailData.implementPhase === "ui" ? "3/3 UI" : stepDetailData.implementPhase}
+                </span>
+              )}
               {selectedStepData.retryCount > 0 && (
                 <span className="af-step-detail__meta-item af-step-detail__meta-item--orange">
                   Retries: {selectedStepData.retryCount}
@@ -262,13 +279,34 @@ const RunCardInline = memo(function RunCardInline({
             {stepDetailLoading && (
               <div className="af-step-detail__loading">Loading step details...</div>
             )}
-            {/* Task 3: Error display for failed steps */}
-            {selectedStepData.status === "failed" && stepDetailData?.error && (
-              <div className="af-step-detail__error">
-                <span className="af-step-detail__error-label">ERROR</span>
-                <pre className="af-step-detail__error-text">{stepDetailData.error}</pre>
-              </div>
-            )}
+            {/* Task 3: Diagnostic Error Cards for failed steps */}
+            {selectedStepData.status === "failed" && (() => {
+              const stepErrors = errorCards.filter(e => e.stepId === selectedStepData.stepId);
+              if (stepErrors.length > 0) {
+                return stepErrors.map((err, i) => (
+                  <ErrorCard
+                    key={`${err.stepId}-${i}`}
+                    category={err.category}
+                    message={err.message}
+                    suggestion={err.suggestion}
+                    severity={err.severity}
+                    stepId={err.stepId}
+                    runId={run.id}
+                    onRetry={() => onRetry(run.id, err.stepId)}
+                  />
+                ));
+              }
+              // Fallback: raw error if no classified cards available
+              if (stepDetailData?.error) {
+                return (
+                  <div className="af-step-detail__error">
+                    <span className="af-step-detail__error-label">ERROR</span>
+                    <pre className="af-step-detail__error-text">{stepDetailData.error}</pre>
+                  </div>
+                );
+              }
+              return null;
+            })()}
             {/* Output excerpt for done/failed steps */}
             {(selectedStepData.status === "done" || selectedStepData.status === "failed") && stepDetailData?.output && (
               <div className="af-step-detail__output">
@@ -344,6 +382,25 @@ export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefre
   const [stepDetailData, setStepDetailData] = useState<StepDetailData | null>(null);
   const [stepDetailLoading, setStepDetailLoading] = useState(false);
 
+  // Task 3: Diagnostic error cards per run
+  const [errorCardsMap, setErrorCardsMap] = useState<Record<string, ClassifiedError[]>>({});
+
+  // Fetch error cards for runs that have failed steps
+  useEffect(() => {
+    const runsWithFailedSteps = (runs || []).filter(r =>
+      r.steps.some(s => s.status === "failed") && !errorCardsMap[r.id]
+    );
+    for (const run of runsWithFailedSteps) {
+      api.runErrors(run.id)
+        .then(errors => {
+          setErrorCardsMap(prev => ({ ...prev, [run.id]: errors }));
+        })
+        .catch(() => {
+          // Silent — error cards are a nice-to-have
+        });
+    }
+  }, [runs]);
+
   const handleStepClick = useCallback(async (runId: string, stepId: string) => {
     const key = `${runId}:${stepId}`;
     if (selectedStepKey === key) {
@@ -370,12 +427,22 @@ export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefre
             duration = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
           }
         }
+        // Extract implement_phase from run context for phased development indicator
+        let implementPhase: string | undefined;
+        if (stepId === "implement") {
+          try {
+            const ctx = typeof detail?.context === "string" ? JSON.parse(detail.context) : detail?.context;
+            if (ctx?.implement_phase) implementPhase = ctx.implement_phase;
+          } catch { /* ignore parse errors */ }
+        }
+
         setStepDetailData({
           output: stepInfo.output || undefined,
           error: stepInfo.error || (stepInfo.status === "failed" ? stepInfo.output : undefined) || undefined,
           duration,
           startedAt,
           completedAt,
+          implementPhase,
         });
       }
     } catch (err) {
@@ -541,6 +608,7 @@ export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefre
             selectedStep={currentSelectedStep}
             stepDetailData={runStepKey ? stepDetailData : null}
             stepDetailLoading={runStepKey ? stepDetailLoading : false}
+            errorCards={errorCardsMap[run.id] || []}
             onToggleExpand={() => setExpandedRun(expandedRun === run.id ? null : run.id)}
             onRetry={handleRetry}
             onStoryRetry={handleStoryRetry}

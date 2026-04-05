@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 interface ScrapeResult {
   success: boolean;
@@ -16,7 +17,18 @@ interface HistoryItem {
   preview?: string;
 }
 
+interface TrendingApp {
+  name: string;
+  developer: string;
+  icon: string;
+  rating: number;
+  category: string;
+  url: string;
+  description: string;
+}
+
 export function Scrape() {
+  const navigate = useNavigate();
   const [url, setUrl] = useState('');
   const [adaptor, setAdaptor] = useState('auto');
   const [format, setFormat] = useState('json');
@@ -24,6 +36,8 @@ export function Scrape() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ScrapeResult | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [trendingApps, setTrendingApps] = useState<TrendingApp[]>([]);
+  const [trendingLoading, setTrendingLoading] = useState(true);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -36,6 +50,18 @@ export function Scrape() {
   useEffect(() => {
     loadHistory();
   }, [loadHistory]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        setTrendingLoading(true);
+        const res = await fetch('/api/scrape/trending');
+        const data = await res.json();
+        setTrendingApps(data);
+      } catch {}
+      setTrendingLoading(false);
+    })();
+  }, []);
 
   async function doScrape() {
     if (loading || !url.trim()) return;
@@ -63,6 +89,35 @@ export function Scrape() {
   return (
     <div className="scrape-page">
       <h2 className="glitch" data-text="SCRAPE">SCRAPE</h2>
+
+      {/* INSPIRATION — Trending Apps */}
+      <div className="scrape-inspiration">
+        <h3 className="scrape-inspiration__title">INSPIRATION</h3>
+        {trendingLoading ? (
+          <div className="scrape-inspiration__loading">Loading trending apps...</div>
+        ) : trendingApps.length > 0 ? (
+          <div className="scrape-inspiration__grid">
+            {trendingApps.map((app, i) => (
+              <div key={i} className="scrape-inspiration__card">
+                {app.icon && <img src={app.icon} alt={app.name} className="scrape-inspiration__icon" />}
+                <div className="scrape-inspiration__info">
+                  <div className="scrape-inspiration__name">{app.name}</div>
+                  <div className="scrape-inspiration__developer">{app.developer}</div>
+                  {app.category && <span className="scrape-inspiration__category">{app.category}</span>}
+                </div>
+                <button
+                  className="scrape-inspiration__clone-btn"
+                  onClick={() => navigate(`/prd?title=${encodeURIComponent(app.name)}&description=${encodeURIComponent(app.description || app.name)}`)}
+                >
+                  Clone This
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="scrape-inspiration__empty">No trending apps available</div>
+        )}
+      </div>
 
       <div className="scrape-page__layout">
         <div className="scrape-page__main">

@@ -39,6 +39,33 @@ async function callLlm(messages: { role: string; content: string }[], maxTokens 
   return data.choices?.[0]?.message?.content || '';
 }
 
+export const TRENDS_2026 = {
+  ui: ["Bento Box grid layouts", "Glassmorphism 2.0 with backdrop-blur", "Micro-animations on every interaction", "Scroll-driven animations", "Skeleton-first loading patterns", "Dark mode as default"],
+  features: ["AI-powered search and recommendations", "Real-time collaboration", "Offline-first PWA architecture", "Voice UI integration", "Accessibility-first design (WCAG 2.1 AA)"],
+  tech: ["React Server Components", "Edge computing with Vercel/Cloudflare Workers", "View Transitions API", "Container queries for responsive design", "Variable fonts for premium typography"],
+};
+
+export function buildTrendEnhancementPrompt(currentPrd: string, trends: typeof TRENDS_2026): string {
+  return `You are enhancing an existing PRD with 2026 technology and design trends.
+
+Current PRD:
+${currentPrd.slice(0, 3000)}
+
+Apply these 2026 trends where relevant:
+UI Trends: ${trends.ui.join(", ")}
+Feature Trends: ${trends.features.join(", ")}
+Tech Trends: ${trends.tech.join(", ")}
+
+Rules:
+1. Keep the original project scope — don't change the core idea
+2. Add trend-aligned enhancements as NEW sections
+3. Suggest modern UI patterns for existing screens
+4. Add an "AI Features" section if applicable
+5. Output the ENHANCED PRD (full content, not just additions)`;
+}
+
+export { callLlm };
+
 export async function generatePrd(params: {
   title: string;
   platform: string;
@@ -296,16 +323,18 @@ export async function analyzeScreenshot(base64: string, filename: string): Promi
               {
                 text: `Bu bir UI screenshot'i. Analiz et ve asagidaki bilgileri JSON olarak dondur:
 {
+  "suggestedTitle": "bu UI icin uygun proje/sayfa adi onerisi (kisa, 2-4 kelime)",
   "layout": "layout aciklamasi (grid/flex/stack/sidebar+content vb.)",
   "colors": { "primary": "#hex", "secondary": "#hex", "background": "#hex", "text": "#hex", "accent": "#hex" },
   "components": ["tespit edilen UI komponentleri (button, card, nav, modal, input, table, vb.)"],
   "sections": ["ana bolumleri (hero, header, sidebar, content, footer, vb.)"],
   "style": "genel stil (minimal/modern/corporate/playful/cyberpunk/glassmorphism)",
-  "typography": { "headingFont": "tahmin", "bodyFont": "tahmin", "sizes": "ornek boyutlar" },
-  "spacing": "genel spacing pattern (compact/normal/spacious)",
+  "typography": { "headingFont": "tahmin edilen heading font ailesi", "bodyFont": "tahmin edilen body font ailesi", "sizes": "ornek boyutlar (h1: 32px, body: 16px vb.)" },
+  "spacing": "genel spacing pattern (compact/normal/spacious) ve pixel degerleri (padding: 16px, gap: 12px vb.)",
   "responsive": "gorunen breakpoint ipuclari",
   "suggestions": ["PRD icin oneriler"]
 }
+ONEMLI: colors alaninda GERCEK hex degerlerini yaz (#1a1a2e gibi). typography alaninda font tahminlerini yap. suggestedTitle alanini mutlaka doldur.
 Sadece JSON dondur, baska aciklama yapma.`
               },
               {
@@ -344,11 +373,14 @@ Sadece JSON dondur, baska aciklama yapma.`
       role: 'system',
       content: `Bir UI screenshot dosya adi ve context'inden, olasi UI yapisini tahmin et. JSON formatinda dondur:
 {
+  "suggestedTitle": "bu UI icin uygun proje/sayfa adi onerisi",
   "layout": "tahmin",
-  "colors": { "primary": "#hex", "background": "#hex", "text": "#hex" },
+  "colors": { "primary": "#hex", "secondary": "#hex", "background": "#hex", "text": "#hex", "accent": "#hex" },
   "components": ["olasi komponentler"],
   "sections": ["olasi bolumler"],
   "style": "tahmin",
+  "typography": { "headingFont": "tahmin", "bodyFont": "tahmin", "sizes": "ornek boyutlar" },
+  "spacing": "tahmin (compact/normal/spacious)",
   "suggestions": ["PRD icin oneriler"]
 }
 Sadece JSON dondur.`,

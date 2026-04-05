@@ -17,6 +17,29 @@ interface LiveEvent {
   detail: string | null;
   output: string | null;
   project: string | null;
+  category?: string;
+}
+
+// Category classification definitions
+const CATEGORY_DEFS: Record<string, { color: string; icon: string; patterns: RegExp[] }> = {
+  DATABASE: { color: '#a855f7', icon: '\u{1F5C4}\uFE0F', patterns: [/CREATE|INSERT|UPDATE|DELETE|migration|prisma|drizzle|\.sql|postgres|sqlite/i] },
+  UI: { color: '#3b82f6', icon: '\u{1F3A8}', patterns: [/\.tsx|\.css|component|styling|tailwind|font|style|scss|layout/i] },
+  BUILD: { color: '#f59e0b', icon: '\u{1F528}', patterns: [/npm|build|vite|tsc|webpack|compile|bundle|esbuild/i] },
+  TEST: { color: '#10b981', icon: '\u{1F9EA}', patterns: [/test|jest|vitest|playwright|spec|assert/i] },
+  ERROR: { color: '#ff0040', icon: '\u274C', patterns: [/error|fail|crash|ENOENT|EACCES|EPERM|panic/i] },
+  GIT: { color: '#ff6600', icon: '\u{1F4E6}', patterns: [/git |commit|push|pull|merge|branch|checkout|rebase/i] },
+  API: { color: '#00ffff', icon: '\u{1F50C}', patterns: [/api\/|routes\/|fetch|curl|endpoint|express|router/i] },
+};
+
+function classifyCategory(ev: LiveEvent): string | null {
+  // Use server-provided category if available
+  if (ev.category) return ev.category;
+
+  const text = `${ev.summary || ''} ${ev.file || ''} ${ev.detail || ''}`;
+  for (const [catId, def] of Object.entries(CATEGORY_DEFS)) {
+    if (def.patterns.some(p => p.test(text))) return catId;
+  }
+  return null;
 }
 
 // Phase grouping definitions
@@ -167,6 +190,7 @@ export function LiveFeed() {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [modelFilter, setModelFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
   const [timeRange, setTimeRange] = useState('all');
   const [models, setModels] = useState<string[]>([]);
   const [lastTs, setLastTs] = useState<string | null>(null);
@@ -289,7 +313,7 @@ export function LiveFeed() {
     setEvents([]);
     setLastTs(null);
     setExpanded(new Set());
-  }, [agentFilter, actionFilter, statusFilter, projectFilter, modelFilter, timeRange, debouncedSearch]);
+  }, [agentFilter, actionFilter, statusFilter, projectFilter, modelFilter, categoryFilter, timeRange, debouncedSearch]);
 
   // Determine the currently running step for focus mode
   const runningStep = useMemo(() => {
@@ -308,6 +332,11 @@ export function LiveFeed() {
     let result = (modelFilter === 'all' ? events : events.filter(e => e.model === modelFilter))
       .filter(e => !e.summary?.includes('step peek'));
 
+    // Category filter
+    if (categoryFilter !== 'all') {
+      result = result.filter(ev => classifyCategory(ev) === categoryFilter);
+    }
+
     // Focus mode: only show events from the currently running step
     if (focusMode && runningStep) {
       result = result.filter(ev => {
@@ -317,7 +346,7 @@ export function LiveFeed() {
     }
 
     return result;
-  }, [events, modelFilter, focusMode, runningStep]);
+  }, [events, modelFilter, categoryFilter, focusMode, runningStep]);
 
   const renderEventRow = useCallback((ev: LiveEvent, i: number) => {
     const isError = ev.status === 'error' || (ev.exitCode !== null && ev.exitCode !== 0);
@@ -325,6 +354,8 @@ export function LiveFeed() {
     const expandable = hasDetailData(ev);
     const isExpanded = expanded.has(ev.id);
     const rowKey = ev.id + '-' + i;
+    const cat = classifyCategory(ev);
+    const catDef = cat ? CATEGORY_DEFS[cat] : null;
 
     return (
       <div key={rowKey} className="lf-entry">
@@ -336,6 +367,25 @@ export function LiveFeed() {
           <span className="lf-row__emoji">{ev.agentEmoji}</span>
           <span className="lf-row__agent">{ev.agent}</span>
           <span className="lf-row__time">{formatTime(ev.ts)}</span>
+          {catDef && (
+            <span
+              className="lf-row__category"
+              style={{
+                fontSize: 9,
+                padding: '1px 5px',
+                borderRadius: 3,
+                background: catDef.color + '18',
+                color: catDef.color,
+                border: `1px solid ${catDef.color}40`,
+                letterSpacing: 0.5,
+                fontWeight: 600,
+                whiteSpace: 'nowrap',
+              }}
+              title={cat || ''}
+            >
+              {catDef.icon} {cat}
+            </span>
+          )}
           <span className="lf-row__action" style={{ color }}>
             {ev.action}
           </span>
@@ -454,6 +504,17 @@ export function LiveFeed() {
             <option value="all">ALL MODELS</option>
             {models.map(m => (
               <option key={m} value={m}>{m.split('/').pop() || m}</option>
+            ))}
+          </select>
+          <select
+            className="lf-select"
+            value={categoryFilter}
+            onChange={e => setCategoryFilter(e.target.value)}
+            title="Filter by category"
+          >
+            <option value="all">ALL CATEGORIES</option>
+            {Object.entries(CATEGORY_DEFS).map(([id, def]) => (
+              <option key={id} value={id}>{def.icon} {id}</option>
             ))}
           </select>
           <select
