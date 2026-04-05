@@ -67,7 +67,7 @@ export function PrdGenerator() {
 
   // Sayfa acildiginda son PRD'yi DB'den otomatik yukle
   useEffect(() => {
-    if (store.id || store.skipAutoLoad) return; // zaten yuklu veya kullanici yeni istedi
+    if (usePrdStore.getState().id || usePrdStore.getState().skipAutoLoad || sessionStorage.getItem('prd_skip_autoload')) return; // zaten yuklu veya kullanici yeni istedi
     api.prdHistory().then(prds => {
       if (prds.length > 0 && !usePrdStore.getState().id) {
         const last = prds[0];
@@ -804,6 +804,7 @@ export function PrdGenerator() {
 
   // Gecmisten PRD yukle
   const handleLoadPrd = (prd: any) => {
+    sessionStorage.removeItem("prd_skip_autoload");
     setStore({
       id: prd.id,
       title: prd.title,

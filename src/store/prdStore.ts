@@ -90,5 +90,5 @@ export const usePrdStore = create<PrdState & PrdActions>((set) => ({
     loading: { ...s.loading, [key]: val },
     loadingStartedAt: { ...s.loadingStartedAt, [key]: val ? (s.loadingStartedAt[key] || Date.now()) : 0 },
   })),
-  reset: () => set({ ...initialState, skipAutoLoad: true, urls: [''], logs: [] }),
+  reset: () => { sessionStorage.setItem('prd_skip_autoload', '1'); set({ ...initialState, skipAutoLoad: true, urls: [''], logs: [] }); },
 }));
