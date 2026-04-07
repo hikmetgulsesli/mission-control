@@ -56,13 +56,20 @@ async function enrichWithStatus(projects: any[]) {
   try {
     const { getRuns } = await import('../utils/setfarm.js');
     const allRuns = (await getRuns()) as any[];
+    // Word-boundary match to avoid "not-defteri" matching "not-defteri-v2" tasks
+    const wordBoundaryMatch = (haystack: string, needle: string): boolean => {
+      if (!haystack || !needle) return false;
+      // Match needle as whole word: not preceded/followed by alphanumeric or - or _
+      const re = new RegExp(`(^|[^\\w-])${needle.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}([^\\w-]|$)`);
+      return re.test(haystack);
+    };
     for (const p of projects) {
       const repoPath = p.repoPath || p.repo || '';
       const matching = allRuns
         .filter((r: any) => {
-          // Guard: empty strings match everything via .includes('') — skip them
-          const matchRepo = repoPath && r.task?.includes(repoPath);
-          const matchId = p.id && p.id.length > 2 && r.task?.includes(p.id);
+          // Exact word match — substring would match "foo" against "foo-v2"
+          const matchRepo = repoPath && wordBoundaryMatch(r.task || '', repoPath);
+          const matchId = p.id && p.id.length > 2 && wordBoundaryMatch(r.task || '', p.id);
           return matchRepo || matchId;
         })
         .sort((a: any, b: any) => (b.run_number || 0) - (a.run_number || 0));
