@@ -123,6 +123,25 @@ function formatMessage(ev: NotifyEvent): { channel: string; message: string }[] 
     case 'story.done':
       return [{ channel: 'code-changes', message: `📝 Story done: "${ev.storyTitle || '?'}" — ${detail}` }];
 
+    // Wave 2 fix #6 (plan: reactive-frolicking-cupcake): new handlers for story
+    // lifecycle events that were previously dropped. story.failed triggers for
+    // merge conflicts (Fix 8), guardrail failures, and loop-exhausted stories.
+    // story.conflict is not currently emitted but defined for forward compatibility.
+    case 'story.verified':
+      return [{ channel: 'code-changes', message: `✅ Story verified: "${ev.storyTitle || '?'}"${detail ? ' — ' + detail : ''}` }];
+
+    case 'story.failed':
+      return [
+        { channel: 'setfarm-pipeline', message: `⚠️ Story FAILED: "${ev.storyTitle || '?'}" — ${wf} ${num}${detail ? '\n' + detail : ''}` },
+        { channel: 'alerts', message: `🔴 Story failed in ${wf} ${num}: "${ev.storyTitle || '?'}" — ${detail || 'no details'}` },
+      ];
+
+    case 'story.conflict':
+      return [{ channel: 'alerts', message: `🔴 Merge conflict: "${ev.storyTitle || '?'}" — ${wf} ${num} — requires manual resolution${detail ? '\n' + detail : ''}` }];
+
+    case 'story.skipped':
+      return [{ channel: 'setfarm-pipeline', message: `⏭️ Story skipped: "${ev.storyTitle || '?'}"${detail ? ' — ' + detail : ''}` }];
+
     case 'cost.threshold': {
       const icon = ev.level === 'critical' ? '🔴' : '⚠️';
       const label = ev.level === 'critical' ? 'Kritik maliyet uyarisi' : 'Gunluk maliyet esigi';

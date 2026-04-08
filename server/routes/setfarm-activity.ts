@@ -107,16 +107,20 @@ router.get('/setfarm/pipeline', async (_req, res) => {
       const batchProgress = await getBatchStoryProgress(allDisplayRuns.map((r: any) => String(r.id))).catch(() => ({}));
 
       return allDisplayRuns.map((r: any) => {
-        let storyProgress = (batchProgress as any)[r.id] || { completed: 0, total: 0, verified: 0, skipped: 0, running: 0, pending: 0, done: 0 };
-        if (r.status === 'completed' && storyProgress.total > 0) {
-          storyProgress = { ...storyProgress, completed: storyProgress.total };
-        }
+        // Wave 1 fix #1 + #9 (plan: reactive-frolicking-cupcake): fall back includes
+        // a `failed` bucket now, and we no longer force-set completed = total when
+        // the run is marked completed. Forcing that override was the second source
+        // of the "100%" lie (first was failed-counted-as-completed in setfarm-db.ts).
+        // Now the real bucket counts flow through unchanged.
+        const storyProgress = (batchProgress as any)[r.id] || { completed: 0, total: 0, verified: 0, skipped: 0, running: 0, pending: 0, done: 0, failed: 0 };
+        const hasFailures = (storyProgress.failed || 0) > 0;
         return {
           id: r.id,
           runNumber: r.run_number,
           workflow: r.workflow_id,
           task: r.task,
           status: r.status,
+          hasFailures,
           updatedAt: r.updated_at,
           createdAt: r.created_at,
           steps: (r.steps || []).map((s: any) => ({
@@ -538,7 +542,8 @@ async function createBuildingProject(run: any): Promise<void> {
   // Get next available port
   let port: number | null = null;
   try {
-    const res = await fetch('http://127.0.0.1:3080/api/projects/next-port');
+    const mcBase = process.env.MC_INTERNAL_URL || 'http://127.0.0.1:3080';
+    const res = await fetch(mcBase + '/api/projects/next-port');
     const data = await res.json() as any;
     port = data.port || null;
   } catch (e: any) { console.warn('next-port fetch failed:', e?.message || e); }

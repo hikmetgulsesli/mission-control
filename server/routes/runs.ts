@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getRuns, getEvents } from '../utils/setfarm.js';
-import { cached } from '../utils/cache.js';
+import { cached, invalidateCache, clearAllCache } from '../utils/cache.js';
 import { runCli } from '../utils/cli.js';
 import { config } from '../config.js';
 import { sql } from '../utils/pg.js';
@@ -9,13 +9,36 @@ import { getStuckRuns, unstickRun, getRunDetail, diagnoseStuckStep, tryAutoFix, 
 const router = Router();
 const USE_PG = true; // Faz7: PG-only
 
+// Wave 4 fix #15 (plan: reactive-frolicking-cupcake): structured errors with
+// classification and log context instead of a bare 500. Previously a PG outage
+// or setfarm unreachable both surfaced as '500 — {err.message}' with no way to
+// tell them apart from the frontend.
+function classifyRouteError(err: any): { code: string; status: number; detail: string } {
+  const msg = String(err?.message || err || '');
+  if (/ECONNREFUSED|ENOTFOUND|EHOSTUNREACH/i.test(msg)) {
+    return { code: 'UPSTREAM_UNREACHABLE', status: 503, detail: 'PostgreSQL or setfarm daemon not reachable' };
+  }
+  if (/timeout|ETIMEDOUT/i.test(msg)) {
+    return { code: 'UPSTREAM_TIMEOUT', status: 504, detail: 'Upstream query took too long' };
+  }
+  if (/authentication|permission denied|password/i.test(msg)) {
+    return { code: 'UPSTREAM_AUTH', status: 502, detail: 'Upstream auth failure' };
+  }
+  if (/relation.*does not exist|column.*does not exist|schema/i.test(msg)) {
+    return { code: 'SCHEMA_MISMATCH', status: 500, detail: 'DB schema mismatch — migration may be pending' };
+  }
+  return { code: 'INTERNAL', status: 500, detail: msg.slice(0, 300) };
+}
+
 router.get('/runs', async (_req, res) => {
   try {
     const data = await cached('runs', 5000, getRuns) as any[];
     const active = data.filter((r: any) => r.status === 'running' || r.status === 'pending');
     res.json(active);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    const { code, status, detail } = classifyRouteError(err);
+    console.error('[runs] ' + code + ': ' + detail);
+    res.status(status).json({ error: detail, code });
   }
 });
 
@@ -24,7 +47,9 @@ router.get('/runs/:id/events', async (req, res) => {
     const data = await getEvents(req.params.id);
     res.json(data);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    const { code, status, detail } = classifyRouteError(err);
+    console.error('[runs/events] ' + code + ': ' + detail);
+    res.status(status).json({ error: detail, code, runId: req.params.id });
   }
 });
 
@@ -262,4 +287,13 @@ router.delete('/runs/:id', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+
+// Wave 5 fix #22 (plan: reactive-frolicking-cupcake): cache flush endpoint.
+router.post('/cache/invalidate', (req: any, res: any) => {
+  const key = (req.body && req.body.key) || null;
+  if (key) { invalidateCache(key); console.log('[cache] invalidated: ' + key); res.json({ ok: true, invalidated: key }); }
+  else { const n = clearAllCache(); console.log('[cache] cleared ' + n); res.json({ ok: true, cleared: n }); }
+});
+
 export default router;

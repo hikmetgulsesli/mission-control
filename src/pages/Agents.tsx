@@ -36,7 +36,7 @@ export function Agents() {
       if (!cancelled) setAgentStatsMap(statsMap);
     };
     fetchStats();
-    const interval = setInterval(fetchStats, 60_000);
+    const interval = setInterval(fetchStats, 15_000);
     return () => { cancelled = true; clearInterval(interval); };
   }, [agents]);
 

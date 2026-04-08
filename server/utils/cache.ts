@@ -59,6 +59,15 @@ export function invalidateCache(key: string): void {
   store.delete(key);
 }
 
+// Wave 5 fix #22 (plan: reactive-frolicking-cupcake): operator-facing flush.
+// Use when a stale cache is blocking a real state change and you want to force
+// a fresh read without restarting the process.
+export function clearAllCache(): number {
+  const n = store.size;
+  store.clear();
+  return n;
+}
+
 // Pre-warm: call on startup to populate cache
 const warmupFns: Array<() => Promise<void>> = [];
 

@@ -12,6 +12,10 @@ interface SetfarmEvent {
   detail?: string;
 }
 
+// Wave 2 fix #16 (plan: reactive-frolicking-cupcake): story.failed, story.skipped,
+// story.retry, step.skipped were all missing from this map. They were emitted by
+// setfarm (see events.ts EventType) but rendered without color, so users couldn't
+// visually distinguish a failed story from a successful one in the live feed.
 const EVENT_COLORS: Record<string, string> = {
   'run.started': '#00ffff',
   'run.completed': '#00ff41',
@@ -21,9 +25,14 @@ const EVENT_COLORS: Record<string, string> = {
   'step.pending': '#666680',
   'step.timeout': '#ff6600',
   'step.failed': '#ff0040',
+  'step.skipped': '#ffaa00',
   'story.started': '#8844ff',
   'story.done': '#44ff88',
   'story.verified': '#00ffff',
+  'story.failed': '#ff0040',
+  'story.skipped': '#ffaa00',
+  'story.retry': '#ff6600',
+  'story.conflict': '#ff00ff',
   'pipeline.advanced': '#666680',
 };
 

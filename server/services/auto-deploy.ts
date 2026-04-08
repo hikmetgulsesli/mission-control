@@ -644,7 +644,7 @@ export function autoDeployProject(
             "-s",
             "-X",
             "POST",
-            "http://127.0.0.1:3080/api/discord-notify",
+            (process.env.MC_INTERNAL_URL || "http://127.0.0.1:3080") + "/api/discord-notify",
             "-H",
             "Content-Type: application/json",
             "-d",

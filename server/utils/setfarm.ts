@@ -33,18 +33,28 @@ export async function getRuns() {
                 stepMap[s.run_id].push(s);
             }
 
+            // Wave 2 fix #5 (plan: reactive-frolicking-cupcake): storyMap previously only
+            // tracked { total, done, verified, running } and conflated done+verified into
+            // the `done` counter. Frontend code accessed sp.skipped / sp.failed which came
+            // back undefined and broke progress bars. Align the shape with getBatchStoryProgress
+            // so both code paths return identical data, and expose hasFailures for the UI.
             const storyMap: Record<string, any> = {};
             for (const s of stories) {
-                if (!storyMap[s.run_id]) storyMap[s.run_id] = { total: 0, done: 0, verified: 0, running: 0 };
+                if (!storyMap[s.run_id]) storyMap[s.run_id] = { total: 0, completed: 0, done: 0, verified: 0, skipped: 0, running: 0, pending: 0, failed: 0 };
                 storyMap[s.run_id].total += s.cnt;
-                if (s.status === 'done' || s.status === 'verified') storyMap[s.run_id].done += s.cnt;
-                if (s.status === 'verified') storyMap[s.run_id].verified += s.cnt;
-                if (s.status === 'running') storyMap[s.run_id].running += s.cnt;
+                if (s.status === 'verified') { storyMap[s.run_id].verified += s.cnt; storyMap[s.run_id].completed += s.cnt; }
+                else if (s.status === 'done') storyMap[s.run_id].done += s.cnt;
+                else if (s.status === 'skipped') { storyMap[s.run_id].skipped += s.cnt; storyMap[s.run_id].completed += s.cnt; }
+                else if (s.status === 'running') storyMap[s.run_id].running += s.cnt;
+                else if (s.status === 'pending') storyMap[s.run_id].pending += s.cnt;
+                else if (s.status === 'failed') storyMap[s.run_id].failed += s.cnt;
             }
 
             for (const r of runs) {
                 (r as any).steps = stepMap[r.id] || [];
-                (r as any).storyProgress = storyMap[r.id] || { total: 0, done: 0, verified: 0, running: 0 };
+                const sp = storyMap[r.id] || { total: 0, completed: 0, done: 0, verified: 0, skipped: 0, running: 0, pending: 0, failed: 0 };
+                (r as any).storyProgress = sp;
+                (r as any).hasFailures = (sp.failed || 0) > 0;
             }
         }
         return runs;

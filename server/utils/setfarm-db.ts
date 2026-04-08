@@ -728,7 +728,13 @@ export async function deleteRunsByProject(projectName: string): Promise<{ delete
 
 
 // D2: Batch story progress (single query replaces N getRunStories calls)
-export async function getBatchStoryProgress(runIds: string[]): Promise<Record<string, { completed: number; total: number; verified: number; skipped: number; running: number; pending: number; done: number }>> {
+// Wave 1 fix #1 + #9 (plan: reactive-frolicking-cupcake): previously "failed" stories
+// were added to the "completed" bucket, which made run #338 show "5/5 stories (100%)"
+// even though 2 stories were in merge-conflict limbo. failed and done are now tracked
+// in dedicated buckets, and "completed" only sums verified + skipped (the terminal
+// success states). "done" is excluded because under direct-merge it means "implement
+// finished, merge pending" — not actually complete from the run's perspective.
+export async function getBatchStoryProgress(runIds: string[]): Promise<Record<string, { completed: number; total: number; verified: number; skipped: number; running: number; pending: number; done: number; failed: number }>> {
   if (runIds.length === 0) return {};
 
   const rows = await sql`
@@ -740,17 +746,17 @@ export async function getBatchStoryProgress(runIds: string[]): Promise<Record<st
 
   const result: Record<string, any> = {};
   for (const id of runIds) {
-    result[id] = { completed: 0, total: 0, verified: 0, skipped: 0, running: 0, pending: 0, done: 0 };
+    result[id] = { completed: 0, total: 0, verified: 0, skipped: 0, running: 0, pending: 0, done: 0, failed: 0 };
   }
   for (const row of (rows || [])) {
     if (!result[row.run_id]) continue;
     result[row.run_id].total += row.cnt;
     if (row.status === "verified") { result[row.run_id].verified += row.cnt; result[row.run_id].completed += row.cnt; }
     else if (row.status === "skipped") { result[row.run_id].skipped += row.cnt; result[row.run_id].completed += row.cnt; }
-    else if (row.status === "done") { result[row.run_id].done += row.cnt; result[row.run_id].completed += row.cnt; }
+    else if (row.status === "done") { result[row.run_id].done += row.cnt; }
     else if (row.status === "running") result[row.run_id].running += row.cnt;
     else if (row.status === "pending") result[row.run_id].pending += row.cnt;
-    else if (row.status === "failed") result[row.run_id].completed += row.cnt;
+    else if (row.status === "failed") result[row.run_id].failed += row.cnt;
   }
   return result;
 }
