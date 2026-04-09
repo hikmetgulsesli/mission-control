@@ -8186,3 +8186,18 @@ html, body, #root {
     max-height: 95vh;
   }
 }
+
+/* ── Scrape Inspiration Cards ── */
+.scrape-inspiration { margin-bottom: 20px; }
+.scrape-inspiration__title { font-size: 11px; font-weight: 700; color: var(--neon-orange); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 10px; border-bottom: 1px dashed rgba(255, 102, 0, 0.2); padding-bottom: 4px; }
+.scrape-inspiration__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; max-height: 300px; overflow-y: auto; scrollbar-width: thin; }
+.scrape-inspiration__card { display: flex; align-items: center; gap: 10px; padding: 10px; background: var(--glass-bg, rgba(18,18,31,0.7)); border: 1px solid var(--glass-border, rgba(255,255,255,0.08)); border-radius: 6px; cursor: pointer; transition: border-color 0.2s, box-shadow 0.2s; }
+.scrape-inspiration__card:hover { border-color: var(--neon-cyan); box-shadow: 0 0 10px rgba(0,255,255,0.15); }
+.scrape-inspiration__icon { width: 48px; height: 48px; border-radius: 12px; object-fit: cover; flex-shrink: 0; }
+.scrape-inspiration__info { flex: 1; min-width: 0; overflow: hidden; }
+.scrape-inspiration__name { font-size: 12px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scrape-inspiration__developer { font-size: 10px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scrape-inspiration__category { font-size: 9px; color: var(--neon-cyan); background: rgba(0,255,255,0.08); padding: 1px 6px; border-radius: 3px; margin-top: 2px; display: inline-block; }
+.scrape-inspiration__clone-btn { font-size: 9px; font-weight: 700; color: var(--neon-green); background: rgba(0,255,65,0.08); border: 1px solid rgba(0,255,65,0.2); border-radius: 3px; padding: 2px 8px; cursor: pointer; margin-top: 4px; transition: background 0.2s; }
+.scrape-inspiration__clone-btn:hover { background: rgba(0,255,65,0.2); }
+.scrape-inspiration__loading, .scrape-inspiration__empty { font-size: 11px; color: var(--text-dim); padding: 20px 0; }

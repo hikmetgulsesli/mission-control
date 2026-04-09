@@ -47,10 +47,10 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://cdn.tailwindcss.com"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       connectSrc: ["'self'", "ws:", "wss:", "https://fonts.googleapis.com"],
-      imgSrc: ["'self'", "data:", "blob:", "https://cdn.simpleicons.org"],
+      imgSrc: ["'self'", "data:", "blob:", "https://cdn.simpleicons.org", "https://*.mzstatic.com", "https://*.googleusercontent.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
     }
   }
