@@ -381,7 +381,23 @@ export function invalidateKimiQuotaCache(): void {
 
 export type KimiQuotaSeverity = 'ok' | 'warn' | 'critical' | 'exhausted' | 'unknown';
 
-/** Classify a snapshot into a severity bucket the UI can render directly. */
+/**
+ * Classify a snapshot into a severity bucket the UI can render directly.
+ *
+ * Thresholds are PERCENTAGE-based, not absolute, because the Allegretto plan
+ * exposes a 100-call weekly bucket while higher tiers may show 2048+. The
+ * original (run #344 calibration) thresholds used absolute counts and tagged
+ * a 6/100 used ('warn') even when 94 calls remained — false alarm noise.
+ *
+ * Severity ladder (whichever bucket trips first wins):
+ *   exhausted — remaining == 0 in weekly OR rate window
+ *   critical  — pctUsed >= 90 (≤10% remaining)
+ *   warn      — pctUsed >= 70 (≤30% remaining)
+ *   ok        — everything else
+ *
+ * The CLI guard only blocks at 'exhausted'; 'critical' and 'warn' are
+ * informational and let the run start.
+ */
 export function classifyKimiQuota(snapshot: KimiQuotaSnapshot | null): {
   severity: KimiQuotaSeverity;
   reason: string;
@@ -397,16 +413,18 @@ export function classifyKimiQuota(snapshot: KimiQuotaSnapshot | null): {
   if (r && r.remaining === 0) {
     return { severity: 'exhausted', reason: `Rate window exhausted (resets in ${Math.round(r.resetInMs / 60000)} min)` };
   }
-  if ((w && w.remaining < 20) || (r && r.remaining < 10)) {
+  const wPct = w?.pctUsed ?? 0;
+  const rPct = r?.pctUsed ?? 0;
+  if (wPct >= 90 || rPct >= 90) {
     return {
       severity: 'critical',
-      reason: `Quota critically low — weekly ${w?.remaining ?? '?'} / rate ${r?.remaining ?? '?'}`,
+      reason: `Quota critically low — weekly ${w?.remaining ?? '?'}/${w?.limit ?? '?'} (${wPct}% used) · rate ${r?.remaining ?? '?'}/${r?.limit ?? '?'} (${rPct}% used)`,
     };
   }
-  if ((w && w.remaining < 100) || (r && r.remaining < 30)) {
+  if (wPct >= 70 || rPct >= 70) {
     return {
       severity: 'warn',
-      reason: `Quota running low — weekly ${w?.remaining ?? '?'} / rate ${r?.remaining ?? '?'}`,
+      reason: `Quota running low — weekly ${w?.remaining ?? '?'}/${w?.limit ?? '?'} (${wPct}% used) · rate ${r?.remaining ?? '?'}/${r?.limit ?? '?'} (${rPct}% used)`,
     };
   }
   return { severity: 'ok', reason: 'Within safe quota range' };
