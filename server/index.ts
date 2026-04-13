@@ -37,6 +37,7 @@ import rulesRouter from "./routes/rules.js";
 import liveFeedRouter from "./routes/live-feed.js";
 import telemetryRouter from "./routes/telemetry.js";
 import changelogRouter from "./routes/changelog.js";
+import changelogPageRouter from "./routes/changelog-page.js";
 import { authMiddleware } from './middleware/auth.js';
 import rateLimit from 'express-rate-limit';
 
@@ -106,6 +107,9 @@ app.get('/api/health', async (_req, res) => {
   const allUp = Object.values(checks).every(c => c.status !== 'down');
   res.status(allUp ? 200 : 503).json({ status: allUp ? 'healthy' : 'degraded', checks, timestamp: new Date().toISOString() });
 });
+
+// Public changelog page (no auth — mount BEFORE authMiddleware)
+app.use('/', changelogPageRouter);
 
 // Auth middleware
 app.use('/api', authMiddleware);
