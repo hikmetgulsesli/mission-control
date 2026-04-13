@@ -74,7 +74,13 @@ router.get('/changelog', async (_req, res) => {
     try {
       const fs = await import('node:fs/promises');
       const setfarmBuildRaw = await fs.readFile(path.join(SETFARM_REPO, 'dist/BUILD_INFO.json'), 'utf-8');
-      setfarmBuild = JSON.parse(setfarmBuildRaw);
+      const raw = JSON.parse(setfarmBuildRaw);
+      // BUILD_INFO.json uses `sha` field, normalize to `commit` for consistency with mc
+      setfarmBuild = {
+        commit: raw.sha || raw.commit || 'unknown',
+        branch: raw.branch || 'main',
+        builtAt: raw.builtAt || new Date().toISOString(),
+      };
     } catch { /* setfarm not built yet */ }
 
     try {
