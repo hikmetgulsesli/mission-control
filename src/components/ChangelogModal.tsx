@@ -116,19 +116,19 @@ export function ChangelogModal({ open, onClose }: Props) {
           <button className="changelog-close" onClick={onClose}>×</button>
         </div>
 
-        {data && (
+        {data && (data.setfarm || data.mc) && (
           <div className="changelog-versions">
-            {data.setfarm && (
+            {data.setfarm?.commit && (
               <div className="version-card">
                 <div className="version-card__title">SETFARM</div>
-                <div className="version-card__commit">{data.setfarm.commit.slice(0, 8)}</div>
-                <div className="version-card__branch">{data.setfarm.branch}</div>
+                <div className="version-card__commit">{String(data.setfarm.commit).slice(0, 8)}</div>
+                <div className="version-card__branch">{data.setfarm.branch || 'main'}</div>
               </div>
             )}
-            {data.mc && (
+            {data.mc?.commit && (
               <div className="version-card">
                 <div className="version-card__title">MISSION CONTROL</div>
-                <div className="version-card__commit">v{data.mc.version} · {data.mc.commit}</div>
+                <div className="version-card__commit">v{data.mc.version || '?'} · {String(data.mc.commit).slice(0, 8)}</div>
               </div>
             )}
           </div>

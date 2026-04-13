@@ -20,21 +20,27 @@ interface Commit {
 
 async function getCommits(repoPath: string, repoName: 'setfarm' | 'mc', limit: number): Promise<Commit[]> {
   try {
-    const format = '%H|%aI|%an|%s';
+    // Use unlikely separator to avoid collision with commit subjects
+    const SEP = '\x1f'; // ASCII unit separator
+    const format = `%H${SEP}%aI${SEP}%an${SEP}%s`;
     const { stdout } = await execAsync(
       `git log --format="${format}" -${limit}`,
       { cwd: repoPath, timeout: 5000 }
     );
     return stdout.trim().split('\n').filter(Boolean).map(line => {
-      const [hash, date, author, ...subjectParts] = line.split('|');
+      const parts = line.split(SEP);
+      const hash = parts[0] || '';
+      const date = parts[1] || '';
+      const author = parts[2] || '';
+      const subject = parts.slice(3).join(SEP);
       return {
         hash: hash.slice(0, 8),
         date,
         author,
-        subject: subjectParts.join('|'),
+        subject,
         repo: repoName,
       };
-    });
+    }).filter(c => c.hash && c.date);
   } catch (err) {
     console.warn(`[changelog] Failed to read ${repoName}:`, err);
     return [];
