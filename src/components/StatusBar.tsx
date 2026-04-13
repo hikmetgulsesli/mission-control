@@ -1,11 +1,13 @@
 import { useAppStore } from '../store/appStore';
 import { format } from 'date-fns';
 import { useState, useEffect } from 'react';
+import { ChangelogModal } from './ChangelogModal';
 
 export function StatusBar() {
   const system = useAppStore(s => s.system);
   const overview = useAppStore(s => s.overview);
   const [time, setTime] = useState(format(new Date(), 'HH:mm'));
+  const [changelogOpen, setChangelogOpen] = useState(false);
 
   useEffect(() => {
     const id = setInterval(() => setTime(format(new Date(), 'HH:mm')), 30000);
@@ -34,7 +36,16 @@ export function StatusBar() {
           </>
         )}
         <span>{time}</span>
+        <button
+          className="status-bar__version-btn"
+          onClick={() => setChangelogOpen(true)}
+          title="Sürüm ve değişiklikler"
+          aria-label="Versiyon"
+        >
+          v
+        </button>
       </div>
+      <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
     </header>
   );
 }

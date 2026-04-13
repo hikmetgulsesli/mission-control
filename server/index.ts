@@ -36,6 +36,7 @@ import scrapeRouter from "./routes/scrape.js";
 import rulesRouter from "./routes/rules.js";
 import liveFeedRouter from "./routes/live-feed.js";
 import telemetryRouter from "./routes/telemetry.js";
+import changelogRouter from "./routes/changelog.js";
 import { authMiddleware } from './middleware/auth.js';
 import rateLimit from 'express-rate-limit';
 
@@ -157,6 +158,7 @@ app.use("/api", scrapeRouter);
 app.use("/api", rulesRouter);
 app.use("/api", liveFeedRouter);
 app.use("/api", telemetryRouter);
+app.use("/api", changelogRouter);
 
 // Serve avatars
 if (existsSync(config.avatarsDir)) {
