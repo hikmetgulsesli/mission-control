@@ -233,9 +233,28 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
 
     const output = designStep.output as string;
 
-    // Parse STITCH_PROJECT_ID
+    // Parse STITCH_PROJECT_ID (with .stitch file fallback — design agent often
+    // forgets to echo this field in its output even though preclaim sets it in context)
     const pidMatch = output.match(/STITCH_PROJECT_ID:\s*(\S+)/);
-    const projectId = pidMatch ? pidMatch[1] : null;
+    let projectId: string | null = pidMatch ? pidMatch[1] : null;
+    if (!projectId) {
+      try {
+        const ctxForPid = JSON.parse(run.context || "{}");
+        const repoForPid = ctxForPid.repo || "";
+        if (repoForPid) {
+          const candidates = [
+            join(repoForPid, ".stitch"),
+            join("/home/setrox/projects", (repoForPid.split("/").pop() || ""), ".stitch"),
+          ];
+          for (const dotStitch of candidates) {
+            if (existsSync(dotStitch)) {
+              const parsed = JSON.parse(readFileSync(dotStitch, "utf-8"));
+              if (parsed && parsed.projectId) { projectId = parsed.projectId; break; }
+            }
+          }
+        }
+      } catch { /* best effort — projectId stays null */ }
+    }
 
     // Parse SCREEN_MAP JSON
     let screenMap: any[] = [];
