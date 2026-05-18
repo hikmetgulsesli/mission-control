@@ -1,5 +1,11 @@
 # Mission Control Changelog
 
+## 2.0.17 - 2026-05-18
+
+- Normalized legacy Setfarm pipeline events that carried internal step UUIDs into readable workflow step names.
+- Resolved persisted Live history and error rows against Setfarm step metadata so old events remain operator-readable.
+- Preserved rich project labels and event identity while cleaning displayed step ownership in Live and run-history views.
+
 ## 2.0.16 - 2026-05-18
 
 - Normalized visible run, story, visual QA, and delete-flow statuses so `N/A` and skipped labels are not shown to operators.

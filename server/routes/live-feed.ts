@@ -64,6 +64,7 @@ interface LiveProjectOption {
 }
 
 const UUIDISH_PROJECT_ID = /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i;
+const UUIDISH_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function extractProjectDisplayName(task: unknown, fallbackId: string): string {
   const compactTask = String(task || '').replace(/\s+/g, ' ').trim();
@@ -130,13 +131,84 @@ function compactPipelineSummary(eventName: string, stepId: string, detail: strin
   return `${prefix}${source}${repeat}`.replace(/\s+/g, ' ').trim().slice(0, 180);
 }
 
-function mapSetfarmEvent(event: any): LiveEvent {
+function stepLookupKey(runId: unknown, stepId: unknown): string | null {
+  const run = String(runId || '').trim();
+  const step = String(stepId || '').trim();
+  if (!run || !UUIDISH_ID.test(step)) return null;
+  return `${run}:${step}`;
+}
+
+function parseSummaryStepPrefix(summary: unknown): string | null {
+  const match = String(summary || '').trim().match(/^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}):\s*/i);
+  return match?.[1] || null;
+}
+
+function collectSetfarmStepCandidates(records: any[]): Array<{ runId: string; stepId: string }> {
+  const seen = new Set<string>();
+  const candidates: Array<{ runId: string; stepId: string }> = [];
+  for (const record of records) {
+    const runId = String(record?.runId || record?.project || '').trim();
+    if (!runId) continue;
+    const possibleStepIds = [
+      record?.stepId,
+      record?.agent,
+      parseSummaryStepPrefix(record?.summary),
+    ];
+    for (const possible of possibleStepIds) {
+      const key = stepLookupKey(runId, possible);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      candidates.push({ runId, stepId: String(possible).trim() });
+    }
+  }
+  return candidates;
+}
+
+async function resolveSetfarmStepNames(records: any[]): Promise<Map<string, string>> {
+  const candidates = collectSetfarmStepCandidates(records);
+  if (candidates.length === 0) return new Map();
+
+  const runIds = [...new Set(candidates.map((candidate) => candidate.runId))];
+    const stepIds = [...new Set(candidates.map((candidate) => candidate.stepId))];
+  try {
+    const rows = await pgSql.unsafe(
+      'SELECT run_id, id, step_id FROM steps WHERE run_id = ANY($1::text[]) AND id = ANY($2::text[])',
+      [runIds, stepIds],
+    );
+    const entries: Array<[string, string]> = [];
+    for (const row of rows as any[]) {
+      const stepId = String(row.step_id || '').trim();
+      if (stepId) entries.push([`${String(row.run_id)}:${String(row.id)}`, stepId]);
+    }
+    return new Map(entries);
+  } catch (err: any) {
+    console.error('[live-feed] Step name resolution failed:', err.message);
+    return new Map();
+  }
+}
+
+function resolveStepIdForDisplay(runId: unknown, rawStepId: unknown, stepNameByInternal: Map<string, string>): string {
+  const stepId = String(rawStepId || '').trim();
+  const lookupKey = stepLookupKey(runId, stepId);
+  return (lookupKey && stepNameByInternal.get(lookupKey)) || stepId;
+}
+
+function replaceStepPrefix(text: string | null | undefined, runId: unknown, stepNameByInternal: Map<string, string>): string | null {
+  if (!text) return text || null;
+  const rawStepId = parseSummaryStepPrefix(text);
+  if (!rawStepId) return text;
+  const stepId = resolveStepIdForDisplay(runId, rawStepId, stepNameByInternal);
+  if (stepId === rawStepId) return text;
+  return text.replace(rawStepId, stepId);
+}
+
+function mapSetfarmEvent(event: any, stepNameByInternal: Map<string, string> = new Map()): LiveEvent {
   const eventName = String(event?.event || event?.action || 'setfarm.event');
-  const stepId = String(event?.stepId || '').trim();
+  const project = String(event?.runId || '').trim() || null;
+  const stepId = resolveStepIdForDisplay(project, event?.stepId, stepNameByInternal);
   const storyId = String(event?.storyId || '').trim();
   const detail = String(event?.detail || event?.storyTitle || '').trim();
   const repeatCount = Number(event?.repeatCount || 0) || undefined;
-  const project = String(event?.runId || '').trim() || null;
   const status = setfarmEventStatus(eventName, detail);
   const agent = normalizeSetfarmAgent(event?.agentId || stepId || 'setfarm');
   const idParts = [
@@ -213,7 +285,17 @@ function applyEventQueryFilters(events: LiveEvent[], query: Record<string, any>)
 
 async function getSetfarmLiveEvents(limit: number, query: Record<string, any> = {}): Promise<LiveEvent[]> {
   const raw = await getSetfarmActivity(Math.min(Math.max(limit, 50), 300));
-  return applyEventQueryFilters(raw.map(mapSetfarmEvent), query);
+  const stepNameByInternal = await resolveSetfarmStepNames(raw);
+  return applyEventQueryFilters(raw.map((event) => mapSetfarmEvent(event, stepNameByInternal)), query);
+}
+
+function normalizePersistedSetfarmEvent(event: LiveEvent, stepNameByInternal: Map<string, string>): LiveEvent {
+  if (event.tool !== 'setfarm' && event.model !== 'setfarm') return event;
+  const stepId = resolveStepIdForDisplay(event.project, event.agent, stepNameByInternal);
+  const summary = replaceStepPrefix(event.summary, event.project, stepNameByInternal);
+  const detail = replaceStepPrefix(event.detail, event.project, stepNameByInternal);
+  const agent = stepId === event.agent ? event.agent : normalizeSetfarmAgent(stepId);
+  return { ...event, agent, summary: summary || event.summary, detail: detail || event.detail };
 }
 
 
@@ -681,13 +763,15 @@ router.get('/live-feed/errors', async (req, res) => {
     params.push(limit);
 
     const rows = await pgSql.unsafe(query, params);
-    const mapped = (rows as any[]).map(r => ({
+    const rawMapped = (rows as any[]).map(r => ({
       ...r,
       durationMs: r.duration_ms,
       exitCode: r.exit_code,
       agentEmoji: Object.values(AGENT_MAP).find(a => a.name.toLowerCase() === (r.agent || '').toLowerCase())?.emoji || '',
       category: r.category || classifyCategory(r.summary, r.file, r.detail),
     }));
+    const stepNameByInternal = await resolveSetfarmStepNames(rawMapped);
+    const mapped = rawMapped.map((event) => normalizePersistedSetfarmEvent(event, stepNameByInternal));
     res.json(mapped);
   } catch (err: any) {
     console.error('[live-feed-db] Errors query error:', err.message);
@@ -735,13 +819,15 @@ router.get('/live-feed/history', async (req, res) => {
     params.push(limit);
 
     const rows = await pgSql.unsafe(query, params);
-    const mapped = (rows as any[]).map(r => ({
+    const rawMapped = (rows as any[]).map(r => ({
       ...r,
       durationMs: r.duration_ms,
       exitCode: r.exit_code,
       agentEmoji: Object.values(AGENT_MAP).find(a => a.name.toLowerCase() === (r.agent || '').toLowerCase())?.emoji || '',
       category: r.category || classifyCategory(r.summary, r.file, r.detail),
     }));
+    const stepNameByInternal = await resolveSetfarmStepNames(rawMapped);
+    const mapped = rawMapped.map((event) => normalizePersistedSetfarmEvent(event, stepNameByInternal));
     const setfarmEvents = await getSetfarmLiveEvents(limit, req.query).catch(() => []);
     const byId = new Map<string, LiveEvent>();
     for (const event of mapped) byId.set(event.id, event);
