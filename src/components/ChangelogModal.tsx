@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { tr } from 'date-fns/locale';
 
@@ -25,9 +25,9 @@ interface Props {
 }
 
 // Minimal markdown → React renderer
-function renderMarkdown(md: string): JSX.Element[] {
+function renderMarkdown(md: string): ReactNode[] {
   const lines = md.split('\n');
-  const nodes: JSX.Element[] = [];
+  const nodes: ReactNode[] = [];
   let key = 0;
   let i = 0;
   while (i < lines.length) {
@@ -59,8 +59,8 @@ function renderMarkdown(md: string): JSX.Element[] {
   return nodes;
 }
 
-function inline(s: string): JSX.Element[] {
-  const parts: JSX.Element[] = [];
+function inline(s: string): ReactNode[] {
+  const parts: ReactNode[] = [];
   const regex = /(\*\*[^*]+\*\*|`[^`]+`)/g;
   let lastIdx = 0;
   let key = 0;
@@ -112,7 +112,7 @@ export function ChangelogModal({ open, onClose }: Props) {
     <div className="changelog-backdrop" onClick={onClose}>
       <div className="changelog-modal" onClick={e => e.stopPropagation()}>
         <div className="changelog-header">
-          <h2>Sistem Sürümü & Değişiklikler</h2>
+          <h2>System Version & Changes</h2>
           <button className="changelog-close" onClick={onClose}>×</button>
         </div>
 
@@ -136,17 +136,17 @@ export function ChangelogModal({ open, onClose }: Props) {
 
         <div className="changelog-tabs">
           <button className={tab === 'notes' ? 'active' : ''} onClick={() => setTab('notes')}>
-            Sürüm Notları
+            Release Notes
           </button>
           <button className={tab === 'git' ? 'active' : ''} onClick={() => setTab('git')}>
-            Git Tarihçesi ({data?.commits.length || 0})
+            Git History ({data?.commits.length || 0})
           </button>
         </div>
 
         {tab === 'notes' && (
           <div className="changelog-body changelog-notes">
-            {loading && <div className="changelog-loading">Yükleniyor…</div>}
-            {error && <div className="changelog-error">Hata: {error}</div>}
+            {loading && <div className="changelog-loading">Loading...</div>}
+            {error && <div className="changelog-error">Error: {error}</div>}
             {data?.setfarmChangelog && (
               <section className="changelog-section">
                 <h3 className="changelog-section-title">Setfarm</h3>
@@ -160,7 +160,7 @@ export function ChangelogModal({ open, onClose }: Props) {
               </section>
             )}
             {!loading && !data?.setfarmChangelog && !data?.mcChangelog && (
-              <div className="changelog-empty">CHANGELOG.md bulunamadı.</div>
+              <div className="changelog-empty">CHANGELOG.md not found.</div>
             )}
           </div>
         )}
@@ -168,14 +168,14 @@ export function ChangelogModal({ open, onClose }: Props) {
         {tab === 'git' && (
           <>
             <div className="changelog-filter">
-              <button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>Tümü</button>
+              <button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>All</button>
               <button className={filter === 'setfarm' ? 'active' : ''} onClick={() => setFilter('setfarm')}>Setfarm</button>
               <button className={filter === 'mc' ? 'active' : ''} onClick={() => setFilter('mc')}>MC</button>
             </div>
             <div className="changelog-body">
-              {loading && <div className="changelog-loading">Yükleniyor…</div>}
-              {error && <div className="changelog-error">Hata: {error}</div>}
-              {!loading && !error && commits.length === 0 && <div className="changelog-empty">Commit yok.</div>}
+              {loading && <div className="changelog-loading">Loading...</div>}
+              {error && <div className="changelog-error">Error: {error}</div>}
+              {!loading && !error && commits.length === 0 && <div className="changelog-empty">No commits.</div>}
               {commits.map(commit => (
                 <div key={`${commit.repo}-${commit.hash}`} className={`commit-row commit-row--${commit.repo}`}>
                   <div className="commit-row__badges">

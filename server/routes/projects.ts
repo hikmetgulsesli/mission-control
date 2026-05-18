@@ -3,12 +3,13 @@ import { readFileSync, writeFileSync, existsSync, rmSync, mkdirSync, unlinkSync 
 import { join } from "path";
 import { createConnection } from "net";
 import { execSync, execFileSync } from "child_process";
-import { config } from "../config.js";
+import { config, PATHS } from "../config.js";
 import { deleteRunsByProject } from "../utils/setfarm-db.js";
+import { getSupervisorSummaryForRun } from "../utils/supervisor.js";
 
 const router = Router();
 const PROJECTS_FILE = (config as any).projectsJson || join(import.meta.dirname, "../../projects.json");
-const DISABLED_DIR = join(process.env.HOME || "/home/setrox", ".openclaw/disabled-services");
+const DISABLED_DIR = join(PATHS.setfarmDir, "..", "disabled-services");
 const DELETED_FILE = join(import.meta.dirname || __dirname, "../../deleted-projects.json");
 
 function loadDeletedIds(): Set<string> {
@@ -21,14 +22,14 @@ function addDeletedId(id: string) {
 }
 
 const DEFAULT_CHECKLIST = [
-  { id: "task-received", label: "Gorev iletildi", completed: false },
-  { id: "github-repo", label: "GitHub repo olusturuldu", completed: false },
-  { id: "dns-setup", label: "Cloudflare DNS ve subdomain olusturuldu", completed: false },
-  { id: "added-to-projects", label: "Projeler bolumune eklendi", completed: false },
-  { id: "ports-assigned", label: "Portlar belirlendi", completed: false },
-  { id: "setup-run", label: "Setup calistirildi", completed: false },
-  { id: "dev-started", label: "Gelistirici calismaya basladi", completed: false },
-  { id: "test-review", label: "Test ve review tamamlandi", completed: false },
+  { id: "task-received", label: "Task received", completed: false },
+  { id: "github-repo", label: "GitHub repo created", completed: false },
+  { id: "dns-setup", label: "Cloudflare DNS and subdomain created", completed: false },
+  { id: "added-to-projects", label: "Added to projects", completed: false },
+  { id: "ports-assigned", label: "Ports assigned", completed: false },
+  { id: "setup-run", label: "Setup completed", completed: false },
+  { id: "dev-started", label: "Developer started", completed: false },
+  { id: "test-review", label: "Test and review completed", completed: false },
 ];
 
 function checkPort(port: number): Promise<boolean> {
@@ -51,6 +52,108 @@ function saveProjects(projects: any[]) {
   writeFileSync(PROJECTS_FILE, JSON.stringify(projects, null, 2));
 }
 
+function parseRunContext(run: any): any {
+  if (!run?.context || typeof run.context !== "string") return {};
+  try {
+    return JSON.parse(run.context);
+  } catch {
+    return {};
+  }
+}
+
+function slugFromText(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")
+    .slice(0, 80);
+}
+
+function toIsoString(value: any): string {
+  if (!value) return new Date().toISOString();
+  if (value instanceof Date) return value.toISOString();
+  return String(value);
+}
+
+function deriveRunProjectName(run: any, context: any): string {
+  if (context.project_display_name) return String(context.project_display_name);
+  if (context.project_slug) {
+    return String(context.project_slug)
+      .split("-")
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+  const task = String(run?.task || "").trim();
+  const explicit = task.match(/(?:called|named|Project:)\s+([A-Za-z0-9][A-Za-z0-9 _-]{1,48})/i);
+  if (explicit?.[1]) return explicit[1].replace(/[.].*$/, "").trim();
+  return `Run #${run?.run_number || "unknown"}`;
+}
+
+async function synthesizeSetfarmProjects(existingProjects: any[]) {
+  try {
+    const { getRuns } = await import("../utils/setfarm.js");
+    const allRuns = (await getRuns()) as any[];
+    const knownRunIds = new Set<string>();
+    const knownProjectIds = new Set<string>();
+    const knownRepos = new Set<string>();
+
+    for (const project of existingProjects) {
+      knownProjectIds.add(project.id);
+      if (project.repo) knownRepos.add(String(project.repo).replace(/\/+$/, ""));
+      for (const id of project.setfarmRunIds || []) knownRunIds.add(id);
+      if (project.workflowRunId) knownRunIds.add(project.workflowRunId);
+      if (project.latestRunId) knownRunIds.add(project.latestRunId);
+    }
+
+    const synthesized: any[] = [];
+    for (const run of allRuns) {
+      const context = parseRunContext(run);
+      const repo = String(context.repo || "").replace(/\/+$/, "");
+      const baseSlug = String(context.project_slug || (repo ? repo.split("/").pop() : "") || slugFromText(deriveRunProjectName(run, context)));
+      const id = slugFromText(baseSlug || `setfarm-run-${run.run_number || run.id}`);
+
+      if (knownRunIds.has(run.id)) continue;
+      if (repo && knownRepos.has(repo)) continue;
+      if (knownProjectIds.has(id)) continue;
+
+      synthesized.push({
+        id,
+        name: deriveRunProjectName(run, context),
+        emoji: "\u{1F9EA}",
+        status: run.status === "running" || run.status === "pending" ? "building" : run.status,
+        description: run.task || "",
+        ports: {},
+        domain: "",
+        repo,
+        stack: context.tech_stack ? [context.tech_stack] : ["setfarm"],
+        service: "",
+        serviceStatus: run.status === "running" ? "building" : "unknown",
+        createdBy: "setfarm-run",
+        createdAt: toIsoString(run.created_at),
+        updatedAt: toIsoString(run.updated_at || run.created_at),
+        stories: run.storyProgress || { total: 0, done: 0 },
+        features: [],
+        tasks: [],
+        github: "",
+        category: "setfarm",
+        checklist: DEFAULT_CHECKLIST.map((item) => ({ ...item })),
+        workflowRunId: run.id,
+        setfarmRunIds: [run.id],
+        runNumber: run.run_number || undefined,
+        latestRunNumber: run.run_number || undefined,
+        latestRunId: run.id,
+        latestRunStatus: run.status,
+        supervisor: await getSupervisorSummaryForRun(run),
+        virtual: true,
+      });
+    }
+    return synthesized;
+  } catch {
+    return [];
+  }
+}
+
 async function enrichWithStatus(projects: any[]) {
   // Enrich with latest run number from setfarm DB
   try {
@@ -63,10 +166,16 @@ async function enrichWithStatus(projects: any[]) {
       const re = new RegExp(`(^|[^\\w-])${needle.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}([^\\w-]|$)`);
       return re.test(haystack);
     };
-    for (const p of projects) {
+    await Promise.all(projects.map(async (p) => {
       const repoPath = p.repoPath || p.repo || '';
       const matching = allRuns
         .filter((r: any) => {
+          const runIds = new Set([
+            ...(Array.isArray(p.setfarmRunIds) ? p.setfarmRunIds : []),
+            p.workflowRunId,
+            p.latestRunId,
+          ].filter(Boolean));
+          if (runIds.has(r.id)) return true;
           // Exact word match — substring would match "foo" against "foo-v2"
           const matchRepo = repoPath && wordBoundaryMatch(r.task || '', repoPath);
           const matchId = p.id && p.id.length > 2 && wordBoundaryMatch(r.task || '', p.id);
@@ -77,8 +186,9 @@ async function enrichWithStatus(projects: any[]) {
         p.latestRunNumber = matching[0].run_number || 0;
         p.latestRunId = matching[0].id;
         p.latestRunStatus = matching[0].status;
+        p.supervisor = await getSupervisorSummaryForRun(matching[0]);
       }
-    }
+    }));
   } catch {}
 
   for (const p of projects) {
@@ -99,11 +209,15 @@ async function enrichWithStatus(projects: any[]) {
 
 router.get("/projects", async (_req, res) => {
   try {
-    const projects = await enrichWithStatus(loadProjects());
+    const registeredProjects = loadProjects();
+    const projects = await enrichWithStatus([
+      ...registeredProjects,
+      ...(await synthesizeSetfarmProjects(registeredProjects)),
+    ]);
     // Sort by createdAt descending — newest first
     projects.sort((a: any, b: any) => {
-      const da = a.createdAt || '1970-01-01';
-      const db = b.createdAt || '1970-01-01';
+      const da = toIsoString(a.createdAt || '1970-01-01');
+      const db = toIsoString(b.createdAt || '1970-01-01');
       return db.localeCompare(da);
     });
     res.json(projects);
@@ -561,7 +675,7 @@ function findProjectByIdOrRepo(projects: any[], id: string): any | undefined {
   // 1. Exact ID match
   let p = projects.find((p: any) => p.id === id);
   if (p) return p;
-  // 2. Repo basename match (e.g. 'nakliye-crm' matches repo '/home/setrox/projects/nakliye-crm')
+  // 2. Repo basename match across local or remote project roots.
   p = projects.find((p: any) => {
     if (!p.repo) return false;
     const basename = p.repo.replace(/\/+$/, '').split('/').pop();

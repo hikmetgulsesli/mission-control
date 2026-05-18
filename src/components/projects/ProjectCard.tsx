@@ -1,4 +1,5 @@
 import React from "react";
+import { normalizeVisibleVisualStatus } from "../../lib/status";
 
 interface Project {
   id: string;
@@ -30,6 +31,21 @@ interface Project {
   checklist?: any[];
   buildStartedAt?: string;
   buildCompletedAt?: string;
+  supervisor?: {
+    available: boolean;
+    status: string;
+    openBlockers: number;
+    warnings: number;
+    pendingInterventions: number;
+    checklistItems: number;
+    checklistPassed: number;
+    visual: {
+      status: "pass" | "fail" | "skipped" | "missing";
+      issueCount: number;
+      controlsChecked: number;
+      routesChecked: string[];
+    };
+  };
 }
 
 export interface ProjectCardProps {
@@ -51,6 +67,17 @@ export const ProjectCard = React.memo(function ProjectCard({
   onExport,
   onDelete,
 }: ProjectCardProps) {
+  const supervisor = p.supervisor;
+  const supervisorStatus = supervisor?.available ? supervisor.status : "missing";
+  const visualStatus = normalizeVisibleVisualStatus(supervisor?.visual.status);
+  const supervisorTone = supervisorStatus === "passed" || supervisorStatus === "done"
+    ? "pass"
+    : supervisorStatus === "blocked" || visualStatus === "fail"
+      ? "fail"
+      : supervisorStatus === "fixing"
+        ? "fixing"
+        : "muted";
+
   return (
     <div
       className={`project-card ${selected ? "project-card--selected" : ""} ${p.status === "building" ? "project-card--building" : p.status === "failed" ? "project-card--failed" : ""} ${p.type === "mobile" ? "project-card--mobile" : `project-card--${p.serviceStatus === "active" ? "online" : "offline"}`}`}
@@ -71,7 +98,7 @@ export const ProjectCard = React.memo(function ProjectCard({
             className={"project-card__toggle " + (p.serviceStatus === "active" ? "project-card__toggle--on" : "project-card__toggle--off")}
             onClick={onToggle}
             disabled={toggling || p.id === "mission-control"}
-            title={p.serviceStatus === "active" ? "Durdur" : "Baslat"}
+            title={p.serviceStatus === "active" ? "Stop" : "Start"}
           >
             <span className="project-card__toggle-knob" />
             <span className="project-card__toggle-label">
@@ -82,6 +109,21 @@ export const ProjectCard = React.memo(function ProjectCard({
       </div>
 
       <p className="project-card__desc" title={p.description}>{p.description}</p>
+
+      {supervisor && (
+        <div className={`project-card__supervisor project-card__supervisor--${supervisorTone}`}>
+          <span className="project-card__supervisor-label">SUPERVISOR</span>
+          <span className="project-card__supervisor-status">{supervisorStatus.toUpperCase()}</span>
+          {supervisor.available ? (
+            <>
+              <span>{supervisor.openBlockers} blockers</span>
+              <span>{visualStatus.toUpperCase()} visual</span>
+            </>
+          ) : (
+            <span>No ledger yet</span>
+          )}
+        </div>
+      )}
 
       <div className="project-card__meta">
         {p.type !== "mobile" && (
@@ -129,7 +171,7 @@ export const ProjectCard = React.memo(function ProjectCard({
 
         {(p.createdAt || p.completedAt) && (
           <div className="project-card__meta-row">
-            <span className="project-card__label">TARIH</span>
+            <span className="project-card__label">DATE</span>
             <span className="project-card__value project-card__dates">
               {p.createdAt && <span>{p.createdAt.slice(0, 10)}</span>}
               {p.createdAt && p.completedAt && <span> → </span>}
@@ -157,7 +199,7 @@ export const ProjectCard = React.memo(function ProjectCard({
       <div className="project-card__actions" onClick={(e) => e.stopPropagation()}>
         <button className="btn btn--tiny" onClick={() => onExport()} title="Export JSON">EXPORT</button>
         {p.id !== "mission-control" && (
-          <button className="btn btn--tiny btn--danger" onClick={onDelete} title="Projeyi sil">SIL</button>
+          <button className="btn btn--tiny btn--danger" onClick={onDelete} title="Delete project">DELETE</button>
         )}
       </div>
     </div>

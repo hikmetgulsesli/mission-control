@@ -25,9 +25,9 @@ async function callLlm(messages: { role: string; content: string }[], maxTokens 
   } catch (err: any) {
     // D5 fix: user-friendly timeout message
     if (err.name === 'AbortError' || err.name === 'TimeoutError') {
-      throw new Error('LLM istegi 5 dakika icinde tamamlanamadi. Daha kisa bir PRD ile tekrar deneyin.');
+      throw new Error('LLM request did not complete within 5 minutes. Try again with a shorter PRD.');
     }
-    throw new Error(`LLM baglanti hatasi: ${err.message}`);
+    throw new Error(`LLM connection error: ${err.message}`);
   }
 
   if (!res.ok) {
@@ -77,50 +77,69 @@ export async function generatePrd(params: {
 }): Promise<string> {
   const { title, platform, description, analysis, research, chatHistory, templateContent } = params;
 
-  let systemPrompt = `Sen bir PRD yazicisin. Sana verilen bilgilerle HEMEN bir PRD yaz. Soru sorma, bilgi isteme, aciklama yapma — sadece PRD icerigini Markdown olarak yaz.
+  let systemPrompt = `You are a PRD writer. Use the provided information and write the PRD immediately. Do not ask questions, request more information, or add explanations. Output only Markdown PRD content.
 
-KURALLAR:
-- Direkt "# PRD — [Proje Adi]" ile basla
-- Soru SORMA. Eksik bilgi varsa makul varsayimlar yap ve yaz.
-- Asla "bana bilgi verin", "secenekler sunayim", "erisimim yok" gibi seyler yazma.
-- Ciktinin tamami PRD olmali, baska metin olmasin.
+RULES:
+- Start directly with "# PRD — [Project Name]"
+- Do NOT ask questions. If information is missing, make reasonable assumptions and document them.
+- Never write phrases like "give me more information", "I can offer options", or "I do not have access".
+- The entire output must be the PRD, with no extra commentary.
 
-PRD FORMATI:
-1. Proje Genel Bakis (1 paragraf)
-2. Tasarim Sistemi: renkler (hex kodlari), fontlar, spacing degerleri
-3. Sayfa Listesi: "## Sayfalar" basligiyla. Her sayfa su EXACT formatta:
-   N. **Sayfa Adi** (\`/route\`) — Kisa aciklama
+PRD FORMAT:
+1. Project Overview (one paragraph)
+2. Design System: colors with hex codes, fonts, spacing values
+3. Page List: use a "## Pages" heading. Every page must use this EXACT format:
+   N. **Page Name** (\`/route\`) — Short description
    
-   Ornek:
-   1. **Ana Sayfa** (\`/\`) — Hero section, ozellikler grid, CTA
-   2. **Hakkimizda** (\`/about\`) — Takim tanitimi, sirket hikayesi
-   3. **Blog** (\`/blog\`) — Yazi listesi, kategoriler, arama
+   Example:
+   1. **Home** (\`/\`) — Hero section, feature grid, CTA
+   2. **About** (\`/about\`) — Team intro and company story
+   3. **Blog** (\`/blog\`) — Article list, categories, search
    
-   ZORUNLU: Backtick icinde route (\`/path\`), bold isim (**Ad**), tire ile aciklama. Bu format DEGISTIRILEMEZ.
-4. Her sayfa icin ayri detay bolumu (## [Sayfa Adi]) — layout, komponentler, davranislar, exact CSS degerleri
+   REQUIRED: route inside backticks (\`/path\`), bold name (**Name**), dash and description. This format must not change.
+4. A separate detail section for each page (## [Page Name]) with layout, components, behaviors, exact CSS values
 5. Animasyonlar: timing (ms), easing, duration
-6. Responsive breakpoint'ler (mobile/tablet/desktop)
-7. Veri modeli (interface/type tanimlari)
-8. API endpoint'leri
+6. Responsive breakpoints (mobile/tablet/desktop)
+7. Data model (interface/type definitions)
+8. API endpoints
 
-ONEMLI: "## Sayfalar" bolumunde TUM sayfalari EXACT formatta listele: N. **Ad** (\`/route\`) — Aciklama. Her sayfa sonra ayri ## bolum olarak detaylandirilacak. Sayfa sayisi en az 3, projenin buyuklugune gore 4-8 arasi.
+IMPORTANT: List ALL pages in the "## Pages" section using the exact format: N. **Name** (\`/route\`) — Description. Each page must later have its own ## detail section. Include at least 3 pages, usually 4-8 depending on project size.
 
-Tech stack: ${platform === 'mobile' ? 'React Native + Expo + TypeScript' : 'React + TypeScript + Tailwind CSS + shadcn/ui'}
+Tech stack: ${(() => {
+  switch (platform) {
+    case 'mobile':
+    case 'mobile-rn':
+      return 'React Native + Expo + TypeScript';
+    case 'game-web':
+      return 'React + Three.js (WebGL) + TypeScript + Tailwind';
+    case 'game-native':
+      return 'Unity 2D + C# (or Godot 4 + GDScript)';
+    case 'python-api':
+      return 'Python 3.12 + FastAPI + Pydantic + SQLAlchemy async';
+    case 'python-cli':
+      return 'Python 3.12 + Typer + Rich + pytest';
+    case 'docs':
+      return 'Next.js + MDX + Fumadocs';
+    case 'web':
+    default:
+      return 'React + TypeScript + Tailwind CSS + shadcn/ui';
+  }
+})()}
 
-ISIM KURALI: Domain adindaki, kullanicinin verdigi isimleri/kelimeleri ASLA degistirme veya tahminle duzeltme — oldugu gibi kullan. Ornek: "gulsesli" ise "gulesli" yapma.
+NAME RULE: Never rewrite or "correct" user-provided names or words from a domain. Preserve them exactly. Example: if the user wrote "gulsesli", do not change it to "gulesli".
 
-DETAY SEVIYESI: "Modern goruntum" YAZMA → exact hex renk yaz. "Guzel animasyon" YAZMA → "300ms ease-out opacity 0→1" yaz.`;
+DETAIL LEVEL: Do not write vague phrases like "modern look"; provide exact hex colors. Do not write "nice animation"; write details like "300ms ease-out opacity 0->1".`;
 
   const messages: { role: string; content: string }[] = [
     { role: 'system', content: systemPrompt },
   ];
 
-  // Build context block — hepsini tek user mesajinda topla
+  // Build one compact user context block.
   let contextBlock = '';
 
   if (analysis) {
     const a = typeof analysis === 'string' ? analysis : JSON.stringify(analysis, null, 2);
-    contextBlock += `\n\nREFERANS SITE ANALIZI (bu bilgileri PRD'ye entegre et — renkler, fontlar, yapiyi aynen kullan):\n${a}`;
+    contextBlock += `\n\nREFERENCE SITE ANALYSIS (integrate these details into the PRD; preserve colors, fonts, and structure where relevant):\n${a}`;
 
     // Inject structured screenshot analysis as explicit design rules
     if (typeof analysis === 'object' && analysis !== null) {
@@ -135,30 +154,30 @@ DETAY SEVIYESI: "Modern goruntum" YAZMA → exact hex renk yaz. "Guzel animasyon
   }
 
   if (research) {
-    contextBlock += `\n\nWEB ARASTIRMA SONUCLARI:\n${JSON.stringify(research, null, 2)}`;
+    contextBlock += `\n\nWEB RESEARCH RESULTS:\n${JSON.stringify(research, null, 2)}`;
   }
 
   if (chatHistory?.length) {
-    const qaText = chatHistory.map(m => `${m.role === 'user' ? 'Kullanici' : 'Asistan'}: ${m.content}`).join('\n');
-    contextBlock += `\n\nKULLANICI TERCIHLERI (Q&A):\n${qaText}`;
+    const qaText = chatHistory.map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`).join('\n');
+    contextBlock += `\n\nUSER PREFERENCES (Q&A):\n${qaText}`;
   }
 
   if (templateContent) {
     messages.push({
       role: 'user',
-      content: `Şablon PRD (bunu baz al ama projeye uyarla):\n\n${templateContent}`,
+      content: `Template PRD (use as a base, but adapt it to the project):\n\n${templateContent}`,
     });
   }
 
-  // Final generation request — tek mesajda tum context + direktif
+  // Final generation request with all context and directives.
   messages.push({
     role: 'user',
-    content: `"${title}" projesi icin PRD yaz.
+    content: `Write a PRD for the "${title}" project.
 Platform: ${platform}
-${description ? `Aciklama: ${description}` : ''}
+${description ? `Description: ${description}` : ''}
 ${contextBlock}
 
-SIMDI HEMEN PRD YAZ. "# PRD — ${title}" ile basla. Soru sorma, aciklama yapma, sadece PRD icerigini yaz.`,
+WRITE THE PRD NOW. Start with "# PRD — ${title}". Do not ask questions, do not add commentary, output only PRD content.`,
   });
 
   const raw = await callLlm(messages, 16000);
@@ -166,8 +185,8 @@ SIMDI HEMEN PRD YAZ. "# PRD — ${title}" ile basla. Soru sorma, aciklama yapma,
 }
 
 /**
- * LLM ciktisini temizle — thinking bloklari, meta yorumlar, bos satirlari kaldir.
- * Sadece markdown PRD icerigini birak.
+ * Clean LLM output by removing thinking blocks, meta commentary, and empty wrapper text.
+ * Keep only Markdown PRD content.
  */
 function cleanPrdOutput(raw: string): string {
   let text = raw;
@@ -175,20 +194,19 @@ function cleanPrdOutput(raw: string): string {
   // Strip <think>...</think> blocks (LLM reasoning output)
   text = text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 
-  // "The user wants me to..." gibi meta-thinking bloklarini kaldir
-  // Bu bloklar genelde PRD'den once gelir
+  // Remove meta-thinking blocks that usually appear before the PRD.
   const prdStart = text.search(/^#\s+PRD/m);
   if (prdStart > 0) {
     text = text.slice(prdStart);
   }
 
-  // Eger hala # ile baslamiyorsa, ilk # satirindan itibaren al
+  // If output still does not start with a heading, keep content from the first heading.
   const firstHeading = text.search(/^#\s/m);
   if (firstHeading > 0) {
     text = text.slice(firstHeading);
   }
 
-  // Sondaki meta yorumlari temizle (genelde --- veya "Note:" ile baslar)
+  // Remove trailing meta commentary.
   text = text.replace(/\n---\n[\s\S]*?(?:Note|Disclaimer|Bu PRD|Not:)[\s\S]*$/i, '');
 
   return text.trim();
@@ -198,31 +216,31 @@ export async function enhancePrd(currentPrd: string, version: number): Promise<s
   const messages = [
     {
       role: 'system',
-      content: `Sen bir PRD kalite uzmanısın. Mevcut PRD'yi analiz edip daha detaylı hale getirirsin.
+      content: `You are a PRD quality specialist. Analyze the existing PRD and make it more complete.
 
-KRITIK KURALLAR:
-- MEVCUT SAYFA BOLUMLERINI ASLA SILME. Tum sayfa detaylari (## Ana Sayfa, ## Projeler vb.) korunmali
-- Mevcut icerigi koru, sadece EKLE veya DETAYLANDIR
-- Genel ifadeleri spesifik yap ("modern" → exact CSS values)
-- Eksik sayfalari/ekranlari ekle — "## Sayfalar" bolumundeki listeye de ekle
-- Animasyon timing/easing detaylari ekle (eksikse)
-- Komponent props/state detaylari ekle (eksikse)
-- Responsive breakpoint'ler ekle (eksikse)
-- Edge case'leri tanimla
-- CIKTI: Onceki PRD'nin TAMAMI + eklenen detaylar. Hicbir bolum cikarilmamali.
-- Eger PRD zaten 100 puan aliyorsa, sadece kucuk iyilestirmeler yap, bolum silme
-- "## Sayfalar" bolumundeki format: N. **Sayfa Adi** (\`/route\`) — Aciklama. Bu format ASLA degistirilmez.
-- Yeni sayfa EKLENEBILIR ama AYNI formatta olmali. Mevcut sayfalarin adi ve route'u DEGISTIRILEMEZ.
-- Tasarim sistemi degerlerini (font-family, hex renk kodlari, spacing, shadows) DEGISTIRME — sadece eksik olanlari EKLE.
-- Mevcut fontlar, renkler ve diger design token'lar oldugu gibi KORUNMALI.`,
+CRITICAL RULES:
+- NEVER DELETE EXISTING PAGE SECTIONS. Preserve all page details such as ## Home or ## Projects.
+- Preserve existing content; only add or expand details.
+- Replace vague wording with specific requirements ("modern" -> exact CSS values).
+- Add missing pages/screens and also add them to the "## Pages" list.
+- Add animation timing/easing details when missing.
+- Add component props/state details when missing.
+- Add responsive breakpoints when missing.
+- Define edge cases.
+- OUTPUT: the complete previous PRD plus the additions. Do not remove any section.
+- If the PRD already scores 100, make only small improvements and do not remove sections.
+- The "## Pages" list format is: N. **Page Name** (\`/route\`) — Description. This format must not change.
+- New pages may be added, but they must use the same format. Existing page names and routes must not change.
+- Do not change existing design-system values such as font-family, hex colors, spacing, or shadows; only add missing values.
+- Existing fonts, colors, and design tokens must be preserved exactly.`,
     },
     {
       role: 'user',
-      content: `Bu PRD'nin v${version} versiyonu. Bunu geliştirip v${version + 1} yap:
+      content: `This is version v${version} of the PRD. Improve it into v${version + 1}:
 
 ${currentPrd}
 
-Gelistir ve sadece yeni PRD'yi Markdown olarak dondur. Meta yorum, aciklama, dusunce sureci yazma — direkt PRD icerigi.`,
+Improve it and return only the new PRD as Markdown. Do not include meta commentary, explanation, or reasoning. Output direct PRD content.`,
     },
   ];
 
@@ -241,18 +259,18 @@ export async function generateChatQuestions(context: {
   const messages = [
     {
       role: 'system',
-      content: `Sen bir PRD oluşturma asistanısın. Kullanıcıdan proje detaylarını öğrenmek için akıllı sorular sorarsın. Her seferinde 1-2 soru sor. Kısa ve öz ol. Türkçe konuş.
+      content: `You are a PRD discovery assistant. Ask smart questions to learn the user's project details. Ask 1-2 questions at a time. Be concise. Speak English.
 
-Sorulacak konular (sırayla, henüz cevaplanmamışları sor):
-1. Hedef kitle
+Topics to ask about, in order, skipping anything already answered:
+1. Target audience
 2. Tema (dark/light)
-3. Dil (Türkçe/İngilizce/çoklu)
-4. Login/auth gereksinimi
-5. Ekran sayısı tahmini
-6. Özel istek veya kısıtlamalar
-7. Benzer projeler / ilham kaynakları
+3. Language (English, multilingual, or another explicit target language)
+4. Login/auth requirements
+5. Estimated screen count
+6. Special requests or constraints
+7. Similar projects or inspiration sources
 
-Zaten cevaplanan soruları tekrar sorma.`,
+Do not repeat questions that have already been answered.`,
     },
   ];
 
@@ -264,13 +282,13 @@ Zaten cevaplanan soruları tekrar sorma.`,
 
   messages.push({
     role: 'user',
-    content: `Proje: ${context.title || 'Henüz belirsiz'}
+    content: `Project: ${context.title || 'Not specified yet'}
 Platform: ${context.platform || 'web'}
-${context.description ? `Açıklama: ${context.description}` : ''}
-${context.urls?.length ? `URL'ler: ${context.urls.join(', ')}` : ''}
-${context.analysis ? 'Site analizi yapıldı.' : ''}
+${context.description ? `Description: ${context.description}` : ''}
+${context.urls?.length ? `URLs: ${context.urls.join(', ')}` : ''}
+${context.analysis ? 'Site analysis is available.' : ''}
 
-Bir sonraki soruyu sor.`,
+Ask the next question.`,
   });
 
   return callLlm(messages, 500);
@@ -282,21 +300,21 @@ export async function analyzeSite(html: string, url: string): Promise<any> {
   const messages = [
     {
       role: 'system',
-      content: `Web sitesi HTML'ini analiz et ve aşağıdaki bilgileri JSON olarak döndür:
+      content: `Analyze this website HTML and return the following information as JSON:
 {
-  "title": "site başlığı",
-  "description": "site açıklaması",
-  "pages": ["tespit edilen sayfalar"],
+  "title": "site title",
+  "description": "site description",
+  "pages": ["detected pages"],
   "colors": { "primary": "#hex", "secondary": "#hex", "background": "#hex", "text": "#hex", "accent": "#hex" },
-  "fonts": ["font isimleri"],
-  "techStack": ["tespit edilen teknolojiler"],
-  "components": ["tespit edilen UI komponentleri"],
-  "sections": ["ana bölümler"],
-  "animations": ["tespit edilen animasyonlar"],
+  "fonts": ["font names"],
+  "techStack": ["detected technologies"],
+  "components": ["detected UI components"],
+  "sections": ["main sections"],
+  "animations": ["detected animations"],
   "responsive": "responsive bilgisi",
-  "features": ["temel özellikler"]
+  "features": ["core features"]
 }
-Sadece JSON döndür, başka açıklama yapma.`,
+Return only JSON, with no extra explanation.`,
     },
     {
       role: 'user',
@@ -320,7 +338,7 @@ Sadece JSON döndür, başka açıklama yapma.`,
 }
 
 export async function analyzeScreenshot(base64: string, filename: string): Promise<any> {
-  // Gemini API ile gercek vision analizi
+  // Real vision analysis through Gemini API.
   const geminiKey = process.env.GEMINI_API_KEY || '';
 
   if (geminiKey) {
@@ -332,21 +350,21 @@ export async function analyzeScreenshot(base64: string, filename: string): Promi
           contents: [{
             parts: [
               {
-                text: `Bu bir UI screenshot'i. Analiz et ve asagidaki bilgileri JSON olarak dondur:
+                text: `This is a UI screenshot. Analyze it and return the following information as JSON:
 {
-  "suggestedTitle": "bu UI icin uygun proje/sayfa adi onerisi (kisa, 2-4 kelime)",
-  "layout": "layout aciklamasi (grid/flex/stack/sidebar+content vb.)",
+  "suggestedTitle": "a suitable short 2-4 word project/page title for this UI",
+  "layout": "layout description (grid/flex/stack/sidebar+content, etc.)",
   "colors": { "primary": "#hex", "secondary": "#hex", "background": "#hex", "text": "#hex", "accent": "#hex" },
-  "components": ["tespit edilen UI komponentleri (button, card, nav, modal, input, table, vb.)"],
-  "sections": ["ana bolumleri (hero, header, sidebar, content, footer, vb.)"],
-  "style": "genel stil (minimal/modern/corporate/playful/cyberpunk/glassmorphism)",
-  "typography": { "headingFont": "tahmin edilen heading font ailesi", "bodyFont": "tahmin edilen body font ailesi", "sizes": "ornek boyutlar (h1: 32px, body: 16px vb.)" },
-  "spacing": "genel spacing pattern (compact/normal/spacious) ve pixel degerleri (padding: 16px, gap: 12px vb.)",
-  "responsive": "gorunen breakpoint ipuclari",
-  "suggestions": ["PRD icin oneriler"]
+  "components": ["detected UI components (button, card, nav, modal, input, table, etc.)"],
+  "sections": ["main sections (hero, header, sidebar, content, footer, etc.)"],
+  "style": "overall style (minimal/modern/corporate/playful/cyberpunk/glassmorphism)",
+  "typography": { "headingFont": "estimated heading font family", "bodyFont": "estimated body font family", "sizes": "example sizes (h1: 32px, body: 16px, etc.)" },
+  "spacing": "overall spacing pattern (compact/normal/spacious) and pixel values (padding: 16px, gap: 12px, etc.)",
+  "responsive": "visible breakpoint clues",
+  "suggestions": ["PRD suggestions"]
 }
-ONEMLI: colors alaninda GERCEK hex degerlerini yaz (#1a1a2e gibi). typography alaninda font tahminlerini yap. suggestedTitle alanini mutlaka doldur.
-Sadece JSON dondur, baska aciklama yapma.`
+IMPORTANT: use real hex values in colors, such as #1a1a2e. Estimate fonts in typography. Always fill suggestedTitle.
+Return only JSON, with no extra explanation.`
               },
               {
                 inline_data: {
@@ -378,27 +396,27 @@ Sadece JSON dondur, baska aciklama yapma.`
     }
   }
 
-  // Fallback: text-only MiniMax analiz (dosya adi ve context'ten tahmin)
+  // Fallback: text-only MiniMax analysis based on filename and context.
   const messages = [
     {
       role: 'system',
-      content: `Bir UI screenshot dosya adi ve context'inden, olasi UI yapisini tahmin et. JSON formatinda dondur:
+      content: `Infer a likely UI structure from a UI screenshot filename and context. Return JSON:
 {
-  "suggestedTitle": "bu UI icin uygun proje/sayfa adi onerisi",
-  "layout": "tahmin",
+  "suggestedTitle": "a suitable project/page title for this UI",
+  "layout": "estimate",
   "colors": { "primary": "#hex", "secondary": "#hex", "background": "#hex", "text": "#hex", "accent": "#hex" },
-  "components": ["olasi komponentler"],
-  "sections": ["olasi bolumler"],
-  "style": "tahmin",
-  "typography": { "headingFont": "tahmin", "bodyFont": "tahmin", "sizes": "ornek boyutlar" },
-  "spacing": "tahmin (compact/normal/spacious)",
-  "suggestions": ["PRD icin oneriler"]
+  "components": ["likely components"],
+  "sections": ["likely sections"],
+  "style": "estimate",
+  "typography": { "headingFont": "estimate", "bodyFont": "estimate", "sizes": "example sizes" },
+  "spacing": "estimate (compact/normal/spacious)",
+  "suggestions": ["PRD suggestions"]
 }
-Sadece JSON dondur.`,
+Return only JSON.`,
     },
     {
       role: 'user',
-      content: `Screenshot dosya adi: ${filename}. Bu bir UI tasarimi screenshot'i. Dosya adindan ve genel UI pattern'larindan yapisi hakkinda tahmin yap.`,
+      content: `Screenshot filename: ${filename}. This is a UI design screenshot. Infer its structure from the filename and common UI patterns.`,
     },
   ];
 

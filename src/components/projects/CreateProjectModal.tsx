@@ -22,20 +22,20 @@ export const CreateProjectModal = React.memo(function CreateProjectModal({
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <form className="modal" onClick={(e) => e.stopPropagation()} onSubmit={onSubmit}>
-        <h3>Yeni Proje Olustur</h3>
+        <h3>Create New Project</h3>
         <label>
-          Proje Adi
-          <input type="text" value={form.name} onChange={(e) => onFormChange(f => ({ ...f, name: e.target.value }))} placeholder="ornek-proje" autoFocus />
+          Project Name
+          <input type="text" value={form.name} onChange={(e) => onFormChange(f => ({ ...f, name: e.target.value }))} placeholder="example-project" autoFocus />
         </label>
         <label>
-          Aciklama
-          <textarea value={form.description} onChange={(e) => onFormChange(f => ({ ...f, description: e.target.value }))} rows={2} placeholder="Proje aciklamasi..." />
+          Description
+          <textarea value={form.description} onChange={(e) => onFormChange(f => ({ ...f, description: e.target.value }))} rows={2} placeholder="Project description..." />
         </label>
         <label>
-          Tur
+          Type
           <select value={form.type} onChange={(e) => onFormChange(f => ({ ...f, type: e.target.value }))}>
-            <option value="web">Web Uygulamasi</option>
-            <option value="mobile">Mobil Uygulama</option>
+            <option value="web">Web Application</option>
+            <option value="mobile">Mobile Application</option>
           </select>
         </label>
         <label>
@@ -43,9 +43,9 @@ export const CreateProjectModal = React.memo(function CreateProjectModal({
           <input type="text" value={form.emoji} onChange={(e) => onFormChange(f => ({ ...f, emoji: e.target.value }))} placeholder={"\u{1F4E6}"} maxLength={4} />
         </label>
         <div className="modal__actions">
-          <button type="button" className="btn" onClick={onClose}>Vazgec</button>
+          <button type="button" className="btn" onClick={onClose}>Cancel</button>
           <button type="submit" className="btn btn--primary" disabled={loading || !form.name.trim()}>
-            {loading ? "Olusturuluyor..." : "Olustur"}
+            {loading ? "Creating..." : "Create"}
           </button>
         </div>
       </form>

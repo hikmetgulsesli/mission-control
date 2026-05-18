@@ -10,6 +10,9 @@ interface SetfarmEvent {
   storyId?: string;
   storyTitle?: string;
   detail?: string;
+  repeatCount?: number;
+  firstTs?: string;
+  lastTs?: string;
 }
 
 // Wave 2 fix #16 (plan: reactive-frolicking-cupcake): story.failed, story.skipped,
@@ -21,6 +24,7 @@ const EVENT_COLORS: Record<string, string> = {
   'run.completed': '#00ff41',
   'run.failed': '#ff0040',
   'step.running': '#4488ff',
+  'step.progress': '#a78bfa',
   'step.done': '#00ff41',
   'step.pending': '#666680',
   'step.timeout': '#ff6600',
@@ -38,16 +42,22 @@ const EVENT_COLORS: Record<string, string> = {
 
 function formatTime(ts: string): string {
   const d = new Date(ts);
-  return d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
 function formatDate(ts: string): string {
   const d = new Date(ts);
-  return d.toLocaleDateString('tr-TR', { month: '2-digit', day: '2-digit' });
+  return d.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit' });
 }
 
 function eventLabel(event: string): string {
-  return (event || "").replace('.', ' ').toUpperCase();
+  return (event || "").replace(".skipped", ".failed").replace('.', ' ').toUpperCase();
+}
+
+function visibleFeedText(value: string): string {
+  return value
+    .replace(/\bN\/A\b/gi, "Pending")
+    .replace(/\bskipped\b/gi, "failed");
 }
 
 export function SetfarmFeed({ events }: { events: SetfarmEvent[] }) {
@@ -80,9 +90,12 @@ export function SetfarmFeed({ events }: { events: SetfarmEvent[] }) {
           const color = EVENT_COLORS[e.event] || '#666680';
           const agent = e.agentId?.split('/').pop();
           let detail = '';
-          if (e.storyTitle) detail = e.storyTitle;
-          else if (e.detail) detail = e.detail;
+          if (e.storyTitle) detail = visibleFeedText(e.storyTitle);
+          else if (e.detail) detail = visibleFeedText(e.detail);
           else if (e.stepId) detail = e.stepId;
+          const title = [detail, e.repeatCount && e.repeatCount > 1 ? `Repeated ${e.repeatCount} times from ${e.firstTs || e.ts} to ${e.lastTs || e.ts}` : '']
+            .filter(Boolean)
+            .join('\n');
 
           return (
             <div key={`${e.ts}-${i}`} className="af-feed__item">
@@ -94,7 +107,10 @@ export function SetfarmFeed({ events }: { events: SetfarmEvent[] }) {
               <span className="af-feed__badge" style={{ color, borderColor: color + '44' }}>
                 {eventLabel(e.event)}
               </span>
-              {detail && <span className="af-feed__detail" title={detail}>{detail}</span>}
+              {detail && <span className="af-feed__detail" title={title}>{detail}</span>}
+              {e.repeatCount && e.repeatCount > 1 && (
+                <span className="af-feed__repeat" title={title}>x{e.repeatCount}</span>
+              )}
             </div>
           );
         })}

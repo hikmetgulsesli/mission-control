@@ -23,9 +23,9 @@ function formatDuration(createdAt?: string, completedAt?: string, buildStartedAt
   const days = Math.floor(hours / 24);
   const remH = hours % 24;
   const remM = minutes % 60;
-  if (days > 0) return remH > 0 ? `${days}g ${remH}s` : `${days}g`;
-  if (hours > 0) return remM > 0 ? `${hours}s ${remM}dk` : `${hours}s`;
-  return `${minutes}dk`;
+  if (days > 0) return remH > 0 ? `${days}d ${remH}h` : `${days}d`;
+  if (hours > 0) return remM > 0 ? `${hours}h ${remM}m` : `${hours}h`;
+  return `${minutes}m`;
 }
 
 interface Project {
@@ -97,12 +97,12 @@ export function Projects() {
     setDeleteLoading(true);
     setDeleteResult(null);
     const steps = [
-      { id: 'service', label: 'Systemd servisi', detail: deleteTarget.service || '-', status: 'waiting' as const },
+      { id: 'service', label: 'Systemd service', detail: deleteTarget.service || '-', status: 'waiting' as const },
       { id: 'tunnel', label: 'Cloudflare tunnel', detail: deleteTarget.domain || '-', status: 'waiting' as const },
-      { id: 'files', label: 'Yerel dosyalar', detail: deleteTarget.repo || '~/projects/' + deleteTarget.id, status: 'waiting' as const },
+      { id: 'files', label: 'Local files', detail: deleteTarget.repo || '~/projects/' + deleteTarget.id, status: 'waiting' as const },
       { id: 'github', label: 'GitHub repo', detail: (deleteTarget as any).github?.replace('https://github.com/', '') || '-', status: 'waiting' as const },
       { id: 'json', label: 'projects.json', detail: deleteTarget.id, status: 'waiting' as const },
-      { id: 'db', label: 'Pipeline kayitlari', detail: 'runs, steps, stories', status: 'waiting' as const },
+      { id: 'db', label: 'Pipeline records', detail: 'runs, steps, stories', status: 'waiting' as const },
     ];
     setDeleteSteps(steps);
     try {
@@ -110,12 +110,12 @@ export function Projects() {
       const log = result.log || [];
       const logStr = log.join(' ');
       const updated = steps.map(s => {
-        if (s.id === 'service') return { ...s, status: logStr.includes('stopped') ? 'done' as const : logStr.includes('Service') ? 'fail' as const : 'skip' as const };
-        if (s.id === 'tunnel') return { ...s, status: logStr.includes('Tunnel entry') || logStr.includes('Tunnel:') ? 'done' as const : logStr.includes('Tunnel') && logStr.includes('failed') ? 'fail' as const : 'skip' as const };
-        if (s.id === 'files') return { ...s, status: logStr.includes('deleted') && logStr.includes('Repo') ? 'done' as const : logStr.includes('deletion failed') ? 'fail' as const : 'skip' as const };
-        if (s.id === 'github') return { ...s, status: logStr.includes('GitHub repo deleted') ? 'done' as const : logStr.includes('GitHub delete failed') ? 'fail' as const : 'skip' as const };
-        if (s.id === 'json') return { ...s, status: logStr.includes('Removed from projects.json') ? 'done' as const : 'skip' as const };
-        if (s.id === 'db') return { ...s, status: logStr.includes('Setfarm') ? 'done' as const : 'skip' as const };
+        if (s.id === 'service') return { ...s, status: logStr.includes('Service') && !logStr.includes('Service stopped') ? 'fail' as const : 'done' as const };
+        if (s.id === 'tunnel') return { ...s, status: logStr.includes('Tunnel') && logStr.includes('failed') ? 'fail' as const : 'done' as const };
+        if (s.id === 'files') return { ...s, status: logStr.includes('deletion failed') ? 'fail' as const : 'done' as const };
+        if (s.id === 'github') return { ...s, status: logStr.includes('GitHub delete failed') ? 'fail' as const : 'done' as const };
+        if (s.id === 'json') return { ...s, status: 'done' as const };
+        if (s.id === 'db') return { ...s, status: 'done' as const };
         return s;
       });
       for (let i = 0; i < updated.length; i++) {
@@ -192,7 +192,7 @@ export function Projects() {
       setProjects(prev => prev.map(pr =>
         pr.id === p.id ? { ...pr, serviceStatus: result.serviceStatus ?? (action === "start" ? "active" : "inactive"), manuallyDisabled: action === "stop" } : pr
       ));
-      toast(p.name + " " + (action === "start" ? "baslatildi" : "durduruldu"), "success");
+      toast(p.name + " " + (action === "start" ? "started" : "stopped"), "success");
     } catch (err: any) {
       toast("Toggle failed: " + err.message, "error");
     } finally {
@@ -205,7 +205,7 @@ export function Projects() {
       p.id !== "mission-control" && p.type !== "mobile" && p.service &&
       (action === "start" ? p.serviceStatus !== "active" : p.serviceStatus === "active")
     );
-    if (targets.length === 0) { toast("Degistirilecek servis yok", "error"); return; }
+    if (targets.length === 0) { toast("No service needs this action", "error"); return; }
     setBulkAction(action);
     let ok = 0, fail = 0;
     for (const p of targets) {
@@ -217,7 +217,7 @@ export function Projects() {
         ok++;
       } catch { fail++; }
     }
-    toast(ok + " servis " + (action === "start" ? "baslatildi" : "durduruldu") + (fail ? ", " + fail + " basarisiz" : ""), ok > 0 ? "success" : "error");
+    toast(ok + " service(s) " + (action === "start" ? "started" : "stopped") + (fail ? ", " + fail + " failed" : ""), ok > 0 ? "success" : "error");
     setBulkAction(null);
   };
 
@@ -228,7 +228,7 @@ export function Projects() {
     setDeleteResult(null);
   };
 
-  if (loading) return <div className="page-loading">Projeler yukleniyor...</div>;
+  if (loading) return <div className="page-loading">Loading projects...</div>;
 
   const ownProjectsRaw = projects.filter((p) => p.category === "own" && p.id !== "mission-control");
   const ownProjects = [...ownProjectsRaw].sort((a, b) => {
@@ -237,7 +237,7 @@ export function Projects() {
       case 'port': return (a.ports?.frontend || 9999) - (b.ports?.frontend || 9999);
       case 'name': return a.name.localeCompare(b.name);
       case 'run': {
-        // runNumber yoksa createdAt'e göre sırala (en yeni üstte)
+        // Prefer run numbers; fall back to newest projects first.
         const aRun = a.runNumber || 0;
         const bRun = b.runNumber || 0;
         if (aRun === 0 && bRun === 0) return (b.createdAt || '').localeCompare(a.createdAt || '');
@@ -258,23 +258,23 @@ export function Projects() {
   return (
     <div className="projects-page">
       <div className="projects-page__header">
-        <GlitchText text="PROJELER" tag="h2" />
+        <GlitchText text="PROJECTS" tag="h2" />
         <div className="projects-page__actions">
-          <button className="btn btn--small btn--primary" onClick={() => setShowCreate(true)}>+ YENI PROJE</button>
+          <button className="btn btn--small btn--primary" onClick={() => setShowCreate(true)}>+ NEW PROJECT</button>
           <button className="btn btn--small" onClick={() => importRef.current?.click()}>IMPORT</button>
           <input ref={importRef} type="file" accept=".json" style={{ display: "none" }} onChange={handleImport} />
           <button className="btn btn--small btn--success" onClick={() => handleBulkToggle("start")} disabled={!!bulkAction}>
-            {bulkAction === "start" ? "BASLATILIYOR..." : "TUMUNU BASLAT"}
+            {bulkAction === "start" ? "STARTING..." : "START ALL"}
           </button>
           <button className="btn btn--small btn--danger" onClick={() => handleBulkToggle("stop")} disabled={!!bulkAction}>
-            {bulkAction === "stop" ? "DURDURULUYOR..." : "TUMUNU DURDUR"}
+            {bulkAction === "stop" ? "STOPPING..." : "STOP ALL"}
           </button>
         </div>
       </div>
 
       {/* External tools - link bar */}
       <div className="tools-bar">
-        <span className="tools-bar__label">ARACLAR</span>
+        <span className="tools-bar__label">TOOLS</span>
         <div className="tools-bar__links">
           {extProjects.map((p) => (
             <a
@@ -299,10 +299,10 @@ export function Projects() {
 
       {/* Sort controls */}
       <div className="projects-sort">
-        <span className="projects-sort__label">SIRALA:</span>
+        <span className="projects-sort__label">SORT:</span>
         {(['run', 'date', 'port', 'name', 'status'] as const).map((s) => (
           <button key={s} className={`projects-sort__btn ${sortBy === s ? 'projects-sort__btn--active' : ''}`} onClick={() => setSortBy(s)}>
-            {s === 'run' ? 'RUN' : s === 'date' ? 'TARIH' : s === 'port' ? 'PORT' : s === 'name' ? 'AD' : 'DURUM'}
+            {s === 'run' ? 'RUN' : s === 'date' ? 'DATE' : s === 'port' ? 'PORT' : s === 'name' ? 'NAME' : 'STATUS'}
           </button>
         ))}
       </div>

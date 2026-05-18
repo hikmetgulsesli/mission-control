@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { spawn } from 'child_process';
 import { homedir } from 'os';
 
-import { config } from '../config.js';
+import { config, PATHS } from '../config.js';
 
 const router = Router();
 
@@ -13,8 +13,11 @@ const ALLOWED_COMMANDS = new Set([
 ]);
 
 const SAFE_PATHS = [
-  `${homedir()}/.openclaw/`,
-  `${homedir()}/projects/mission-control/`,
+  `${PATHS.setfarmDir}/`,
+  `${PATHS.setfarmRepoDir}/`,
+  `${PATHS.scriptsDir}/`,
+  `${PATHS.agentsDir}/`,
+  `${PATHS.projectsDir}/mission-control/`,
   '/var/log/',
   '/tmp/',
 ];

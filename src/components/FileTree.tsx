@@ -55,9 +55,9 @@ export function FileTree({ entries, currentPath, selectedFile, onNavigate, onSel
   return (
     <div className="file-tree">
       <div className="file-tree__toolbar">
-        {onNewFile && <button className="file-tree__toolbar-btn" onClick={onNewFile} title="Yeni Dosya">+ Dosya</button>}
-        {onNewDir && <button className="file-tree__toolbar-btn" onClick={onNewDir} title="Yeni Dizin">+ Dizin</button>}
-        {onUpload && <button className="file-tree__toolbar-btn" onClick={onUpload} title="Yukle">Yukle</button>}
+        {onNewFile && <button className="file-tree__toolbar-btn" onClick={onNewFile} title="New File">+ File</button>}
+        {onNewDir && <button className="file-tree__toolbar-btn" onClick={onNewDir} title="New Directory">+ Directory</button>}
+        {onUpload && <button className="file-tree__toolbar-btn" onClick={onUpload} title="Upload">Upload</button>}
       </div>
       <div className="file-tree__header">
         {canGoUp && (

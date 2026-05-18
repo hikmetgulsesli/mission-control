@@ -1,7 +1,9 @@
-import { config } from '../config.js';
+import { homedir } from 'os';
+import { join } from 'path';
+import { config, PATHS } from '../config.js';
 import { sql } from './pg.js';
 
-const USE_PG = true; // Faz7: PG-only
+const USE_PG = true; // Phase 7: PG-only
 import { readFile } from "fs/promises";
 const BASE = config.setfarmUrl;
 async function setfarmFetch(path: string): Promise<any> {
@@ -10,6 +12,59 @@ async function setfarmFetch(path: string): Promise<any> {
         throw new Error(`Setfarm ${res.status}: ${path}`);
     return res.json();
 }
+
+function compactText(value: unknown, limit = 220): string {
+    return String(value || '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, limit);
+}
+
+function firstByStatus(stories: any[], statuses: string[]): any | undefined {
+    return stories.find((story) => statuses.includes(String(story.status || '')));
+}
+
+function parseContext(run: any): Record<string, any> {
+    try {
+        const raw = run?.context || {};
+        return typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch {
+        return {};
+    }
+}
+
+function summarizeRunBlocker(run: any, steps: any[], stories: any[]): { blockerStepId?: string; blockerSummary?: string } {
+    const context = parseContext(run);
+    const contextFailure = compactText(context.previous_failure || context.failure_suggestion || '');
+    if (contextFailure) {
+        return {
+            blockerStepId: compactText(context.failure_category || 'context', 48),
+            blockerSummary: contextFailure,
+        };
+    }
+
+    const failedStory = stories.find((story) => String(story.status || '') === 'failed' && compactText(story.output));
+    if (failedStory) {
+        return {
+            blockerStepId: failedStory.story_id,
+            blockerSummary: compactText(failedStory.output),
+        };
+    }
+
+    const blocker = [...steps]
+        .reverse()
+        .find((step) => {
+            const output = compactText(step.output);
+            if (!['failed', 'skipped'].includes(String(step.status || '')) || !output) return false;
+            return !/^STATUS:\s*done\b/i.test(output);
+        });
+    if (!blocker) return {};
+    return {
+        blockerStepId: blocker.step_id,
+        blockerSummary: compactText(blocker.output),
+    };
+}
+
 export async function getWorkflows() {
     if (USE_PG) {
         // Workflows are defined in YAML files, not DB. Return static list.
@@ -26,6 +81,12 @@ export async function getRuns() {
             const runIds = runs.map((r: any) => r.id);
             const steps = await sql`SELECT * FROM steps WHERE run_id = ANY(${runIds}) ORDER BY step_index`;
             const stories = await sql`SELECT run_id, status, COUNT(*)::int as cnt FROM stories WHERE run_id = ANY(${runIds}) GROUP BY run_id, status`;
+            const storyRows = await sql`
+                SELECT run_id, story_index, story_id, title, status, retry_count, max_retries, output
+                FROM stories
+                WHERE run_id = ANY(${runIds})
+                ORDER BY story_index
+            `;
 
             const stepMap: Record<string, any[]> = {};
             for (const s of steps) {
@@ -44,17 +105,43 @@ export async function getRuns() {
                 storyMap[s.run_id].total += s.cnt;
                 if (s.status === 'verified') { storyMap[s.run_id].verified += s.cnt; storyMap[s.run_id].completed += s.cnt; }
                 else if (s.status === 'done') storyMap[s.run_id].done += s.cnt;
-                else if (s.status === 'skipped') { storyMap[s.run_id].skipped += s.cnt; storyMap[s.run_id].completed += s.cnt; }
+                else if (s.status === 'skipped') { storyMap[s.run_id].skipped += s.cnt; storyMap[s.run_id].failed += s.cnt; }
                 else if (s.status === 'running') storyMap[s.run_id].running += s.cnt;
                 else if (s.status === 'pending') storyMap[s.run_id].pending += s.cnt;
                 else if (s.status === 'failed') storyMap[s.run_id].failed += s.cnt;
             }
+            const storyDetailMap: Record<string, any[]> = {};
+            for (const story of storyRows) {
+                if (!storyDetailMap[story.run_id]) storyDetailMap[story.run_id] = [];
+                storyDetailMap[story.run_id].push(story);
+            }
 
             for (const r of runs) {
-                (r as any).steps = stepMap[r.id] || [];
+                const runSteps = stepMap[r.id] || [];
+                const runStories = storyDetailMap[r.id] || [];
+                const storyPriority = String(r.status || '') === 'failed'
+                    ? ['failed', 'running', 'done', 'pending']
+                    : ['running', 'done', 'pending', 'failed'];
+                const currentStory =
+                    firstByStatus(runStories, storyPriority);
+                const nextStory =
+                    firstByStatus(runStories, ['running']) ||
+                    firstByStatus(runStories, ['pending']);
+                const blocker = summarizeRunBlocker(r, runSteps, runStories);
+                (r as any).steps = runSteps;
                 const sp = storyMap[r.id] || { total: 0, completed: 0, done: 0, verified: 0, skipped: 0, running: 0, pending: 0, failed: 0 };
                 (r as any).storyProgress = sp;
                 (r as any).hasFailures = (sp.failed || 0) > 0;
+                (r as any).currentStoryId = currentStory?.story_id || null;
+                (r as any).currentStoryTitle = currentStory?.title || null;
+                (r as any).currentStoryStatus = currentStory?.status || null;
+                (r as any).currentStoryRetry = currentStory?.retry_count || 0;
+                (r as any).currentStoryMaxRetries = currentStory?.max_retries || 0;
+                (r as any).nextStoryId = nextStory?.story_id || null;
+                (r as any).nextStoryTitle = nextStory?.title || null;
+                (r as any).nextStoryStatus = nextStory?.status || null;
+                (r as any).blockerStepId = blocker.blockerStepId || null;
+                (r as any).blockerSummary = blocker.blockerSummary || null;
             }
         }
         return runs;
@@ -87,7 +174,30 @@ export async function getEvents(runId?: string) {
     const path = runId ? `/api/events?runId=${runId}` : '/api/events';
     return setfarmFetch(path);
 }
-const EVENTS_PATH = '/home/setrox/.openclaw/setfarm/events.jsonl';
+function uniqueStrings(values: string[]): string[] {
+    return [...new Set(values.filter(Boolean))];
+}
+
+function eventFileCandidates(): string[] {
+    return uniqueStrings([
+        PATHS.eventsJsonl,
+        process.env.SETFARM_EVENTS_JSONL || '',
+        join(homedir(), '.openclaw', 'setfarm', 'events.jsonl'),
+    ]);
+}
+
+async function readEventsContent(): Promise<string> {
+    let lastError: unknown = null;
+    for (const path of eventFileCandidates()) {
+        try {
+            return await readFile(path, 'utf-8');
+        } catch (err) {
+            lastError = err;
+        }
+    }
+    throw lastError || new Error('Setfarm events file not found');
+}
+
 function parseEventsFile(content: string) {
     return content.trim().split('\n').filter(Boolean).map((line: string) => {
         try {
@@ -98,13 +208,63 @@ function parseEventsFile(content: string) {
         }
     }).filter(Boolean);
 }
+
+function coalescibleActivityKey(event: any): string | null {
+    const eventName = String(event?.event || event?.action || '');
+    if (eventName === 'step.progress') {
+        return [
+            eventName,
+            event.runId || '',
+            event.workflowId || '',
+            event.stepId || '',
+            event.agentId || '',
+            event.detail || '',
+        ].join('|');
+    }
+    if (eventName === 'step.running') {
+        return [
+            eventName,
+            event.runId || '',
+            event.workflowId || '',
+            event.stepId || '',
+            event.agentId || '',
+        ].join('|');
+    }
+    return null;
+}
+
+function coalesceActivityEvents(events: any[], limit: number): any[] {
+    const rawWindow = events.slice(-Math.max(limit * 8, 200)).reverse();
+    const coalesced: any[] = [];
+    for (const event of rawWindow) {
+        const key = coalescibleActivityKey(event);
+        const previous = coalesced[coalesced.length - 1];
+        if (key && previous?.__coalesceKey === key) {
+            previous.repeatCount = (previous.repeatCount || 1) + 1;
+            previous.firstTs = event.ts || previous.firstTs;
+            continue;
+        }
+        coalesced.push({
+            ...event,
+            __coalesceKey: key,
+            repeatCount: key ? 1 : undefined,
+            firstTs: event.ts,
+            lastTs: event.ts,
+        });
+    }
+    return coalesced.slice(0, limit).map(({ __coalesceKey, repeatCount, firstTs, lastTs, ...event }) => ({
+        ...event,
+        ...(repeatCount && repeatCount > 1 ? { repeatCount, firstTs, lastTs } : {}),
+    }));
+}
+
 export async function getSetfarmActivity(limit = 50) {
     // Always read from events.jsonl — these are pipeline events (run.started, step.done, story.started)
     // live_events table has agent tool calls (bash, read, write) which are noise
     try {
-        const content = await readFile(EVENTS_PATH, 'utf-8');
+        const content = await readEventsContent();
         const events = parseEventsFile(content);
-        return events.slice(-limit).reverse();
+        return coalesceActivityEvents(events, limit);
     }
     catch {
         return [];
@@ -114,7 +274,7 @@ export async function getSetfarmAgentStats() {
     // Use events.jsonl for pipeline agent stats (not live_events which has tool calls)
     {
         try {
-            const content = await readFile(EVENTS_PATH, 'utf-8');
+            const content = await readEventsContent();
             const events = parseEventsFile(content).filter((e: any) => ['step.running','step.done','step.failed','step.timeout'].includes(e.event || e.action));
             const stats: Record<string, any> = {};
             const stepStart: Record<string, string> = {};
@@ -187,7 +347,7 @@ export async function getSetfarmAgentStats() {
         }
     }
     try {
-        const content = await readFile(EVENTS_PATH, 'utf-8');
+        const content = await readEventsContent();
         const events = parseEventsFile(content);
         const stats: Record<string, any> = {};
         const stepAgent: Record<string, string> = {};
@@ -252,7 +412,7 @@ export async function getSetfarmAgentStats() {
 export async function getSetfarmAlerts() {
     // Use events.jsonl for pipeline alerts (not live_events which has tool calls)
     try {
-        const content = await readFile(EVENTS_PATH, 'utf-8');
+        const content = await readEventsContent();
         const events = parseEventsFile(content);
         const counts = {
             abandoned: events.filter((e: any) => e.detail?.includes('abandoned')).length,

@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { useToast } from './Toast';
 import type { Run } from '../lib/types';
 import { ConfirmDialog } from './ConfirmDialog';
+import { normalizeVisibleWorkflowStatus } from '../lib/status';
 
 interface Props {
   run: Run;
@@ -82,18 +83,21 @@ export const RunCard = React.memo(function RunCard({ run, onClick, onDelete }: P
       {expanded && run.steps && run.steps.length > 0 && (
         <div className="run-card__steps">
           <div className="run-card__steps-header">Pipeline Steps</div>
-          {run.steps.map((step, i) => (
-            <div key={step.id || i} className={`run-card__step run-card__step--${step.status}`}>
-              <span className="run-card__step-status">
-                {step.status === 'done' ? '✓' : step.status === 'failed' ? '✗' : step.status === 'pending' ? '▶' : '○'}
-              </span>
-              <span className="run-card__step-name">{step.id}</span>
-              <span className="run-card__step-agent">{step.agent?.split('/').pop()}</span>
-              <span className={`run-card__step-badge run-card__step-badge--${step.status}`}>
-                {step.status}
-              </span>
-            </div>
-          ))}
+          {run.steps.map((step, i) => {
+            const stepStatus = normalizeVisibleWorkflowStatus(step.status);
+            return (
+              <div key={step.id || i} className={`run-card__step run-card__step--${stepStatus}`}>
+                <span className="run-card__step-status">
+                  {stepStatus === 'done' ? '✓' : stepStatus === 'failed' ? '✗' : stepStatus === 'pending' ? '▶' : '○'}
+                </span>
+                <span className="run-card__step-name">{step.id}</span>
+                <span className="run-card__step-agent">{step.agent?.split('/').pop()}</span>
+                <span className={`run-card__step-badge run-card__step-badge--${stepStatus}`}>
+                  {stepStatus}
+                </span>
+              </div>
+            );
+          })}
           {totalSteps > 0 && (
             <div className="run-card__steps-summary">
               {doneSteps}/{totalSteps} completed
@@ -115,9 +119,9 @@ export const RunCard = React.memo(function RunCard({ run, onClick, onDelete }: P
       )}
     <ConfirmDialog
         open={showDeleteConfirm}
-        title="Run Sil"
-        message={`Run ${run.id.slice(0, 8)} silinecek. Bu islem geri alinamaz.`}
-        confirmLabel="Sil"
+        title="Delete Run"
+        message={`Run ${run.id.slice(0, 8)} will be deleted. This action cannot be undone.`}
+        confirmLabel="Delete"
         onConfirm={handleDeleteConfirmed}
         onCancel={() => setShowDeleteConfirm(false)}
       />

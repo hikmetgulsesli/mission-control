@@ -61,15 +61,15 @@ async function ensureSchema(): Promise<void> {
 async function seedTemplates(): Promise<void> {
   const { TEMPLATE_CONTENTS } = await import('./prd-templates.js');
   const templates = [
-    { id: 'tpl-ecommerce', name: 'E-Ticaret', category: 'ecommerce', platform: 'web', description: 'Urun listeleme, sepet, odeme akisi ile tam kapsamli e-ticaret sitesi' },
-    { id: 'tpl-portfolio', name: 'Portfolio', category: 'portfolio', platform: 'web', description: 'Kisisel portfolio sitesi — projeler, hakkinda, iletisim' },
-    { id: 'tpl-saas', name: 'SaaS Landing', category: 'saas', platform: 'web', description: 'SaaS urun landing page — hero, ozellikler, fiyatlandirma, CTA' },
-    { id: 'tpl-blog', name: 'Blog', category: 'blog', platform: 'web', description: 'Blog sitesi — yazi listesi, detay, kategoriler, arama' },
-    { id: 'tpl-dashboard', name: 'Dashboard', category: 'dashboard', platform: 'web', description: 'Veri dashboardu — grafikler, tablolar, metrikler, filtreler' },
-    { id: 'tpl-admin', name: 'Admin Panel', category: 'admin', platform: 'web', description: 'CRUD admin paneli — kullanicilar, icerik yonetimi, ayarlar' },
-    { id: 'tpl-mobile', name: 'Mobil App', category: 'mobile', platform: 'mobile', description: 'React Native mobil uygulama — tab navigation, liste, detay' },
-    { id: 'tpl-game', name: 'Oyun', category: 'game', platform: 'web', description: 'Canvas/WebGL tabanli basit oyun — menu, oyun ekrani, skor' },
-    { id: 'tpl-docs', name: 'Dokumantasyon', category: 'docs', platform: 'web', description: 'Dokumantasyon sitesi — sidebar nav, markdown render, arama' },
+    { id: 'tpl-ecommerce', name: 'E-Commerce', category: 'ecommerce', platform: 'web', description: 'Full e-commerce site with product discovery, cart, checkout, and account flows' },
+    { id: 'tpl-portfolio', name: 'Portfolio', category: 'portfolio', platform: 'web', description: 'Personal portfolio with projects, about, experience, and contact sections' },
+    { id: 'tpl-saas', name: 'SaaS Landing', category: 'saas', platform: 'web', description: 'SaaS landing page with hero, features, pricing, testimonials, and CTA' },
+    { id: 'tpl-blog', name: 'Blog', category: 'blog', platform: 'web', description: 'Blog site with article list, article details, categories, and search' },
+    { id: 'tpl-dashboard', name: 'Dashboard', category: 'dashboard', platform: 'web', description: 'Analytics dashboard with charts, tables, metrics, filters, and reports' },
+    { id: 'tpl-admin', name: 'Admin Panel', category: 'admin', platform: 'web', description: 'CRUD admin panel with users, content management, and settings' },
+    { id: 'tpl-mobile', name: 'Mobile App', category: 'mobile', platform: 'mobile', description: 'React Native mobile app with tab navigation, lists, details, and profile' },
+    { id: 'tpl-game', name: 'Game', category: 'game', platform: 'web', description: 'Canvas/WebGL game with menu, gameplay screen, settings, and score state' },
+    { id: 'tpl-docs', name: 'Documentation', category: 'docs', platform: 'web', description: 'Documentation site with sidebar navigation, Markdown rendering, and search' },
   ];
 
   for (const t of templates) {

@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { execFile, execFileSync } from 'node:child_process';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
 import { checkSsrf } from '../utils/ssrf.js';
 
 const router = Router();
 
-const HOME = process.env.HOME ?? '/home/setrox';
+const HOME = process.env.HOME ?? homedir();
 const SCRAPE_PYTHON = join(HOME, 'libs', 'scrapling', '.venv', 'bin', 'python');
 const SCRAPE_SCRIPT = join(HOME, 'libs', 'scrapling', 'scrape-api.py');
 const SCRAPE_CWD = join(HOME, 'libs', 'scrapling');

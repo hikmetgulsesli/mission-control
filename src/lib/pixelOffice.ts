@@ -1319,7 +1319,7 @@ export class PixelOfficeEngine {
 
     // Clock
     const now = new Date();
-    const timeStr = now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     drawRect(this.ctx, W - 80, H - 30, 70, 22, '#111122');
     drawPixelBorder(this.ctx, W - 80, H - 30, 70, 22, '#333355', 1);
     drawPixelText(this.ctx, timeStr, W - 45, H - 13, '#00ff41', 11);

@@ -3,7 +3,7 @@ import path from 'path';
 import { createHash } from 'crypto';
 import { execFile as execFileCb } from 'child_process';
 import { promisify } from 'util';
-import { readFile } from 'fs/promises';
+import { readdir, readFile, stat } from 'fs/promises';
 import { sql } from './pg.js';
 
 const execFileAsync = promisify(execFileCb);
@@ -16,6 +16,19 @@ export { STUCK_DETECTION_MS, STUCK_THRESHOLD_MS, MAX_AUTO_UNSTICK };
 
 // Whitelist validation: IDs must be alphanumeric/dash/underscore (setfarm uses UUIDs and slugs)
 const SAFE_ID_RE = /^[a-zA-Z0-9_-]+$/;
+const FILE_TREE_LIMIT = 700;
+const GIT_LOG_LIMIT = 25;
+const DIFF_FILE_LIMIT = 80;
+const TREE_EXCLUDES = new Set([
+  '.git',
+  'node_modules',
+  'dist',
+  'build',
+  '.next',
+  '.turbo',
+  'coverage',
+  '.cache',
+]);
 
 function validateId(value: string, name: string): string {
   if (!value || !SAFE_ID_RE.test(value)) {
@@ -27,6 +40,197 @@ function validateId(value: string, name: string): string {
 function escapeStr(value: string): string {
   // Strip null bytes and control characters (except newline/tab), then escape single quotes
   return value.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '').replace(/'/g, "''");
+}
+
+function safeJson(value: unknown, fallback: any = null): any {
+  if (value == null || value === '') return fallback;
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function parseRunContext(run: any): Record<string, any> {
+  const parsed = safeJson(run?.context, {});
+  return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+}
+
+function expandRuntimePath(value: string): string {
+  return value
+    .replace(/^\$HOME(?=\/|$)/, homedir())
+    .replace(/^~(?=\/|$)/, homedir());
+}
+
+function repoPathForRun(run: any): string | null {
+  const context = parseRunContext(run);
+  const candidates = [context.repo, context.REPO, context.project_path, context.workdir];
+  for (const candidate of candidates) {
+    if (typeof candidate !== 'string' || !candidate.trim()) continue;
+    return expandRuntimePath(candidate.trim());
+  }
+  return null;
+}
+
+function parseJsonList(value: unknown): any[] {
+  if (Array.isArray(value)) return value;
+  const parsed = safeJson(value, null);
+  if (Array.isArray(parsed)) return parsed;
+  if (typeof value === 'string' && value.trim()) {
+    return value
+      .split(/\r?\n|,/)
+      .map((item) => item.replace(/^[-*]\s*/, '').trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function normalizeStoryRow(story: any): any {
+  const acceptanceCriteria = parseJsonList(story.acceptance_criteria);
+  const scopeFiles = parseJsonList(story.scope_files).map(String).filter(Boolean);
+  const sharedFiles = parseJsonList(story.shared_files).map(String).filter(Boolean);
+  const dependsOn = parseJsonList(story.depends_on).map(String).filter(Boolean);
+  const storyScreens = parseJsonList(story.story_screens);
+  return {
+    ...story,
+    storyId: story.story_id || story.storyId || story.id,
+    title: story.title || story.story_id || story.id,
+    description: story.description || '',
+    acceptanceCriteria,
+    scopeFiles,
+    sharedFiles,
+    dependsOn,
+    storyScreens,
+    retryCount: Number(story.retry_count || 0),
+    maxRetries: Number(story.max_retries || 0),
+    output: story.output || '',
+    prUrl: story.pr_url || null,
+    mergeStatus: story.merge_status || null,
+  };
+}
+
+async function pathExists(target: string): Promise<boolean> {
+  try {
+    await stat(target);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function fallbackFileTree(root: string): Promise<string[]> {
+  const files: string[] = [];
+  async function walk(dir: string, rel = '', depth = 0): Promise<void> {
+    if (files.length >= FILE_TREE_LIMIT || depth > 8) return;
+    let entries: any[];
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (files.length >= FILE_TREE_LIMIT) return;
+      if (TREE_EXCLUDES.has(entry.name)) continue;
+      const entryRel = rel ? `${rel}/${entry.name}` : entry.name;
+      const entryPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await walk(entryPath, entryRel, depth + 1);
+      } else if (entry.isFile()) {
+        files.push(entryRel);
+      }
+    }
+  }
+  await walk(root);
+  return files.sort();
+}
+
+async function readRepoFileTree(repo: string | null): Promise<string[]> {
+  if (!repo || !(await pathExists(repo))) return [];
+  try {
+    const { stdout } = await execFileAsync('git', ['-C', repo, 'ls-files'], {
+      timeout: 5000,
+      maxBuffer: 2 * 1024 * 1024,
+    });
+    const files = stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    if (files.length > 0) return files.slice(0, FILE_TREE_LIMIT);
+  } catch {
+    // Non-git project directories still deserve a file tree in Mission Control.
+  }
+  return fallbackFileTree(repo);
+}
+
+async function readGitLog(repo: string | null): Promise<any[]> {
+  if (!repo || !(await pathExists(path.join(repo, '.git')))) return [];
+  try {
+    const { stdout } = await execFileAsync('git', [
+      '-C',
+      repo,
+      'log',
+      `--max-count=${GIT_LOG_LIMIT}`,
+      '--date=iso-strict',
+      '--pretty=format:%h%x1f%ad%x1f%an%x1f%s',
+    ], { timeout: 5000, maxBuffer: 1024 * 1024 });
+    return stdout.split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => {
+        const [hash, date, author, ...messageParts] = line.split('\x1f');
+        return { hash, date, author, message: messageParts.join('\x1f') };
+      })
+      .filter((commit) => commit.hash);
+  } catch {
+    return [];
+  }
+}
+
+async function readDiffStats(repo: string | null, commits: any[]): Promise<any[]> {
+  if (!repo || commits.length === 0) return [];
+  const result: any[] = [];
+  for (const commit of commits.slice(0, 12)) {
+    try {
+      const { stdout } = await execFileAsync('git', ['-C', repo, 'show', '--name-only', '--format=', '-n', '1', commit.hash], {
+        timeout: 5000,
+        maxBuffer: 512 * 1024,
+      });
+      const files = stdout.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(0, DIFF_FILE_LIMIT);
+      result.push({ hash: commit.hash, files });
+    } catch {
+      result.push({ hash: commit.hash, files: [] });
+    }
+  }
+  return result;
+}
+
+function buildAgentChatsFromSteps(steps: any[]): any[] {
+  const grouped = new Map<string, any[]>();
+  for (const step of steps) {
+    const output = String(step.output || '').trim();
+    if (!output) continue;
+    const agent = String(step.agent_id || step.step_id || 'agent');
+    const messages = grouped.get(agent) || [];
+    messages.push({
+      role: String(step.step_id || 'step'),
+      text: output.length > 5000 ? `${output.slice(0, 5000)}...` : output,
+      timestamp: step.updated_at || step.created_at,
+    });
+    grouped.set(agent, messages);
+  }
+  return [...grouped.entries()].map(([agent, messages]) => ({
+    agent,
+    sessionId: `${agent}-${messages.length}`,
+    messages,
+  }));
+}
+
+function buildProgressLog(steps: any[], stories: any[]): string {
+  const lines: string[] = [];
+  for (const step of steps) {
+    lines.push(`${step.step_id || step.id}: ${step.status || 'unknown'}`);
+  }
+  for (const story of stories) {
+    lines.push(`${story.story_id || story.id}: ${story.status || 'unknown'} ${story.title || ''}`.trim());
+  }
+  return lines.join('\n');
 }
 
 export async function querySetfarmDb(sqlStr: string): Promise<any[]> {
@@ -209,11 +413,35 @@ export async function getRunDetail(runId: string) {
   const [runs, steps, stories] = await Promise.all([
     sql`SELECT * FROM runs WHERE id = ${safeId}`,
     sql`SELECT * FROM steps WHERE run_id = ${safeId} ORDER BY step_index`,
-    sql`SELECT id, run_id, status FROM stories WHERE run_id = ${safeId}`,
+    sql`SELECT * FROM stories WHERE run_id = ${safeId} ORDER BY story_index`,
   ]);
 
   if (runs.length === 0) return null;
-  return { run: runs[0], steps, stories };
+  const run = runs[0];
+  const repo = repoPathForRun(run);
+  const normalizedStories = stories.map(normalizeStoryRow);
+  const gitLog = await readGitLog(repo);
+  const [fileTree, diffStats] = await Promise.all([
+    readRepoFileTree(repo),
+    readDiffStats(repo, gitLog),
+  ]);
+
+  return {
+    id: run.id,
+    workflow: run.workflow_id,
+    status: run.status,
+    task: run.task,
+    storyCount: normalizedStories.length,
+    run,
+    steps,
+    fullSteps: steps,
+    stories: normalizedStories,
+    gitLog,
+    diffStats,
+    fileTree,
+    agentChats: buildAgentChatsFromSteps(steps),
+    progressLog: buildProgressLog(steps, stories),
+  };
 }
 
 // Known error patterns for diagnosis
@@ -221,37 +449,37 @@ const KNOWN_PATTERNS = [
   { pattern: /SSL_ERROR|CERT_HAS_EXPIRED|ERR_CERT|unable to verify.*cert/i,
     cause: 'missing_ssl_cert',
     fixable: true,
-    description: 'SSL sertifika sorunu',
-    suggestedFix: 'Self-signed cert olustur' },
+    description: 'SSL certificate issue',
+    suggestedFix: 'Create a self-signed certificate' },
   { pattern: /EACCES|Permission denied|EPERM/i,
     cause: 'permission_error',
     fixable: false,
-    description: 'Dosya/dizin izin hatasi',
+    description: 'File or directory permission error',
     suggestedFix: null },
   { pattern: /rate.?limit|429|too many requests|quota exceeded/i,
     cause: 'rate_limit',
     fixable: true,
-    description: 'API rate limit asimi',
-    suggestedFix: 'Story skip et ve devam et' },
+    description: 'API rate limit exceeded',
+    suggestedFix: 'Skip the story and continue' },
   { pattern: /ECONNREFUSED|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|network error/i,
     cause: 'network_error',
     fixable: false,
-    description: 'Ag baglanti hatasi',
+    description: 'Network connection error',
     suggestedFix: null },
   { pattern: /Cannot find module|MODULE_NOT_FOUND|ENOENT.*node_modules/i,
     cause: 'dependency_error',
     fixable: true,
-    description: 'Eksik npm paketi',
-    suggestedFix: 'npm install calistir' },
+    description: 'Missing npm package',
+    suggestedFix: 'Run npm install' },
   { pattern: /missing.*tool|tool.*not.*found|command not found/i,
     cause: 'missing_tool',
     fixable: false,
-    description: 'Gerekli tool/komut bulunamadi',
+    description: 'Required tool or command not found',
     suggestedFix: null },
   { pattern: /\[missing:\s*\w+\]/i,
     cause: 'missing_context_var',
     fixable: false,
-    description: 'Onceki step gerekli output uretmedi (orn: PR URL)',
+    description: 'Previous step did not produce required output, such as a PR URL',
     suggestedFix: null },
 ];
 
@@ -278,7 +506,7 @@ export async function diagnoseStuckStep(runId: string, stepId?: string) {
   }
 
   if (steps.length === 0) {
-    return { stepId, cause: 'not_found', fixable: false, description: 'Step bulunamadi', excerpt: '', suggestedFix: null };
+    return { stepId, cause: 'not_found', fixable: false, description: 'Step not found', excerpt: '', suggestedFix: null };
   }
 
   const step = steps[0];
@@ -348,7 +576,7 @@ export async function diagnoseStuckStep(runId: string, stepId?: string) {
     storyId: step.current_story_id || null,
     cause: 'unknown',
     fixable: false,
-    description: 'Bilinmeyen hata',
+    description: 'Unknown error',
     excerpt: textToAnalyze.slice(-200).replace(/\n/g, ' ').trim(),
     suggestedFix: null,
   };
@@ -371,10 +599,10 @@ export async function tryAutoFix(runId: string, cause: string, storyId?: string 
             -subj "/C=TR/ST=Local/L=Local/O=OpenClaw/CN=localhost" 2>&1
         `], { timeout: 15000 });
         console.log(`[MEDIC] Auto-fix: missing_ssl_cert -> self-signed cert created`);
-        return { success: true, message: 'Self-signed SSL cert olusturuldu' };
+        return { success: true, message: 'Self-signed SSL certificate created' };
       } catch (err: any) {
         console.error(`[MEDIC] Auto-fix: missing_ssl_cert -> FAILED: ${err.message}`);
-        return { success: false, message: `SSL cert olusturulamadi: ${err.message}` };
+        return { success: false, message: `SSL certificate could not be created: ${err.message}` };
       }
     },
 
@@ -386,10 +614,10 @@ export async function tryAutoFix(runId: string, cause: string, storyId?: string 
           env: SETFARM_CLI_ENV,
         });
         console.log(`[MEDIC] Auto-fix: dependency_error -> npm install ok`);
-        return { success: true, message: 'npm install basarili' };
+        return { success: true, message: 'npm install succeeded' };
       } catch (err: any) {
         console.error(`[MEDIC] Auto-fix: dependency_error -> FAILED: ${err.message}`);
-        return { success: false, message: `npm install basarisiz: ${err.message}` };
+        return { success: false, message: `npm install failed: ${err.message}` };
       }
     },
 
@@ -401,9 +629,9 @@ export async function tryAutoFix(runId: string, cause: string, storyId?: string 
           WHERE id = ${safeStoryId}
         `;
         console.log(`[MEDIC] Auto-fix: rate_limit -> story ${storyId} skipped`);
-        return { success: true, message: `Story ${storyId} skip edildi (rate limit)` };
+        return { success: true, message: `Story ${storyId} skipped due to rate limit` };
       }
-      return { success: false, message: 'Story ID bulunamadi, skip yapilamadi' };
+      return { success: false, message: 'Story ID not found; skip could not be applied' };
     },
   };
 
@@ -731,8 +959,8 @@ export async function deleteRunsByProject(projectName: string): Promise<{ delete
 // Wave 1 fix #1 + #9 (plan: reactive-frolicking-cupcake): previously "failed" stories
 // were added to the "completed" bucket, which made run #338 show "5/5 stories (100%)"
 // even though 2 stories were in merge-conflict limbo. failed and done are now tracked
-// in dedicated buckets, and "completed" only sums verified + skipped (the terminal
-// success states). "done" is excluded because under direct-merge it means "implement
+// in dedicated buckets, and "completed" only sums verified. "done" is excluded
+// because under direct-merge it means "implement
 // finished, merge pending" — not actually complete from the run's perspective.
 export async function getBatchStoryProgress(runIds: string[]): Promise<Record<string, { completed: number; total: number; verified: number; skipped: number; running: number; pending: number; done: number; failed: number }>> {
   if (runIds.length === 0) return {};
@@ -752,7 +980,7 @@ export async function getBatchStoryProgress(runIds: string[]): Promise<Record<st
     if (!result[row.run_id]) continue;
     result[row.run_id].total += row.cnt;
     if (row.status === "verified") { result[row.run_id].verified += row.cnt; result[row.run_id].completed += row.cnt; }
-    else if (row.status === "skipped") { result[row.run_id].skipped += row.cnt; result[row.run_id].completed += row.cnt; }
+    else if (row.status === "skipped") { result[row.run_id].skipped += row.cnt; result[row.run_id].failed += row.cnt; }
     else if (row.status === "done") { result[row.run_id].done += row.cnt; }
     else if (row.status === "running") result[row.run_id].running += row.cnt;
     else if (row.status === "pending") result[row.run_id].pending += row.cnt;

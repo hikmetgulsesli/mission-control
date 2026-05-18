@@ -1,9 +1,10 @@
 import React, { useState, useCallback, useEffect, memo } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { InlinePlanView } from "./pipeline/InlinePlanView";
 import { DeleteRunModal } from "./pipeline/DeleteRunModal";
 import { ErrorCard } from "./pipeline/ErrorCard";
+import { normalizeVisibleWorkflowStatus } from "../lib/status";
 
 const STEP_ORDER = ["plan", "design", "stories", "setup-repo", "setup-build", "implement", "verify", "security-gate", "qa-test", "final-test", "deploy"];
 const STEP_LABELS: Record<string, string> = {
@@ -63,7 +64,17 @@ interface PipelineRun {
   status: string;
   updatedAt: string;
   steps: StepLike[];
-  storyProgress: { completed: number; total: number };
+  storyProgress: { completed: number; total: number; done?: number; verified?: number; skipped?: number; running?: number; pending?: number; failed?: number };
+  currentStoryId?: string | null;
+  currentStoryTitle?: string | null;
+  currentStoryStatus?: string | null;
+  currentStoryRetry?: number;
+  currentStoryMaxRetries?: number;
+  nextStoryId?: string | null;
+  nextStoryTitle?: string | null;
+  nextStoryStatus?: string | null;
+  blockerStepId?: string | null;
+  blockerSummary?: string | null;
 }
 
 /** Step detail data fetched on demand from runDetail API */
@@ -77,15 +88,16 @@ interface StepDetailData {
 }
 
 function statusClass(s: string): string {
-  if (s === "done") return "af-step--done";
-  if (s === "running") return "af-step--running";
-  if (s === "failed") return "af-step--failed";
+  const status = normalizeVisibleWorkflowStatus(s);
+  if (status === "done") return "af-step--done";
+  if (status === "running") return "af-step--running";
+  if (status === "failed") return "af-step--failed";
   return "af-step--pending";
 }
 
 function extractTitle(task: string): string {
-  const projeMatch = task.match(/Proje:\s*([^\s]+)/);
-  const aciklamaMatch = task.match(/A[c\xe7][\u0131i]klama:\s*(.+)/i);
+  const projeMatch = task.match(/Project:\s*([^\s]+)/);
+  const aciklamaMatch = task.match(/Description:\s*(.+)/i);
   if (projeMatch) {
     const name = projeMatch[1];
     const desc = aciklamaMatch ? aciklamaMatch[1].trim() : "";
@@ -117,11 +129,11 @@ interface RunCardInlineProps {
   errorCards: ClassifiedError[];
   onToggleExpand: () => void;
   onRetry: (runId: string, stepId: string) => void;
-  onStoryRetry: (runId: string, storyId: string) => void;
   onStop: (runId: string) => void;
   onResume: (runId: string) => void;
   onDelete: (run: PipelineRun) => void;
   onStepClick: (runId: string, stepId: string) => void;
+  onOpenDetail: (runId: string) => void;
 }
 
 const RunCardInline = memo(function RunCardInline({
@@ -135,11 +147,11 @@ const RunCardInline = memo(function RunCardInline({
   errorCards,
   onToggleExpand,
   onRetry,
-  onStoryRetry,
   onStop,
   onResume,
   onDelete,
   onStepClick,
+  onOpenDetail,
 }: RunCardInlineProps) {
   // Task 4: Fix Array.sort mutation — use spread copy before sorting
   const steps = [...run.steps].sort((a, b) => {
@@ -163,6 +175,9 @@ const RunCardInline = memo(function RunCardInline({
   const progressPct = run.storyProgress.total > 0
     ? Math.round((run.storyProgress.completed / run.storyProgress.total) * 100)
     : 0;
+  const storyRetry = Number(run.currentStoryRetry || 0);
+  const storyMaxRetries = Number(run.currentStoryMaxRetries || 0);
+  const hasStoryLine = Boolean(run.currentStoryId || run.nextStoryId || run.blockerSummary);
 
   // Phase grouping for feature-dev workflow (the main one with PIPELINE_PHASES)
   const phaseGroups = groupStepsByPhase(allSteps);
@@ -173,7 +188,7 @@ const RunCardInline = memo(function RunCardInline({
 
   return (
     <div className={`af-pipeline__run af-pipeline__run--${run.status}`}>
-      <div className="af-pipeline__header" onClick={onToggleExpand} style={{ cursor: "pointer" }}>
+      <div className="af-pipeline__header">
         <span className={`af-pipeline__status af-pipeline__status--${run.status}`}>
           {run.status === "running" && <span className="af-pulse" />}
           {run.status.toUpperCase()}
@@ -183,58 +198,94 @@ const RunCardInline = memo(function RunCardInline({
         <span className="af-pipeline__task">{truncate(extractTitle(run.task), 60)}</span>
         <span className="af-pipeline__run-actions" onClick={(e) => e.stopPropagation()}>
           {run.status === "running" ? (
-            <button className="af-run-btn af-run-btn--stop" onClick={() => onStop(run.id)} disabled={actionLoading === run.id + ":stop"} title="Durdur">
+            <button className="af-run-btn af-run-btn--stop" onClick={() => onStop(run.id)} disabled={actionLoading === run.id + ":stop"} title="Stop">
               {actionLoading === run.id + ":stop" ? "..." : "\u23F8"}
             </button>
           ) : (run.status === "failed" || run.status === "cancelled") ? (
-            <button className="af-run-btn af-run-btn--resume" onClick={() => onResume(run.id)} disabled={actionLoading === run.id + ":resume"} title="Devam Et">
+            <button className="af-run-btn af-run-btn--resume" onClick={() => onResume(run.id)} disabled={actionLoading === run.id + ":resume"} title="Resume">
               {actionLoading === run.id + ":resume" ? "..." : "\u25B6"}
             </button>
           ) : null}
-          <button className="af-run-btn af-run-btn--delete" onClick={() => onDelete(run)} disabled={actionLoading === run.id + ":delete"} title="Sil">
+          <button className="af-run-btn af-run-btn--detail" onClick={() => onOpenDetail(run.id)} title="Open run detail">
+            DETAIL
+          </button>
+          <button className="af-run-btn af-run-btn--delete" onClick={() => onDelete(run)} disabled={actionLoading === run.id + ":delete"} title="Delete">
             {actionLoading === run.id + ":delete" ? "..." : "\u2715"}
           </button>
+          <button className="af-run-btn af-run-btn--expand" onClick={onToggleExpand} title={isExpanded ? "Hide preview" : "Show preview"}>
+            {isExpanded ? "\u25B2" : "\u25BC"}
+          </button>
         </span>
-        <span className="af-pipeline__expand">{isExpanded ? "\u25B2" : "\u25BC"}</span>
       </div>
 
+      {hasStoryLine && (
+        <div className="af-pipeline__storyline">
+          {run.currentStoryId && (
+            <span className="af-pipeline__story-pill">
+              <b>{run.currentStoryId}</b>
+              {run.currentStoryStatus && <span>{normalizeVisibleWorkflowStatus(run.currentStoryStatus)}</span>}
+              {storyMaxRetries > 0 && <span>R{storyRetry}/{storyMaxRetries}</span>}
+              {run.currentStoryTitle && <span title={run.currentStoryTitle}>{truncate(run.currentStoryTitle, 54)}</span>}
+            </span>
+          )}
+          {run.nextStoryId && run.nextStoryId !== run.currentStoryId && (
+            <span className="af-pipeline__story-pill af-pipeline__story-pill--next">
+              <b>Next {run.nextStoryId}</b>
+              {run.nextStoryStatus && <span>{normalizeVisibleWorkflowStatus(run.nextStoryStatus)}</span>}
+              {run.nextStoryTitle && <span title={run.nextStoryTitle}>{truncate(run.nextStoryTitle, 54)}</span>}
+            </span>
+          )}
+          {run.blockerSummary && (
+            <span className="af-pipeline__story-pill af-pipeline__story-pill--blocker" title={run.blockerSummary}>
+              <b>{run.blockerStepId || "blocker"}</b>
+              <span>{truncate(run.blockerSummary, 110)}</span>
+            </span>
+          )}
+        </div>
+      )}
+
       <div className="af-pipeline__steps">
-        {allSteps.map((step, i) => (
-          <div key={`${step.stepId}-${i}`} className="af-step-wrapper">
-            {i > 0 && <span className="af-step-arrow">&rarr;</span>}
-            <div
-              className={`af-step ${statusClass(step.status)} ${step.status === "failed" ? "af-step--failed-highlight" : ""} ${selectedStep === step.stepId ? "af-step--selected" : ""}`}
-              title={`${step.stepId} (${step.agent?.split("/").pop() || "?"})`}
-              onClick={(e) => { e.stopPropagation(); onStepClick(run.id, step.stepId); }}
-              style={{ cursor: "pointer" }}
-            >
-              <div className="af-step__label">{STEP_LABELS[step.stepId] || step.stepId.toUpperCase()}</div>
-              {step.agent && <div className="af-step__agent">{step.agent.split("/").pop()}</div>}
-              {step.status === "running" && <div className="af-step__pulse" />}
-              {step.retryCount > 0 && <div className="af-step__retry">R{step.retryCount}</div>}
-              {step.status === "failed" && (
-                <button
-                  className="af-step__retry-btn"
-                  onClick={(e) => { e.stopPropagation(); onRetry(run.id, step.stepId); }}
-                  disabled={retrying === step.stepId}
-                >
-                  {retrying === step.stepId ? "..." : "RETRY"}
-                </button>
-              )}
+        {allSteps.map((step, i) => {
+          const stepStatus = normalizeVisibleWorkflowStatus(step.status);
+          return (
+            <div key={`${step.stepId}-${i}`} className="af-step-wrapper">
+              {i > 0 && <span className="af-step-arrow">&rarr;</span>}
+              <div
+                className={`af-step ${statusClass(stepStatus)} ${stepStatus === "failed" ? "af-step--failed-highlight" : ""} ${selectedStep === step.stepId ? "af-step--selected" : ""}`}
+                title={`${step.stepId} (${step.agent?.split("/").pop() || "?"})`}
+                onClick={(e) => { e.stopPropagation(); onStepClick(run.id, step.stepId); }}
+                style={{ cursor: "pointer" }}
+              >
+                <div className="af-step__label">{STEP_LABELS[step.stepId] || step.stepId.toUpperCase()}</div>
+                {step.agent && <div className="af-step__agent">{step.agent.split("/").pop()}</div>}
+                {stepStatus === "running" && <div className="af-step__pulse" />}
+                {step.retryCount > 0 && <div className="af-step__retry">R{step.retryCount}</div>}
+                {stepStatus === "failed" && (
+                  <button
+                    className="af-step__retry-btn"
+                    onClick={(e) => { e.stopPropagation(); onRetry(run.id, step.stepId); }}
+                    disabled={retrying === step.stepId}
+                  >
+                    {retrying === step.stepId ? "..." : "RETRY"}
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Task 2 & 3: Step Detail Drill-Down Panel */}
-      {selectedStep && selectedStepData && (
-        <div className={`af-step-detail ${selectedStepData.status === "failed" ? "af-step-detail--failed" : ""}`}>
+      {selectedStep && selectedStepData && (() => {
+        const selectedStatus = normalizeVisibleWorkflowStatus(selectedStepData.status);
+        return (
+        <div className={`af-step-detail ${selectedStatus === "failed" ? "af-step-detail--failed" : ""}`}>
           <div className="af-step-detail__header">
             <span className="af-step-detail__title">
               {STEP_LABELS[selectedStepData.stepId] || selectedStepData.stepId.toUpperCase()}
             </span>
-            <span className={`af-step-detail__status af-step-detail__status--${selectedStepData.status}`}>
-              {selectedStepData.status.toUpperCase()}
+            <span className={`af-step-detail__status af-step-detail__status--${selectedStatus}`}>
+              {selectedStatus.toUpperCase()}
             </span>
             {selectedStepData.agent && (
               <span className="af-step-detail__agent">Agent: {selectedStepData.agent.split("/").pop()}</span>
@@ -280,7 +331,7 @@ const RunCardInline = memo(function RunCardInline({
               <div className="af-step-detail__loading">Loading step details...</div>
             )}
             {/* Task 3: Diagnostic Error Cards for failed steps */}
-            {selectedStepData.status === "failed" && (() => {
+            {selectedStatus === "failed" && (() => {
               const stepErrors = errorCards.filter(e => e.stepId === selectedStepData.stepId);
               if (stepErrors.length > 0) {
                 return stepErrors.map((err, i) => (
@@ -308,18 +359,19 @@ const RunCardInline = memo(function RunCardInline({
               return null;
             })()}
             {/* Output excerpt for done/failed steps */}
-            {(selectedStepData.status === "done" || selectedStepData.status === "failed") && stepDetailData?.output && (
+            {(selectedStatus === "done" || selectedStatus === "failed") && stepDetailData?.output && (
               <div className="af-step-detail__output">
                 <span className="af-step-detail__output-label">Output</span>
                 <pre className="af-step-detail__output-text">{truncate(stepDetailData.output, 200)}</pre>
               </div>
             )}
-            {!stepDetailLoading && !stepDetailData?.output && !stepDetailData?.error && (selectedStepData.status === "done" || selectedStepData.status === "failed") && (
+            {!stepDetailLoading && !stepDetailData?.output && !stepDetailData?.error && (selectedStatus === "done" || selectedStatus === "failed") && (
               <div className="af-step-detail__empty">No output available</div>
             )}
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Error details shown via step drill-down click — no duplicate list needed */}
 
@@ -329,7 +381,7 @@ const RunCardInline = memo(function RunCardInline({
         const sp = run.storyProgress as any;
         const verifiedPct = ((sp.verified || 0) / t) * 100;
         const donePct = ((sp.done || 0) / t) * 100;
-        const skippedPct = ((sp.skipped || 0) / t) * 100;
+        const failedPct = (((sp.failed || 0) + (sp.skipped || 0)) / t) * 100;
         const runningPct = ((sp.running || 0) / t) * 100;
         return (
           <div className="af-pipeline__actions">
@@ -337,7 +389,7 @@ const RunCardInline = memo(function RunCardInline({
               <div className="af-pipeline__progress-bar" style={{ display: "flex", overflow: "hidden" }}>
                 {verifiedPct > 0 && <div style={{ width: `${verifiedPct}%`, background: "#22c55e", height: "100%", transition: "width .3s" }} title={`${sp.verified} verified`} />}
                 {donePct > 0 && <div style={{ width: `${donePct}%`, background: "#3b82f6", height: "100%", transition: "width .3s" }} title={`${sp.done} done`} />}
-                {skippedPct > 0 && <div style={{ width: `${skippedPct}%`, background: "#6b7280", height: "100%", transition: "width .3s" }} title={`${sp.skipped} skipped`} />}
+                {failedPct > 0 && <div style={{ width: `${failedPct}%`, background: "#ff0040", height: "100%", transition: "width .3s" }} title={`${(sp.failed || 0) + (sp.skipped || 0)} failed`} />}
                 {runningPct > 0 && <div style={{ width: `${runningPct}%`, background: "#f59e0b", height: "100%", transition: "width .3s" }} title={`${sp.running} running`} />}
               </div>
               <span className="af-pipeline__progress-text">
@@ -346,7 +398,7 @@ const RunCardInline = memo(function RunCardInline({
                   {sp.verified > 0 && <span style={{ color: "#22c55e" }}>{sp.verified} verified </span>}
                   {sp.done > 0 && <span style={{ color: "#3b82f6" }}>{sp.done} done </span>}
                   {sp.running > 0 && <span style={{ color: "#f59e0b" }}>{sp.running} running </span>}
-                  {sp.skipped > 0 && <span style={{ color: "#6b7280" }}>{sp.skipped} skipped</span>}
+                  {((sp.failed || 0) + (sp.skipped || 0)) > 0 && <span style={{ color: "#ff0040" }}>{(sp.failed || 0) + (sp.skipped || 0)} failed</span>}
                 </span>
               </span>
             </div>
@@ -354,10 +406,28 @@ const RunCardInline = memo(function RunCardInline({
         );
       })()}
 
-      {/* Expanded: inline plan view */}
+      {/* Expanded: compact run preview. Full contract/design/story detail lives on the Run page. */}
       {isExpanded && (
-        <div className="af-pipeline__expanded">
-          <InlinePlanView runId={run.id} onRetry={(storyId) => onStoryRetry(run.id, storyId)} />
+        <div className="af-pipeline__expanded af-pipeline__expanded--preview">
+          <div className="af-run-preview">
+            <div className="af-run-preview__cell">
+              <span>Current</span>
+              <strong>{run.currentStoryId || run.blockerStepId || normalizeVisibleWorkflowStatus(run.currentStoryStatus || run.status)}</strong>
+              <em>{truncate(run.currentStoryTitle || run.blockerSummary || extractTitle(run.task), 92)}</em>
+            </div>
+            <div className="af-run-preview__cell">
+              <span>Stories</span>
+              <strong>{run.storyProgress.completed}/{run.storyProgress.total || 0}</strong>
+              <em>
+                {Number((run.storyProgress as any).verified || 0)} verified
+                {Number((run.storyProgress as any).running || 0) > 0 ? `, ${(run.storyProgress as any).running} running` : ""}
+                {Number((run.storyProgress as any).failed || 0) > 0 ? `, ${(run.storyProgress as any).failed} failed` : ""}
+              </em>
+            </div>
+            <button className="af-run-preview__open" onClick={() => onOpenDetail(run.id)}>
+              Open Run Detail
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -365,6 +435,7 @@ const RunCardInline = memo(function RunCardInline({
 });
 
 export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefresh?: () => void }) {
+  const navigate = useNavigate();
   const [expandedRun, setExpandedRun] = useState<string | null>(null);
   const [retrying, setRetrying] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -490,14 +561,6 @@ export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefre
     }
   };
 
-  const handleStoryRetry = async (runId: string, storyId: string) => {
-    try {
-      await api.retryRun(runId, undefined, `Retry story ${storyId}`);
-    } catch (err: any) {
-      console.error("Story retry failed:", err);
-    }
-  };
-
   const handleStop = async (runId: string) => {
     setStopConfirm(runId);
   };
@@ -524,14 +587,14 @@ export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefre
     setActionLoading(deleteModal.runId + ":delete");
     setDeleteResult(null);
 
-    const steps: { id: string; label: string; status: "waiting" | "done" | "fail" | "skip"; detail?: string }[] = [
-      { id: "db", label: "DB kayitlari", status: "waiting", detail: "runs, steps, stories" },
+    const steps: { id: string; label: string; status: "waiting" | "done" | "fail"; detail?: string }[] = [
+      { id: "db", label: "DB records", status: "waiting", detail: "runs, steps, stories" },
     ];
     if (deleteCleanup) {
       steps.push(
         { id: "github", label: "GitHub repo", status: "waiting" },
-        { id: "files", label: "Yerel dosyalar", status: "waiting" },
-        { id: "service", label: "Systemd servisi", status: "waiting" },
+        { id: "files", label: "Local files", status: "waiting" },
+        { id: "service", label: "Systemd service", status: "waiting" },
         { id: "json", label: "projects.json", status: "waiting" },
         { id: "tunnel", label: "Cloudflare tunnel", status: "waiting" },
       );
@@ -547,25 +610,25 @@ export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefre
         if (s.id === "github") {
           if (log.includes("GitHub repo deleted")) return { ...s, status: "done" as const };
           if (log.includes("GitHub delete failed")) return { ...s, status: "fail" as const };
-          return { ...s, status: "skip" as const, detail: "repo bulunamadi" };
+          return { ...s, status: "done" as const, detail: "repo not found" };
         }
         if (s.id === "files") {
           if (log.includes("Local repo deleted") || (log.includes("Repo") && log.includes("deleted"))) return { ...s, status: "done" as const };
           if (log.includes("delete failed") || log.includes("deletion failed")) return { ...s, status: "fail" as const };
-          return { ...s, status: "skip" as const, detail: "dosya bulunamadi" };
+          return { ...s, status: "done" as const, detail: "file not found" };
         }
         if (s.id === "service") {
           if (log.includes("Service stopped")) return { ...s, status: "done" as const };
-          return { ...s, status: "skip" as const, detail: "servis yok" };
+          return { ...s, status: "done" as const, detail: "no service" };
         }
         if (s.id === "json") {
           if (log.includes("Removed from projects.json")) return { ...s, status: "done" as const };
-          return { ...s, status: "skip" as const };
+          return { ...s, status: "done" as const, detail: "already clean" };
         }
         if (s.id === "tunnel") {
           if (log.includes("Tunnel:") || log.includes("Tunnel entry")) return { ...s, status: "done" as const };
           if (log.includes("Tunnel cleanup failed")) return { ...s, status: "fail" as const };
-          return { ...s, status: "skip" as const, detail: "tunnel yok" };
+          return { ...s, status: "done" as const, detail: "no tunnel" };
         }
         return s;
       });
@@ -592,6 +655,10 @@ export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefre
     finally { setActionLoading(null); }
   };
 
+  const handleOpenDetail = useCallback((runId: string) => {
+    navigate(`/setfarm/runs/${runId}`);
+  }, [navigate]);
+
   return (
     <div className="af-pipeline">
       {filterBar}
@@ -611,11 +678,11 @@ export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefre
             errorCards={errorCardsMap[run.id] || []}
             onToggleExpand={() => setExpandedRun(expandedRun === run.id ? null : run.id)}
             onRetry={handleRetry}
-            onStoryRetry={handleStoryRetry}
             onStop={handleStop}
             onResume={handleResume}
             onDelete={openDeleteModal}
             onStepClick={handleStepClick}
+            onOpenDetail={handleOpenDetail}
           />
         );
       })}
@@ -635,9 +702,9 @@ export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefre
 
       <ConfirmDialog
         open={!!stopConfirm}
-        title="Workflow Durdur"
-        message="Bu workflow durdurulsun mu?"
-        confirmLabel="Durdur"
+        title="Stop Workflow"
+        message="Stop this workflow?"
+        confirmLabel="Stop"
         onConfirm={handleStopConfirmed}
         onCancel={() => setStopConfirm(null)}
       />

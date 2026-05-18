@@ -13,7 +13,7 @@ export const ConfirmDialog = React.memo(function ConfirmDialog({
   open,
   title,
   message,
-  confirmLabel = "Onayla",
+  confirmLabel = "Confirm",
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {

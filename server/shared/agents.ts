@@ -7,13 +7,17 @@ export const AGENT_DEFINITIONS = {
   main: { name: 'Arya', emoji: '\u{1F99E}', role: 'CEO / Orchestrator', model: 'minimax-m2.7', color: '#ff6600' },
   koda: { name: 'Koda', emoji: '\u{1F916}', role: 'Lead Dev', model: 'kimi-k2p5', color: '#00ff41' },
   flux: { name: 'Flux', emoji: '\u26A1', role: 'Senior Architect', model: 'kimi-k2p5', color: '#00ffff' },
-  atlas: { name: 'Atlas', emoji: '\u{1F30D}', role: 'Infra Lead', model: 'kimi-k2p5', color: '#4488ff' },
+  atlas: { name: 'Atlas', emoji: '\u{1F30D}', role: 'Infra Lead', model: 'minimax-m2.7', color: '#4488ff' },
   iris: { name: 'Iris', emoji: '\u{1F50D}', role: 'Research Lead', model: 'minimax-m2.7', color: '#ff44ff' },
   sentinel: { name: 'Sentinel', emoji: '\u{1F6E1}\uFE0F', role: 'QA Lead', model: 'minimax-m2.7', color: '#ffaa00' },
   cipher: { name: 'Cipher', emoji: '\u{1F4BB}', role: 'Backend Dev', model: 'kimi-k2p5', color: '#44ff88' },
   lux: { name: 'Lux', emoji: '\u270D\uFE0F', role: 'Dev / Writer', model: 'kimi-k2p5', color: '#ff8844' },
   nexus: { name: 'Nexus', emoji: '\u{1F504}', role: 'Dev / SRE', model: 'kimi-k2p5', color: '#8844ff' },
   prism: { name: 'Prism', emoji: '\u{1F3A8}', role: 'UI Designer', model: 'kimi-k2p5', color: '#ff4488' },
+  axon: { name: 'Axon', emoji: '\u{1F9E0}', role: 'Dev Pool', model: 'kimi-k2p5', color: '#00ccff' },
+  nova: { name: 'Nova', emoji: '✨', role: 'Dev Pool', model: 'kimi-k2p5', color: '#ffcc00' },
+  zeta: { name: 'Zeta', emoji: '\u{1F300}', role: 'Dev Pool', model: 'kimi-k2p5', color: '#cc88ff' },
+  helix: { name: 'Helix', emoji: '\u{1F9EC}', role: 'Dev Pool', model: 'kimi-k2p5', color: '#88ffcc' },
 } as const;
 
 export type AgentId = keyof typeof AGENT_DEFINITIONS;
@@ -33,11 +37,11 @@ export const AGENT_MAP = Object.fromEntries(AGENTS_ARRAY.map(a => [a.id, a])) as
 export const STEP_MAPPING: Record<string, Record<string, string[]>> = {
   'feature-dev': {
     plan:            ['main'],
-    design:          ['mert'],
+    design:          ['prism'],
     stories:         ['main'],
     'setup-repo':    ['atlas'],
     'setup-build':   ['atlas'],
-    implement:       ['koda', 'flux', 'cipher', 'prism', 'lux', 'nexus'],
+    implement:       ['koda', 'flux', 'cipher', 'prism', 'lux', 'nexus', 'axon', 'nova', 'zeta', 'helix'],
     verify:          ['sentinel', 'iris'],
     'security-gate': ['sentinel'],
     'qa-test':       ['sentinel'],

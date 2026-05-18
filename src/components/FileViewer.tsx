@@ -90,10 +90,10 @@ export function FileViewer({ file, loading, error, editMode, editContent, onEdit
         </span>
         <span className="file-viewer__actions">
           {!editMode && onStartEdit && (
-            <button className="file-viewer__action-btn" onClick={onStartEdit}>Duzenle</button>
+            <button className="file-viewer__action-btn" onClick={onStartEdit}>Edit</button>
           )}
           {onDownload && (
-            <button className="file-viewer__action-btn" onClick={onDownload}>Indir</button>
+            <button className="file-viewer__action-btn" onClick={onDownload}>Download</button>
           )}
         </span>
       </div>
@@ -105,13 +105,13 @@ export function FileViewer({ file, loading, error, editMode, editContent, onEdit
               onClick={onSave}
               disabled={saving || !hasChanges}
             >
-              {saving ? 'Kaydediliyor...' : 'Kaydet'}
+              {saving ? 'Saving...' : 'Save'}
             </button>
             <button className="file-viewer__toolbar-btn" onClick={onUndo} disabled={!hasChanges}>
-              Geri Al
+              Revert
             </button>
             <button className="file-viewer__toolbar-btn" onClick={onCancel}>
-              Iptal
+              Cancel
             </button>
           </div>
           <textarea

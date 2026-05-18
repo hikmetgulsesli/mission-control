@@ -125,7 +125,7 @@ export function Rules() {
             Rules Engine
           </h1>
           <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2, fontFamily: 'var(--font)' }}>
-            {rules.length} kural &middot; {rules.filter(r => r.readonly).length} system &middot; {rules.filter(r => !r.readonly).length} custom
+            {rules.length} rules &middot; {rules.filter(r => r.readonly).length} system &middot; {rules.filter(r => !r.readonly).length} custom
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -218,7 +218,7 @@ export function Rules() {
             {STAGES.find(s => s.id === activeStage)!.icon} {activeStage} stage
           </span>
           <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font)' }}>
-            {filtered.length} kural aktif &middot; {filtered.filter(r => r.applies_to === 'all').length} global
+            {filtered.length} active rules &middot; {filtered.filter(r => r.applies_to === 'all').length} global
           </span>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
             <input
@@ -386,9 +386,9 @@ export function Rules() {
       {/* Delete confirmation */}
       <ConfirmDialog
         open={!!deleteConfirmId}
-        title="Kural Sil"
-        message="Bu kurali silmek istediginize emin misiniz?"
-        confirmLabel="Sil"
+        title="Delete Rule"
+        message="Are you sure you want to delete this rule?"
+        confirmLabel="Delete"
         onConfirm={handleDeleteConfirmed}
         onCancel={() => setDeleteConfirmId(null)}
       />

@@ -185,6 +185,7 @@ export interface ProjectData {
   repo?: string;
   stack?: string[];
   status?: string;
+  supervisor?: unknown;
 }
 
 export interface TaskCreateData {

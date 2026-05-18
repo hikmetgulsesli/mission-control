@@ -3,7 +3,7 @@ import { config } from "../config.js";
 import { sql } from "../utils/pg.js";
 
 const router = Router();
-const USE_PG = true; // Faz7: PG-only
+const USE_PG = true; // Phase 7: PG-only
 
 async function proxy(url: string, opts?: RequestInit) {
   const ctrl = new AbortController();

@@ -386,6 +386,16 @@
   white-space: nowrap;
   flex-shrink: 0;
 }
+.af-feed__repeat {
+  color: #a78bfa;
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  background: rgba(167, 139, 250, 0.08);
+  border-radius: 2px;
+  padding: 1px 4px;
+  font-size: 8px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
 
 /* Stats & Alerts */
 .af-stats { display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }

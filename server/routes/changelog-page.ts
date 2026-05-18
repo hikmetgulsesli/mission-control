@@ -3,14 +3,14 @@ import { readFile } from 'node:fs/promises';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
-import os from 'node:os';
 import { marked } from 'marked';
+import { PATHS } from '../config.js';
 
 const execAsync = promisify(exec);
 const router = Router();
 
-const SETFARM_REPO = path.join(os.homedir(), '.openclaw', 'setfarm-repo');
-const MC_REPO = path.join(os.homedir(), 'projects', 'mission-control');
+const SETFARM_REPO = PATHS.setfarmRepoDir;
+const MC_REPO = process.env.MC_REPO_DIR || path.join(PATHS.projectsDir, 'mission-control');
 
 // Standalone HTML page for changelog — no React, no CSS refresh issues
 // Visit directly: https://ai.setrox.com.tr/changelog
@@ -57,20 +57,20 @@ router.get('/changelog', async (_req, res) => {
       mcCommit = stdout.trim();
     } catch {}
 
-    const setfarmHtml = setfarmMd ? marked.parse(setfarmMd) : '<p>CHANGELOG.md bulunamadı.</p>';
-    const mcHtml = mcMd ? marked.parse(mcMd) : '<p>CHANGELOG.md bulunamadı.</p>';
+    const setfarmHtml = setfarmMd ? marked.parse(setfarmMd) : '<p>CHANGELOG.md not found.</p>';
+    const mcHtml = mcMd ? marked.parse(mcMd) : '<p>CHANGELOG.md not found.</p>';
 
     const commitsHtml = allCommits.map(c => `
       <div class="commit">
         <span class="badge badge-${c.repo}">${c.repo === 'setfarm' ? 'SF' : 'MC'}</span>
         <code class="hash">${c.hash}</code>
         <span class="subject">${escapeHtml(c.subject)}</span>
-        <span class="meta">${escapeHtml(c.author)} · ${new Date(c.date).toLocaleString('tr-TR')}</span>
+        <span class="meta">${escapeHtml(c.author)} · ${new Date(c.date).toLocaleString('en-US')}</span>
       </div>
     `).join('');
 
     const html = `<!doctype html>
-<html lang="tr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <title>Changelog — Mission Control</title>
@@ -183,7 +183,7 @@ body {
 <body>
 <div class="container">
   <div class="header">
-    <h1>Sistem Sürümü &amp; Değişiklikler</h1>
+    <h1>System Version &amp; Changes</h1>
     <a href="/" style="color: #888; text-decoration: none; font-size: 13px;">← Dashboard</a>
   </div>
 
@@ -200,8 +200,8 @@ body {
   </div>
 
   <div class="tabs">
-    <button class="tab active" data-tab="notes">Sürüm Notları</button>
-    <button class="tab" data-tab="git">Git Tarihçesi (${allCommits.length})</button>
+    <button class="tab active" data-tab="notes">Release Notes</button>
+    <button class="tab" data-tab="git">Git History (${allCommits.length})</button>
   </div>
 
   <div class="section active" id="notes">
@@ -219,7 +219,7 @@ body {
     ${commitsHtml}
   </div>
 
-  <div class="footer">Auto-generated ${new Date().toLocaleString('tr-TR')}</div>
+  <div class="footer">Auto-generated ${new Date().toLocaleString('en-US')}</div>
 </div>
 <script>
 document.querySelectorAll('.tab').forEach(btn => {

@@ -8,7 +8,7 @@ import { sql } from "../utils/pg.js";
 
 const router = Router();
 const UPLOADS_DIR = resolve(import.meta.dirname || __dirname, "..", "..", "uploads");
-const USE_PG = true; // Faz7: PG-only (SQLite removed)
+const USE_PG = true; // Phase 7: PG-only (SQLite removed)
 
 async function proxy(url: string, opts?: RequestInit) {
   const ctrl = new AbortController();
@@ -24,12 +24,12 @@ async function proxy(url: string, opts?: RequestInit) {
 // ── Auto-sync tasks with workflow story progress ──────────────────
 const TASK_STORY_MAP: Record<string, string[]> = {
   "Frontend": ["US-004", "US-005", "US-010"],
-  "Agent Kartları": ["US-006", "US-007", "US-008", "US-009"],
+  "Agent Cards": ["US-006", "US-007", "US-008", "US-009"],
   "Tool Call": ["US-007"],
   "Systemd Service": ["US-011", "US-012", "US-013"],
   "WebSocket API": ["US-002"],
   "Session Log": ["US-003"],
-  "Proje Setup": ["US-001"],
+  "Project Setup": ["US-001"],
 };
 
 let lastSyncTime = 0;

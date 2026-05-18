@@ -40,6 +40,7 @@ export const api = {
   workflows: () => fetchApi<Workflow[]>('/api/workflows'),
   runs: () => fetchApi<Run[]>('/api/runs'),
   runDetail: (id: string) => fetchApi<any>(`/api/runs/${id}/detail`),
+  runSupervisor: (id: string) => fetchApi<any>(`/api/runs/${id}/supervisor`),
   runEvents: (id: string) => fetchApi<any[]>(`/api/runs/${id}/events`),
   startRun: (workflow: string, task: string) =>
     fetchApi<any>('/api/runs', {
@@ -98,6 +99,7 @@ export const api = {
   runStories: (id: string) => fetchApi<any[]>(`/api/setfarm/runs/${id}/stories`),
   runPlan: (id: string) => fetchApi<any>(`/api/setfarm/runs/${id}/plan`),
   runDesign: (id: string) => fetchApi<any>(`/api/setfarm/runs/${id}/design`),
+  runContract: (id: string) => fetchApi<any>(`/api/setfarm/runs/${id}/contract`),
   // Terminal
   terminalExec: (command: string, args: string[]) =>
     fetchApi<{ output: string; exitCode: number; command: string }>('/api/terminal/exec', {

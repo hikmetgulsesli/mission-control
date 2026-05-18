@@ -9,6 +9,7 @@ export interface RefinementState {
 
 interface PrdState {
   id: string | null;
+  skipAutoLoad: boolean;
   title: string;
   platform: 'web' | 'mobile';
   urls: string[];
@@ -34,7 +35,7 @@ interface PrdState {
   workflow: string;
   showHistory: boolean;
   showTemplates: boolean;
-  // Faz 2: Screen gallery
+  // Phase 2: Screen gallery
   stitchProjectId: string | null;
   screenCoverage: { covered: string[]; missing: string[]; coverage: number } | null;
   lightboxScreenId: string | null;
@@ -85,7 +86,7 @@ const initialState: PrdState = {
 export const usePrdStore = create<PrdState & PrdActions>((set) => ({
   ...initialState,
   setState: (updates) => set((s) => ({ ...s, ...updates })),
-  addLog: (msg) => set((s) => ({ logs: [...s.logs, `[${new Date().toLocaleTimeString('tr-TR')}] ${msg}`] })),
+  addLog: (msg) => set((s) => ({ logs: [...s.logs, `[${new Date().toLocaleTimeString('en-US')}] ${msg}`] })),
   setLoading: (key, val) => set((s) => ({
     loading: { ...s.loading, [key]: val },
     loadingStartedAt: { ...s.loadingStartedAt, [key]: val ? (s.loadingStartedAt[key] || Date.now()) : 0 },

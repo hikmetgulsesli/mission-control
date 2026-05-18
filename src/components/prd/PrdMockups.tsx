@@ -33,8 +33,8 @@ export function PrdMockups({ screens, coverage, onScreenClick, onClearAll, onGen
   if (!screens || screens.length === 0) {
     return (
       <div className="prd-empty">
-        <p>Henuz mockup uretilmedi.</p>
-        <p className="prd-empty__hint">PRD olusturduktan sonra "Mockup Uret" butonuna basin.</p>
+        <p>No mockups have been generated yet.</p>
+        <p className="prd-empty__hint">Generate a PRD, then click "Generate Mockups".</p>
       </div>
     );
   }
@@ -55,13 +55,13 @@ export function PrdMockups({ screens, coverage, onScreenClick, onClearAll, onGen
     <div className="prd-mockups">
       {/* Header with count and coverage */}
       <div className="prd-mockups__header">
-        <span className="prd-mockups__count">{filtered.length} ekran</span>
+        <span className="prd-mockups__count">{filtered.length} screens</span>
         {screens.length > 0 && onClearAll && (
-          <button className="btn btn--small btn--danger" onClick={onClearAll}>Tumunu Sil</button>
+          <button className="btn btn--small btn--danger" onClick={onClearAll}>Delete All</button>
         )}
         {coverage && (
           <span className={`prd-mockups__coverage ${getCoverageBadgeClass(coverage.coverage)}`}>
-            {coverage.covered.length}/{coverage.covered.length + coverage.missing.length} sayfa kapsaniyor ({coverage.coverage}%)
+            {coverage.covered.length}/{coverage.covered.length + coverage.missing.length} pages covered ({coverage.coverage}%)
           </span>
         )}
       </div>
@@ -69,10 +69,10 @@ export function PrdMockups({ screens, coverage, onScreenClick, onClearAll, onGen
       {/* Missing pages warning */}
       {coverage && coverage.missing.length > 0 && (
         <div className="prd-mockups__missing">
-          <span className="prd-mockups__missing-label">Eksik sayfalar:</span>
+          <span className="prd-mockups__missing-label">Missing pages:</span>
           {coverage.missing.map((m, i) => (
             <span key={i} className={`prd-mockups__missing-item ${onGenerateMissing ? 'prd-mockups__missing-item--clickable' : ''}`}
-              onClick={() => onGenerateMissing?.(m)} title="Tikla: bu sayfa icin mockup uret">{m}</span>
+              onClick={() => onGenerateMissing?.(m)} title="Click to generate a mockup for this page">{m}</span>
           ))}
         </div>
       )}
@@ -120,8 +120,8 @@ export function PrdMockups({ screens, coverage, onScreenClick, onClearAll, onGen
                 <button
                   className="prd-mockup-card__delete"
                   onClick={(e) => { e.stopPropagation(); onDeleteScreen(screen.id); }}
-                  title="Bu ekrani sil"
-                >SIL</button>
+                  title="Delete this screen"
+                >DELETE</button>
               )}
             </div>
           );

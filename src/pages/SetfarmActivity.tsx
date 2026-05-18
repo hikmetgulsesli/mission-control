@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAppStore } from "../store/appStore";
 import { api } from "../lib/api";
 import { useToast } from "../components/Toast";
@@ -11,6 +12,7 @@ import { AgentChatFeed } from "../components/AgentChatFeed";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 
 export function SetfarmActivity() {
+  const navigate = useNavigate();
   const [filterStatus, setFilterStatus] = useState("");
   const [filterSearch, setFilterSearch] = useState("");
   const { toast } = useToast();
@@ -100,7 +102,7 @@ export function SetfarmActivity() {
 
         <div style={{ display: "flex", gap: "8px", marginBottom: "8px", flexWrap: "wrap" }}>
           <input
-            placeholder="Ara (proje, gorev)..."
+            placeholder="Search project or task..."
             value={filterSearch}
             onChange={e => setFilterSearch(e.target.value)}
             style={{ flex: 1, minWidth: "150px", background: "var(--bg-card)", border: "1px solid var(--border)", color: "var(--text-primary)", padding: "4px 8px", fontSize: "11px", fontFamily: "var(--font)" }}
@@ -110,7 +112,7 @@ export function SetfarmActivity() {
             onChange={e => setFilterStatus(e.target.value)}
             style={{ background: "var(--bg-card)", border: "1px solid var(--border)", color: "var(--text-primary)", padding: "4px 8px", fontSize: "11px", fontFamily: "var(--font)" }}
           >
-            <option value="">Tum durumlar</option>
+            <option value="">All statuses</option>
             <option value="running">Running</option>
             <option value="completed">Completed</option>
             <option value="failed">Failed</option>
@@ -134,6 +136,7 @@ export function SetfarmActivity() {
           <div className="af-section__title" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             PIPELINE
             <button className="btn btn--small btn--primary" onClick={() => setShowModal(true)}>+ START RUN</button>
+            <button className="btn btn--small" onClick={() => navigate("/setfarm/active")}>ACTIVE RUN</button>
           </div>
           <PipelineView runs={pipeline || []} />
         </div>
@@ -191,7 +194,7 @@ export function SetfarmActivity() {
         open={!!confirmAction}
         title={confirmAction?.title || ""}
         message={confirmAction?.message || ""}
-        confirmLabel="Onayla"
+        confirmLabel="Confirm"
         onConfirm={() => {
           const action = confirmAction?.action;
           setConfirmAction(null);

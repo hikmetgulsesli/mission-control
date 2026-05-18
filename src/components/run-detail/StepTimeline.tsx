@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { normalizeVisibleWorkflowStatus } from "../../lib/status";
 
 interface StepDetail {
   id: string;
@@ -25,37 +26,45 @@ export const StepTimeline = React.memo(function StepTimeline({ steps, progressLo
       <div className="rd-pipeline">
         <h3 className="rd-section-title">PIPELINE</h3>
         <div className="rd-pipeline-steps">
-          {steps.map((step, i) => (
-            <div key={step.id} className="rd-pipe-row">
-              {i > 0 && <div className="rd-pipe-connector" />}
-              <div
-                className={`rd-pipe-step rd-pipe-step--${step.status} ${selectedStep === step.id ? "rd-pipe-step--selected" : ""}`}
-                onClick={() => setSelectedStep(selectedStep === step.id ? null : step.id)}
-              >
-                <div className="rd-pipe-icon">
-                  {step.status === "done" ? "\u2713" : step.status === "pending" || step.status === "running" ? "\u25B6" : step.status === "failed" ? "\u2717" : "\u25CB"}
-                </div>
-                <div className="rd-pipe-info">
-                  <div className="rd-pipe-name">{step.id}</div>
-                  <div className="rd-pipe-agent">{step.agent}</div>
-                </div>
-                <div className="rd-pipe-meta">
-                  <span className={`rd-pipe-badge rd-pipe-badge--${step.status}`}>{step.status}</span>
-                  {step.retryCount > 0 && <span className="rd-pipe-retry">retry: {step.retryCount}</span>}
+          {steps.map((step, i) => {
+            const stepStatus = normalizeVisibleWorkflowStatus(step.status);
+            return (
+              <div key={step.id} className="rd-pipe-row">
+                {i > 0 && <div className="rd-pipe-connector" />}
+                <div
+                  className={`rd-pipe-step rd-pipe-step--${stepStatus} ${selectedStep === step.id ? "rd-pipe-step--selected" : ""}`}
+                  onClick={() => setSelectedStep(selectedStep === step.id ? null : step.id)}
+                >
+                  <div className="rd-pipe-icon">
+                    {stepStatus === "done" ? "\u2713" : stepStatus === "pending" || stepStatus === "running" ? "\u25B6" : stepStatus === "failed" ? "\u2717" : "\u25CB"}
+                  </div>
+                  <div className="rd-pipe-info">
+                    <div className="rd-pipe-name">{step.id}</div>
+                    <div className="rd-pipe-agent">{step.agent}</div>
+                  </div>
+                  <div className="rd-pipe-meta">
+                    <span className={`rd-pipe-badge rd-pipe-badge--${stepStatus}`}>{stepStatus}</span>
+                    {step.retryCount > 0 && <span className="rd-pipe-retry">retry: {step.retryCount}</span>}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
       {/* Step output panel */}
       {stepDetail && (
         <div className="rd-step-output">
+          {(() => {
+            const stepStatus = normalizeVisibleWorkflowStatus(stepDetail.status);
+            return (
           <h3 className="rd-section-title">
             {stepDetail.id.toUpperCase()} — {stepDetail.agent}
-            <span className={`rd-pipe-badge rd-pipe-badge--${stepDetail.status}`}>{stepDetail.status}</span>
+            <span className={`rd-pipe-badge rd-pipe-badge--${stepStatus}`}>{stepStatus}</span>
           </h3>
+            );
+          })()}
           {stepDetail.output ? (
             <pre className="rd-output-pre">{stepDetail.output}</pre>
           ) : (

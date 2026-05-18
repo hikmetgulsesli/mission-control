@@ -1,20 +1,18 @@
 /**
- * Benchmark & Geri Bildirim — Pipeline run sonuclari ile PRD kalitesi
- * arasindaki iliskiyi analiz eder.
+ * Benchmark and feedback analysis for pipeline run outcomes versus PRD quality.
  *
- * setfarm.db'den: runs, steps, stories, claim_log tablolari
+ * Source tables from setfarm.db: runs, steps, stories, claim_log.
  */
 
 import { execFile as execFileCb } from 'child_process';
 import { promisify } from 'util';
-import { homedir } from 'os';
-import { join } from 'path';
 import { sql } from '../utils/pg.js';
+import { PATHS } from '../config.js';
 
 const execFileAsync = promisify(execFileCb);
 
-const USE_PG = true; // Faz7: PG-only
-const SETFARM_DB = join(homedir(), '.openclaw', 'setfarm', 'setfarm.db');
+const USE_PG = true; // Phase 7: PG-only
+const SETFARM_DB = PATHS.setfarmDb;
 
 async function querySetfarm(sqlStr: string): Promise<any[]> {
   const { stdout } = await execFileAsync('sqlite3', [SETFARM_DB, '-json', sqlStr], {
@@ -197,17 +195,17 @@ export async function analyzePrdFormats(): Promise<PrdFormatAnalysis> {
 
   let recommendation = '';
   if (topErrors[0]?.category === 'timeout') {
-    recommendation = 'PRD daha kisa ve odakli olmali — agent timeout orani yuksek';
+    recommendation = 'PRD should be shorter and more focused because agent timeout rate is high';
   } else if (topErrors[0]?.category === 'lint_error') {
-    recommendation = 'PRD tech stack ve lint kurallarini acikca belirtmeli';
+    recommendation = 'PRD should clearly specify the tech stack and lint rules';
   } else if (topErrors[0]?.category === 'build_error') {
-    recommendation = 'PRD dependency ve build setup talimatlarini icermeli';
+    recommendation = 'PRD should include dependency and build setup instructions';
   } else if (topErrors[0]?.category === 'design_mismatch') {
-    recommendation = 'PRD daha detayli tasarim tanimlari icermeli (renkler, fontlar, spacing)';
+    recommendation = 'PRD should include more detailed design definitions, including colors, fonts, and spacing';
   } else if (successRate >= 80) {
-    recommendation = 'PRD kalitesi iyi — mevcut formati koruyun';
+    recommendation = 'PRD quality is good; keep the current format';
   } else {
-    recommendation = 'PRD puanlama ile skor 70+ olana kadar gelistirin';
+    recommendation = 'Improve the PRD until its score reaches 70 or higher';
   }
 
   return {

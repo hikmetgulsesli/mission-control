@@ -91,7 +91,7 @@ export function ScreenshotUpload({ onUpload, loading, visionAnalysis }: Screensh
         onClick={() => !loading && inputRef.current?.click()}
       >
         {loading ? (
-          <span style={{ color: 'var(--neon-cyan)', fontSize: 13 }}>Analiz ediliyor...</span>
+          <span style={{ color: 'var(--neon-cyan)', fontSize: 13 }}>Analyzing...</span>
         ) : preview ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <img
@@ -106,14 +106,14 @@ export function ScreenshotUpload({ onUpload, loading, visionAnalysis }: Screensh
               }}
             />
             <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>
-              Yeni gorsel yuklemek icin tikla veya birak
+              Click or drop to upload a new image
             </span>
           </div>
         ) : (
           <div>
             <div style={{ fontSize: 28, marginBottom: 6, opacity: 0.5 }}>&#128247;</div>
             <div style={{ color: 'var(--text-dim)', fontSize: 13 }}>
-              Gorseli buraya birakin veya tiklayin
+              Drop an image here or click
             </div>
             <div style={{ color: 'var(--text-dim)', fontSize: 11, marginTop: 4, opacity: 0.6 }}>
               PNG, JPG, WebP

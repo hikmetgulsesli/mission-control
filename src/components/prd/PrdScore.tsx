@@ -13,13 +13,13 @@ interface PrdScoreProps {
 }
 
 const categories = [
-  { key: 'pageDetail', label: 'Sayfa Detayi', max: 20 },
-  { key: 'designSystem', label: 'Tasarim Sistemi', max: 20 },
-  { key: 'components', label: 'Komponentler', max: 15 },
-  { key: 'animations', label: 'Animasyonlar', max: 10 },
+  { key: 'pageDetail', label: 'Page Detail', max: 20 },
+  { key: 'designSystem', label: 'Design System', max: 20 },
+  { key: 'components', label: 'Components', max: 15 },
+  { key: 'animations', label: 'Animations', max: 10 },
   { key: 'responsive', label: 'Responsive', max: 10 },
-  { key: 'dataModel', label: 'Veri Modeli', max: 10 },
-  { key: 'screenCount', label: 'Ekran Sayisi', max: 15 },
+  { key: 'dataModel', label: 'Data Model', max: 10 },
+  { key: 'screenCount', label: 'Screen Count', max: 15 },
 ];
 
 function getScoreColor(score: number): string {

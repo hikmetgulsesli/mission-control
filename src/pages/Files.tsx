@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { api } from "../lib/api";
 import { useToast } from "../components/Toast";
 import { GlitchText } from "../components/GlitchText";
@@ -20,7 +20,7 @@ type CtxTarget = { path: string; name: string; isDir: boolean } | null;
 
 export function Files() {
   const { toast } = useToast();
-  const [currentPath, setCurrentPath] = useState("/home/setrox/");
+  const [currentPath, setCurrentPath] = useState("");
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [fileData, setFileData] = useState<any>(null);
   const [fileLoading, setFileLoading] = useState(false);
@@ -49,6 +49,10 @@ export function Files() {
   const [unsavedConfirm, setUnsavedConfirm] = useState<{ action: () => void } | null>(null);
 
   const { data: listing, error: listError, loading: listLoading, refresh } = usePolling(() => api.filesList(currentPath), 30000, currentPath);
+
+  useEffect(() => {
+    if (!currentPath && listing?.path) setCurrentPath(listing.path);
+  }, [currentPath, listing?.path]);
 
   const confirmIfUnsaved = (action: () => void) => {
     if (editMode) {
@@ -106,7 +110,7 @@ export function Files() {
       setEditMode(false);
       refresh();
     } catch (err: any) {
-      toast("Kaydetme hatasi: " + (err.message || "Bilinmeyen hata"), "error");
+      toast("Save failed: " + (err.message || "Unknown error"), "error");
     } finally {
       setSaving(false);
     }
@@ -137,28 +141,28 @@ export function Files() {
 
     if (!t) {
       return [
-        { label: "Yeni Dosya", icon: "+", action: () => openDialog("newFile") },
-        { label: "Yeni Dizin", icon: ">", action: () => openDialog("newDir") },
-        { label: "Yukle", icon: "^", action: () => openDialog("upload") },
+        { label: "New File", icon: "+", action: () => openDialog("newFile") },
+        { label: "New Directory", icon: ">", action: () => openDialog("newDir") },
+        { label: "Upload", icon: "^", action: () => openDialog("upload") },
       ];
     }
 
     if (t.isDir) {
       return [
-        { label: "Ac", icon: ">", action: () => handleNavigate(t.path + "/") },
-        { label: "Yeni Dosya", icon: "+", action: () => { setCurrentPath(t.path + "/"); openDialog("newFile", t.path + "/"); } },
-        { label: "Yeni Dizin", icon: ">", action: () => openDialog("newDir", t.path + "/") },
-        { label: "Yukle", icon: "^", action: () => openDialog("upload", t.path + "/") },
-        { label: "Yeniden Adlandir", icon: "R", action: () => { setDialog({ type: "rename", path: t.path, name: t.name }); setDialogInput(t.name); } },
-        { label: "Sil", icon: "X", action: () => setDialog({ type: "delete", path: t.path, name: t.name, isDir: true }), danger: true },
+        { label: "Open", icon: ">", action: () => handleNavigate(t.path + "/") },
+        { label: "New File", icon: "+", action: () => { setCurrentPath(t.path + "/"); openDialog("newFile", t.path + "/"); } },
+        { label: "New Directory", icon: ">", action: () => openDialog("newDir", t.path + "/") },
+        { label: "Upload", icon: "^", action: () => openDialog("upload", t.path + "/") },
+        { label: "Rename", icon: "R", action: () => { setDialog({ type: "rename", path: t.path, name: t.name }); setDialogInput(t.name); } },
+        { label: "Delete", icon: "X", action: () => setDialog({ type: "delete", path: t.path, name: t.name, isDir: true }), danger: true },
       ];
     }
 
     return [
-      { label: "Duzenle", icon: "E", action: () => { handleSelectFile(t.path).then(() => setTimeout(handleStartEdit, 100)); } },
-      { label: "Yeniden Adlandir", icon: "R", action: () => { setDialog({ type: "rename", path: t.path, name: t.name }); setDialogInput(t.name); } },
-      { label: "Indir", icon: "D", action: () => window.open("/api/files/download?path=" + encodeURIComponent(t.path), "_blank") },
-      { label: "Sil", icon: "X", action: () => setDialog({ type: "delete", path: t.path, name: t.name, isDir: false }), danger: true },
+      { label: "Edit", icon: "E", action: () => { handleSelectFile(t.path).then(() => setTimeout(handleStartEdit, 100)); } },
+      { label: "Rename", icon: "R", action: () => { setDialog({ type: "rename", path: t.path, name: t.name }); setDialogInput(t.name); } },
+      { label: "Download", icon: "D", action: () => window.open("/api/files/download?path=" + encodeURIComponent(t.path), "_blank") },
+      { label: "Delete", icon: "X", action: () => setDialog({ type: "delete", path: t.path, name: t.name, isDir: false }), danger: true },
     ];
   };
 
@@ -193,7 +197,7 @@ export function Files() {
       refresh();
       closeDialog();
     } catch (err: any) {
-      setDialogError(err.message || "Silme hatasi");
+      setDialogError(err.message || "Delete failed");
     } finally {
       setDialogLoading(false);
     }
@@ -201,7 +205,7 @@ export function Files() {
 
   const handleRename = async () => {
     if (!dialog || dialog.type !== "rename") return;
-    if (!dialogInput.trim()) { setDialogError("Isim bos olamaz"); return; }
+    if (!dialogInput.trim()) { setDialogError("Name cannot be empty"); return; }
     setDialogLoading(true);
     setDialogError("");
     try {
@@ -216,7 +220,7 @@ export function Files() {
       refresh();
       closeDialog();
     } catch (err: any) {
-      setDialogError(err.message || "Yeniden adlandirma hatasi");
+      setDialogError(err.message || "Rename failed");
     } finally {
       setDialogLoading(false);
     }
@@ -224,7 +228,7 @@ export function Files() {
 
   const handleNewFile = async () => {
     if (!dialog || dialog.type !== "newFile") return;
-    if (!dialogInput.trim()) { setDialogError("Dosya adi bos olamaz"); return; }
+    if (!dialogInput.trim()) { setDialogError("File name cannot be empty"); return; }
     setDialogLoading(true);
     setDialogError("");
     try {
@@ -235,14 +239,14 @@ export function Files() {
       await handleSelectFile(filePath);
       setTimeout(handleStartEdit, 200);
     } catch (err: any) {
-      setDialogError(err.message || "Dosya olusturma hatasi");
+      setDialogError(err.message || "File creation failed");
       setDialogLoading(false);
     }
   };
 
   const handleMkdir = async () => {
     if (!dialog || dialog.type !== "newDir") return;
-    if (!dialogInput.trim()) { setDialogError("Dizin adi bos olamaz"); return; }
+    if (!dialogInput.trim()) { setDialogError("Directory name cannot be empty"); return; }
     setDialogLoading(true);
     setDialogError("");
     try {
@@ -251,7 +255,7 @@ export function Files() {
       refresh();
       closeDialog();
     } catch (err: any) {
-      setDialogError(err.message || "Dizin olusturma hatasi");
+      setDialogError(err.message || "Directory creation failed");
     } finally {
       setDialogLoading(false);
     }
@@ -276,7 +280,7 @@ export function Files() {
       refresh();
       closeDialog();
     } catch (err: any) {
-      setDialogError(err.message || "Yukleme hatasi");
+      setDialogError(err.message || "Upload failed");
     } finally {
       setDialogLoading(false);
     }
@@ -371,9 +375,9 @@ export function Files() {
       {/* Unsaved changes confirmation */}
       <ConfirmDialog
         open={!!unsavedConfirm}
-        title="Kaydedilmemis Degisiklikler"
-        message="Kaydedilmemis degisiklikler var. Devam etmek istiyor musunuz?"
-        confirmLabel="Devam"
+        title="Unsaved Changes"
+        message="There are unsaved changes. Do you want to continue?"
+        confirmLabel="Continue"
         onConfirm={() => {
           const action = unsavedConfirm?.action;
           setUnsavedConfirm(null);
@@ -388,42 +392,42 @@ export function Files() {
           <div className="file-dialog" onClick={(e) => e.stopPropagation()}>
             {dialog.type === "delete" && (
               <>
-                <h3 className="file-dialog__title">Silme Onayi</h3>
+                <h3 className="file-dialog__title">Delete Confirmation</h3>
                 <p className="file-dialog__text">
-                  <strong>{dialog.name}</strong> {dialog.isDir ? "dizini ve tum icerigi" : "dosyasi"} silinecek. Emin misiniz?
+                  <strong>{dialog.name}</strong> {dialog.isDir ? "directory and all contents" : "file"} will be deleted. Are you sure?
                 </p>
                 {dialogError && <p className="file-dialog__error">{dialogError}</p>}
                 <div className="file-dialog__actions">
                   <button className="file-dialog__btn file-dialog__btn--danger" onClick={handleDelete} disabled={dialogLoading}>
-                    {dialogLoading ? "Siliniyor..." : "Sil"}
+                    {dialogLoading ? "Deleting..." : "Delete"}
                   </button>
-                  <button className="file-dialog__btn" onClick={closeDialog}>Iptal</button>
+                  <button className="file-dialog__btn" onClick={closeDialog}>Cancel</button>
                 </div>
               </>
             )}
             {dialog.type === "rename" && (
               <>
-                <h3 className="file-dialog__title">Yeniden Adlandir</h3>
+                <h3 className="file-dialog__title">Rename</h3>
                 <input
                   className="file-dialog__input"
                   value={dialogInput}
                   onChange={(e) => setDialogInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleRename()}
                   autoFocus
-                  placeholder="Yeni isim"
+                  placeholder="New name"
                 />
                 {dialogError && <p className="file-dialog__error">{dialogError}</p>}
                 <div className="file-dialog__actions">
                   <button className="file-dialog__btn file-dialog__btn--save" onClick={handleRename} disabled={dialogLoading}>
-                    {dialogLoading ? "Kaydediliyor..." : "Kaydet"}
+                    {dialogLoading ? "Saving..." : "Save"}
                   </button>
-                  <button className="file-dialog__btn" onClick={closeDialog}>Iptal</button>
+                  <button className="file-dialog__btn" onClick={closeDialog}>Cancel</button>
                 </div>
               </>
             )}
             {dialog.type === "newFile" && (
               <>
-                <h3 className="file-dialog__title">Yeni Dosya</h3>
+                <h3 className="file-dialog__title">New File</h3>
                 <p className="file-dialog__text file-dialog__text--dim">{dialog.dir}</p>
                 <input
                   className="file-dialog__input"
@@ -431,20 +435,20 @@ export function Files() {
                   onChange={(e) => setDialogInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleNewFile()}
                   autoFocus
-                  placeholder="Dosya adi"
+                  placeholder="File name"
                 />
                 {dialogError && <p className="file-dialog__error">{dialogError}</p>}
                 <div className="file-dialog__actions">
                   <button className="file-dialog__btn file-dialog__btn--save" onClick={handleNewFile} disabled={dialogLoading}>
-                    {dialogLoading ? "Olusturuluyor..." : "Olustur"}
+                    {dialogLoading ? "Creating..." : "Create"}
                   </button>
-                  <button className="file-dialog__btn" onClick={closeDialog}>Iptal</button>
+                  <button className="file-dialog__btn" onClick={closeDialog}>Cancel</button>
                 </div>
               </>
             )}
             {dialog.type === "newDir" && (
               <>
-                <h3 className="file-dialog__title">Yeni Dizin</h3>
+                <h3 className="file-dialog__title">New Directory</h3>
                 <p className="file-dialog__text file-dialog__text--dim">{dialog.dir}</p>
                 <input
                   className="file-dialog__input"
@@ -452,20 +456,20 @@ export function Files() {
                   onChange={(e) => setDialogInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleMkdir()}
                   autoFocus
-                  placeholder="Dizin adi"
+                  placeholder="Directory name"
                 />
                 {dialogError && <p className="file-dialog__error">{dialogError}</p>}
                 <div className="file-dialog__actions">
                   <button className="file-dialog__btn file-dialog__btn--save" onClick={handleMkdir} disabled={dialogLoading}>
-                    {dialogLoading ? "Olusturuluyor..." : "Olustur"}
+                    {dialogLoading ? "Creating..." : "Create"}
                   </button>
-                  <button className="file-dialog__btn" onClick={closeDialog}>Iptal</button>
+                  <button className="file-dialog__btn" onClick={closeDialog}>Cancel</button>
                 </div>
               </>
             )}
             {dialog.type === "upload" && (
               <>
-                <h3 className="file-dialog__title">Dosya Yukle</h3>
+                <h3 className="file-dialog__title">Upload File</h3>
                 <p className="file-dialog__text file-dialog__text--dim">{dialog.dir}</p>
                 <input
                   ref={uploadRef}
@@ -479,9 +483,9 @@ export function Files() {
                 {dialogError && <p className="file-dialog__error">{dialogError}</p>}
                 <div className="file-dialog__actions">
                   <button className="file-dialog__btn file-dialog__btn--save" onClick={handleUpload} disabled={dialogLoading || !uploadFile}>
-                    {dialogLoading ? "Yukleniyor..." : "Yukle"}
+                    {dialogLoading ? "Uploading..." : "Upload"}
                   </button>
-                  <button className="file-dialog__btn" onClick={closeDialog}>Iptal</button>
+                  <button className="file-dialog__btn" onClick={closeDialog}>Cancel</button>
                 </div>
               </>
             )}

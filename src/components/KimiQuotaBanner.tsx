@@ -161,7 +161,7 @@ export function KimiQuotaBanner() {
         borderBottom: '1px solid rgba(255,255,255,0.08)',
         userSelect: 'none',
       }}
-      title={`Kimi Code quota — tıklayarak yenile. ${snapshot.staleSince ? `(stale snapshot, son taze veri ${snapshot.fetchedAt})` : ''}`}
+      title={`Kimi Code quota - click to refresh. ${snapshot.staleSince ? `(stale snapshot, last fresh data ${snapshot.fetchedAt})` : ''}`}
     >
       <span style={{ fontSize: '14px' }}>{style.icon}</span>
       <strong>KIMI</strong>

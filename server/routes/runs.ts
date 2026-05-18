@@ -5,9 +5,10 @@ import { runCli } from '../utils/cli.js';
 import { config } from '../config.js';
 import { sql } from '../utils/pg.js';
 import { getStuckRuns, unstickRun, getRunDetail, diagnoseStuckStep, tryAutoFix, skipStory, deleteRun } from '../utils/setfarm-db.js';
+import { getSupervisorSummaryByRunId } from '../utils/supervisor.js';
 
 const router = Router();
-const USE_PG = true; // Faz7: PG-only
+const USE_PG = true; // Phase 7: PG-only
 
 // Wave 4 fix #15 (plan: reactive-frolicking-cupcake): structured errors with
 // classification and log context instead of a bare 500. Previously a PG outage
@@ -39,6 +40,26 @@ router.get('/runs', async (_req, res) => {
     const { code, status, detail } = classifyRouteError(err);
     console.error('[runs] ' + code + ': ' + detail);
     res.status(status).json({ error: detail, code });
+  }
+});
+
+// 2026-04-23: live progress file exposure. Agents write to /tmp/setfarm-progress-<runId>.txt
+// every ~5min during implement step. MC polls this endpoint for real-time visibility.
+router.get('/runs/:id/progress', async (req, res) => {
+  try {
+    const fs = await import('node:fs');
+    const progressPath = `/tmp/setfarm-progress-${req.params.id}.txt`;
+    if (!fs.existsSync(progressPath)) {
+      res.json({ available: false, lines: [], mtime: null });
+      return;
+    }
+    const stat = fs.statSync(progressPath);
+    const content = fs.readFileSync(progressPath, 'utf-8');
+    const lines = content.split('\n').filter(l => l.trim().length > 0).slice(-50);
+    res.json({ available: true, lines, mtime: stat.mtimeMs, ageSeconds: Math.round((Date.now() - stat.mtimeMs) / 1000) });
+  } catch (err: any) {
+    const { code, status, detail } = classifyRouteError(err);
+    res.status(status).json({ error: detail, code, runId: req.params.id });
   }
 });
 
@@ -150,9 +171,21 @@ router.get('/runs/:id/detail', async (req, res) => {
   try {
     const detail = await getRunDetail(req.params.id);
     if (!detail) { res.status(404).json({ error: 'Run not found' }); return; }
-    res.json(detail);
+    const supervisor = await getSupervisorSummaryByRunId(req.params.id);
+    res.json({ ...detail, supervisor });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/runs/:id/supervisor', async (req, res) => {
+  try {
+    const supervisor = await getSupervisorSummaryByRunId(req.params.id);
+    if (!supervisor) { res.status(404).json({ error: 'Run not found' }); return; }
+    res.json(supervisor);
+  } catch (err: any) {
+    const { code, status, detail } = classifyRouteError(err);
+    res.status(status).json({ error: detail, code, runId: req.params.id });
   }
 });
 
@@ -235,21 +268,21 @@ router.get('/runs/:id/errors', async (req, res) => {
 
     // Error classification patterns
     const ERROR_PATTERNS: { category: string; severity: 'error' | 'warning' | 'info'; patterns: RegExp[]; suggestion: string }[] = [
-      { category: 'TIMEOUT', severity: 'error', patterns: [/timeout|timed out|ETIMEDOUT|AbortError/i], suggestion: 'Step suresi asimi. Agent modelini degistirmeyi veya gorev kapsamini daraltmayi deneyin.' },
-      { category: 'BUILD', severity: 'error', patterns: [/npm|build|vite|tsc|webpack|compile|TypeScript|SyntaxError/i], suggestion: 'Build hatasi. package.json bagimliklarini ve tsconfig ayarlarini kontrol edin.' },
-      { category: 'NETWORK', severity: 'error', patterns: [/ECONNREFUSED|ENOTFOUND|fetch failed|network|ECONNRESET|502|503/i], suggestion: 'Ag hatasi. Servis durumlarini ve DNS ayarlarini kontrol edin.' },
-      { category: 'PERMISSION', severity: 'error', patterns: [/EACCES|permission denied|EPERM|sudo/i], suggestion: 'Yetki hatasi. Dosya izinlerini ve kullanici yetkilerini kontrol edin.' },
-      { category: 'FILE', severity: 'warning', patterns: [/ENOENT|not found|no such file|missing/i], suggestion: 'Dosya bulunamadi. Path ve dosya adini kontrol edin.' },
-      { category: 'GIT', severity: 'warning', patterns: [/git|merge conflict|diverged|rejected/i], suggestion: 'Git hatasi. Branch durumunu ve conflict\'leri kontrol edin.' },
-      { category: 'MEMORY', severity: 'error', patterns: [/OOM|heap|memory|ENOMEM|killed/i], suggestion: 'Bellek yetersiz. MemoryMax limitini artirmayi veya paralel gorevleri azaltmayi deneyin.' },
-      { category: 'LLM', severity: 'warning', patterns: [/rate limit|429|quota|api key|token limit|context length/i], suggestion: 'LLM API hatasi. Kota, rate limit ve API anahtarini kontrol edin.' },
-      { category: 'TEST', severity: 'info', patterns: [/test fail|assertion|expect|jest|vitest|playwright/i], suggestion: 'Test hatasi. Test ciktisini inceleyip kodu veya testi duzeltmeyi deneyin.' },
+      { category: 'TIMEOUT', severity: 'error', patterns: [/timeout|timed out|ETIMEDOUT|AbortError/i], suggestion: 'Step timeout. Try changing the agent model or narrowing the task scope.' },
+      { category: 'BUILD', severity: 'error', patterns: [/npm|build|vite|tsc|webpack|compile|TypeScript|SyntaxError/i], suggestion: 'Build failure. Check package.json dependencies and TypeScript configuration.' },
+      { category: 'NETWORK', severity: 'error', patterns: [/ECONNREFUSED|ENOTFOUND|fetch failed|network|ECONNRESET|502|503/i], suggestion: 'Network failure. Check service status and DNS settings.' },
+      { category: 'PERMISSION', severity: 'error', patterns: [/EACCES|permission denied|EPERM|sudo/i], suggestion: 'Permission failure. Check file permissions and user privileges.' },
+      { category: 'FILE', severity: 'warning', patterns: [/ENOENT|not found|no such file|missing/i], suggestion: 'Missing file. Check the path and filename.' },
+      { category: 'GIT', severity: 'warning', patterns: [/git|merge conflict|diverged|rejected/i], suggestion: 'Git failure. Check branch status and merge conflicts.' },
+      { category: 'MEMORY', severity: 'error', patterns: [/OOM|heap|memory|ENOMEM|killed/i], suggestion: 'Insufficient memory. Increase MemoryMax or reduce parallel work.' },
+      { category: 'LLM', severity: 'warning', patterns: [/rate limit|429|quota|api key|token limit|context length/i], suggestion: 'LLM API failure. Check quota, rate limits, and API key configuration.' },
+      { category: 'TEST', severity: 'info', patterns: [/test fail|assertion|expect|jest|vitest|playwright/i], suggestion: 'Test failure. Inspect the test output and fix the code or test.' },
     ];
 
     const errors = (failedSteps as any[]).map(step => {
       const errorText = step.error || step.output || '';
       let category = 'UNKNOWN';
-      let suggestion = 'Hata siniflandirilamadi. Step output\'unu inceleyin.';
+      let suggestion = 'Error could not be classified. Inspect the step output.';
       let severity: 'error' | 'warning' | 'info' = 'error';
 
       for (const pattern of ERROR_PATTERNS) {

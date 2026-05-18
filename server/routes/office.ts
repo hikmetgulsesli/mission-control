@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import { existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
-import { homedir } from 'os';
 
 import { cached } from '../utils/cache.js';
 import { getRuns } from '../utils/setfarm.js';
 import { STEP_MAPPING } from '../shared/agents.js';
+import { PATHS } from '../config.js';
 
 const router = Router();
 
@@ -17,7 +17,7 @@ const CRON_AGENTS: Record<string, string[]> = {
   'daily-standup': ['lux'],
 };
 
-const SESSIONS_BASE = join(homedir(), '.openclaw', 'agents');
+const SESSIONS_BASE = PATHS.agentsDir;
 
 interface AgentStatus {
   id: string;

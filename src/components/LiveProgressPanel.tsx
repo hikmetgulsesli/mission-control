@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
+import { normalizeVisibleWorkflowStatus } from '../lib/status';
 
 interface Props {
   agentId: string;
@@ -29,10 +30,11 @@ export function LiveProgressPanel({ agentId, agentName, onClose }: Props) {
 
         if (data.runs && data.runs.length > 0) {
           const latestRun = data.runs[0];
+          const status = normalizeVisibleWorkflowStatus(latestRun.status);
           setProgress({
-            currentStep: latestRun.step || 'unknown',
-            currentFile: latestRun.output?.substring(0, 100) || 'N/A',
-            progress: latestRun.status === 'done' ? 100 : latestRun.status === 'running' ? 50 : 0,
+            currentStep: latestRun.step || 'pending',
+            currentFile: latestRun.output?.substring(0, 100) || 'Pending',
+            progress: status === 'done' ? 100 : status === 'running' ? 50 : 0,
             lastAction: latestRun.task || 'Working...',
             lastUpdate: latestRun.completedAt || new Date().toISOString(),
           });

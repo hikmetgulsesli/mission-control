@@ -1,10 +1,10 @@
 import { Router } from 'express';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 'fs';
-import { join } from 'path';
+import { basename, extname, join } from 'path';
 import { execSync, execFileSync } from 'child_process';
 import { cached } from '../utils/cache.js';
 import { getBatchStoryProgress } from '../utils/setfarm-db.js';
-import { PATHS } from '../config.js';
+import { config, PATHS } from '../config.js';
 import { readFileSync as readSync, writeFileSync as writeSync, renameSync } from 'fs';
 import { tmpdir } from 'os';
 import { createProjectProgrammatic, updateProjectById } from './projects.js';
@@ -31,7 +31,7 @@ import { getAgentFeed as getAgentFeedService } from '../services/agent-feed.js';
 /** Detect if a task describes a mobile app */
 function isMobileProject(task: string, repo: string): boolean {
   const mobileKeywords = [
-    'react native', 'expo', 'mobil uygulama', 'mobile app',
+    'react native', 'expo', 'mobile application', 'mobile app',
     'android', 'ios app', 'flutter', 'swift', 'kotlin'
   ];
   const lower = (task + ' ' + repo).toLowerCase();
@@ -41,6 +41,342 @@ function isMobileProject(task: string, repo: string): boolean {
 
 let syncInProgress = false;
 const router = Router();
+
+function parseRunContext(run: any): any {
+  try {
+    const raw = run?.context || {};
+    return typeof raw === 'string' ? JSON.parse(raw) : raw;
+  } catch {
+    return {};
+  }
+}
+
+function safeJson(value: unknown, fallback: any = null): any {
+  if (value == null || value === '') return fallback;
+  if (typeof value !== 'string') return value;
+  try { return JSON.parse(value); } catch { return fallback; }
+}
+
+function compactDisplay(value: unknown, max = 220): string {
+  if (value == null) return '';
+  if (typeof value !== 'object') return String(value).replace(/\s+/g, ' ').trim().slice(0, max);
+  try {
+    return JSON.stringify(value).replace(/\s+/g, ' ').trim().slice(0, max);
+  } catch {
+    return String(value).replace(/\s+/g, ' ').trim().slice(0, max);
+  }
+}
+
+function formatListEntry(value: unknown): string {
+  if (value == null) return '';
+  if (typeof value !== 'object') return String(value).trim();
+  const entry = value as Record<string, any>;
+  const name = entry.name || entry.title || entry.label || entry.screenName;
+  const type = entry.type || entry.deviceType || entry.kind;
+  const id = entry.screenId || entry.screen_id || entry.id || entry.path;
+  if (name && type) return `${name} (${type})`;
+  if (name) return String(name);
+  if (id) return String(id);
+  return compactDisplay(entry, 180);
+}
+
+function parseList(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(formatListEntry).map(v => v.trim()).filter(Boolean);
+  if (typeof value !== 'string') return [];
+  const parsed = safeJson(value, null);
+  if (Array.isArray(parsed)) return parsed.map(formatListEntry).map(v => v.trim()).filter(Boolean);
+  return value.split(/\r?\n|,/).map(v => v.replace(/^[-*]\s*/, '').trim()).filter(Boolean);
+}
+
+function contractStatus(items: any[]): string {
+  const statuses = items.map(i => normalizeVisibleStatus(i?.status));
+  if (statuses.some(status => status === 'fail')) return 'fail';
+  if (statuses.some(status => status === 'pending')) return 'pending';
+  if (statuses.some(status => status === 'pass')) return 'pass';
+  if (statuses.some(status => status === 'deferred')) return 'deferred';
+  return 'pending';
+}
+
+function normalizeVisibleStatus(status: unknown): string {
+  const value = String(status || 'pending').trim().toLowerCase();
+  if (value === 'na' || value === 'n/a' || value === 'not_applicable') return 'pending';
+  if (value === 'skipped' || value === 'skip') return 'fail';
+  return value || 'pending';
+}
+
+function countFiles(dir: string, extension: string): number {
+  try {
+    if (!dir || !existsSync(dir)) return 0;
+    return readdirSync(dir).filter(f => f.toLowerCase().endsWith(extension)).length;
+  } catch {
+    return 0;
+  }
+}
+
+function readRepoContract(run: any): any | null {
+  const ctx = parseRunContext(run);
+  const fromContext = safeJson(ctx.run_contract, null);
+  if (fromContext?.schema === 'setfarm.run-contract.v1') return fromContext;
+  const repo = typeof ctx.repo === 'string' ? ctx.repo : '';
+  const candidate = repo ? join(repo, '.setfarm', 'RUN_CONTRACT.json') : '';
+  if (candidate && existsSync(candidate)) {
+    const parsed = safeJson(readFileSync(candidate, 'utf-8'), null);
+    if (parsed?.schema === 'setfarm.run-contract.v1') return parsed;
+  }
+  return null;
+}
+
+function buildFallbackContract(run: any, stories: any[]): any {
+  const ctx = parseRunContext(run);
+  const repo = typeof ctx.repo === 'string' ? ctx.repo : '';
+  const stitchDir = repo ? join(repo, 'stitch') : '';
+  const steps = Array.isArray(run.steps) ? run.steps : [];
+  const nowIso = new Date().toISOString();
+  const item = (id: string, label: string, status: string, owner: string, evidence = '', stepId?: string) => ({
+    id, label, status, owner, evidence, stepId, updatedAt: nowIso,
+  });
+  const stepStatus = (stepId: string) => {
+    const step = steps.find((s: any) => s.step_id === stepId || s.stepId === stepId);
+    if (!step) return 'pending';
+    if (step.status === 'done') return 'pass';
+    if (step.status === 'failed' || step.status === 'skipped') return 'fail';
+    return 'pending';
+  };
+  const requiredStatus = (stepId: string, present: boolean) => {
+    const status = stepStatus(stepId);
+    if (status === 'pending') return 'pending';
+    return present ? 'pass' : 'fail';
+  };
+  const designManifest = existsSync(join(stitchDir, 'DESIGN_MANIFEST.json'));
+  const domManifest = existsSync(join(stitchDir, 'DESIGN_DOM.json'));
+  const uiContract = existsSync(join(stitchDir, 'UI_CONTRACT.json'));
+  const htmlCount = countFiles(stitchDir, '.html');
+  const pngCount = countFiles(stitchDir, '.png');
+  const phases = [
+    { id: 'plan', label: 'Plan', items: [
+      item('plan.repo', 'Repository path resolved', requiredStatus('plan', Boolean(repo)), 'planner', repo || 'missing repo', 'plan'),
+      item('plan.stack', 'Technology stack declared', requiredStatus('plan', Boolean(ctx.tech_stack)), 'planner', ctx.tech_stack || 'missing tech_stack', 'plan'),
+      item('plan.prd', 'PRD captured', requiredStatus('plan', Boolean(ctx.prd)), 'planner', ctx.prd ? `${String(ctx.prd).length} chars` : 'missing prd', 'plan'),
+    ]},
+    { id: 'design', label: 'Design', items: [
+      item('design.stitch_dir', 'Stitch artifact directory exists', requiredStatus('design', existsSync(stitchDir)), 'designer', stitchDir, 'design'),
+      item('design.manifest', 'Design manifest exists', requiredStatus('design', designManifest), 'designer', 'DESIGN_MANIFEST.json', 'design'),
+      item('design.png', 'PNG screenshots downloaded', requiredStatus('design', pngCount > 0), 'designer', `${pngCount} png file(s)`, 'design'),
+      item('design.dom', 'DOM manifest exists', requiredStatus('design', domManifest), 'designer', 'DESIGN_DOM.json', 'design'),
+      item('design.ui_contract', 'UI contract exists', requiredStatus('design', uiContract), 'designer', 'UI_CONTRACT.json', 'design'),
+    ]},
+    { id: 'stories', label: 'Stories', items: [
+      item('stories.count', 'Stories decomposed', requiredStatus('stories', stories.length > 0), 'planner', `${stories.length} story(ies)`, 'stories'),
+      item('stories.scope', 'Story scope files captured', requiredStatus('stories', stories.length > 0 && stories.every((s: any) => parseList(s.scope_files).length > 0)), 'planner', 'scope_files', 'stories'),
+    ]},
+    ...['setup-repo', 'setup-build', 'implement', 'verify', 'security-gate', 'qa-test', 'final-test', 'deploy'].map(stepId => ({
+      id: stepId,
+      label: stepId.replace(/-/g, ' ').replace(/\b\w/g, m => m.toUpperCase()),
+      items: [item(`${stepId}.status`, `${stepId} step status`, stepStatus(stepId), stepId, steps.find((s: any) => s.step_id === stepId)?.status || 'waiting', stepId)],
+    })),
+  ].map((phase: any) => ({ ...phase, status: contractStatus(phase.items) }));
+  const allItems = phases.flatMap((p: any) => p.items);
+  const progress = allItems.reduce((acc: any, current: any) => {
+    acc.total += 1;
+    acc[current.status] = (acc[current.status] || 0) + 1;
+    return acc;
+  }, { total: 0, pass: 0, fail: 0, pending: 0, deferred: 0, na: 0 });
+  return {
+    schema: 'setfarm.run-contract.v1',
+    version: 1,
+    runId: run.id,
+    runNumber: run.run_number,
+    workflowId: run.workflow_id,
+    status: run.status,
+    task: run.task,
+    project: {
+      repo,
+      branch: ctx.branch || '',
+      displayName: ctx.project_display_name || basename(repo || '') || 'Setfarm Project',
+      techStack: ctx.tech_stack || '',
+      uiLanguage: ctx.ui_language || 'English',
+    },
+    stackPack: { id: ctx.stack_pack || 'unknown', label: ctx.stack_pack || 'Unknown stack', confidence: 'low', evidence: ['Fallback contract generated by Mission Control'] },
+    progress,
+    phases,
+    stories: stories.map((s: any) => ({
+      storyId: s.story_id,
+      title: s.title,
+      status: normalizeVisibleStatus(s.status),
+      ownsScreens: parseList(s.story_screens),
+      scopeFiles: parseList(s.scope_files),
+      sharedFiles: parseList(s.shared_files),
+      dependsOn: parseList(s.depends_on),
+      deferred: ['pending', 'waiting'].includes(String(s.status || '')),
+      blocker: s.status === 'failed' ? String(s.output || '').slice(0, 220) : undefined,
+    })),
+    artifacts: { stitchDir, designScreenCount: 0, htmlCount, pngCount, domManifest, uiContract },
+    blockers: steps.filter((s: any) => ['failed', 'skipped'].includes(String(s.status || ''))).map((s: any) => `${s.step_id}: ${String(s.output || s.status).replace(/\s+/g, ' ').slice(0, 180)}`),
+    updatedAt: nowIso,
+    reason: 'mc-fallback',
+  };
+}
+
+function normalizeRunContract(contract: any, stories: any[], run?: any): any {
+  const storyRows = new Map<string, any>();
+  const stepRows = new Map<string, string>();
+  for (const step of Array.isArray(run?.steps) ? run.steps : []) {
+    const id = String(step.step_id || step.stepId || '');
+    if (id) stepRows.set(id, String(step.status || ''));
+  }
+  const terminalStep = (status: string) => ['done', 'failed', 'skipped'].includes(status);
+  const normalizeItemStatus = (phaseId: string, item: any): string => {
+    const rawStatus = String(item?.status || 'pending').trim().toLowerCase();
+    const status = normalizeVisibleStatus(rawStatus);
+    const stepId = String(item?.stepId || item?.step_id || phaseId || '');
+    const stepStatus = stepRows.get(stepId);
+    if ((rawStatus === 'na' || rawStatus === 'n/a' || rawStatus === 'not_applicable') && stepStatus && terminalStep(stepStatus)) {
+      return stepStatus === 'failed' || stepStatus === 'skipped' ? 'fail' : 'pass';
+    }
+    if (status !== 'pass') return status;
+    if (!stepId || stepRows.size === 0) return status;
+    return !stepStatus || !terminalStep(stepStatus) ? 'pending' : status;
+  };
+  const normalizePhaseStatus = (phase: any): string => {
+    const items = Array.isArray(phase.items) ? phase.items : [];
+    const status = contractStatus(items);
+    if (status === 'fail' || stepRows.size === 0) return status;
+    const stepIds = new Set<string>();
+    for (const item of items) {
+      const stepId = String(item?.stepId || item?.step_id || phase.id || '').trim();
+      if (stepId) stepIds.add(stepId);
+    }
+    if (stepIds.size === 0 && phase.id) stepIds.add(String(phase.id));
+    for (const stepId of stepIds) {
+      const stepStatus = stepRows.get(stepId);
+      if (stepStatus && !terminalStep(stepStatus)) return 'pending';
+    }
+    return status;
+  };
+  for (const story of stories || []) {
+    if (story?.story_id) storyRows.set(String(story.story_id), story);
+    if (story?.id) storyRows.set(String(story.id), story);
+  }
+  const normalizedStories = Array.isArray(contract?.stories)
+    ? contract.stories.map((story: any) => {
+        const storyId = String(story.storyId || story.story_id || story.id || '');
+        const row = storyRows.get(storyId) || storyRows.get(String(story.id || '')) || {};
+        return {
+          ...story,
+          storyId,
+          title: story.title || row.title || storyId,
+          status: normalizeVisibleStatus(story.status || row.status || 'pending'),
+          ownsScreens: parseList(row.story_screens ?? story.ownsScreens),
+          scopeFiles: parseList(row.scope_files ?? story.scopeFiles),
+          sharedFiles: parseList(row.shared_files ?? story.sharedFiles),
+          dependsOn: parseList(row.depends_on ?? story.dependsOn),
+          blocker: compactDisplay(story.blocker || row.output || '', 260) || undefined,
+        };
+      })
+    : [];
+  const normalizedPhases = Array.isArray(contract?.phases)
+    ? contract.phases.map((phase: any) => ({
+        ...phase,
+        items: Array.isArray(phase.items)
+          ? phase.items.map((item: any) => ({
+              ...item,
+              status: normalizeItemStatus(String(phase.id || ''), item),
+              evidence: compactDisplay(item.evidence, 260),
+              blocker: compactDisplay(item.blocker, 260),
+            }))
+          : [],
+      })).map((phase: any) => ({ ...phase, status: normalizePhaseStatus(phase) }))
+    : [];
+  const allItems = normalizedPhases.flatMap((phase: any) => phase.items || []);
+  const progress = allItems.reduce((acc: any, current: any) => {
+    acc.total += 1;
+    acc[current.status] = (acc[current.status] || 0) + 1;
+    return acc;
+  }, { total: 0, pass: 0, fail: 0, pending: 0, deferred: 0, na: 0 });
+  return {
+    ...contract,
+    progress,
+    phases: normalizedPhases,
+    stories: normalizedStories,
+    blockers: parseList(contract?.blockers).map((item) => compactDisplay(item, 260)),
+  };
+}
+
+function uniquePaths(paths: string[]): string[] {
+  return [...new Set(paths.filter(Boolean))];
+}
+
+function projectRootCandidates(): string[] {
+  const home = process.env.HOME || process.cwd();
+  return uniquePaths([
+    PATHS.projectsDir,
+    process.env.SETFARM_PROJECTS_DIR || '',
+    process.env.OPENCLAW_PROJECTS_DIR || '',
+    join(home, 'projects'),
+  ]);
+}
+
+function stitchCacheDir(projectId: string): string {
+  const home = process.env.HOME || process.cwd();
+  return join(home, '.openclaw', 'setfarm', 'stitch-cache', projectId);
+}
+
+function resolveRunStitchDirs(run: any, projectId?: string | null): string[] {
+  const ctx = parseRunContext(run);
+  const repo = typeof ctx.repo === 'string' ? ctx.repo : '';
+  const projectName = repo ? basename(repo) : '';
+  const dirs = [
+    repo ? join(repo, 'stitch') : '',
+    ...projectRootCandidates().flatMap((root) => projectName ? [join(root, projectName, 'stitch')] : []),
+    projectId ? stitchCacheDir(projectId) : '',
+  ];
+  return uniquePaths(dirs);
+}
+
+function findRunStitchFile(run: any, projectId: string | null | undefined, fileName: string): string | null {
+  if (!fileName || fileName !== basename(fileName)) return null;
+  for (const dir of resolveRunStitchDirs(run, projectId)) {
+    const fullPath = join(dir, fileName);
+    if (existsSync(fullPath)) return fullPath;
+  }
+  return null;
+}
+
+function designArtifactUrl(runId: string, fileName: string): string {
+  return `/api/setfarm/runs/${encodeURIComponent(runId)}/design-artifact/${encodeURIComponent(fileName)}`;
+}
+
+function resolveRunProjectId(run: any, output?: string): string | null {
+  const pidMatch = output?.match(/STITCH_PROJECT_ID:\s*(\S+)/);
+  if (pidMatch) return pidMatch[1];
+
+  const ctx = parseRunContext(run);
+  const repo = typeof ctx.repo === 'string' ? ctx.repo : '';
+  for (const dir of resolveRunStitchDirs(run, null)) {
+    const dotStitch = join(dir.replace(/\/stitch$/, ''), '.stitch');
+    if (!existsSync(dotStitch)) continue;
+    try {
+      const parsed = JSON.parse(readFileSync(dotStitch, 'utf-8'));
+      if (parsed?.projectId) return parsed.projectId;
+    } catch {
+      // Continue through other candidate locations.
+    }
+  }
+
+  if (repo) {
+    try {
+      const dotStitch = join(repo, '.stitch');
+      if (existsSync(dotStitch)) {
+        const parsed = JSON.parse(readFileSync(dotStitch, 'utf-8'));
+        if (parsed?.projectId) return parsed.projectId;
+      }
+    } catch {
+      // Project id is optional for older runs.
+    }
+  }
+
+  return null;
+}
 
 // Recent activity events (last 50, reverse chronological)
 router.get('/setfarm/activity', async (_req, res) => {
@@ -112,7 +448,7 @@ router.get('/setfarm/pipeline', async (_req, res) => {
         // the run is marked completed. Forcing that override was the second source
         // of the "100%" lie (first was failed-counted-as-completed in setfarm-db.ts).
         // Now the real bucket counts flow through unchanged.
-        const storyProgress = (batchProgress as any)[r.id] || { completed: 0, total: 0, verified: 0, skipped: 0, running: 0, pending: 0, done: 0, failed: 0 };
+            const storyProgress = (batchProgress as any)[r.id] || { completed: 0, total: 0, verified: 0, skipped: 0, running: 0, pending: 0, done: 0, failed: 0 };
         const hasFailures = (storyProgress.failed || 0) > 0;
         return {
           id: r.id,
@@ -123,6 +459,16 @@ router.get('/setfarm/pipeline', async (_req, res) => {
           hasFailures,
           updatedAt: r.updated_at,
           createdAt: r.created_at,
+          currentStoryId: r.currentStoryId || r.current_story_id || null,
+          currentStoryTitle: r.currentStoryTitle || r.current_story_title || null,
+          currentStoryStatus: r.currentStoryStatus || r.current_story_status || null,
+          currentStoryRetry: r.currentStoryRetry || r.current_story_retry || 0,
+          currentStoryMaxRetries: r.currentStoryMaxRetries || r.current_story_max_retries || 0,
+          nextStoryId: r.nextStoryId || r.next_story_id || null,
+          nextStoryTitle: r.nextStoryTitle || r.next_story_title || null,
+          nextStoryStatus: r.nextStoryStatus || r.next_story_status || null,
+          blockerStepId: r.blockerStepId || r.blocker_step_id || null,
+          blockerSummary: r.blockerSummary || r.blocker_summary || null,
           steps: (r.steps || []).map((s: any) => ({
             stepId: s.step_id,
             agent: s.agent_id,
@@ -149,6 +495,20 @@ router.get('/setfarm/runs/:id/stories', async (req, res) => {
     res.json(stories || []);
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Stories fetch failed' });
+  }
+});
+
+// GET /setfarm/runs/:id/contract — machine-readable run contract/checklist.
+router.get('/setfarm/runs/:id/contract', async (req, res) => {
+  try {
+    const allRuns = (await getRuns()) as any[];
+    const run = allRuns.find((r: any) => r.id === req.params.id);
+    if (!run) { res.status(404).json({ error: 'Run not found' }); return; }
+    const stories = await getRunStories(req.params.id).catch(() => []);
+    const contract = readRepoContract(run) || buildFallbackContract(run, stories || []);
+    res.json(normalizeRunContract(contract, stories || [], run));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Contract fetch failed' });
   }
 });
 
@@ -218,6 +578,41 @@ router.get('/setfarm/runs/:id/plan', async (req, res) => {
   }
 });
 
+// GET /setfarm/runs/:id/design-artifact/:file — Serve Stitch artifacts from the run's real project location.
+router.get('/setfarm/runs/:id/design-artifact/:file', async (req, res) => {
+  try {
+    const rawFile = req.params.file || '';
+    const fileName = basename(rawFile);
+    const extension = extname(fileName).toLowerCase();
+    const allowedExtensions = new Set(['.png', '.html', '.css', '.jpg', '.jpeg', '.webp']);
+
+    if (fileName !== rawFile || !allowedExtensions.has(extension)) {
+      res.status(400).json({ error: 'Invalid design artifact' });
+      return;
+    }
+
+    const allRuns = (await getRuns()) as any[];
+    const run = allRuns.find((r: any) => r.id === req.params.id);
+    if (!run) { res.status(404).json({ error: 'Run not found' }); return; }
+
+    const designStep = (run.steps || []).find((s: any) => s.step_id === 'design');
+    const projectId = resolveRunProjectId(run, designStep?.output as string | undefined);
+    const artifactPath = findRunStitchFile(run, projectId, fileName);
+    if (!artifactPath) {
+      res.status(404).json({ error: 'Design artifact not found' });
+      return;
+    }
+
+    if (extension === '.html') res.type('html');
+    else if (extension === '.css') res.type('css');
+    else res.type(extension.slice(1));
+    res.set('Cache-Control', 'private, max-age=300');
+    res.sendFile(artifactPath);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Design artifact fetch failed' });
+  }
+});
+
 // GET /setfarm/runs/:id/design — Stitch design screens with local screenshots
 router.get('/setfarm/runs/:id/design', async (req, res) => {
   try {
@@ -233,28 +628,7 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
 
     const output = designStep.output as string;
 
-    // Parse STITCH_PROJECT_ID (with .stitch file fallback — design agent often
-    // forgets to echo this field in its output even though preclaim sets it in context)
-    const pidMatch = output.match(/STITCH_PROJECT_ID:\s*(\S+)/);
-    let projectId: string | null = pidMatch ? pidMatch[1] : null;
-    if (!projectId) {
-      try {
-        const ctxForPid = JSON.parse(run.context || "{}");
-        const repoForPid = ctxForPid.repo || "";
-        if (repoForPid) {
-          const candidates = [
-            join(repoForPid, ".stitch"),
-            join("/home/setrox/projects", (repoForPid.split("/").pop() || ""), ".stitch"),
-          ];
-          for (const dotStitch of candidates) {
-            if (existsSync(dotStitch)) {
-              const parsed = JSON.parse(readFileSync(dotStitch, "utf-8"));
-              if (parsed && parsed.projectId) { projectId = parsed.projectId; break; }
-            }
-          }
-        }
-      } catch { /* best effort — projectId stays null */ }
-    }
+    const projectId = resolveRunProjectId(run, output);
 
     // Parse SCREEN_MAP JSON
     let screenMap: any[] = [];
@@ -281,12 +655,7 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
     // ENRICH: If screenMap exists but lacks htmlFile/screenshot, merge from DESIGN_MANIFEST.json
     if (screenMap.length > 0 && projectId) {
       try {
-        const ctx0 = JSON.parse(run.context || '{}');
-        const repo0 = ctx0.repo || '';
-        const manifestCandidates = repo0 ? [
-          join(repo0, 'stitch', 'DESIGN_MANIFEST.json'),
-          join('/home/setrox/projects', repo0.split('/').pop() || '', 'stitch', 'DESIGN_MANIFEST.json'),
-        ] : [];
+        const manifestCandidates = resolveRunStitchDirs(run, projectId).map((dir) => join(dir, 'DESIGN_MANIFEST.json'));
         const mp = manifestCandidates.find(p => existsSync(p));
         if (mp) {
           const mfRaw = JSON.parse(readFileSync(mp, 'utf-8'));
@@ -305,13 +674,7 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
     // FALLBACK 1: Read from DESIGN_MANIFEST.json (design step writes this to repo)
     if (screenMap.length === 0 && projectId) {
       try {
-        const ctx = JSON.parse(run.context || '{}');
-        const repo = ctx.repo || '';
-        // Try original repo path, then fallback to projects/ basename (worktree may be deleted)
-        const candidatePaths = repo ? [
-          join(repo, 'stitch', 'DESIGN_MANIFEST.json'),
-          join('/home/setrox/projects', repo.split('/').pop() || '', 'stitch', 'DESIGN_MANIFEST.json'),
-        ] : [];
+        const candidatePaths = resolveRunStitchDirs(run, projectId).map((dir) => join(dir, 'DESIGN_MANIFEST.json'));
         const manifestPath = candidatePaths.find(p => existsSync(p)) || '';
         if (manifestPath) {
           const manifestRaw = JSON.parse(readFileSync(manifestPath, 'utf-8'));
@@ -352,13 +715,7 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
     // FALLBACK 3: Scan repo stitch/ dir for .html+.png files directly
     if (screenMap.length === 0) {
       try {
-        const ctx3 = JSON.parse(run.context || '{}');
-        const repo3 = ctx3.repo || '';
-        // Try original path, then projects/ basename fallback
-        const stitchDir3Candidates = repo3 ? [
-          join(repo3, 'stitch'),
-          join('/home/setrox/projects', repo3.split('/').pop() || '', 'stitch'),
-        ] : [];
+        const stitchDir3Candidates = resolveRunStitchDirs(run, projectId);
         const stitchDir3 = stitchDir3Candidates.find(d => existsSync(d));
         if (stitchDir3) {
           const htmlFiles = readdirSync(stitchDir3).filter((f: string) => f.endsWith('.html') && f !== 'DESIGN_MANIFEST.json');
@@ -379,8 +736,7 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
 
     // Cache dir for this project's screenshots
 
-    const homeDir = process.env.HOME || '/home/setrox';
-    const cacheDir = join(homeDir, '.openclaw', 'setfarm', 'stitch-cache', projectId);
+    const cacheDir = stitchCacheDir(projectId);
     mkdirSync(cacheDir, { recursive: true });
 
     const STITCH_SCRIPT = join(PATHS.setfarmRepoDir, 'scripts/stitch-api.mjs');
@@ -393,11 +749,11 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
       // Populate cache from repo's stitch/ dir (eager-downloaded during design step)
       // Stitch API deletes screens after hours, so repo-local files are the only reliable source
       try {
-        const ctx = JSON.parse(run.context || '{}');
+        const ctx = parseRunContext(run);
         const repo = ctx.repo || '';
+        const repoStitchDir = repo ? join(repo, 'stitch') : '';
         let populated = false;
-        if (repo) {
-          const repoStitchDir = join(repo, 'stitch');
+        if (repoStitchDir) {
           if (existsSync(repoStitchDir)) {
             execFileSync('node', [STITCH_SCRIPT, 'populate-cache', repoStitchDir, cacheDir], { timeout: 15_000, stdio: 'pipe' });
             populated = true;
@@ -405,10 +761,11 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
         }
         // Fallback: worktree deleted — try projects/ dir with basename
         if (!populated && repo) {
-          const { basename } = await import('path');
-          const altRepoStitch = join('/home/setrox/projects', basename(repo), 'stitch');
-          if (existsSync(altRepoStitch)) {
+          for (const altRepoStitch of resolveRunStitchDirs(run, projectId)) {
+            if (altRepoStitch === repoStitchDir || !existsSync(altRepoStitch)) continue;
             execFileSync('node', [STITCH_SCRIPT, 'populate-cache', altRepoStitch, cacheDir], { timeout: 15_000, stdio: 'pipe' });
+            populated = true;
+            break;
           }
         }
       } catch { /* best effort */ }
@@ -435,29 +792,6 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
       }
     }
 
-    // Resolve stitch dir: prefer project repo dir, fallback to stitch-cache
-    let stitchBase = '';
-    let stitchUrlBase = '';
-    try {
-      const ctxRaw = run.context || '{}';
-      const ctx = typeof ctxRaw === 'string' ? JSON.parse(ctxRaw) : ctxRaw;
-      const repo = ctx.repo || '';
-      const projName = repo ? repo.split('/').pop() : '';
-      const projStitch = projName ? join('/home/setrox/projects', projName, 'stitch') : '';
-      if (projStitch && existsSync(projStitch)) {
-        stitchBase = projStitch;
-        stitchUrlBase = `/projects-stitch/${projName}/stitch`;
-      } else if (repo && existsSync(join(repo, 'stitch'))) {
-        stitchBase = join(repo, 'stitch');
-        stitchUrlBase = `/projects-stitch/${projName}/stitch`;
-      }
-    } catch { /* context parse */ }
-    // Fallback to stitch-cache
-    if (!stitchBase) {
-      stitchBase = cacheDir;
-      stitchUrlBase = `/stitch-cache/${projectId}`;
-    }
-
     const screens = screenMap.map((screen: any) => {
       // Try: manifest screenshot field, screenId.png, htmlFile-based
       const candidates = [
@@ -465,18 +799,18 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
         screen.screenId + '.png',
         screen.htmlFile ? screen.htmlFile.replace('.html', '.png') : '',
       ].filter(Boolean);
-      const screenshotName = candidates.find(f => existsSync(join(stitchBase, f))) || null;
+      const screenshotName = candidates.find(f => findRunStitchFile(run, projectId, f)) || null;
 
       const htmlCandidates = [
         screen.htmlFile || '',
         screen.screenId + '.html',
       ].filter(Boolean);
-      const htmlName = htmlCandidates.find(f => existsSync(join(stitchBase, f))) || null;
+      const htmlName = htmlCandidates.find(f => findRunStitchFile(run, projectId, f)) || null;
 
       return {
         ...screen,
-        screenshotUrl: screenshotName ? `${stitchUrlBase}/${encodeURIComponent(screenshotName)}` : null,
-        htmlUrl: htmlName ? `${stitchUrlBase}/${encodeURIComponent(htmlName)}` : null,
+        screenshotUrl: screenshotName ? designArtifactUrl(req.params.id, screenshotName) : null,
+        htmlUrl: htmlName ? designArtifactUrl(req.params.id, htmlName) : null,
         width: screen.width || null,
         height: screen.height || null,
       };
@@ -561,7 +895,7 @@ async function createBuildingProject(run: any): Promise<void> {
   // Get next available port
   let port: number | null = null;
   try {
-    const mcBase = process.env.MC_INTERNAL_URL || 'http://127.0.0.1:3080';
+    const mcBase = config.internalUrl;
     const res = await fetch(mcBase + '/api/projects/next-port');
     const data = await res.json() as any;
     port = data.port || null;
@@ -776,7 +1110,7 @@ async function syncProjectsFromRuns(): Promise<{ synced: any[]; skipped: string[
         try {
           const stories = await getRunStories(run.id);
           if (stories && stories.length > 0) {
-            const done = run.status === 'completed' ? stories.length : stories.filter((s: any) => ['done', 'verified', 'skipped'].includes(s.status)).length;
+            const done = run.status === 'completed' ? stories.length : stories.filter((s: any) => ['done', 'verified'].includes(s.status)).length;
             updateProjectById(result.project.id, {
               stories: { total: stories.length, done },
               completedAt: run.updated_at || new Date().toISOString(),
@@ -823,7 +1157,7 @@ async function syncProjectsFromRuns(): Promise<{ synced: any[]; skipped: string[
       try {
         const stories = await getRunStories(run.id);
         if (stories && stories.length > 0) {
-          const done = run.status === 'completed' ? stories.length : stories.filter((s: any) => ['done', 'verified', 'skipped'].includes(s.status)).length;
+          const done = run.status === 'completed' ? stories.length : stories.filter((s: any) => ['done', 'verified'].includes(s.status)).length;
           updateProjectById(result.project.id, {
             stories: { total: stories.length, done },
             completedAt: (run.status === 'completed' || run.status === 'failed' || run.status === 'cancelled') ? (run.updated_at || new Date().toISOString()) : undefined,

@@ -28,17 +28,17 @@ const PRD_TEMPLATES = [
 function scorePrdLocal(content: string) {
   const lower = content.toLowerCase();
   const lines = content.split('\n');
-  const screenHeaders = lines.filter((l: string) => /^#{1,3}\s.*(sayfa|ekran|page|screen|view)/i.test(l)).length;
+  const screenHeaders = lines.filter((l: string) => /^#{1,3}\s.*(page|screen|view)/i.test(l)).length;
   const hasRoutes = /route|path|navigation/i.test(lower);
-  const hasColors = /renk|color|#[0-9a-f]{3,6}/i.test(lower);
+  const hasColors = /color|#[0-9a-f]{3,6}/i.test(lower);
   const hasFonts = /font|typography/i.test(lower);
-  const hasTheme = /tema|theme|dark|light/i.test(lower);
+  const hasTheme = /theme|dark|light/i.test(lower);
   const componentKw = ['button', 'card', 'modal', 'input', 'form', 'header', 'footer', 'table', 'tab', 'nav'];
   const foundC = componentKw.filter(k => lower.includes(k)).length;
   const hasAnim = /animation|transition|hover|easing/i.test(lower);
   const hasResp = /breakpoint|responsive|mobile|tablet/i.test(lower);
   const hasApi = /api|endpoint|data|fetch/i.test(lower);
-  const totalScreens = screenHeaders + (lower.match(/ekran|screen|view|sayfa|page/g)?.length || 0) / 3;
+  const totalScreens = screenHeaders + (lower.match(/screen|view|page/g)?.length || 0) / 3;
   const pageDetail = Math.min(20, (screenHeaders >= 4 ? 20 : screenHeaders >= 2 ? 14 : screenHeaders >= 1 ? 8 : 2) + (hasRoutes ? 3 : 0));
   const designSystem = (hasColors ? 6 : 0) + (hasFonts ? 5 : 0) + (hasTheme ? 5 : 0);
   const components = foundC >= 8 ? 15 : foundC >= 5 ? 11 : foundC >= 3 ? 7 : foundC >= 1 ? 4 : 0;
@@ -65,9 +65,9 @@ export function PrdGenerator() {
   const [trendEnhancing, setTrendEnhancing] = useState(false);
   const esRef = useRef<EventSource | null>(null);
 
-  // Sayfa acildiginda son PRD'yi DB'den otomatik yukle
+  // Auto-load the latest PRD from the database when the page opens.
   useEffect(() => {
-    if (usePrdStore.getState().id || usePrdStore.getState().skipAutoLoad || sessionStorage.getItem('prd_skip_autoload')) return; // zaten yuklu veya kullanici yeni istedi
+    if (usePrdStore.getState().id || usePrdStore.getState().skipAutoLoad || sessionStorage.getItem('prd_skip_autoload')) return; // Already loaded or user requested a fresh PRD.
     api.prdHistory().then(prds => {
       if (prds.length > 0 && !usePrdStore.getState().id) {
         const last = prds[0];
@@ -108,27 +108,27 @@ export function PrdGenerator() {
   }, []);
   const { setState: setStore, addLog, setLoading, reset } = store;
 
-  // URL veya aciklamadan otomatik proje adi onerisi
+  // Suggest a project name from the URL or description.
   const autoTitle = (source: string, type: 'url' | 'desc') => {
-    if (store.title) return; // zaten elle girilmis
+    if (store.title) return; // User already entered one manually.
     let name = '';
     if (type === 'url') {
       try {
         const u = new URL(source);
-        // domain'den anlamli isim cikar: "alexcinovoj.dev" -> "Alexcinovoj"
+        // Derive a readable name from the domain: "alexcinovoj.dev" -> "Alexcinovoj".
         const host = u.hostname.replace(/^www\./, '');
         const parts = host.split('.');
-        // apps.apple.com/app/xyz -> xyz, play.google.com -> ilk path segment
+        // apps.apple.com/app/xyz -> xyz; play.google.com -> first path segment.
         if (/apps\.apple\.com|play\.google\.com/.test(host)) {
           const pathParts = u.pathname.split('/').filter(Boolean);
           name = pathParts[pathParts.length - 1]?.replace(/-/g, ' ') || parts[0];
         } else {
-          name = parts[0]; // domain'in ilk kismi
+          name = parts[0]; // First domain segment.
         }
         name = name.charAt(0).toUpperCase() + name.slice(1);
       } catch { /* invalid url, skip */ }
     } else {
-      // aciklamadan ilk 3-4 kelimeyi al
+      // Use the first three or four words from the description.
       const words = source.trim().split(/\s+/).slice(0, 4);
       if (words.length > 0) {
         name = words.join(' ');
@@ -138,7 +138,7 @@ export function PrdGenerator() {
     if (name) setStore({ title: name });
   };
 
-  // URL'den platform auto-detect
+  // Auto-detect platform from URL.
   const handleUrlChange = (index: number, value: string) => {
     const newUrls = [...store.urls];
     newUrls[index] = value;
@@ -146,7 +146,7 @@ export function PrdGenerator() {
     if (/apps\.apple\.com|play\.google\.com/.test(value)) {
       setStore({ platform: 'mobile' });
     }
-    // ilk URL girildiginde otomatik proje adi oner
+    // Suggest a project name after the first URL is entered.
     if (index === 0 && value.startsWith('http')) {
       autoTitle(value, 'url');
     }
@@ -158,45 +158,45 @@ export function PrdGenerator() {
   // GitHub repo import
   const handleGithubImport = async () => {
     const githubUrl = store.urls.find(u => u.includes('github.com'));
-    if (!githubUrl) { addLog('GitHub URL gerekli (ornek: https://github.com/user/repo)'); return; }
+    if (!githubUrl) { addLog('GitHub URL is required, for example https://github.com/user/repo'); return; }
     setLoading('analyze', true);
-    addLog(`GitHub repo analiz ediliyor: ${githubUrl}`);
+    addLog(`Analyzing GitHub repo: ${githubUrl}`);
     try {
       const result = await api.prdGithubImport(githubUrl);
       setStore({
         analysis: result.analysis,
         platform: result.platform as 'web' | 'mobile',
         title: result.analysis?.title || store.title,
-        activeTab: 'analiz',
+        activeTab: 'analysis',
       });
-      addLog(`GitHub import basarili: ${result.analysis?.fullName || githubUrl} (${result.analysis?.techStack?.join(', ') || 'stack bilinmiyor'})`);
+      addLog(`GitHub import succeeded: ${result.analysis?.fullName || githubUrl} (${result.analysis?.techStack?.join(', ') || 'stack unknown'})`);
     } catch (err: any) {
-      addLog(`GitHub import hatasi: ${err.message}`);
+      addLog(`GitHub import failed: ${err.message}`);
     } finally {
       setLoading('analyze', false);
     }
   };
 
-  // Site analiz et
+  // Analyze site.
   const handleAnalyze = async () => {
     const validUrls = store.urls.filter(u => u.trim());
-    if (validUrls.length === 0 && !store.description) { addLog('URL veya aciklama gerekli'); return; }
+    if (validUrls.length === 0 && !store.description) { addLog('URL or description is required'); return; }
 
     setLoading('analyze', true);
     const allAnalyses: any[] = [];
     for (const url of validUrls) {
-      addLog(`Analiz ediliyor: ${url}`);
+      addLog(`Analyzing: ${url}`);
       try {
         const result = await api.prdAnalyze({ url });
         allAnalyses.push(result.analysis);
-        addLog(`Analiz tamamlandi: ${url}`);
+        addLog(`Analysis complete: ${url}`);
         if (result.platform) setStore({ platform: result.platform });
-        // Analiz sonucundan site title'i ile proje adi oner
+        // Suggest project name from the analyzed site title.
         if (!store.title && result.analysis?.title) {
           setStore({ title: result.analysis.title });
         }
       } catch (err: any) {
-        addLog(`Analiz hatasi: ${err.message}`);
+        addLog(`Analysis failed: ${err.message}`);
       }
     }
     setStore({ analyses: allAnalyses, analysis: allAnalyses.length === 1 ? allAnalyses[0] : allAnalyses });
@@ -224,7 +224,7 @@ export function PrdGenerator() {
     }
     // Add generic features if none detected
     if (detectedFeatures.length === 0) {
-      const fallback = ['Ana Sayfa', 'Navigasyon', 'Footer', 'Responsive Design', 'Dark Mode'];
+      const fallback = ['Home Page', 'Navigation', 'Footer', 'Responsive Design', 'Dark Mode'];
       for (const name of fallback) detectedFeatures.push({ name, enabled: true });
     }
     setStore({
@@ -238,10 +238,10 @@ export function PrdGenerator() {
     setLoading('analyze', false);
   };
 
-  // Screenshot analiz
+  // Screenshot analysis.
   const handleScreenshot = async (base64: string, filename: string) => {
     setLoading('screenshot', true);
-    addLog(`Screenshot analiz ediliyor: ${filename}`);
+    addLog(`Analyzing screenshot: ${filename}`);
     try {
       const result = await api.prdAnalyze({ screenshot: base64, filename });
       const visionData = result.analysis || {};
@@ -250,7 +250,7 @@ export function PrdGenerator() {
       // Auto-fill title from vision analysis if not already set
       if (!store.title && visionData.suggestedTitle) {
         setStore({ title: visionData.suggestedTitle });
-        addLog(`Onerilen baslik: ${visionData.suggestedTitle}`);
+        addLog(`Suggested title: ${visionData.suggestedTitle}`);
       }
 
       // Auto-fill description from vision data
@@ -258,37 +258,37 @@ export function PrdGenerator() {
         const parts: string[] = [];
         if (visionData.style) parts.push(`${visionData.style} stil`);
         if (visionData.layout) parts.push(`${visionData.layout} layout`);
-        if (visionData.components?.length) parts.push(`${visionData.components.slice(0, 5).join(', ')} komponentleri`);
-        setStore({ description: parts.join(', ') + ' iceren UI tasarimi' });
+        if (visionData.components?.length) parts.push(`${visionData.components.slice(0, 5).join(', ')} components`);
+        setStore({ description: parts.join(', ') + ' UI design' });
       }
 
-      addLog(`Screenshot analizi tamamlandi${visionData.components?.length ? ` — ${visionData.components.length} komponent tespit edildi` : ''}`);
+      addLog(`Screenshot analysis complete${visionData.components?.length ? ` - ${visionData.components.length} components detected` : ''}`);
     } catch (err: any) {
-      addLog(`Screenshot hatasi: ${err.message}`);
+      addLog(`Screenshot failed: ${err.message}`);
     }
     setLoading('screenshot', false);
   };
 
-  // Web arastirma
+  // Web research
   const handleResearch = async () => {
     setLoading('research', true);
-    addLog('Web arastirmasi baslatiliyor...');
+    addLog('Starting web research...');
     try {
       const topic = store.title || store.description || store.urls[0];
       const result = await api.prdResearch({ topic, query: topic });
       setStore({ research: result.research });
-      addLog('Arastirma tamamlandi');
+      addLog('Research complete');
     } catch (err: any) {
-      addLog(`Arastirma hatasi: ${err.message}`);
+      addLog(`Research failed: ${err.message}`);
     }
     setLoading('research', false);
   };
 
-  // PRD olustur (with optional refinements)
+  // Generate PRD with optional refinements.
   const handleGenerateWithRefinements = async () => {
-    if (!store.title.trim()) { addLog('Proje adi gerekli'); return; }
+    if (!store.title.trim()) { addLog('Project name is required'); return; }
     setLoading('generate', true);
-    addLog('PRD olusturuluyor (refinements ile)...');
+    addLog('Generating PRD with refinements...');
 
     // Build refinement context
     const ref = store.refinements;
@@ -323,18 +323,18 @@ export function PrdGenerator() {
         scoreDetails: result.score_details,
         costEstimate: result.cost_estimate,
       });
-      addLog(`PRD v${result.prd_version} olusturuldu — Skor: ${result.score}/100`);
+      addLog(`PRD v${result.prd_version} generated - Score: ${result.score}/100`);
     } catch (err: any) {
-      addLog(`PRD olusturma hatasi: ${err.message}`);
+      addLog(`PRD generation failed: ${err.message}`);
     }
     setLoading('generate', false);
   };
 
-  // PRD olustur
+  // Generate PRD.
   const handleGenerate = async () => {
-    if (!store.title.trim()) { addLog('Proje adi gerekli'); return; }
+    if (!store.title.trim()) { addLog('Project name is required'); return; }
     setLoading('generate', true);
-    addLog('PRD olusturuluyor...');
+    addLog('Generating PRD...');
     try {
       const result = await api.prdGenerate({
         prdId: store.id,
@@ -356,17 +356,17 @@ export function PrdGenerator() {
       });
       addLog(`PRD v${result.prd_version} olusturuldu — Skor: ${result.score}/100`);
     } catch (err: any) {
-      addLog(`PRD olusturma hatasi: ${err.message}`);
+      addLog(`PRD generation failed: ${err.message}`);
     }
     setLoading('generate', false);
   };
 
-  // PRD gelistir
+  // Enhance PRD.
   const handleEnhance = async () => {
     setPreviousPrd(store.prdContent || '');
     if (!store.id) return;
     setLoading('enhance', true);
-    addLog('PRD gelistiriliyor...');
+    addLog('Enhancing PRD...');
     try {
       // Start async enhance job
       await fetch('/api/prd/enhance', {
@@ -382,11 +382,11 @@ export function PrdGenerator() {
             const data = await res.json();
             if (data.status === 'done') { clearInterval(poll); resolve(data.result); }
             else if (data.status === 'error') { clearInterval(poll); reject(new Error(data.error)); }
-            else if (data.status === 'idle') { clearInterval(poll); reject(new Error('Islem bulunamadi — tekrar deneyin')); }
-          } catch { clearInterval(poll); reject(new Error('Polling hatasi')); }
+            else if (data.status === 'idle') { clearInterval(poll); reject(new Error('Operation not found; try again')); }
+          } catch { clearInterval(poll); reject(new Error('Polling failed')); }
         }, 5000);
         // Timeout after 10 minutes
-        setTimeout(() => { clearInterval(poll); reject(new Error('Zaman asimi (10dk)')); }, 600000);
+        setTimeout(() => { clearInterval(poll); reject(new Error('Timed out after 10 minutes')); }, 600000);
       });
       setStore({
         prdContent: result.prd_content,
@@ -395,50 +395,50 @@ export function PrdGenerator() {
         scoreDetails: result.score_details,
         costEstimate: result.cost_estimate,
       });
-      addLog(`PRD v${result.prd_version} — Skor: ${result.score}/100`);
-      // Coverage yeniden hesapla (PRD degisti, yeni sayfalar eklenmis olabilir)
+      addLog(`PRD v${result.prd_version} - Score: ${result.score}/100`);
+      // Recompute coverage because the PRD may have changed.
       const currentScreens = usePrdStore.getState().mockupScreens;
       if (currentScreens.length > 0 && result.prd_content) {
         try {
           const cov = await api.prdScreenCoverage({ prdContent: result.prd_content, screens: currentScreens, prdId: store.id || undefined });
           setStore({ screenCoverage: cov });
           if (cov.missing.length > 0) {
-            addLog(`${cov.missing.length} yeni/eksik sayfa tespit edildi`);
+            addLog(`${cov.missing.length} new or missing pages detected`);
           }
         } catch { /* optional */ }
       }
     } catch (err: any) {
-      addLog(`Gelistirme hatasi: ${err.message}`);
+      addLog(`Enhancement failed: ${err.message}`);
     }
     setLoading('enhance', false);
   };
 
-  // PRD'yi 2026 trendleriyle gelistir
+  // Enhance PRD with 2026 trends.
   const handleTrendEnhance = async () => {
     if (!store.prdContent) return;
     setTrendEnhancing(true);
-    addLog('2026 trendleriyle gelistiriliyor...');
+    addLog('Enhancing with 2026 trends...');
     try {
       const result = await api.enhanceWithTrends(store.prdContent);
       if (result.enhanced) {
         setPreviousPrd(store.prdContent);
         setStore({ prdContent: result.enhanced });
-        addLog('PRD 2026 trendleriyle guncellendi');
+        addLog('PRD updated with 2026 trends');
       }
     } catch (err: any) {
-      addLog(`Trend enhancement hatasi: ${err.message}`);
+      addLog(`Trend enhancement failed: ${err.message}`);
     }
     setTrendEnhancing(false);
   };
 
-// Mockup uret (SSE streaming — ekranlar teker teker gelir)
+// Generate mockups through SSE streaming.
   const handleMockups = async () => {
     if (!store.prdContent) return;
     setLoading('mockups', true);
     setStore({ mockupScreens: [], activeTab: 'mockup', screenCoverage: null });
-    addLog('Mockup uretiliyor...');
+    addLog('Generating mockups...');
 
-    // PRD DB'de yoksa once kaydet (SSE icin prdId lazim, prdContent URL'e sigmaz)
+    // Save the PRD first when needed because SSE requires a prdId.
     let prdId = store.id;
     if (!prdId) {
       try {
@@ -454,7 +454,7 @@ export function PrdGenerator() {
         prdId = result.id;
         setStore({ id: result.id, prdVersion: result.prd_version, score: result.score, scoreDetails: result.score_details, costEstimate: result.cost_estimate });
       } catch (err: any) {
-        addLog(`PRD kaydetme hatasi: ${err.message}`);
+        addLog(`PRD save failed: ${err.message}`);
         setLoading('mockups', false);
         return;
       }
@@ -471,25 +471,25 @@ export function PrdGenerator() {
     es.addEventListener('start', (e) => {
       const data = JSON.parse(e.data);
       setStore({ stitchProjectId: data.projectId || null });
-      addLog(`Stitch projesi olusturuldu — ${data.total} ekran uretilecek`);
+      addLog(`Stitch project created - ${data.total} screens will be generated`);
     });
 
     es.addEventListener('progress', (e) => {
       const data = JSON.parse(e.data);
-      addLog(`[${data.index + 1}/${data.total}] ${data.title} uretiliyor...`);
+      addLog(`[${data.index + 1}/${data.total}] Generating ${data.title}...`);
     });
 
     es.addEventListener('screen', (e) => {
       const data = JSON.parse(e.data);
       const current = usePrdStore.getState().mockupScreens;
       setStore({ mockupScreens: [...current, data.screen] });
-      addLog(`[${data.index + 1}/${data.total}] ${data.screen.name} tamamlandi`);
+      addLog(`[${data.index + 1}/${data.total}] ${data.screen.name} complete`);
     });
 
     es.addEventListener('done', (e) => {
       const data = JSON.parse(e.data);
       setStore({ mockupScreens: data.screens, stitchProjectId: data.projectId });
-      addLog(`${data.total} ekran mockup'i uretildi`);
+      addLog(`${data.total} screen mockups generated`);
       closeEs();
       // Coverage check
       const prdContent = usePrdStore.getState().prdContent;
@@ -503,22 +503,22 @@ export function PrdGenerator() {
     es.addEventListener('error', (e) => {
       try {
         const data = JSON.parse((e as MessageEvent).data);
-        addLog(`Mockup hatasi: ${data.message}`);
+        addLog(`Mockup failed: ${data.message}`);
       } catch {
         const current = usePrdStore.getState().mockupScreens;
         if (current.length > 0) {
-          addLog(`Baglanti kesildi ama ${current.length} ekran mevcut`);
-          // Coverage check — eksik sayfalari goster
+          addLog(`Connection closed, but ${current.length} screens are available`);
+          // Coverage check: show missing pages.
           const prdContent = usePrdStore.getState().prdContent;
           if (prdContent) {
             api.prdScreenCoverage({ prdContent, screens: current, prdId: store.id || undefined })
               .then(cov => {
                 setStore({ screenCoverage: cov });
-                if (cov.missing.length > 0) addLog(`${cov.missing.length} eksik sayfa var — tiklayarak uretebilirsiniz`);
+                if (cov.missing.length > 0) addLog(`${cov.missing.length} pages are missing - click to generate them`);
               }).catch(() => {});
           }
         } else {
-          addLog('Mockup baglantisi kesildi');
+          addLog('Mockup connection closed');
         }
       }
       closeEs();
@@ -527,13 +527,13 @@ export function PrdGenerator() {
     es.onerror = () => { closeEs(); };
   };
 
-  // Mockup devam et — coverage'daki eksik sayfalari sirayla uret
+  // Resume mockups by generating missing coverage pages.
   const handleResumeMockups = async () => {
     if (!store.prdContent || !store.id) return;
     const existingCount = store.mockupScreens.length;
     if (existingCount === 0) { handleMockups(); return; }
 
-    // Coverage varsa eksik sayfalari kullan, yoksa once coverage hesapla
+    // Use existing coverage, or calculate it first.
     let missingPages = store.screenCoverage?.missing || [];
     if (missingPages.length === 0) {
       try {
@@ -544,7 +544,7 @@ export function PrdGenerator() {
     }
 
     if (missingPages.length === 0) {
-      addLog('Tum sayfalar zaten kapsaniyor — eksik sayfa yok');
+      addLog('All pages are already covered - no missing pages');
       return;
     }
 
@@ -555,18 +555,18 @@ export function PrdGenerator() {
       if (projectId) setStore({ stitchProjectId: projectId });
     }
     if (!projectId) {
-      addLog('Stitch project ID bulunamadi — once "Mockup Uret" ile yeni uretim yapin');
+      addLog('Stitch project ID not found - run "Generate Mockups" first');
       return;
     }
 
     setLoading('mockups', true);
 
-    addLog(`${missingPages.length} eksik sayfa icin mockup uretiliyor...`);
+    addLog(`Generating mockups for ${missingPages.length} missing pages...`);
 
     // Generate missing pages one by one
     for (let i = 0; i < missingPages.length; i++) {
       const title = missingPages[i];
-      addLog(`[${i + 1}/${missingPages.length}] "${title}" uretiliyor...`);
+      addLog(`[${i + 1}/${missingPages.length}] Generating "${title}"...`);
       try {
         const prdTruncated = store.prdContent.length > 12000 ? store.prdContent.slice(0, 12000) : store.prdContent;
         const prompt = `Build a complete, production-ready web page design for: "${title}"\n\nFULL PROJECT PRD:\n${prdTruncated}\n\nTARGET PAGE: "${title}"\nUse the EXACT design system from the PRD. Match existing screens style.`;
@@ -575,23 +575,23 @@ export function PrdGenerator() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ title, prompt, projectId: store.stitchProjectId }),
         });
-        if (!res.ok) { addLog(`"${title}" uretim hatasi: ${res.status}`); continue; }
+        if (!res.ok) { addLog(`"${title}" generation failed: ${res.status}`); continue; }
         const result = await res.json();
         if (result.screen) {
           const updated = [...usePrdStore.getState().mockupScreens, result.screen];
           setStore({ mockupScreens: updated });
-          addLog(`[${i + 1}/${missingPages.length}] "${title}" tamamlandi`);
+          addLog(`[${i + 1}/${missingPages.length}] "${title}" complete`);
         }
         // Rate limit
         if (i < missingPages.length - 1) await new Promise(r => setTimeout(r, 2000));
       } catch (err: any) {
-        addLog(`"${title}" hatasi: ${err.message}`);
+        addLog(`"${title}" failed: ${err.message}`);
       }
     }
 
     // Final coverage update
     const finalScreens = usePrdStore.getState().mockupScreens;
-    addLog(`Tamamlandi! Toplam ${finalScreens.length} ekran`);
+    addLog(`Complete. Total screens: ${finalScreens.length}`);
     try {
       const cov = await api.prdScreenCoverage({ prdContent: store.prdContent, screens: finalScreens, prdId: store.id || undefined });
       setStore({ screenCoverage: cov });
@@ -600,25 +600,25 @@ export function PrdGenerator() {
   };
 
 
-  // Pipeline'a gonder
+  // Send to pipeline.
   const handleStartRun = async () => {
     if (!store.id || !store.prdContent) return;
     setLoading('startRun', true);
     const projectName = store.projectName || store.title;
     const screens = store.mockupScreens;
 
-    addLog('--- PIPELINE BASLATIYOR ---');
-    addLog(`1/6 Repo olusturuluyor: ~/projects/${projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/`);
+    addLog('--- STARTING PIPELINE ---');
+    addLog(`1/6 Creating repo: ~/projects/${projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/`);
 
     if (screens.length > 0) {
-      addLog(`2/6 Design dosyalari yerlestiriliyor (${screens.length} ekran)...`);
-      addLog('   stitch/ dizini + .stitch + DESIGN_MANIFEST.json');
+      addLog(`2/6 Placing design files (${screens.length} screens)...`);
+      addLog('   stitch/ directory + .stitch + DESIGN_MANIFEST.json');
     } else {
-      addLog('2/6 Design dosyasi yok — design step sifirdan calisacak');
+      addLog('2/6 No design file; design step will run from scratch');
     }
 
-    addLog(`3/6 PRD + metadata task string olusturuluyor...`);
-    addLog(`4/6 setfarm workflow run ${store.workflow} calistiriliyor...`);
+    addLog(`3/6 Creating PRD + metadata task string...`);
+    addLog(`4/6 Starting setfarm workflow run ${store.workflow}...`);
 
     try {
       const result = await api.prdStartRun({
@@ -627,12 +627,12 @@ export function PrdGenerator() {
         workflow: store.workflow,
       });
       setStore({ runId: result.runId });
-      addLog(`5/6 Pipeline baslatildi! Run ID: ${result.runId}`);
+      addLog(`5/6 Pipeline started. Run ID: ${result.runId}`);
       if (result.repoPath) addLog(`   Repo: ${result.repoPath}`);
-      addLog('6/6 AGENTS tabindan takip edebilirsiniz');
-      addLog('--- PIPELINE AKTIF ---');
+      addLog('6/6 Track progress from the AGENTS tab');
+      addLog('--- PIPELINE ACTIVE ---');
     } catch (err: any) {
-      addLog(`Pipeline hatasi: ${err.message}`);
+      addLog(`Pipeline failed: ${err.message}`);
     }
     setLoading('startRun', false);
   };
@@ -656,15 +656,15 @@ export function PrdGenerator() {
       });
       setStore({ chatHistory: result.chatHistory });
     } catch (err: any) {
-      setStore({ chatHistory: [...newHistory, { role: 'assistant', content: `Hata: ${err.message}` }] });
+      setStore({ chatHistory: [...newHistory, { role: 'assistant', content: `Error: ${err.message}` }] });
     }
   };
   const handleGenerateMissing = async (title: string) => {
-    if (!store.stitchProjectId || !store.id) { addLog('Once mockup uretimi yapilmali'); return; }
+    if (!store.stitchProjectId || !store.id) { addLog('Mockup generation must run first'); return; }
     setLoading('mockups', true);
-    addLog(`"${title}" sayfasi icin mockup uretiliyor...`);
+    addLog(`Generating mockup for "${title}"...`);
     try {
-      // SSE stream ile tek sayfa uret (variant degil, yeni bagimsiz ekran)
+      // Generate one independent screen through the SSE stream.
       const params = new URLSearchParams({
         prdId: store.id,
         prdContent: store.prdContent,
@@ -687,21 +687,21 @@ export function PrdGenerator() {
       if (result.screen) {
         const updated = [...store.mockupScreens, result.screen];
         setStore({ mockupScreens: updated });
-        addLog(`"${title}" mockup'i uretildi`);
+        addLog(`"${title}" mockup generated`);
         // Coverage guncelle
         api.prdScreenCoverage({ prdContent: store.prdContent, screens: updated, prdId: store.id || undefined })
           .then(cov => setStore({ screenCoverage: cov }))
           .catch(() => {});
       } else {
-        addLog(`"${title}" uretilemedi`);
+        addLog(`"${title}" could not be generated`);
       }
     } catch (err: any) {
-      addLog(`Uretim hatasi: ${err.message}`);
+      addLog(`Generation failed: ${err.message}`);
     }
     setLoading('mockups', false);
   };
 
-  // Mockup uretimini durdur
+  // Stop mockup generation.
   const handleStopMockups = () => {
     if (esRef.current) {
       esRef.current.close();
@@ -709,16 +709,16 @@ export function PrdGenerator() {
     }
     setLoading('mockups', false);
     const current = usePrdStore.getState().mockupScreens;
-    addLog(`Uretim durduruldu — ${current.length} ekran mevcut`);
+    addLog(`Generation stopped - ${current.length} screens available`);
   };
 
-  // Toplu sil (state + DB)
+  // Clear all screens from state and database.
   const handleClearAllScreens = async () => {
     setStore({ mockupScreens: [], screenCoverage: null, lightboxScreenId: null });
     if (store.id) {
       try { await api.prdClearScreens(store.id); } catch {}
     }
-    addLog('Tum ekranlar silindi');
+    addLog('All screens deleted');
   };
 
   // Screen gallery handlers
@@ -731,7 +731,7 @@ export function PrdGenerator() {
     try {
       const result = await api.prdDeleteScreen(store.id, screenId);
       setStore({ mockupScreens: result.screens, lightboxScreenId: null });
-      addLog('Ekran silindi');
+      addLog('Screen deleted');
       // Refresh coverage
       if (store.prdContent && result.screens.length > 0) {
         try {
@@ -742,20 +742,20 @@ export function PrdGenerator() {
         setStore({ screenCoverage: null });
       }
     } catch (err: any) {
-      addLog(`Silme hatasi: ${err.message}`);
+      addLog(`Delete failed: ${err.message}`);
     }
   };
 
   const handleRegenerateScreen = async (screenId: string) => {
     if (!store.id) return;
     setLoading('screenAction', true);
-    addLog('Ekran yeniden uretiliyor...');
+    addLog('Regenerating screen...');
     try {
       const result = await api.prdRegenerateScreen(store.id, screenId);
       setStore({ mockupScreens: result.screens });
-      addLog('Ekran yeniden uretildi');
+      addLog('Screen regenerated');
     } catch (err: any) {
-      addLog(`Yeniden uretim hatasi: ${err.message}`);
+      addLog(`Regeneration failed: ${err.message}`);
     }
     setLoading('screenAction', false);
   };
@@ -777,13 +777,13 @@ export function PrdGenerator() {
   const handleEditPromptScreen = async (screenId: string, newPrompt: string) => {
     if (!store.id) return;
     setLoading('screenAction', true);
-    addLog('Ekran yeni prompt ile uretiliyor...');
+    addLog('Generating screen with the new prompt...');
     try {
       const result = await api.prdRegenerateScreen(store.id, screenId, { prompt: newPrompt });
       setStore({ mockupScreens: result.screens });
-      addLog('Ekran guncellendi');
+      addLog('Screen updated');
     } catch (err: any) {
-      addLog(`Prompt uretim hatasi: ${err.message}`);
+      addLog(`Prompt generation failed: ${err.message}`);
     }
     setLoading('screenAction', false);
   };
@@ -791,18 +791,18 @@ export function PrdGenerator() {
   const handleGenerateVariant = async (screenId: string) => {
     if (!store.id) return;
     setLoading('screenAction', true);
-    addLog('Varyant uretiliyor...');
+    addLog('Generating variant...');
     try {
       const result = await api.prdVariantScreen(store.id, { sourceScreenId: screenId });
       setStore({ mockupScreens: result.screens });
-      addLog('Varyant uretildi');
+      addLog('Variant generated');
     } catch (err: any) {
-      addLog(`Varyant hatasi: ${err.message}`);
+      addLog(`Variant failed: ${err.message}`);
     }
     setLoading('screenAction', false);
   };
 
-  // Gecmisten PRD yukle
+  // Load PRD from history.
   const handleLoadPrd = (prd: any) => {
     sessionStorage.removeItem("prd_skip_autoload");
     setStore({
@@ -827,7 +827,7 @@ export function PrdGenerator() {
       screenCoverage: null,
       lightboxScreenId: null,
     });
-    addLog(`PRD yuklendi: ${prd.title} (v${prd.prd_version})`);
+    addLog(`PRD loaded: ${prd.title} (v${prd.prd_version})`);
   };
 
   // Template sec
@@ -846,7 +846,7 @@ export function PrdGenerator() {
         costEstimate: cost,
         showTemplates: false,
       });
-      addLog(`Sablon yuklendi: ${template.name} (icerikli)`);
+      addLog(`Template loaded: ${template.name} (with content)`);
     } else {
       setStore({
         title: store.title || template.name,
@@ -854,14 +854,14 @@ export function PrdGenerator() {
         description: store.description || template.description,
         showTemplates: false,
       });
-      addLog(`Sablon secildi: ${template.name}`);
+      addLog(`Template selected: ${template.name}`);
     }
   };
 
-  // Yeni PRD
+  // New PRD
   const handleNew = () => {
     reset();
-    addLog('Yeni PRD basladi');
+    addLog('New PRD started');
   };
 
   return (
@@ -869,9 +869,9 @@ export function PrdGenerator() {
       <div className="prd-page__header">
         <h1 className="glitch">PRD GENERATOR</h1>
         <div className="prd-page__header-actions">
-          <button className="btn btn--small" onClick={handleNew}>Yeni</button>
-          <button className="btn btn--small" onClick={() => setStore({ showHistory: true })}>Gecmis</button>
-          <button className="btn btn--small" onClick={() => setStore({ showTemplates: true })}>Sablon</button>
+          <button className="btn btn--small" onClick={handleNew}>New</button>
+          <button className="btn btn--small" onClick={() => setStore({ showHistory: true })}>History</button>
+          <button className="btn btn--small" onClick={() => setStore({ showTemplates: true })}>Template</button>
         </div>
       </div>
 
@@ -883,7 +883,7 @@ export function PrdGenerator() {
       )}
 
       <div className="prd-page__content">
-        {/* SOL PANEL */}
+        {/* Left panel */}
         <div className="prd-page__left">
           <div className="prd-input-group">
             <label className="prd-label">Platform</label>
@@ -894,7 +894,7 @@ export function PrdGenerator() {
           </div>
 
           <div className="prd-input-group">
-            <label className="prd-label">URL(ler)</label>
+            <label className="prd-label">URLs</label>
             {store.urls.map((url, i) => (
               <div key={i} className="prd-url-row">
                 <input type="text" className="prd-input" placeholder="https://example.com" value={url} onChange={(e) => handleUrlChange(i, e.target.value)} />
@@ -902,8 +902,8 @@ export function PrdGenerator() {
               </div>
             ))}
             <div className="prd-url-actions">
-              <button className="btn btn--small" onClick={addUrl}>+ URL ekle</button>
-              <button className="btn btn--small btn--primary" onClick={handleAnalyze} disabled={store.loading.analyze}>{store.loading.analyze ? 'Analiz...' : 'Analiz Et'}</button>
+              <button className="btn btn--small" onClick={addUrl}>+ Add URL</button>
+              <button className="btn btn--small btn--primary" onClick={handleAnalyze} disabled={store.loading.analyze}>{store.loading.analyze ? 'Analyzing...' : 'Analyze'}</button>
               {store.urls.some(u => u.includes('github.com')) && (
                 <button className="btn btn--small btn--success" onClick={handleGithubImport} disabled={store.loading.analyze}>
                   {store.loading.analyze ? 'Import...' : 'GitHub Import'}
@@ -919,32 +919,32 @@ export function PrdGenerator() {
           />
 
           <div className="prd-input-group">
-            <label className="prd-label">Aciklama / Konu</label>
-            <textarea className="prd-textarea" placeholder="Proje aciklamasi, istekler, detaylar..." value={store.description} onChange={(e) => setStore({ description: e.target.value })} onBlur={(e) => autoTitle(e.target.value, 'desc')} rows={3} />
-            <button className="btn btn--small" onClick={handleResearch} disabled={store.loading.research}>{store.loading.research ? 'Arastiriliyor...' : 'Web Arastir'}</button>
+            <label className="prd-label">Description / Topic</label>
+            <textarea className="prd-textarea" placeholder="Project description, requests, details..." value={store.description} onChange={(e) => setStore({ description: e.target.value })} onBlur={(e) => autoTitle(e.target.value, 'desc')} rows={3} />
+            <button className="btn btn--small" onClick={handleResearch} disabled={store.loading.research}>{store.loading.research ? 'Researching...' : 'Web Research'}</button>
           </div>
 
           <PrdChat chatHistory={store.chatHistory} onSend={handleChatMessage} />
           <AnalysisLog logs={store.logs} />
         </div>
 
-        {/* SAG PANEL */}
+        {/* Right panel */}
         <div className="prd-page__right">
           <div className="prd-tabs">
             {(['prd', 'mockup', 'analysis'] as const).map(tab => (
-              <button key={tab} className={`prd-tab ${store.activeTab === tab ? 'prd-tab--active' : ''}`} onClick={() => setStore({ activeTab: tab })}>{tab === 'prd' ? 'PRD' : tab === 'mockup' ? 'Mockup' : 'Analiz'}</button>
+              <button key={tab} className={`prd-tab ${store.activeTab === tab ? 'prd-tab--active' : ''}`} onClick={() => setStore({ activeTab: tab })}>{tab === 'prd' ? 'PRD' : tab === 'mockup' ? 'Mockup' : 'Analysis'}</button>
             ))}
             {store.prdVersion > 0 && <span className="prd-version-badge">v{store.prdVersion}</span>}
           </div>
 
-          {/* Sticky progress bar — scroll'da kaybolmaz */}
+          {/* Sticky progress bar */}
           {Object.values(store.loading).some(v => v) && (
             <div className="prd-progress-sticky">
-              <ProgressBar active={!!store.loading.analyze} startedAt={store.loadingStartedAt.analyze || 0} label="Site Analiz Ediliyor" steps={['HTML indiriliyor...', 'Sayfa yapisi inceleniyor...', 'Renkler ve fontlar cikariliyor...', 'Komponentler tespit ediliyor...', 'Analiz tamamlaniyor...']} />
-            <ProgressBar active={!!store.loading.generate} startedAt={store.loadingStartedAt.generate || 0} label="PRD Olusturuluyor" steps={['Veriler hazirlaniyor...', 'Analiz entegre ediliyor...', 'PRD yaziliyor...', 'Sayfalar tanimlaniyor...', 'Komponentler eslestiriliyor...', 'Puanlama yapiliyor...']} />
-            <ProgressBar active={!!store.loading.enhance} startedAt={store.loadingStartedAt.enhance || 0} label="PRD Gelistiriliyor" steps={['Mevcut PRD analiz ediliyor...', 'Eksik bolumler tespit ediliyor...', 'Detaylar ekleniyor...', 'Animasyonlar tanimlaniyor...', 'Puanlama yapiliyor...']} />
-            <ProgressBar active={!!store.loading.mockups} startedAt={store.loadingStartedAt.mockups || 0} label={`Mockup Uretiliyor (${store.mockupScreens.length} ekran hazir)`} steps={["Ekranlar uretiliyor...", "Indiriliyor...", "Tamamlaniyor..."]} />
-            <ProgressBar active={!!store.loading.research} startedAt={store.loadingStartedAt.research || 0} label="Web Arastirmasi" steps={['Konu arastiriliyor...', 'Best practice\'ler toplanilyor...', 'UX pattern\'lar analiz ediliyor...', 'Sonuclar derleniyor...']} />
+              <ProgressBar active={!!store.loading.analyze} startedAt={store.loadingStartedAt.analyze || 0} label="Analyzing Site" steps={['Downloading HTML...', 'Inspecting page structure...', 'Extracting colors and fonts...', 'Detecting components...', 'Finalizing analysis...']} />
+            <ProgressBar active={!!store.loading.generate} startedAt={store.loadingStartedAt.generate || 0} label="Generating PRD" steps={['Preparing data...', 'Integrating analysis...', 'Writing PRD...', 'Defining pages...', 'Matching components...', 'Scoring...']} />
+            <ProgressBar active={!!store.loading.enhance} startedAt={store.loadingStartedAt.enhance || 0} label="Enhancing PRD" steps={['Analyzing current PRD...', 'Detecting gaps...', 'Adding details...', 'Defining animations...', 'Scoring...']} />
+            <ProgressBar active={!!store.loading.mockups} startedAt={store.loadingStartedAt.mockups || 0} label={`Generating Mockups (${store.mockupScreens.length} screens ready)`} steps={["Generating screens...", "Downloading...", "Completing..."]} />
+            <ProgressBar active={!!store.loading.research} startedAt={store.loadingStartedAt.research || 0} label="Web Research" steps={['Researching topic...', 'Collecting best practices...', 'Analyzing UX patterns...', 'Compiling results...']} />
             </div>
           )}
 
@@ -954,8 +954,8 @@ export function PrdGenerator() {
                 <PrdEditor content={store.prdContent} editMode={store.editMode} onChange={(c) => setStore({ prdContent: c })} previousContent={previousPrd} />
               ) : !Object.values(store.loading).some(v => v) ? (
                 <div className="prd-empty">
-                  <p>Henuz PRD olusturulmadi.</p>
-                  <p className="prd-empty__hint">Sol panelden bilgileri girin ve "PRD Olustur" butonuna basin.</p>
+                  <p>No PRD has been generated yet.</p>
+                  <p className="prd-empty__hint">Enter details in the left panel and click "Generate PRD".</p>
                 </div>
               ) : null
             )}
@@ -975,12 +975,12 @@ export function PrdGenerator() {
                 {store.analyses.length > 1 ? (
                   <CompetitiveTable analyses={store.analyses} urls={store.urls} />
                 ) : store.analysis ? (
-                  <div className="prd-analysis-result"><h3>Site Analizi</h3><pre className="prd-analysis-json">{JSON.stringify(store.analysis, null, 2)}</pre></div>
+                  <div className="prd-analysis-result"><h3>Site Analysis</h3><pre className="prd-analysis-json">{JSON.stringify(store.analysis, null, 2)}</pre></div>
                 ) : (
-                  <div className="prd-empty"><p>Henuz analiz yapilmadi.</p></div>
+                  <div className="prd-empty"><p>No analysis has been run yet.</p></div>
                 )}
                 {store.research && (
-                  <div className="prd-analysis-result"><h3>Web Arastirmasi</h3><pre className="prd-analysis-json">{JSON.stringify(store.research, null, 2)}</pre></div>
+                  <div className="prd-analysis-result"><h3>Web Research</h3><pre className="prd-analysis-json">{JSON.stringify(store.research, null, 2)}</pre></div>
                 )}
 
                 {/* Refinement Panel: shown when analysis exists but PRD not yet generated */}
@@ -990,7 +990,7 @@ export function PrdGenerator() {
 
                     {/* Detected Features Toggles */}
                     <div className="prd-refinement-section">
-                      <label className="prd-label">Tespit Edilen Ozellikler</label>
+                      <label className="prd-label">Detected Features</label>
                       <div className="prd-refinement-features">
                         {store.refinements.features.map((feat, idx) => (
                           <label key={idx} className="prd-refinement-feature">
@@ -1011,7 +1011,7 @@ export function PrdGenerator() {
 
                     {/* Design Direction */}
                     <div className="prd-refinement-section">
-                      <label className="prd-label">Tasarim Yonu</label>
+                      <label className="prd-label">Design Direction</label>
                       <select
                         className="prd-select"
                         value={store.refinements.designDirection}
@@ -1026,10 +1026,10 @@ export function PrdGenerator() {
 
                     {/* User Goals */}
                     <div className="prd-refinement-section">
-                      <label className="prd-label">Ek Gereksinimler</label>
+                      <label className="prd-label">Additional Requirements</label>
                       <textarea
                         className="prd-textarea"
-                        placeholder="Ozel isteklerinizi buraya yazin..."
+                        placeholder="Write additional requests here..."
                         value={store.refinements.userGoals}
                         onChange={(e) => setStore({ refinements: { ...store.refinements!, userGoals: e.target.value } })}
                         rows={3}
@@ -1039,7 +1039,7 @@ export function PrdGenerator() {
                     {/* Mobile Platform (only if platform is mobile) */}
                     {store.platform === 'mobile' && (
                       <div className="prd-refinement-section">
-                        <label className="prd-label">Mobil Platform</label>
+                        <label className="prd-label">Mobile Platform</label>
                         <div className="prd-platform-toggle">
                           {(['both', 'ios', 'android'] as const).map(opt => (
                             <button
@@ -1057,14 +1057,14 @@ export function PrdGenerator() {
                     {/* Generate with Refinements */}
                     <div className="prd-refinement-actions">
                       <div className="prd-input-group" style={{ flex: 1, marginBottom: 0 }}>
-                        <input type="text" className="prd-input" placeholder="Proje Adi" value={store.title} onChange={(e) => setStore({ title: e.target.value })} />
+                        <input type="text" className="prd-input" placeholder="Project Name" value={store.title} onChange={(e) => setStore({ title: e.target.value })} />
                       </div>
                       <button
                         className="btn btn--primary"
                         onClick={handleGenerateWithRefinements}
                         disabled={store.loading.generate || !store.title.trim()}
                       >
-                        {store.loading.generate ? 'Olusturuluyor...' : 'Refinements ile PRD Olustur'}
+                        {store.loading.generate ? 'Generating...' : 'Generate PRD with Refinements'}
                       </button>
                     </div>
                   </div>
@@ -1073,7 +1073,7 @@ export function PrdGenerator() {
             )}
           </div>
 
-          {/* STICKY FOOTER — her zaman gorunur */}
+          {/* Sticky footer */}
           <div className="prd-footer">
             {store.score !== null && (
               <div className="prd-bottom-bar">
@@ -1086,22 +1086,22 @@ export function PrdGenerator() {
               {!store.prdContent && !store.editMode ? (
                 <>
                   <div className="prd-input-group" style={{ flex: 1 }}>
-                    <input type="text" className="prd-input" placeholder="Proje Adi" value={store.title} onChange={(e) => setStore({ title: e.target.value })} />
+                    <input type="text" className="prd-input" placeholder="Project Name" value={store.title} onChange={(e) => setStore({ title: e.target.value })} />
                   </div>
-                  <button className="btn btn--primary" onClick={handleGenerate} disabled={store.loading.generate || !store.title.trim()}>{store.loading.generate ? 'Olusturuluyor...' : 'PRD Olustur'}</button>
+                  <button className="btn btn--primary" onClick={handleGenerate} disabled={store.loading.generate || !store.title.trim()}>{store.loading.generate ? 'Generating...' : 'Generate PRD'}</button>
                 </>
               ) : (
                 <>
-                  <button className="btn btn--small" onClick={() => setStore({ editMode: !store.editMode })}>{store.editMode ? 'Onizle' : 'Duzenle'}</button>
-                  {store.editMode && <button className="btn btn--small btn--primary" onClick={handleSavePrd}>Kaydet</button>}
-                  <button className="btn btn--small btn--primary" onClick={handleEnhance} disabled={store.loading.enhance}>{store.loading.enhance ? 'Gelistiriliyor...' : 'Gelistir'}</button>
+                  <button className="btn btn--small" onClick={() => setStore({ editMode: !store.editMode })}>{store.editMode ? 'Preview' : 'Edit'}</button>
+                  {store.editMode && <button className="btn btn--small btn--primary" onClick={handleSavePrd}>Save</button>}
+                  <button className="btn btn--small btn--primary" onClick={handleEnhance} disabled={store.loading.enhance}>{store.loading.enhance ? 'Enhancing...' : 'Enhance'}</button>
                   <button className="btn btn--small" style={{ background: 'var(--color-success, #10b981)', color: '#fff', borderColor: 'var(--color-success, #10b981)' }} onClick={handleTrendEnhance} disabled={trendEnhancing}>{trendEnhancing ? 'Enhancing with 2026 trends...' : '* AI Enhance'}</button>
-                  <button className="btn btn--small" onClick={handleMockups} disabled={store.loading.mockups}>{store.loading.mockups ? 'Uretiliyor...' : 'Mockup Uret'}</button>
+                  <button className="btn btn--small" onClick={handleMockups} disabled={store.loading.mockups}>{store.loading.mockups ? 'Generating...' : 'Generate Mockups'}</button>
                   {store.loading.mockups && (
-                    <button className="btn btn--small btn--danger" onClick={handleStopMockups}>Durdur</button>
+                    <button className="btn btn--small btn--danger" onClick={handleStopMockups}>Stop</button>
                   )}
                   {store.mockupScreens.length > 0 && !store.loading.mockups && store.screenCoverage && store.screenCoverage.missing.length > 0 && (
-                    <button className="btn btn--small btn--primary" onClick={handleResumeMockups}>Tamamla</button>
+                    <button className="btn btn--small btn--primary" onClick={handleResumeMockups}>Complete</button>
                   )}
                   <button className="btn btn--small" onClick={() => {
                     const blob = new Blob([store.prdContent], { type: 'text/markdown' });
@@ -1111,7 +1111,7 @@ export function PrdGenerator() {
                     a.download = `${(store.title || 'prd').replace(/[^a-zA-Z0-9-_]/g, '-')}.md`;
                     a.click();
                     URL.revokeObjectURL(url);
-                  }}>Indir .md</button>
+                  }}>Download .md</button>
                 </>
               )}
             </div>
@@ -1119,7 +1119,7 @@ export function PrdGenerator() {
             {store.prdContent && (
               <div className="prd-launch">
                 <div className="prd-launch__inputs">
-                  <input type="text" className="prd-input" placeholder="Proje Adi" value={store.projectName || store.title} onChange={(e) => setStore({ projectName: e.target.value })} />
+                  <input type="text" className="prd-input" placeholder="Project Name" value={store.projectName || store.title} onChange={(e) => setStore({ projectName: e.target.value })} />
                   <select className="prd-select" value={store.workflow} onChange={(e) => setStore({ workflow: e.target.value })}>
                     <option value="feature-dev">feature-dev</option>
                     <option value="bug-fix">bug-fix</option>
@@ -1127,7 +1127,7 @@ export function PrdGenerator() {
                   </select>
                 </div>
                 <button className="btn btn--primary prd-launch__btn" onClick={handleStartRun} disabled={store.loading.startRun}>
-                  {store.loading.startRun ? 'Baslatiliyor...' : store.runId ? 'Yeniden Baslat' : 'Gorevi Baslat'}
+                  {store.loading.startRun ? 'Starting...' : store.runId ? 'Restart' : 'Start Task'}
                 </button>
               </div>
             )}

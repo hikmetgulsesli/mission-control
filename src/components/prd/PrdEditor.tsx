@@ -60,9 +60,9 @@ export function PrdEditor({ content, editMode, onChange, previousContent }: PrdE
           <button
             className={"btn btn--tiny" + (showDiff ? " btn--primary" : "")}
             onClick={() => setShowDiff(!showDiff)}
-          >{showDiff ? 'DIFF KAPAT' : 'DIFF GOSTER'}</button>
+          >{showDiff ? 'HIDE DIFF' : 'SHOW DIFF'}</button>
           <span style={{ fontSize: '10px', color: 'var(--neon-green)', fontFamily: 'var(--font)' }}>
-            Yeni eklenen bolumler yesil ile isaretli
+            Newly added sections are highlighted in green
           </span>
         </div>
       )}

@@ -4,12 +4,13 @@ import { homedir } from 'os';
 import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 import { readFile } from 'fs/promises';
+import { PATHS } from '../config.js';
 
 const execFileAsync = promisify(execFileCb);
 
-const STITCH_SCRIPT = join(homedir(), '.openclaw', 'setfarm-repo', 'scripts', 'stitch-api.mjs');
-const STITCH_SCRIPT_ALT = join(homedir(), '.openclaw', 'scripts', 'stitch-api.mjs');
-const STITCH_CACHE_DIR = join(homedir(), '.openclaw', 'setfarm', 'stitch-cache');
+const STITCH_SCRIPT = join(PATHS.setfarmRepoDir, 'scripts', 'stitch-api.mjs');
+const STITCH_SCRIPT_ALT = join(PATHS.scriptsDir, 'stitch-api.mjs');
+const STITCH_CACHE_DIR = join(PATHS.setfarmDir, 'stitch-cache');
 
 // Path traversal guard — Stitch IDs can be hex or numeric
 const SAFE_ID_RE = /^[a-f0-9-]+$/i;
@@ -163,7 +164,7 @@ export async function generateMockupsFromPrd(prdContent: string, title: string, 
   for (const section of sections.slice(0, 8)) {
     const sectionTitle = section.split('\n')[0]?.trim() || '';
     if (!sectionTitle) continue;
-    if (/teknik|api|veri\s*modeli|technical|data\s*model|deployment/i.test(sectionTitle)) continue;
+    if (/technical|api|data\s*model|deployment/i.test(sectionTitle)) continue;
     const sectionContent = section.slice(0, 1000);
     const device = platform === 'mobile' ? 'MOBILE' : 'DESKTOP';
     screenPrompts.push({
@@ -252,7 +253,7 @@ export async function prepareDesignFilesForRepo(
     if (!screen.screenId || screen.status !== 'done') continue;
     const srcHtml = join(cacheDir, `${screen.screenId}.html`);
     const srcPng = join(cacheDir, `${screen.screenId}.png`);
-    // Readable filename: "Ana Sayfa" → "Ana-Sayfa.html"
+    // Readable filename: "Home Page" -> "Home-Page.html"
     const safeName = (screen.title || screen.screenId).replace(/[^a-zA-Z0-9\u00C0-\u024F\u0400-\u04FF -]/g, '').replace(/\s+/g, '-');
     const destHtml = join(stitchDir, `${safeName}.html`);
     const destPng = join(stitchDir, `${safeName}.png`);
@@ -285,13 +286,13 @@ function extractDesignContext(prdContent: string): string {
   const designLines: string[] = [];
   let inDesignSection = false;
   for (const line of lines) {
-    if (/^#{1,3}\s.*(tasar[ıi]m\s*sistemi|design\s*system|renkler|colors|tipografi|typography|fonts)/i.test(line)) {
+    if (/^#{1,3}\s.*(design\s*system|colors|typography|fonts)/i.test(line)) {
       inDesignSection = true;
       designLines.push(line);
       continue;
     }
     if (inDesignSection) {
-      if (/^#{1,2}\s/.test(line) && !/renkler|colors|font|tipografi|spacing|tema|theme/i.test(line)) {
+      if (/^#{1,2}\s/.test(line) && !/colors|font|typography|spacing|theme/i.test(line)) {
         inDesignSection = false;
         continue;
       }
@@ -336,28 +337,28 @@ export function extractScreenPrompts(prdContent: string, platform: string, analy
   const pageNames: string[] = [];
   const lines = prdContent.split("\n");
 
-  // Strategy 1: Find h2 headings with route paths like ## 4. Ana Sayfa (`/`) or ## Ana Sayfa (/)
+  // Strategy 1: find h2 headings with route paths like ## 4. Home Page (`/`) or ## Home Page (/).
   for (const line of lines) {
     // Match: ## N. Page Name (`/path`) or ## Page Name (/path)
     const m = line.match(/^##\s+(?:\d+\.?\s+)?(.+?)\s*\([\`]?\/[^)]*[\`]?\)/);
     if (!m) continue;
     let name = m[1].trim().replace(/[\`]/g, "");
     // Skip technical sections
-    if (/tasar[ıi]m|design|renk|font|spacing|shadow|z-index|animasyon|animation|responsive|breakpoint|komponent\s*k|veri\s*model|api\s*endpoint|teknik|browser|polyfill|dependencies|tailwind|edge\s*case|sayfa\s*listesi|^sayfalar$/i.test(name)) continue;
+    if (/design|font|spacing|shadow|z-index|animation|responsive|breakpoint|component\s*library|data\s*model|api\s*endpoint|technical|browser|polyfill|dependencies|tailwind|edge\s*case|page\s*list|^pages$/i.test(name)) continue;
     // Route path required (regex already filters), just add to list
     if (name.length > 2) {
       if (name.length > 2 && !pageNames.includes(name)) pageNames.push(name);
     }
   }
 
-  // Strategy 2: If not enough, find numbered items in "Sayfalar" bullet list
+  // Strategy 2: if not enough, find numbered items in a Pages bullet list.
   if (pageNames.length < 3) {
     let inPageList = false;
     for (const line of lines) {
-      if (/^##\s+.*sayfalar/i.test(line) || /^##\s+\d+\.\s+sayfalar/i.test(line)) { inPageList = true; continue; }
+      if (/^##\s+.*pages/i.test(line) || /^##\s+\d+\.\s+pages/i.test(line)) { inPageList = true; continue; }
       if (inPageList && /^##\s/.test(line)) { inPageList = false; continue; }
       if (inPageList) {
-        // Match: 1. **Ana Sayfa** (`/`) or - Ana Sayfa (/) or - **Ana Sayfa** — desc
+        // Match: 1. **Home Page** (`/`) or - Home Page (/) or - **Home Page** - desc.
         const m = line.match(/(?:\d+\.\s+)?\*\*(.+?)\*\*|^[-*]\s+(.+?)\s*[—–(]/);
         if (m) {
           let name = (m[1] || m[2] || "").trim().replace(/[\`]/g, "");
@@ -367,7 +368,7 @@ export function extractScreenPrompts(prdContent: string, platform: string, analy
     }
   }
 
-  // Strategy 3: h3 under page sections (### 3.1 Ana Sayfa (/))
+  // Strategy 3: h3 under page sections, such as ### 3.1 Home Page (/).
   if (pageNames.length < 3) {
     for (const line of lines) {
       if (/^###\s+(?:\d+\.\d+\s+)?(.+?)\s*\([\`]?\//.test(line)) {
@@ -395,7 +396,7 @@ export function extractScreenPrompts(prdContent: string, platform: string, analy
 
   // Fallback: filter sectionMap keys
   if (targets.length < 2) {
-    const skipRe = /proje\s*genel|genel\s*bak[ıi]|overview|tasar[ıi]m\s*sistemi|design\s*system|renkler|renk\s*paleti|tipografi|typography\s*scale|fonts|sayfalar$|sayfa\s*listesi|teknik\s*gereksinim|teknik\s*mimari|api\s*endpoint|veri\s*modeli|komponent\s*k[uü]t[uü]phane|animasyon\s*sistemi|animasyonlar$|responsive\s*breakpoint|breakpoint\s*tan|spacing|z-index|shadow|browser\s*deste|polyfill|dependencies|tailwind\s*config/i
+    const skipRe = /project\s*overview|overview|design\s*system|colors|color\s*palette|typography|typography\s*scale|fonts|pages$|page\s*list|technical\s*requirements|technical\s*architecture|api\s*endpoint|data\s*model|component\s*library|animation\s*system|animations$|responsive\s*breakpoint|breakpoint\s*definition|spacing|z-index|shadow|browser\s*support|polyfill|dependencies|tailwind\s*config/i
     for (const [heading] of sectionMap) {
       if (!skipRe.test(heading) && targets.length < 8) targets.push(heading);
     }

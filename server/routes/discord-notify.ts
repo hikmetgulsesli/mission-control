@@ -83,33 +83,33 @@ function formatMessage(ev: NotifyEvent): { channel: string; message: string }[] 
 
   switch (ev.event) {
     case 'run.started':
-      return [{ channel: 'setfarm-pipeline', message: `🚀 **${wf} ${num} basladi**${title}` }];
+      return [{ channel: 'setfarm-pipeline', message: `🚀 **${wf} ${num} started**${title}` }];
 
     case 'run.completed':
-      return [{ channel: 'setfarm-pipeline', message: `✅ **${wf} ${num} tamamlandi**${dur}${ev.storyCount ? ` — ${ev.storyCount} stories` : ''}` }];
+      return [{ channel: 'setfarm-pipeline', message: `✅ **${wf} ${num} completed**${dur}${ev.storyCount ? ` — ${ev.storyCount} stories` : ''}` }];
 
     case 'run.failed':
-      return [{ channel: 'setfarm-pipeline', message: `❌ **${wf} ${num} basarisiz** — step: ${ev.stepId || '?'}${ev.retryCount ? `, retry: ${ev.retryCount}` : ''}` }];
+      return [{ channel: 'setfarm-pipeline', message: `❌ **${wf} ${num} failed** — step: ${ev.stepId || '?'}${ev.retryCount ? `, retry: ${ev.retryCount}` : ''}` }];
 
     case 'step.running':
-      return [{ channel: 'agent-activity', message: `🔄 \`${wf}_${agent}\` calisiyor — ${ev.stepId || '?'} step` }];
+      return [{ channel: 'agent-activity', message: `🔄 \`${wf}_${agent}\` running — ${ev.stepId || '?'} step` }];
 
     case 'step.done': {
       const msgs: { channel: string; message: string }[] = [
-        { channel: 'agent-activity', message: `✅ \`${wf}_${agent}\` bitti — ${ev.stepId || '?'} step${dur}` },
+        { channel: 'agent-activity', message: `✅ \`${wf}_${agent}\` done — ${ev.stepId || '?'} step${dur}` },
       ];
       // PR lifecycle events → #code-changes
       const stepId = ev.stepId || '';
       if (stepId === 'pr') {
-        msgs.push({ channel: 'code-changes', message: `🔗 PR acildi: ${detail || wf + ' ' + num}` });
+        msgs.push({ channel: 'code-changes', message: `🔗 PR opened: ${detail || wf + ' ' + num}` });
       } else if (stepId === 'review') {
-        msgs.push({ channel: 'code-changes', message: `📋 Review: ${detail || 'tamamlandi'} — ${wf} ${num}` });
+        msgs.push({ channel: 'code-changes', message: `📋 Review: ${detail || 'completed'} — ${wf} ${num}` });
       } else if (stepId === 'external-review') {
-        msgs.push({ channel: 'code-changes', message: `🤖 External review: ${detail || 'tamamlandi'} — ${wf} ${num}` });
+        msgs.push({ channel: 'code-changes', message: `🤖 External review: ${detail || 'completed'} — ${wf} ${num}` });
       } else if (stepId === 'merge') {
         msgs.push({ channel: 'code-changes', message: `✅ Merged: ${detail || wf + ' ' + num}` });
       } else if (stepId === 'design') {
-        msgs.push({ channel: 'design-reviews', message: `🎨 Design tamamlandi: ${wf} ${num}${title}\n${detail || 'Stitch screens generated'}` });
+        msgs.push({ channel: 'design-reviews', message: `🎨 Design completed: ${wf} ${num}${title}\n${detail || 'Stitch screens generated'}` });
       }
       return msgs;
     }
@@ -190,7 +190,7 @@ router.post('/discord-notify', async (req, res) => {
   if (ev.event === 'step.done' && ['implement', 'fix'].includes(ev.stepId || '') && ev.repoPath) {
     const gitInfo = await getGitSummary(ev.repoPath);
     if (gitInfo) {
-      const codeMsg = `📦 **${ev.workflowId} ${ev.runNumber ? '#' + ev.runNumber : ''} — ${ev.stepId} step tamamlandi**\n${gitInfo}`;
+      const codeMsg = `📦 **${ev.workflowId} ${ev.runNumber ? '#' + ev.runNumber : ''} — ${ev.stepId} step completed**\n${gitInfo}`;
       await sendDiscord(CHANNELS['code-changes'], codeMsg);
     }
   }

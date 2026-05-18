@@ -58,11 +58,12 @@ export function TelemetryChart({ runId }: { runId: string }) {
     return () => { cancelled = true; };
   }, [runId]);
 
-  if (loading) return <div style={{ padding: 16, color: 'var(--text-dim)', fontSize: 13 }}>Telemetry yukleniyor...</div>;
-  if (error) return <div style={{ padding: 16, color: '#ff4444', fontSize: 13 }}>Telemetry hatasi: {error}</div>;
-  if (!data || data.steps.length === 0) return <div style={{ padding: 16, color: 'var(--text-dim)', fontSize: 13 }}>Telemetry verisi yok</div>;
+  if (loading) return <div style={{ padding: 16, color: 'var(--text-dim)', fontSize: 13 }}>Loading telemetry...</div>;
+  if (error) return <div style={{ padding: 16, color: '#ff4444', fontSize: 13 }}>Telemetry failed: {error}</div>;
+  const steps = Array.isArray(data?.steps) ? data.steps : [];
+  if (steps.length === 0) return <div style={{ padding: 16, color: 'var(--text-dim)', fontSize: 13 }}>No telemetry data</div>;
 
-  const chartData = data.steps
+  const chartData = steps
     .filter(s => s.duration_ms !== null)
     .map(s => ({
       name: STEP_SHORT[s.step_id] || s.step_id.toUpperCase(),
@@ -74,7 +75,7 @@ export function TelemetryChart({ runId }: { runId: string }) {
     }));
 
   if (chartData.length === 0) {
-    return <div style={{ padding: 16, color: 'var(--text-dim)', fontSize: 13 }}>Henuz tamamlanan step yok</div>;
+    return <div style={{ padding: 16, color: 'var(--text-dim)', fontSize: 13 }}>No completed steps yet</div>;
   }
 
   const totalMs = chartData.reduce((sum, d) => sum + d.duration, 0);
@@ -165,7 +166,7 @@ export function TelemetryChart({ runId }: { runId: string }) {
           <span style={{ color: '#f59e0b', fontWeight: 600 }}>Bottleneck:</span>{' '}
           <span style={{ color: 'var(--text-dim)' }}>
             {bottlenecks.map(b => `${b.name} (${formatDuration(b.duration)})`).join(', ')}
-            {' '}&mdash; ortalamadan 2x+ yavas
+            {' '}&mdash; 2x+ slower than average
           </span>
         </div>
       )}

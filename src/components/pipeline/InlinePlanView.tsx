@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { StoryChecklist } from "../StoryChecklist";
 import { api } from "../../lib/api";
+import { normalizeVisibleText, normalizeVisibleWorkflowStatus } from "../../lib/status";
 
 interface StepDuration {
   stepId: string;
@@ -26,13 +27,37 @@ interface StoryItem {
   agent?: string;
 }
 
+interface ContractItem {
+  id: string;
+  label: string;
+  status: "pass" | "fail" | "pending" | "deferred" | string;
+  owner: string;
+  evidence?: string;
+  blocker?: string;
+  storyId?: string;
+  stepId?: string;
+}
+
+interface RunContractData {
+  schema?: string;
+  progress?: Record<string, number>;
+  project?: { displayName?: string; techStack?: string; repo?: string; branch?: string; uiLanguage?: string };
+  stackPack?: { id?: string; label?: string; confidence?: string; evidence?: string[] };
+  phases?: Array<{ id: string; label: string; status: string; items: ContractItem[] }>;
+  stories?: Array<{ storyId: string; title: string; status: string; ownsScreens?: string[]; scopeFiles?: string[]; deferred?: boolean; blocker?: string }>;
+  artifacts?: Record<string, any>;
+  blockers?: string[];
+  updatedAt?: string;
+  reason?: string;
+}
+
 const STORY_STATUS_BADGES: Record<string, { color: string; label: string }> = {
   done: { color: "#00ff41", label: "DONE" },
   running: { color: "#4488ff", label: "RUNNING" },
   failed: { color: "#ff0040", label: "FAILED" },
   pending: { color: "#555570", label: "PENDING" },
   verified: { color: "#22c55e", label: "VERIFIED" },
-  skipped: { color: "#6b7280", label: "SKIPPED" },
+  skipped: { color: "#ff0040", label: "FAILED" },
   "in-progress": { color: "#4488ff", label: "IN PROGRESS" },
   blocked: { color: "#ff6600", label: "BLOCKED" },
 };
@@ -52,18 +77,72 @@ const STATUS_COLORS: Record<string, string> = {
   failed: "#ff0040",
   pending: "#555570",
   verified: "#22c55e",
-  skipped: "#6b7280",
+  skipped: "#ff0040",
 };
+
+const CONTRACT_STATUS_LABELS: Record<string, string> = {
+  pass: "PASS",
+  fail: "FAIL",
+  pending: "PENDING",
+  deferred: "DEFERRED",
+  na: "PENDING",
+};
+
+function normalizeVisibleStatus(status: unknown): string {
+  const value = String(status || "pending").trim().toLowerCase();
+  if (value === "na" || value === "n/a" || value === "not_applicable") return "pending";
+  if (value === "skipped" || value === "skip") return "fail";
+  return value || "pending";
+}
+
+function contractStatusLabel(status: string): string {
+  const visibleStatus = normalizeVisibleStatus(status);
+  return CONTRACT_STATUS_LABELS[visibleStatus] || String(visibleStatus || "UNKNOWN").toUpperCase();
+}
+
+function contractItemSummary(items: ContractItem[] = []): string {
+  if (items.length === 0) return "0 checks";
+  const statuses = items.map((item) => normalizeVisibleStatus(item.status));
+  const pass = statuses.filter((status) => status === "pass").length;
+  const fail = statuses.filter((status) => status === "fail").length;
+  if (fail > 0) return `${fail} failed`;
+  return `${pass}/${items.length} checks`;
+}
+
+function formatContractValue(value: unknown): string {
+  if (value == null) return "";
+  if (Array.isArray(value)) return normalizeVisibleText(value.map(formatContractValue).filter(Boolean).join(", "));
+  if (typeof value !== "object") return normalizeVisibleText(value);
+  const entry = value as Record<string, any>;
+  const name = entry.name || entry.title || entry.label || entry.screenName;
+  const type = entry.type || entry.deviceType || entry.kind;
+  const id = entry.screenId || entry.screen_id || entry.id || entry.path;
+  if (name && type) return normalizeVisibleText(`${name} (${type})`);
+  if (name) return normalizeVisibleText(name);
+  if (id) return normalizeVisibleText(id);
+  try {
+    return normalizeVisibleText(JSON.stringify(value));
+  } catch {
+    return normalizeVisibleText(value);
+  }
+}
+
+function formatContractList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map(formatContractValue).map((item) => item.trim()).filter(Boolean);
+}
 
 export interface InlinePlanViewProps {
   runId: string;
   onRetry?: (storyId: string) => void;
+  initialTab?: "overview" | "contract" | "prd" | "design" | "stories" | "raw" | "memory";
 }
 
-export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetry }: InlinePlanViewProps) {
-  const [tab, setTab] = useState<"overview" | "prd" | "design" | "stories" | "raw" | "memory">("overview");
+export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetry, initialTab = "overview" }: InlinePlanViewProps) {
+  const [tab, setTab] = useState<"overview" | "contract" | "prd" | "design" | "stories" | "raw" | "memory">(initialTab);
   const [planData, setPlanData] = useState<PlanData | null>(null);
   const [designData, setDesignData] = useState<any>(null);
+  const [contractData, setContractData] = useState<RunContractData | null>(null);
   const [storyList, setStoryList] = useState<StoryItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -72,9 +151,11 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
       api.runPlan(runId),
       api.runDesign(runId).catch(() => null),
       api.runStories(runId).catch(() => []),
-    ]).then(([plan, design, stories]) => {
+      api.runContract(runId).catch(() => null),
+    ]).then(([plan, design, stories, contract]) => {
       setPlanData(plan);
       if (design) setDesignData(design);
+      if (contract) setContractData(contract);
       if (Array.isArray(stories)) setStoryList(stories);
       setLoading(false);
     }).catch(() => setLoading(false));
@@ -86,18 +167,35 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
     return () => clearInterval(id);
   }, [fetchData]);
 
+  useEffect(() => {
+    setTab(initialTab);
+  }, [runId, initialTab]);
+
+  const planStories = Array.isArray(planData?.stories) ? planData.stories : [];
+
   if (loading) return <div className="af-inline-plan__loading">Loading plan data...</div>;
-  if (!planData || (!planData.prd && planData.stories.length === 0)) {
+  if (!planData || (!planData.prd && planStories.length === 0 && !contractData)) {
     return <StoryChecklist runId={runId} onRetry={onRetry} />;
   }
 
-  const storyCount = planData.stories.length;
-  const prdExcerpt = planData.prd ? planData.prd.slice(0, 500) + (planData.prd.length > 500 ? "..." : "") : "";
+  const safePlan: PlanData = { prd: planData?.prd || "", stories: planStories, rawOutput: planData?.rawOutput || "", projectMemory: planData?.projectMemory, stepDurations: planData?.stepDurations, storyStats: planData?.storyStats };
+  const storyCount = safePlan.stories.length || contractData?.stories?.length || 0;
+  const prdExcerpt = safePlan.prd ? safePlan.prd.slice(0, 500) + (safePlan.prd.length > 500 ? "..." : "") : "";
+  const contractProgress = contractData?.progress || {};
+  const contractTotal = Number(contractProgress.total || 0);
+  const contractPass = Number(contractProgress.pass || 0);
+  const contractFail = Number(contractProgress.fail || 0);
+  const contractPending = Number(contractProgress.pending || 0);
 
   return (
     <div className="af-inline-plan">
       <div className="af-inline-plan__tabs">
         <button className={`af-inline-plan__tab ${tab === "overview" ? "af-inline-plan__tab--active" : ""}`} onClick={() => setTab("overview")}>OVERVIEW</button>
+        {contractData && (
+          <button className={`af-inline-plan__tab ${tab === "contract" ? "af-inline-plan__tab--active" : ""}`} onClick={() => setTab("contract")}>
+            CONTRACT {contractFail > 0 ? `(${contractFail})` : contractTotal > 0 ? `(${contractPass}/${contractTotal})` : ""}
+          </button>
+        )}
         <button className={`af-inline-plan__tab ${tab === "prd" ? "af-inline-plan__tab--active" : ""}`} onClick={() => setTab("prd")}>PRD</button>
         {designData && designData.screens && designData.screens.length > 0 && (
           <button className={`af-inline-plan__tab ${tab === "design" ? "af-inline-plan__tab--active" : ""}`} onClick={() => setTab("design")}>DESIGN ({designData.screens.length})</button>
@@ -115,7 +213,7 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
             <div className="af-plan-overview__section">
               <div className="af-plan-overview__section-header">
                 <h4 className="af-plan-overview__title">PRD Excerpt</h4>
-                {planData.prd && planData.prd.length > 500 && (
+                {safePlan.prd && safePlan.prd.length > 500 && (
                   <button className="af-plan-overview__more" onClick={() => setTab("prd")}>View Full PRD &rarr;</button>
                 )}
               </div>
@@ -134,10 +232,10 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
                 </h4>
                 <button className="af-plan-overview__more" onClick={() => setTab("stories")}>Full Details &rarr;</button>
               </div>
-              {(storyList.length > 0 ? storyList : planData.stories).length > 0 ? (
+              {(storyList.length > 0 ? storyList : safePlan.stories).length > 0 ? (
                 <div className="af-plan-overview__story-list">
-                  {(storyList.length > 0 ? storyList : planData.stories).map((story: any, idx: number) => {
-                    const status = story.status || "pending";
+                  {(storyList.length > 0 ? storyList : safePlan.stories).map((story: any, idx: number) => {
+                    const status = normalizeVisibleStatus(story.status || "pending");
                     const badge = STORY_STATUS_BADGES[status] || { color: "#888", label: status.toUpperCase() };
                     return (
                       <div key={story.id || idx} className="af-plan-overview__story-row">
@@ -199,7 +297,7 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
 
         {tab === "prd" && (
           <div className="af-inline-plan__prd">
-            {planData.prd.split("\n").map((line, i) => {
+            {safePlan.prd.split("\n").map((line, i) => {
               if (line.match(/^#{1,3}\s/)) {
                 return <h4 key={i} className="af-inline-plan__heading">{line.replace(/^#+\s*/, "")}</h4>;
               }
@@ -218,6 +316,102 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
           </div>
         )}
 
+        {tab === "contract" && (
+          contractData ? (
+            <div className="af-contract">
+              <div className="af-contract__summary">
+                <div className="af-contract__summary-main">
+                  <span className="af-contract__kicker">RUN CONTRACT</span>
+                  <strong>{contractData.project?.displayName || "Setfarm Project"}</strong>
+                  <span>{contractData.stackPack?.label || contractData.stackPack?.id || "Unknown stack"}</span>
+                </div>
+                <div className="af-contract__metrics">
+                  <span className="af-contract__metric af-contract__metric--pass">{contractPass} checks pass</span>
+                  <span className="af-contract__metric af-contract__metric--fail">{contractFail} checks fail</span>
+                  <span className="af-contract__metric af-contract__metric--pending">{contractPending} checks pending</span>
+                  {Number(contractProgress.deferred || 0) > 0 && (
+                    <span className="af-contract__metric af-contract__metric--deferred">{contractProgress.deferred} checks deferred</span>
+                  )}
+                </div>
+              </div>
+
+              {contractData.blockers && contractData.blockers.length > 0 && (
+                <div className="af-contract__blockers">
+                  {contractData.blockers.map((blocker, idx) => (
+                    <div key={idx} className="af-contract__blocker">{formatContractValue(blocker)}</div>
+                  ))}
+                </div>
+              )}
+
+              <div className="af-contract__subhead">Pipeline Phases</div>
+              <div className="af-contract__phase-rail">
+                {(contractData.phases || []).map((phase) => (
+                  <div key={phase.id} className={`af-contract__phase af-contract__phase--${normalizeVisibleStatus(phase.status)}`}>
+                    <span>{phase.label}</span>
+                    <b>{contractStatusLabel(phase.status)}</b>
+                  </div>
+                ))}
+              </div>
+
+              <div className="af-contract__subhead">Evidence Checks</div>
+              <div className="af-contract__grid">
+                {(contractData.phases || []).map((phase) => (
+                  <section key={phase.id} className="af-contract__section">
+                    <div className="af-contract__section-head">
+                      <h4>{phase.label}</h4>
+                      <span className={`af-contract__badge af-contract__badge--${normalizeVisibleStatus(phase.status)}`}>{contractItemSummary(phase.items)}</span>
+                    </div>
+                    <div className="af-contract__items">
+                      {(phase.items || []).map((contractItem) => {
+                        const evidence = formatContractValue(contractItem.evidence);
+                        const blocker = formatContractValue(contractItem.blocker);
+                        return (
+                          <div key={contractItem.id} className={`af-contract__item af-contract__item--${normalizeVisibleStatus(contractItem.status)}`}>
+                            <span className="af-contract__item-status">{contractStatusLabel(contractItem.status)}</span>
+                            <span className="af-contract__item-label">{contractItem.label}</span>
+                            <span className="af-contract__item-owner">{contractItem.owner}</span>
+                            {evidence && <span className="af-contract__item-evidence" title={evidence}>{evidence}</span>}
+                            {blocker && <span className="af-contract__item-blocker">{blocker}</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
+              </div>
+
+              {contractData.stories && contractData.stories.length > 0 && (
+                <section className="af-contract__section af-contract__section--wide">
+                  <div className="af-contract__section-head">
+                    <h4>Story Ownership</h4>
+                    <span>{contractData.stories.length} stories</span>
+                  </div>
+                  <div className="af-contract__stories">
+                    {contractData.stories.map((story) => {
+                      const ownedScreens = formatContractList(story.ownsScreens);
+                      const scopeFiles = formatContractList(story.scopeFiles);
+                      const blocker = formatContractValue(story.blocker);
+                      const storyStatus = normalizeVisibleStatus(story.status);
+                      return (
+                        <div key={story.storyId} className={`af-contract__story ${story.deferred ? "af-contract__story--deferred" : ""}`}>
+                          <span className="af-contract__story-id">{story.storyId}</span>
+                          <span className="af-contract__story-title">{story.title}</span>
+                          <span className={`af-contract__badge af-contract__badge--${storyStatus}`}>{storyStatus.toUpperCase()}</span>
+                          <span className="af-contract__story-meta" title={ownedScreens.join(", ")}>{ownedScreens.length} screens</span>
+                          <span className="af-contract__story-meta" title={scopeFiles.join(", ")}>{scopeFiles.length} files</span>
+                          {blocker && <span className="af-contract__item-blocker">{blocker}</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              )}
+            </div>
+          ) : (
+            <div className="af-plan-overview__empty">No run contract data available yet.</div>
+          )
+        )}
+
         {tab === "design" && designData && (
           <div className="af-inline-plan__design">
             {designData.designSystem && (
@@ -227,7 +421,7 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
                   {Object.entries(designData.designSystem).map(([key, value]: [string, any]) => (
                     <span key={key} className="af-design-token">
                       <span className="af-design-token__key">{key}</span>
-                      <span className="af-design-token__val">{value}</span>
+                      <span className="af-design-token__val">{formatContractValue(value)}</span>
                     </span>
                   ))}
                 </div>
@@ -277,60 +471,70 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
         )}
 
         {tab === "raw" && (
-          <pre className="af-inline-plan__raw">{planData.rawOutput}</pre>
+          <pre className="af-inline-plan__raw">{safePlan.rawOutput}</pre>
         )}
 
         {tab === "memory" && (
           <div className="af-inline-plan__memory">
             {/* Step Timeline */}
-            {planData.stepDurations && planData.stepDurations.length > 0 && (
+            {safePlan.stepDurations && safePlan.stepDurations.length > 0 && (
               <div className="af-memory-section">
                 <h4 className="af-memory-section__title">Step Timeline</h4>
                 <div className="af-memory-timeline">
                   {(() => {
-                    const maxDur = Math.max(...planData.stepDurations.map(s => s.durationMs), 1);
-                    return planData.stepDurations.map((step) => (
-                      <div key={step.stepId} className="af-memory-timeline__row">
-                        <span className="af-memory-timeline__label" style={{ color: STATUS_COLORS[step.status] || "#888" }}>
-                          {step.stepId.toUpperCase()}
-                        </span>
-                        <div className="af-memory-timeline__bar-wrap">
-                          <div
-                            className="af-memory-timeline__bar"
-                            style={{
-                              width: `${Math.max((step.durationMs / maxDur) * 100, 2)}%`,
-                              background: STATUS_COLORS[step.status] || "#555",
-                              opacity: step.status === "pending" ? 0.3 : 0.8,
-                            }}
-                          />
-                        </div>
-                        <span className="af-memory-timeline__dur">{formatDuration(step.durationMs)}</span>
-                        {step.abandonedCount > 0 && (
-                          <span className="af-memory-timeline__abandon" title="Abandon count">
-                            {step.abandonedCount}x
+                    const maxDur = Math.max(...safePlan.stepDurations.map(s => s.durationMs), 1);
+                    return safePlan.stepDurations.map((step) => {
+                      const stepStatus = normalizeVisibleWorkflowStatus(step.status);
+                      return (
+                        <div key={step.stepId} className="af-memory-timeline__row">
+                          <span className="af-memory-timeline__label" style={{ color: STATUS_COLORS[stepStatus] || "#888" }}>
+                            {step.stepId.toUpperCase()}
                           </span>
-                        )}
-                      </div>
-                    ));
+                          <div className="af-memory-timeline__bar-wrap">
+                            <div
+                              className="af-memory-timeline__bar"
+                              style={{
+                                width: `${Math.max((step.durationMs / maxDur) * 100, 2)}%`,
+                                background: STATUS_COLORS[stepStatus] || "#555",
+                                opacity: stepStatus === "pending" ? 0.3 : 0.8,
+                              }}
+                            />
+                          </div>
+                          <span className="af-memory-timeline__dur">{formatDuration(step.durationMs)}</span>
+                          {step.abandonedCount > 0 && (
+                            <span className="af-memory-timeline__abandon" title="Abandon count">
+                              {step.abandonedCount}x
+                            </span>
+                          )}
+                        </div>
+                      );
+                    });
                   })()}
                 </div>
               </div>
             )}
 
             {/* Story Stats */}
-            {planData.storyStats && Object.keys(planData.storyStats).length > 0 && (
+            {safePlan.storyStats && Object.keys(safePlan.storyStats).length > 0 && (
               <div className="af-memory-section">
                 <h4 className="af-memory-section__title">Story Stats</h4>
                 <div className="af-memory-stats">
-                  {Object.entries(planData.storyStats).map(([status, count]) => (
-                    <span key={status} className="af-memory-stat" style={{ color: STATUS_COLORS[status] || "#888" }}>
-                      <span className="af-memory-stat__count">{count}</span>
-                      <span className="af-memory-stat__label">{status}</span>
-                    </span>
-                  ))}
+                  {(() => {
+                    const visibleStats = Object.entries(safePlan.storyStats || {}).reduce<Record<string, number>>((acc, [status, count]) => {
+                      const visibleStatus = normalizeVisibleWorkflowStatus(status);
+                      acc[visibleStatus] = (acc[visibleStatus] || 0) + Number(count || 0);
+                      return acc;
+                    }, {});
+                    return Object.entries(visibleStats).map(([status, count]) => (
+                      <span key={status} className="af-memory-stat" style={{ color: STATUS_COLORS[status] || "#888" }}>
+                        <span className="af-memory-stat__count">{count}</span>
+                        <span className="af-memory-stat__label">{status}</span>
+                      </span>
+                    ));
+                  })()}
                   <span className="af-memory-stat" style={{ color: "#aaa" }}>
                     <span className="af-memory-stat__count">
-                      {Object.values(planData.storyStats).reduce((a, b) => a + b, 0)}
+                      {Object.values(safePlan.storyStats).reduce((a, b) => a + b, 0)}
                     </span>
                     <span className="af-memory-stat__label">total</span>
                   </span>
@@ -339,9 +543,9 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
             )}
 
             {/* Total Abandon Count */}
-            {planData.stepDurations && (() => {
-              const totalAbandons = planData.stepDurations.reduce((sum, s) => sum + s.abandonedCount, 0);
-              const totalDur = planData.stepDurations.reduce((sum, s) => sum + s.durationMs, 0);
+            {safePlan.stepDurations && (() => {
+              const totalAbandons = safePlan.stepDurations.reduce((sum, s) => sum + s.abandonedCount, 0);
+              const totalDur = safePlan.stepDurations.reduce((sum, s) => sum + s.durationMs, 0);
               return totalAbandons > 0 || totalDur > 0 ? (
                 <div className="af-memory-section">
                   <h4 className="af-memory-section__title">Summary</h4>
@@ -364,13 +568,13 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
             })()}
 
             {/* Project Memory */}
-            {planData.projectMemory && (
+            {safePlan.projectMemory && (
               <div className="af-memory-section">
                 <h4 className="af-memory-section__title">Project Memory</h4>
-                <pre className="af-inline-plan__raw">{planData.projectMemory}</pre>
+                <pre className="af-inline-plan__raw">{safePlan.projectMemory}</pre>
               </div>
             )}
-            {!planData.projectMemory && !planData.stepDurations?.length && (
+            {!safePlan.projectMemory && !safePlan.stepDurations?.length && (
               <pre className="af-inline-plan__raw">(no project memory yet)</pre>
             )}
           </div>

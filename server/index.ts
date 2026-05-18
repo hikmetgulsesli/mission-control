@@ -1,11 +1,10 @@
 import express from 'express';
 import { readFileSync } from 'fs';
 import helmet from 'helmet';
-import { homedir } from 'os';
 import { createServer } from 'http';
 import { resolve, join } from 'path';
 import { existsSync } from 'fs';
-import { config } from './config.js';
+import { config, PATHS } from './config.js';
 import { warmupAll } from './utils/cache.js';
 import { setupWsProxy } from './ws-proxy.js';
 import { getStuckRuns, unstickRun, diagnoseStuckStep, tryAutoFix, skipStory, getLimboRuns, resumeLimboRun, detectInfiniteLoop, checkMissingInput, failEntireRun, STUCK_THRESHOLD_MS, MAX_AUTO_UNSTICK } from './utils/setfarm-db.js';
@@ -77,16 +76,9 @@ app.get('/api/health', async (_req, res) => {
   
   // 2. Setfarm DB check
   try {
-    const { execSync } = await import('child_process');
-    const usePg = true; // Faz7: PG-only
-    let result: string;
-    if (usePg) {
-      result = execSync('psql -h localhost -U setrox -d setfarm -t -c "SELECT COUNT(*) FROM runs"', { timeout: 3000 }).toString().trim();
-    } else {
-      const dbPath = join(homedir(), '.openclaw', 'setfarm', 'setfarm.db');
-      result = execSync(`sqlite3 "${dbPath}" "SELECT COUNT(*) FROM runs"`, { timeout: 3000 }).toString().trim();
-    }
-    checks.database = { status: 'up', detail: `${result} runs` };
+    const { sql } = await import('./utils/pg.js');
+    const rows = await sql`SELECT COUNT(*)::int AS count FROM runs`;
+    checks.database = { status: 'up', detail: `${rows[0]?.count || 0} runs` };
   } catch (e: any) { checks.database = { status: 'down', detail: e.message }; }
   
   // 3. Disk space
@@ -117,17 +109,25 @@ app.use('/stitch-cache', authMiddleware);
 app.use('/projects-stitch', authMiddleware);
 
 // Stitch static files (behind auth)
-const stitchCacheDir = join(homedir(), ".openclaw", "setfarm", "stitch-cache");
-app.use("/stitch-cache", express.static(stitchCacheDir));
-app.use("/projects-stitch", express.static("/home/setrox/projects", {
+const stitchCacheDir = join(PATHS.setfarmDir, "stitch-cache");
+const stitchProjectRoots = [...new Set([
+  PATHS.projectsDir,
+  process.env.SETFARM_PROJECTS_DIR || "",
+  process.env.OPENCLAW_PROJECTS_DIR || "",
+].filter(Boolean))];
+const stitchStaticOptions = {
   index: false,
-  setHeaders: (_res, filePath) => {
-    // Only allow stitch-related files
+  setHeaders: (_res: express.Response, filePath: string) => {
+    // Only allow Stitch-related static artifacts.
     if (!filePath.includes('/stitch/') && !filePath.endsWith('.html') && !filePath.endsWith('.png') && !filePath.endsWith('.css')) {
       _res.status(403).end();
     }
   },
-}));
+};
+app.use("/stitch-cache", express.static(stitchCacheDir));
+for (const root of stitchProjectRoots) {
+  app.use("/projects-stitch", express.static(root, stitchStaticOptions));
+}
 
 // Rate limiting
 app.use('/api', rateLimit({ windowMs: 60000, max: 200, standardHeaders: true }));
@@ -219,8 +219,10 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 const server = createServer(app);
 setupWsProxy(server);
 
-server.listen(config.port, '127.0.0.1', () => {
-  console.log(`Mission Control running on http://127.0.0.1:${config.port}`);
+server.listen(config.port, config.host, () => {
+  const displayHost = config.host === '0.0.0.0' ? 'localhost' : config.host;
+  const displayUrl = config.publicOrigin || `http://${displayHost}:${config.port}`;
+  console.log(`Mission Control running on ${displayUrl}`);
   // Pre-warm cache so first request is instant
   warmupAll().then(() => console.log('Cache pre-warmed')).catch(() => {});
 });

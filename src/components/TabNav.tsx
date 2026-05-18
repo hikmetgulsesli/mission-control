@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 
-const tabs: { to: string; label: string; key?: string }[] = [
+const tabs: { to: string; label: string; key?: string; match?: (pathname: string) => boolean }[] = [
   { to: '/', label: 'OVERVIEW' },
   { to: '/office', label: 'OFFICE', key: '0' },
   { to: '/setfarm', label: 'AGENTS', key: '1' },
+  { to: '/setfarm/active', label: 'RUN', key: 'D', match: (pathname) => pathname === '/setfarm/active' || pathname.startsWith('/setfarm/runs/') },
   { to: '/chat', label: 'CHAT', key: '2' },
   { to: '/ops', label: 'OPS', key: '3' },
   { to: '/costs', label: 'COSTS', key: '4' },
@@ -55,8 +56,11 @@ export function TabNav({ onShellToggle, shellOpen }: TabNavProps) {
             <NavLink
               key={tab.to}
               to={tab.to}
-              end={tab.to === '/'}
-              className={({ isActive }) => `tab-nav__item ${isActive ? 'tab-nav__item--active' : ''}`}
+              end={tab.to === '/' || tab.to === '/setfarm'}
+              className={({ isActive }) => {
+                const matched = tab.match ? tab.match(location.pathname) : isActive;
+                return `tab-nav__item ${matched ? 'tab-nav__item--active' : ''}`;
+              }}
             >
               {tab.key && <span className="tab-nav__key">[{tab.key}]</span>}
               {tab.label}

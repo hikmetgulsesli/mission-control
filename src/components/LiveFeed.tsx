@@ -18,10 +18,34 @@ interface LiveEvent {
   output: string | null;
   project: string | null;
   category?: string;
+  repeatCount?: number;
+  firstTs?: string;
+  lastTs?: string;
+}
+
+interface ProjectOption {
+  id: string;
+  label: string;
+  status?: string | null;
+}
+
+const UUIDISH_PROJECT_ID = /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i;
+
+function compactProjectLabel(id: string, label?: string | null, status?: string | null): string {
+  const cleanId = String(id || '').trim();
+  const cleanLabel = String(label || '').replace(/\s+/g, ' ').trim();
+  const fullIdLabel = cleanLabel === cleanId || UUIDISH_PROJECT_ID.test(cleanLabel);
+  const base = fullIdLabel || !cleanLabel
+    ? `${cleanId.slice(0, 8)} - Setfarm run`
+    : cleanLabel;
+  const upperStatus = String(status || '').trim().toUpperCase();
+  if (!upperStatus || base.toUpperCase().endsWith(` - ${upperStatus}`)) return base;
+  return `${base} - ${upperStatus}`;
 }
 
 // Category classification definitions
 const CATEGORY_DEFS: Record<string, { color: string; icon: string; patterns: RegExp[] }> = {
+  PIPELINE: { color: '#00ffff', icon: '◆', patterns: [/setfarm|pipeline|step\.|story\.|run\.|supervisor|stitch|design preclaim/i] },
   DATABASE: { color: '#a855f7', icon: '\u{1F5C4}\uFE0F', patterns: [/CREATE|INSERT|UPDATE|DELETE|migration|prisma|drizzle|\.sql|postgres|sqlite/i] },
   UI: { color: '#3b82f6', icon: '\u{1F3A8}', patterns: [/\.tsx|\.css|component|styling|tailwind|font|style|scss|layout/i] },
   BUILD: { color: '#f59e0b', icon: '\u{1F528}', patterns: [/npm|build|vite|tsc|webpack|compile|bundle|esbuild/i] },
@@ -80,6 +104,15 @@ interface PhaseGroup {
 
 const AGENTS = [
   { id: 'all', label: 'ALL' },
+  { id: 'planner', label: 'Planner' },
+  { id: 'designer', label: 'Designer' },
+  { id: 'developer', label: 'Developer' },
+  { id: 'reviewer', label: 'Reviewer' },
+  { id: 'supervisor', label: 'Supervisor' },
+  { id: 'security-gate', label: 'Security Gate' },
+  { id: 'qa-test', label: 'QA Test' },
+  { id: 'final-test', label: 'Final Test' },
+  { id: 'deployer', label: 'Deployer' },
   { id: 'arya', label: 'Arya' },
   { id: 'koda', label: 'Koda' },
   { id: 'flux', label: 'Flux' },
@@ -94,6 +127,7 @@ const AGENTS = [
 
 const ACTION_TYPES = [
   { id: 'all', label: 'ALL TYPES' },
+  { id: 'pipeline', label: 'PIPELINE' },
   { id: 'bash', label: 'BASH' },
   { id: 'write', label: 'WRITE' },
   { id: 'edit', label: 'EDIT' },
@@ -136,9 +170,23 @@ function actionColor(action: string, status: string): string {
   }
 }
 
+function visibleFeedText(value: string | null | undefined): string {
+  return String(value || '')
+    .replace(/\bN\/A\b/gi, 'Pending')
+    .replace(/\bskipped\b/gi, 'failed');
+}
+
 function formatTime(ts: string): string {
   const d = new Date(ts);
   return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function hasRecentActivity(events: LiveEvent[]): boolean {
+  const cutoff = Date.now() - 5 * 60 * 1000;
+  return events.some((event) => {
+    const ts = new Date(event.ts).getTime();
+    return Number.isFinite(ts) && ts >= cutoff;
+  });
 }
 
 function hasDetailData(ev: LiveEvent): boolean {
@@ -151,7 +199,7 @@ function renderDetailContent(ev: LiveEvent): React.JSX.Element | null {
   const lines: React.JSX.Element[] = [];
 
   if (ev.action === 'edit' && ev.detail) {
-    ev.detail.split('\n').forEach((line, i) => {
+    visibleFeedText(ev.detail).split('\n').forEach((line, i) => {
       let cls = '';
       if (line.startsWith('+ ')) cls = 'lf-detail-line-add';
       else if (line.startsWith('- ')) cls = 'lf-detail-line-del';
@@ -159,18 +207,18 @@ function renderDetailContent(ev: LiveEvent): React.JSX.Element | null {
     });
   } else if (ev.action === 'bash') {
     if (ev.detail) {
-      ev.detail.split('\n').forEach((line, i) => {
+      visibleFeedText(ev.detail).split('\n').forEach((line, i) => {
         lines.push(<div key={'c-' + i} className="lf-detail-line-cmd">{'$ ' + line}</div>);
       });
     }
     if (ev.output) {
-      ev.output.split('\n').forEach((line, i) => {
+      visibleFeedText(ev.output).split('\n').forEach((line, i) => {
         lines.push(<div key={'o-' + i}>{line}</div>);
       });
     }
   } else {
     // write, read, grep, glob, etc.
-    const text = ev.detail || ev.output || '';
+    const text = visibleFeedText(ev.detail || ev.output || '');
     text.split('\n').forEach((line, i) => {
       lines.push(<div key={'t-' + i}>{line}</div>);
     });
@@ -186,7 +234,7 @@ export function LiveFeed() {
   const [actionFilter, setActionFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [projectFilter, setProjectFilter] = useState('all');
-  const [projects, setProjects] = useState<string[]>([]);
+  const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [modelFilter, setModelFilter] = useState('all');
@@ -229,14 +277,26 @@ export function LiveFeed() {
 
   // Fetch available projects
   useEffect(() => {
-    fetch('/api/live-feed/projects')
+    const normalizeProjects = (rows: unknown): ProjectOption[] => {
+      if (!Array.isArray(rows)) return [];
+      return rows
+        .map((row) => {
+          if (typeof row === 'string') return { id: row, label: compactProjectLabel(row) };
+          const value = row as Partial<ProjectOption>;
+          const id = String(value.id || '').trim();
+          if (!id) return null;
+          return { id, label: compactProjectLabel(id, value.label, value.status), status: value.status || null };
+        })
+        .filter(Boolean) as ProjectOption[];
+    };
+    fetch('/api/live-feed/projects?format=rich')
       .then(r => r.ok ? r.json() : [])
-      .then(setProjects)
+      .then(rows => setProjects(normalizeProjects(rows)))
       .catch(() => {});
     const iv = setInterval(() => {
-      fetch('/api/live-feed/projects')
+      fetch('/api/live-feed/projects?format=rich')
         .then(r => r.ok ? r.json() : [])
-        .then(setProjects)
+        .then(rows => setProjects(normalizeProjects(rows)))
         .catch(() => {});
     }, 15000);
     return () => clearInterval(iv);
@@ -261,19 +321,17 @@ export function LiveFeed() {
       const data: LiveEvent[] = await res.json();
 
       if (data.length > 0) {
-        setHasActivity(true);
-        setLastEventTime(Date.now());
+        const recent = hasRecentActivity(data);
+        setHasActivity(recent);
+        if (recent) setLastEventTime(Date.now());
         setEvents(prev => {
-          const merged = [...prev, ...data];
-          const seen = new Set<string>();
-          const deduped = merged.filter(e => {
-            if (seen.has(e.id)) return false;
-            seen.add(e.id);
-            return true;
-          });
-          return deduped.slice(-300);
+          const byId = new Map<string, LiveEvent>();
+          for (const event of [...prev, ...data]) byId.set(event.id, event);
+          return [...byId.values()]
+            .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime())
+            .slice(0, 300);
         });
-        setLastTs(data[data.length - 1].ts);
+        setLastTs(data[0]?.ts || data[data.length - 1].ts);
         // Extract unique models
         setModels(prev => {
           const all = new Set(prev);
@@ -319,8 +377,7 @@ export function LiveFeed() {
   const runningStep = useMemo(() => {
     if (!focusMode) return null;
     // Look through recent events to find the active step
-    for (let i = events.length - 1; i >= 0; i--) {
-      const ev = events[i];
+    for (const ev of events) {
       const text = `${ev.summary || ''} ${ev.detail || ''}`.toLowerCase();
       const stepMatch = text.match(/step[=:\s]+([a-z][-a-z]*)/);
       if (stepMatch) return stepMatch[1];
@@ -349,8 +406,11 @@ export function LiveFeed() {
   }, [events, modelFilter, categoryFilter, focusMode, runningStep]);
 
   const renderEventRow = useCallback((ev: LiveEvent, i: number) => {
-    const isError = ev.status === 'error' || (ev.exitCode !== null && ev.exitCode !== 0);
-    const color = isError ? '#ff4444' : actionColor(ev.action, ev.status);
+    const visibleStatus = visibleFeedText(ev.status);
+    const visibleAction = visibleFeedText(ev.action);
+    const visibleSummary = visibleFeedText(ev.summary);
+    const isError = visibleStatus === 'error' || (ev.exitCode !== null && ev.exitCode !== 0);
+    const color = isError ? '#ff4444' : actionColor(visibleAction, visibleStatus);
     const expandable = hasDetailData(ev);
     const isExpanded = expanded.has(ev.id);
     const rowKey = ev.id + '-' + i;
@@ -387,11 +447,16 @@ export function LiveFeed() {
             </span>
           )}
           <span className="lf-row__action" style={{ color }}>
-            {ev.action}
+            {visibleAction}
           </span>
           <span className="lf-row__summary" style={{ color: isError ? '#ff4444' : undefined }}>
-            {ev.summary}
+            {visibleSummary}
           </span>
+          {ev.repeatCount && ev.repeatCount > 1 && (
+            <span className="lf-row__repeat" title={ev.firstTs && ev.lastTs ? `${ev.firstTs} - ${ev.lastTs}` : 'Repeated event'}>
+              x{ev.repeatCount}
+            </span>
+          )}
           {ev.durationMs !== null && (
             <span className="lf-row__duration">
               {ev.durationMs < 1000 ? ev.durationMs + 'ms' : (ev.durationMs / 1000).toFixed(1) + 's'}
@@ -455,14 +520,14 @@ export function LiveFeed() {
             title="Search in commands, files, output"
           />
           <select
-            className="lf-select"
+            className="lf-select lf-select--project"
             value={projectFilter}
             onChange={e => setProjectFilter(e.target.value)}
             title="Filter by project"
           >
             <option value="all">ALL PROJECTS</option>
             {projects.map(p => (
-              <option key={p} value={p}>{p}</option>
+              <option key={p.id} value={p.id}>{p.label}</option>
             ))}
           </select>
           <select
@@ -565,10 +630,10 @@ export function LiveFeed() {
         {displayed.length === 0 && (
           <div className="lf-empty">
             {focusMode && !runningStep
-              ? 'Focus mode aktif ama calisan step bulunamadi. Aktif bir run basladiginda otomatik filtrelenecek.'
+              ? 'Focus mode is active, but no running step was found. The feed will auto-filter when an active run starts.'
               : hasActivity
-                ? 'Agentlar aktif ama su an sadece polling yapiyor. Yeni gorev basladiginda burada gorunecek.'
-                : 'Aktif agent oturumu yok. Agentlar calistiginda eventler burada gorunecek.'}
+                ? 'Agents are active but only polling right now. New task activity will appear here.'
+                : 'No active agent session. Events will appear here when agents start working.'}
           </div>
         )}
 

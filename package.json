@@ -1,11 +1,14 @@
 {
   "name": "mission-control",
-  "version": "2.0.0",
+  "version": "2.0.16",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "concurrently \"tsx watch server/index.ts\" \"vite\"",
-    "build": "vite build && tsc -p tsconfig.server.json && cp -r server/*.json dist-server/ 2>/dev/null || true",
+    "check:version": "node scripts/check-version-contract.mjs",
+    "check:prompts": "node scripts/check-prompt-language.mjs",
+    "check:paths": "node scripts/check-path-contract.mjs",
+    "build": "npm run check:version && npm run check:prompts && npm run check:paths && vite build && tsc -p tsconfig.server.json && (cp -r server/*.json dist-server/ 2>/dev/null || true)",
     "start": "node server/index.js",
     "preview": "vite preview"
   },

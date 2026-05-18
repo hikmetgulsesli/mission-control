@@ -19,12 +19,12 @@ export function CostEstimate({ estimate }: CostEstimateProps) {
       <div className="prd-cost__divider" />
       <div className="prd-cost__item">
         <span className="prd-cost__value">${estimate.tokenCost}</span>
-        <span className="prd-cost__label">maliyet</span>
+        <span className="prd-cost__label">cost</span>
       </div>
       <div className="prd-cost__divider" />
       <div className="prd-cost__item">
-        <span className="prd-cost__value">~{estimate.estimatedMinutes}dk</span>
-        <span className="prd-cost__label">sure</span>
+        <span className="prd-cost__value">~{estimate.estimatedMinutes}m</span>
+        <span className="prd-cost__label">duration</span>
       </div>
       <div className="prd-cost__divider" />
       <div className="prd-cost__item">
@@ -33,7 +33,7 @@ export function CostEstimate({ estimate }: CostEstimateProps) {
         }}>
           %{estimate.successRate}
         </span>
-        <span className="prd-cost__label">basari</span>
+        <span className="prd-cost__label">success</span>
       </div>
     </div>
   );

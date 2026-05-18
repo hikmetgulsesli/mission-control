@@ -1,6 +1,8 @@
 import { Router } from "express";
 import pgSql from "../utils/pg.js";
 import { execFileSync } from "node:child_process";
+import { join } from "node:path";
+import { PATHS } from "../config.js";
 
 const router = Router();
 
@@ -27,7 +29,7 @@ router.get("/telemetry/:runId", async (req, res) => {
     // Use setfarm's bottleneck detection (5 algorithms: queue, execution, reliability, thrashing, saturation)
     let bottlenecks: any[] = [];
     try {
-      const setfarmCli = process.env.HOME + "/.openclaw/setfarm-repo/dist/installer/bottleneck.js";
+      const setfarmCli = join(PATHS.setfarmRepoDir, "dist", "installer", "bottleneck.js");
       const out = execFileSync("node", ["-e", `
         import("${setfarmCli.replace(/\\/g, '/')}").then(m => m.detectBottlenecks("${runId}")).then(r => console.log(JSON.stringify(r))).catch(() => console.log("[]"))
       `], { encoding: "utf-8", timeout: 10000, stdio: ["pipe", "pipe", "pipe"] });

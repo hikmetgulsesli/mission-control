@@ -6,7 +6,7 @@
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { execSync, execFileSync } from "child_process";
-import { PATHS } from "../config.js";
+import { config, PATHS } from "../config.js";
 
 // ── Port allocation ─────────────────────────────────────────────────
 
@@ -27,8 +27,7 @@ function getUsedPorts(): Set<number> {
   }
   // From projects.json
   try {
-    const pFile = join(import.meta.dirname, "../../projects.json");
-    const projects = JSON.parse(readFileSync(pFile, "utf-8"));
+    const projects = JSON.parse(readFileSync(config.projectsJson, "utf-8"));
     for (const p of projects) {
       for (const v of Object.values(p.ports || {})) {
         if (typeof v === "number") used.add(v as number);
@@ -62,9 +61,9 @@ export function updatePortRegistry(port: number, name: string): void {
   try {
     let reg = readFileSync(PORT_REGISTRY, "utf-8");
     if (reg.includes("| " + port + " |")) return;
-    const line = "| " + port + " | " + name + " | proje |\n";
-    if (reg.includes("Sonraki bos port")) {
-      reg = reg.replace(/(\nSonraki bos port)/s, "\n" + line + "$1");
+    const line = "| " + port + " | " + name + " | project |\n";
+    if (reg.includes("Next free port")) {
+      reg = reg.replace(/(\nNext free port)/s, "\n" + line + "$1");
     } else {
       reg = reg.trimEnd() + "\n" + line;
     }
@@ -644,7 +643,7 @@ export function autoDeployProject(
             "-s",
             "-X",
             "POST",
-            (process.env.MC_INTERNAL_URL || "http://127.0.0.1:3080") + "/api/discord-notify",
+            config.internalUrl + "/api/discord-notify",
             "-H",
             "Content-Type: application/json",
             "-d",

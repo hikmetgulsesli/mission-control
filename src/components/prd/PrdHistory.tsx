@@ -35,15 +35,15 @@ export function PrdHistory({ onSelect, onClose, templatesMode }: PrdHistoryProps
     <div className="prd-modal-overlay" onClick={onClose}>
       <div className="prd-modal" onClick={(e) => e.stopPropagation()}>
         <div className="prd-modal__header">
-          <h2>{templatesMode ? 'Sablonlar' : 'PRD Gecmisi'}</h2>
+          <h2>{templatesMode ? 'Templates' : 'PRD History'}</h2>
           <button className="prd-modal__close" onClick={onClose}>x</button>
         </div>
         <div className="prd-modal__body">
           {loading ? (
-            <div className="prd-empty">Yukleniyor...</div>
+            <div className="prd-empty">Loading...</div>
           ) : items.length === 0 ? (
             <div className="prd-empty">
-              {templatesMode ? 'Sablon bulunamadi.' : 'Gecmis PRD yok.'}
+              {templatesMode ? 'No templates found.' : 'No PRD history.'}
             </div>
           ) : (
             <div className="prd-history-list">
@@ -59,19 +59,19 @@ export function PrdHistory({ onSelect, onClose, templatesMode }: PrdHistoryProps
                   <div className="prd-history-item__meta">
                     {item.platform && <span className="prd-history-item__tag">{item.platform}</span>}
                     {item.category && <span className="prd-history-item__tag">{item.category}</span>}
-                    {item.score != null && <span className="prd-history-item__score">Skor: {item.score}</span>}
+                    {item.score != null && <span className="prd-history-item__score">Score: {item.score}</span>}
                     {item.prd_version && <span className="prd-history-item__version">v{item.prd_version}</span>}
                     {item.created_at && (
                       <span className="prd-history-item__date">
-                        {new Date(item.created_at).toLocaleDateString('tr-TR')}
+                        {new Date(item.created_at).toLocaleDateString('en-US')}
                       </span>
                     )}
                     {!templatesMode && (
                       <button
                         className="prd-history-item__delete"
                         onClick={(e) => handleDelete(e, item.id)}
-                        title="Sil"
-                      >SIL</button>
+                        title="Delete"
+                      >DELETE</button>
                     )}
                   </div>
                   {item.description && (

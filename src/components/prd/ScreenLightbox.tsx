@@ -97,7 +97,7 @@ export function ScreenLightbox({
         {/* Preview — HTML iframe preferred over PNG thumbnail */}
         <div className="screen-lightbox__preview">
           {loading ? (
-            <div className="screen-lightbox__loading">Yukleniyor...</div>
+            <div className="screen-lightbox__loading">Loading...</div>
           ) : screen.htmlUrl ? (
             <iframe src={screen.htmlUrl} title={screen.name} sandbox="allow-scripts allow-same-origin" />
           ) : screen.screenshotUrl ? (
@@ -105,7 +105,7 @@ export function ScreenLightbox({
               <img src={screen.screenshotUrl} alt={screen.name} />
             </a>
           ) : (
-            <div className="screen-lightbox__placeholder">Onizleme mevcut degil</div>
+            <div className="screen-lightbox__placeholder">Preview is not available</div>
           )}
         </div>
 
@@ -121,7 +121,7 @@ export function ScreenLightbox({
                 <span className="screen-lightbox__size">{screen.width}x{screen.height}</span>
               )}
               {screen.parentScreenId && (
-                <span className="screen-lightbox__variant-badge">Varyant</span>
+                <span className="screen-lightbox__variant-badge">Variant</span>
               )}
               <span className="screen-lightbox__counter">{currentIndex + 1}/{screens.length}</span>
             </div>
@@ -138,8 +138,8 @@ export function ScreenLightbox({
                 autoFocus
               />
               <div className="screen-lightbox__prompt-actions">
-                <button className="btn btn--small btn--primary" onClick={handlePromptSubmit}>Uret</button>
-                <button className="btn btn--small" onClick={() => setEditingPrompt(false)}>Iptal</button>
+                <button className="btn btn--small btn--primary" onClick={handlePromptSubmit}>Generate</button>
+                <button className="btn btn--small" onClick={() => setEditingPrompt(false)}>Cancel</button>
               </div>
             </div>
           ) : screen.prompt ? (
@@ -153,18 +153,18 @@ export function ScreenLightbox({
           <div className="screen-lightbox__actions">
             {confirmDelete ? (
               <>
-                <span className="screen-lightbox__confirm-text">Silinsin mi?</span>
-                <button className="btn btn--small btn--danger" onClick={() => onDelete(screen.id)}>Evet, Sil</button>
-                <button className="btn btn--small" onClick={() => setConfirmDelete(false)}>Iptal</button>
+                <span className="screen-lightbox__confirm-text">Delete this screen?</span>
+                <button className="btn btn--small btn--danger" onClick={() => onDelete(screen.id)}>Yes, Delete</button>
+                <button className="btn btn--small" onClick={() => setConfirmDelete(false)}>Cancel</button>
               </>
             ) : (
               <>
-                <button className="btn btn--small btn--danger" onClick={() => setConfirmDelete(true)} disabled={loading}>Sil</button>
-                <button className="btn btn--small" onClick={() => onRegenerate(screen.id)} disabled={loading}>Degistir</button>
-                <button className="btn btn--small" onClick={() => setEditingPrompt(true)} disabled={loading}>Duzenle & Uret</button>
-                <button className="btn btn--small" onClick={() => onVariant(screen.id)} disabled={loading}>Varyant</button>
+                <button className="btn btn--small btn--danger" onClick={() => setConfirmDelete(true)} disabled={loading}>Delete</button>
+                <button className="btn btn--small" onClick={() => onRegenerate(screen.id)} disabled={loading}>Regenerate</button>
+                <button className="btn btn--small" onClick={() => setEditingPrompt(true)} disabled={loading}>Edit & Generate</button>
+                <button className="btn btn--small" onClick={() => onVariant(screen.id)} disabled={loading}>Variant</button>
                 {screen.htmlUrl && (
-                  <a href={screen.htmlUrl} target="_blank" rel="noopener noreferrer" className="btn btn--small">Yeni Sekmede Ac</a>
+                  <a href={screen.htmlUrl} target="_blank" rel="noopener noreferrer" className="btn btn--small">Open in New Tab</a>
                 )}
               </>
             )}

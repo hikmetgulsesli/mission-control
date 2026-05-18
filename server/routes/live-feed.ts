@@ -1,13 +1,14 @@
 import { Router } from 'express';
-// import Database from 'better-sqlite3'; // Faz7: SQLite removed
+// import Database from 'better-sqlite3'; // Phase 7: SQLite removed
 import { readdirSync, statSync, readFileSync } from 'fs';
 import { join } from 'path';
-import { homedir } from 'os';
 import pgSql from '../utils/pg.js';
+import { PATHS } from '../config.js';
+import { getSetfarmActivity } from '../utils/setfarm.js';
 
 const router = Router();
 
-// Faz7: PG-only backend
+// Phase 7: PG-only backend
 
 // Agent name/emoji mapping
 const AGENT_MAP: Record<string, { name: string; emoji: string }> = {
@@ -51,10 +52,43 @@ interface LiveEvent {
   output: string | null;
   project: string | null;
   category: string | null;
+  repeatCount?: number;
+  firstTs?: string;
+  lastTs?: string;
+}
+
+interface LiveProjectOption {
+  id: string;
+  label: string;
+  status?: string | null;
+}
+
+const UUIDISH_PROJECT_ID = /^[0-9a-f]{8}-[0-9a-f-]{27,}$/i;
+
+function extractProjectDisplayName(task: unknown, fallbackId: string): string {
+  const compactTask = String(task || '').replace(/\s+/g, ' ').trim();
+  if (!compactTask) return UUIDISH_PROJECT_ID.test(fallbackId) ? 'Setfarm run' : fallbackId;
+  const nameMatch = compactTask.match(/\bcalled\s+([^.]+?)(?:\.|\s+It\b|$)/i);
+  return (nameMatch?.[1] || compactTask).slice(0, 52);
+}
+
+function formatProjectOption(id: string, run?: any): LiveProjectOption {
+  const shortId = id.slice(0, 8);
+  if (!run) {
+    return { id, label: UUIDISH_PROJECT_ID.test(id) ? `${shortId} - Setfarm run` : id };
+  }
+  const status = String(run.status || '').toUpperCase();
+  const displayName = extractProjectDisplayName(run.task, id);
+  return {
+    id,
+    status,
+    label: `${shortId} - ${displayName}${status ? ` - ${status}` : ''}`,
+  };
 }
 
 // Category classification — matches client-side CATEGORY_DEFS
 const CATEGORY_PATTERNS: { id: string; patterns: RegExp[] }[] = [
+  { id: 'PIPELINE', patterns: [/setfarm|pipeline|step\.|story\.|run\.|supervisor|stitch|design preclaim/i] },
   { id: 'DATABASE', patterns: [/CREATE|INSERT|UPDATE|DELETE|migration|prisma|drizzle|\.sql|postgres|sqlite/i] },
   { id: 'UI', patterns: [/\.tsx|\.css|component|styling|tailwind|font|style|scss|layout/i] },
   { id: 'BUILD', patterns: [/npm|build|vite|tsc|webpack|compile|bundle|esbuild/i] },
@@ -72,8 +106,118 @@ function classifyCategory(summary: string | null, file: string | null, detail: s
   return null;
 }
 
+function normalizeSetfarmAgent(raw: unknown): string {
+  const value = String(raw || 'setfarm')
+    .replace(/^feature-dev_/, '')
+    .replace(/_/g, '-')
+    .trim()
+    .toLowerCase();
+  return value || 'setfarm';
+}
 
-// SQLite persistence removed (Faz7: PG-only)
+function setfarmEventStatus(eventName: string, detail: string): string {
+  const text = `${eventName} ${detail}`;
+  if (/^(story\.retry|step\.failed|run\.failed|step\.timeout)$/i.test(eventName)) return 'error';
+  if (/(failed|failure|unavailable|blocked|\bblock\b|exhausted|error|PR_REVIEW_COMMENTS_OPEN|unresolved[\s\S]{0,120}review\s+thread|actionable[\s\S]{0,120}review\s+comments)/i.test(text)) return 'error';
+  if (/(running|started|pending|progress|retry)/i.test(text)) return 'running';
+  return 'completed';
+}
+
+function compactPipelineSummary(eventName: string, stepId: string, detail: string, repeatCount?: number): string {
+  const prefix = stepId ? `${stepId}: ` : '';
+  const repeat = repeatCount && repeatCount > 1 ? ` x${repeatCount}` : '';
+  const source = detail || eventName;
+  return `${prefix}${source}${repeat}`.replace(/\s+/g, ' ').trim().slice(0, 180);
+}
+
+function mapSetfarmEvent(event: any): LiveEvent {
+  const eventName = String(event?.event || event?.action || 'setfarm.event');
+  const stepId = String(event?.stepId || '').trim();
+  const storyId = String(event?.storyId || '').trim();
+  const detail = String(event?.detail || event?.storyTitle || '').trim();
+  const repeatCount = Number(event?.repeatCount || 0) || undefined;
+  const project = String(event?.runId || '').trim() || null;
+  const status = setfarmEventStatus(eventName, detail);
+  const agent = normalizeSetfarmAgent(event?.agentId || stepId || 'setfarm');
+  const idParts = [
+    'setfarm',
+    event?.runId || 'run',
+    eventName,
+    stepId,
+    storyId,
+    detail.slice(0, 120),
+  ];
+  return {
+    id: idParts.join(':'),
+    ts: String(event?.lastTs || event?.ts || new Date().toISOString()),
+    agent,
+    agentEmoji: '◆',
+    model: 'setfarm',
+    tool: 'setfarm',
+    action: 'pipeline',
+    summary: compactPipelineSummary(eventName, stepId, detail, repeatCount),
+    file: null,
+    status,
+    durationMs: null,
+    exitCode: status === 'error' ? 1 : null,
+    cwd: null,
+    detail: detail || eventName,
+    output: event?.storyTitle ? String(event.storyTitle) : null,
+    project,
+    category: 'PIPELINE',
+    ...(repeatCount && repeatCount > 1 ? {
+      repeatCount,
+      firstTs: String(event?.firstTs || event?.ts || ''),
+      lastTs: String(event?.lastTs || event?.ts || ''),
+    } : {}),
+  };
+}
+
+function applyEventQueryFilters(events: LiveEvent[], query: Record<string, any>): LiveEvent[] {
+  let filtered = events;
+  const project = query.project as string;
+  const agent = query.agent as string;
+  const action = query.action as string;
+  const since = query.since as string;
+  const until = query.until as string;
+  const status = query.status as string;
+  const range = query.range as string;
+  const q = query.q as string;
+
+  if (project) filtered = filtered.filter((e) => e.project === project);
+  if (agent) filtered = filtered.filter((e) => e.agent === agent.toLowerCase());
+  if (action) filtered = filtered.filter((e) => e.action === action.toLowerCase());
+  if (since) {
+    const sinceMs = new Date(since).getTime();
+    if (!Number.isNaN(sinceMs)) filtered = filtered.filter((e) => new Date(e.ts).getTime() > sinceMs);
+  }
+  if (until) {
+    const untilMs = new Date(until).getTime();
+    if (!Number.isNaN(untilMs)) filtered = filtered.filter((e) => new Date(e.ts).getTime() < untilMs);
+  }
+  if (range && range !== 'all') {
+    const rangeMs: Record<string, number> = { '5m': 5*60e3, '15m': 15*60e3, '30m': 30*60e3, '1h': 60*60e3, '3h': 3*60*60e3 };
+    const cutoff = Date.now() - (rangeMs[range] || 60*60e3);
+    filtered = filtered.filter((e) => new Date(e.ts).getTime() > cutoff);
+  }
+  if (status === 'error') {
+    filtered = filtered.filter((e) => e.status === 'error' || (e.exitCode !== null && e.exitCode !== 0));
+  }
+  if (q) {
+    const needle = q.toLowerCase();
+    filtered = filtered.filter((e) => `${e.summary || ''} ${e.detail || ''} ${e.output || ''} ${e.file || ''}`.toLowerCase().includes(needle));
+  }
+
+  return filtered;
+}
+
+async function getSetfarmLiveEvents(limit: number, query: Record<string, any> = {}): Promise<LiveEvent[]> {
+  const raw = await getSetfarmActivity(Math.min(Math.max(limit, 50), 300));
+  return applyEventQueryFilters(raw.map(mapSetfarmEvent), query);
+}
+
+
+// SQLite persistence removed (Phase 7: PG-only)
 
 // ── PostgreSQL persistence ──
 
@@ -240,8 +384,8 @@ function getRealProjects(): Set<string> {
   if (_realProjectsCache && now - _realProjectsCacheTs < 60000) return _realProjectsCache;
   try {
     _realProjectsCache = new Set(
-      readdirSync(join(homedir(), 'projects'))
-        .filter(d => { try { return statSync(join(homedir(), 'projects', d)).isDirectory(); } catch { return false; } })
+      readdirSync(PATHS.projectsDir)
+        .filter(d => { try { return statSync(join(PATHS.projectsDir, d)).isDirectory(); } catch { return false; } })
     );
   } catch {
     _realProjectsCache = new Set();
@@ -306,7 +450,7 @@ function extractDetail(toolName: string, args: any, resultContent: any): { detai
   }
 }
 function scanSessions(): LiveEvent[] {
-  const agentsDir = join(homedir(), '.openclaw', 'agents');
+  const agentsDir = PATHS.agentsDir;
   const events: LiveEvent[] = [];
   const now = Date.now();
   const FIVE_MIN = 5 * 60 * 1000;
@@ -420,7 +564,10 @@ router.get('/live-feed', async (req, res) => {
       return filterAndRespond(feedCache.data, req, res);
     }
 
-    const events = scanSessions();
+    const sessionEvents = scanSessions();
+    const setfarmEvents = await getSetfarmLiveEvents(300).catch(() => []);
+    const events = [...sessionEvents, ...setfarmEvents]
+      .sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
     await persistEvents(events);
     feedCache = { data: events, ts: now };
     return filterAndRespond(events, req, res);
@@ -481,14 +628,30 @@ function filterAndRespond(events: LiveEvent[], req: any, res: any) {
   res.json(filtered.slice(-500));
 }
 
-router.get('/live-feed/projects', async (_req, res) => {
+router.get('/live-feed/projects', async (req, res) => {
   try {
     // Cross-check with real ~/projects/ dirs to filter partial-path artifacts
     const realProjects = getRealProjects();
 
     await ensurePgReady();
     const rows = await pgSql`SELECT DISTINCT project FROM live_events WHERE project IS NOT NULL AND project != '' ORDER BY project`;
-    res.json(rows.map((r: any) => r.project).filter((p: string) => realProjects.has(p)));
+    const dbProjects = rows.map((r: any) => r.project).filter((p: string) => realProjects.has(p));
+    const setfarmProjects = await getSetfarmActivity(200)
+      .then((events: any[]) => [...new Set(events.map((event) => String(event?.runId || '').trim()).filter(Boolean))])
+      .catch(() => []);
+    const ids = [...new Set([...dbProjects, ...setfarmProjects])].sort();
+    let runRows: any[] = [];
+    if (ids.length > 0) {
+      runRows = await pgSql`
+        SELECT id, workflow_id, task, status, created_at
+        FROM runs
+        WHERE id = ANY(${ids})
+      `;
+    }
+    const runMap = new Map(runRows.map((run: any) => [String(run.id), run]));
+    const options: LiveProjectOption[] = ids.map((id) => formatProjectOption(id, runMap.get(id)));
+    const rich = String(req.query.format || '').toLowerCase() === 'rich';
+    res.json(rich ? options : options.map((option) => option.id));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -579,7 +742,13 @@ router.get('/live-feed/history', async (req, res) => {
       agentEmoji: Object.values(AGENT_MAP).find(a => a.name.toLowerCase() === (r.agent || '').toLowerCase())?.emoji || '',
       category: r.category || classifyCategory(r.summary, r.file, r.detail),
     }));
-    res.json(mapped);
+    const setfarmEvents = await getSetfarmLiveEvents(limit, req.query).catch(() => []);
+    const byId = new Map<string, LiveEvent>();
+    for (const event of mapped) byId.set(event.id, event);
+    for (const event of setfarmEvents) byId.set(event.id, event);
+    res.json([...byId.values()]
+      .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime())
+      .slice(0, limit));
   } catch (err: any) {
     console.error('[live-feed-db] History query error:', err.message);
     res.status(500).json({ error: err.message });

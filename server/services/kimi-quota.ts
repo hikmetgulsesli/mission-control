@@ -12,8 +12,8 @@
  *
  * Token discovery order:
  *   1. process.env.KIMI_API_KEY
- *   2. ~/.openclaw/agents/koda/agent/auth-profiles.json -> profiles["kimi-coding:manual"].token
- *   3. ~/.openclaw/agents/main/agent/auth-profiles.json -> same
+ *   2. Agent auth-profiles.json under AGENTS_DIR for koda.
+ *   3. Agent auth-profiles.json under AGENTS_DIR for main.
  *
  * The fetch is best-effort; on network/auth/server errors we return the
  * cached snapshot if any, otherwise an `available: false` payload that the
@@ -25,8 +25,8 @@
  */
 
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { PATHS } from '../config.js';
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -95,7 +95,7 @@ interface RawKimiUsageResponse {
 // ── Configuration ──────────────────────────────────────────────────
 
 const KIMI_USAGES_URL = 'https://api.kimi.com/coding/v1/usages';
-const SNAPSHOT_PATH = join(homedir(), '.openclaw', 'setfarm', 'kimi-quota-snapshot.json');
+const SNAPSHOT_PATH = join(PATHS.setfarmDir, 'kimi-quota-snapshot.json');
 const DEFAULT_TTL_MS = 2 * 60 * 1000; // 2 minutes
 const FETCH_TIMEOUT_MS = 5000;
 
@@ -115,7 +115,7 @@ let inFlight: Promise<KimiQuotaSnapshot> | null = null;
 let cachedToken: string | null | undefined; // undefined = not yet looked up
 
 function readTokenFromAuthProfiles(agentId: string): string | null {
-  const path = join(homedir(), '.openclaw', 'agents', agentId, 'agent', 'auth-profiles.json');
+  const path = join(PATHS.agentsDir, agentId, 'agent', 'auth-profiles.json');
   if (!existsSync(path)) return null;
   try {
     const raw = readFileSync(path, 'utf-8');

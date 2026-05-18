@@ -2,13 +2,13 @@ import { Router } from 'express';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
-import os from 'node:os';
+import { PATHS } from '../config.js';
 
 const execAsync = promisify(exec);
 const router = Router();
 
-const SETFARM_REPO = path.join(os.homedir(), '.openclaw', 'setfarm-repo');
-const MC_REPO = path.join(os.homedir(), 'projects', 'mission-control');
+const SETFARM_REPO = PATHS.setfarmRepoDir;
+const MC_REPO = process.env.MC_REPO_DIR || path.join(PATHS.projectsDir, 'mission-control');
 
 interface Commit {
   hash: string;

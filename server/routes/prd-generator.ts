@@ -6,14 +6,14 @@ import { generateMockupsFromPrd, deleteScreenFromCache, regenerateScreen, genera
 import { mapComponentsFromPrd, generateComponentSection } from '../services/component-mapper.js';
 import { getRunBenchmark, analyzePrdFormats } from '../services/benchmark.js';
 import { checkSsrf } from '../utils/ssrf.js';
-import { homedir } from 'os';
+import { config, PATHS } from '../config.js';
 import { join } from 'path';
 import { mkdirSync, existsSync } from 'fs';
 import { execFileSync } from 'child_process';
 
 const router = Router();
 
-// POST /prd/analyze — URL veya screenshot analiz et
+// POST /prd/analyze - analyze URL or screenshot.
 router.post('/prd/analyze', async (req, res) => {
   try {
     const { url, screenshot, filename } = req.body;
@@ -87,15 +87,15 @@ router.post('/prd/analyze', async (req, res) => {
         const playRes = await fetch(url, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-            'Accept-Language': 'tr-TR,tr;q=0.9,en;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
           },
           signal: AbortSignal.timeout(15000),
         });
         const playHtml = await playRes.text();
         if (playHtml.length < 1024) {
           res.status(502).json({
-            error: 'Play Store sayfasi yuklenemedi (JS-rendered SPA). Lutfen uygulama aciklamasini manuel olarak girin veya App Store linkini deneyin.',
-            hint: 'Google Play Store sayfalari JavaScript gerektirdigi icin otomatik analiz basarisiz olabilir. PRD olusturucu ekraninda "Aciklama" alanina uygulamanin ozelliklerini yapistirin.',
+            error: 'Play Store page could not be loaded because it is a JavaScript-rendered SPA. Enter the app description manually or try an App Store link.',
+            hint: 'Google Play Store pages may fail automatic analysis because they require JavaScript. Paste the application features into the PRD generator description field.',
           });
           return;
         }
@@ -104,8 +104,8 @@ router.post('/prd/analyze', async (req, res) => {
         return;
       } catch (playErr: any) {
         res.status(502).json({
-          error: `Play Store fetch basarisiz: ${playErr.message}. Lutfen uygulama aciklamasini manuel girin.`,
-          hint: 'Google Play Store sayfalari JavaScript gerektirdigi icin otomatik analiz basarisiz olabilir.',
+          error: `Play Store fetch failed: ${playErr.message}. Enter the app description manually.`,
+          hint: 'Google Play Store pages may fail automatic analysis because they require JavaScript.',
         });
         return;
       }
@@ -131,7 +131,7 @@ router.post('/prd/analyze', async (req, res) => {
   }
 });
 
-// POST /prd/github-import — GitHub repo'dan analiz bilgisi cek
+// POST /prd/github-import - extract analysis data from a GitHub repo.
 router.post('/prd/github-import', async (req, res) => {
   try {
     const { url } = req.body;
@@ -139,7 +139,7 @@ router.post('/prd/github-import', async (req, res) => {
 
     const { scrapeGitHubRepo, detectPlatform } = await import('../services/github-scraper.js');
     const data = await scrapeGitHubRepo(url);
-    if (!data) { res.status(404).json({ error: 'GitHub repo bulunamadi veya gh CLI authenticate degil' }); return; }
+    if (!data) { res.status(404).json({ error: 'GitHub repo not found or gh CLI is not authenticated' }); return; }
 
     const platform = detectPlatform(data.techStack);
     res.json({
@@ -175,9 +175,9 @@ router.post('/prd/research', async (req, res) => {
         messages: [
           {
             role: 'system',
-            content: 'Sen bir web arastirma uzmanisin. Verilen konu hakkinda best practice, UX pattern, sektor standartlari ve ornek projeler hakkinda detayli arastirma yap. JSON formatinda dondur: { "bestPractices": [], "uxPatterns": [], "competitors": [], "recommendations": [] }',
+            content: 'You are a web research expert. Research best practices, UX patterns, industry standards, and example projects for the given topic. Return JSON only: { "bestPractices": [], "uxPatterns": [], "competitors": [], "recommendations": [] }',
           },
-          { role: 'user', content: `Arastir: ${finalQuery}` },
+          { role: 'user', content: `Research: ${finalQuery}` },
         ],
         max_tokens: 2000,
         temperature: 0.7,
@@ -235,7 +235,7 @@ router.post('/prd/chat', async (req, res) => {
   }
 });
 
-// POST /prd/generate — PRD olustur
+// POST /prd/generate - generate PRD.
 router.post('/prd/generate', async (req, res) => {
   try {
     const { prdId, title, platform, description, analysis, research, chatHistory, templateId, urls } = req.body;
@@ -263,7 +263,7 @@ router.post('/prd/generate', async (req, res) => {
       templateContent,
     });
 
-    // Komponent kutuphanesi eslestirmesi ekle (Feature 9)
+    // Add component library mapping.
     const componentMappings = mapComponentsFromPrd(prdContent);
     if (componentMappings.length > 0) {
       prdContent += generateComponentSection(componentMappings);
@@ -328,12 +328,12 @@ router.post('/prd/enhance', async (req, res) => {
     try {
       const enhanced = await enhancePrd(prd.prd_content, prd.prd_version);
 
-      // Enhance validasyon: sayfa silme/format bozma kontrolu
+      // Enhancement validation: prevent page deletion or broken page formatting.
       const newPages = extractPages(enhanced);
       const oldPages = prd.pages || extractPages(prd.prd_content);
       if (oldPages.length > 0) {
         if (newPages.length === 0) {
-          enhanceJobs.set(prdId, { status: 'error', error: 'Gelistirme sayfa formatini bozdu. Orijinal korundu.', startedAt: Date.now() });
+          enhanceJobs.set(prdId, { status: 'error', error: 'Enhancement broke the page format. Original content was preserved.', startedAt: Date.now() });
           return;
         }
         const newRoutes = new Set(newPages.map((p: any) => p.route));
@@ -341,7 +341,7 @@ router.post('/prd/enhance', async (req, res) => {
         if (removed.length > 0) {
           enhanceJobs.set(prdId, {
             status: 'error',
-            error: `Gelistirme ${removed.map((p: any) => p.name).join(', ')} sayfalarini sildi. Orijinal korundu.`,
+            error: `Enhancement removed these pages: ${removed.map((p: any) => p.name).join(', ')}. Original content was preserved.`,
             startedAt: Date.now(),
           });
           return;
@@ -400,7 +400,7 @@ router.post('/prd/score', async (req, res) => {
   }
 });
 
-// POST /prd/mockups — Stitch API ile mockup uret (gercek)
+// POST /prd/mockups - generate mockups with the Stitch API.
 router.post('/prd/mockups', async (req, res) => {
   try {
     const { prdId, prdContent, title } = req.body;
@@ -411,7 +411,7 @@ router.post('/prd/mockups', async (req, res) => {
 
     if (!content) { res.status(400).json({ error: 'prdContent or prdId required' }); return; }
 
-    // Gercek Stitch API ile mockup uret
+    // Generate mockups with the real Stitch API.
     const result = await generateMockupsFromPrd(content, prdTitle, platform);
 
     const screens = result.screens.map(s => ({
@@ -437,7 +437,7 @@ router.post('/prd/mockups', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-// GET /prd/mockups/stream — SSE streaming mockup uretimi
+// GET /prd/mockups/stream - SSE streaming mockup generation.
 router.get("/prd/mockups/stream", async (req, res) => {
   const { prdId, prdContent: rawContent, title: rawTitle, skipCount: rawSkip, projectId: existingProjectId } = req.query as any;
   const prd = prdId ? await getPrd(prdId) : null;
@@ -484,7 +484,7 @@ router.get("/prd/mockups/stream", async (req, res) => {
     send("start", { projectId, total: totalAll, remaining: prompts.length, resumed: skipCount > 0 });
 
     const allScreens: any[] = [];
-    const cacheDir = join(homedir(), ".openclaw", "setfarm", "stitch-cache", projectId);
+    const cacheDir = join(PATHS.setfarmDir, "stitch-cache", projectId);
     mkdirSync(cacheDir, { recursive: true });
 
     for (let i = 0; i < prompts.length; i++) {
@@ -541,7 +541,7 @@ router.get("/prd/mockups/stream", async (req, res) => {
   res.end();
 });
 
-// DELETE /prd/screens/:prdId/:screenId — Ekrani sil
+// DELETE /prd/screens/:prdId/:screenId - delete a screen.
 // Save edited PRD content
 router.patch('/prd/:id', async (req, res) => {
   try {
@@ -578,7 +578,7 @@ router.delete('/prd/screens/:prdId/:screenId', async (req, res) => {
   }
 });
 
-// POST /prd/screens/:prdId/:screenId/regenerate — Ekrani yeniden uret
+// POST /prd/screens/:prdId/:screenId/regenerate - regenerate a screen.
 router.post('/prd/screens/:prdId/:screenId/regenerate', async (req, res) => {
   try {
     const { prdId, screenId } = req.params;
@@ -620,7 +620,7 @@ router.post('/prd/screens/:prdId/:screenId/regenerate', async (req, res) => {
   }
 });
 
-// POST /prd/screens/:prdId/variant — Mevcut ekranin varyantini uret
+// POST /prd/screens/:prdId/variant - generate a variant of an existing screen.
 router.post('/prd/screens/:prdId/variant', async (req, res) => {
   try {
     const { prdId } = req.params;
@@ -643,7 +643,7 @@ router.post('/prd/screens/:prdId/variant', async (req, res) => {
     if (!newScreen) { res.status(500).json({ error: 'Variant generation failed' }); return; }
 
     // Download to cache
-    const cacheDir = join(homedir(), '.openclaw', 'setfarm', 'stitch-cache', projectId);
+    const cacheDir = join(PATHS.setfarmDir, 'stitch-cache', projectId);
     mkdirSync(cacheDir, { recursive: true });
     if (newScreen.screenId && newScreen.status === 'done') {
       try {
@@ -689,9 +689,8 @@ router.post('/prd/screens/:prdId/generate-missing', async (req, res) => {
     screen.prompt = prompt;
     // Download to cache
     const { join } = await import('path');
-    const { homedir } = await import('os');
     const { mkdirSync } = await import('fs');
-    const cacheDir = join(homedir(), '.openclaw', 'setfarm', 'stitch-cache', projectId);
+    const cacheDir = join(PATHS.setfarmDir, 'stitch-cache', projectId);
     mkdirSync(cacheDir, { recursive: true });
     try {
       const dl = await downloadScreen(projectId, screen.screenId, cacheDir);
@@ -745,7 +744,7 @@ router.post('/prd/screen-coverage', async (req, res) => {
   }
 });
 
-// POST /prd/screens/:prdId/clear — Tum ekranlari sil
+// POST /prd/screens/:prdId/clear - clear all screens.
 router.post('/prd/screens/:prdId/clear', async (req, res) => {
   try {
     const { prdId } = req.params;
@@ -757,7 +756,7 @@ router.post('/prd/screens/:prdId/clear', async (req, res) => {
 });
 
 
-// POST /prd/estimate — Maliyet/sure tahmin et
+// POST /prd/estimate - estimate cost and duration.
 router.post('/prd/estimate', async (req, res) => {
   try {
     const { content, prdId } = req.body;
@@ -771,7 +770,7 @@ router.post('/prd/estimate', async (req, res) => {
   }
 });
 
-// POST /prd/start-run — Pipeline'a gonder (design dosyalari ile)
+// POST /prd/start-run - Start pipeline with design files.
 router.post('/prd/start-run', async (req, res) => {
   try {
     const { prdId, projectName, workflow } = req.body;
@@ -785,7 +784,7 @@ router.post('/prd/start-run', async (req, res) => {
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
     // 1. Create project directory
-    const projectsDir = join(homedir(), 'projects');
+    const projectsDir = PATHS.projectsDir;
     const repoPath = join(projectsDir, slug);
     if (!existsSync(projectsDir)) mkdirSync(projectsDir, { recursive: true });
 
@@ -843,7 +842,7 @@ router.post('/prd/start-run', async (req, res) => {
     }
 
     // 3. Build task string with full PRD + design metadata
-    let task = `Proje: ${name}\nPlatform: ${prd.platform}\nRepo: ${repoPath}`;
+    let task = `Project: ${name}\nPlatform: ${prd.platform}\nRepo: ${repoPath}`;
     if (stitchProjectId) task += `\nSTITCH_PROJECT_ID: ${stitchProjectId}`;
     if (screenMapStr) task += `\nSCREEN_MAP: ${screenMapStr}`;
     task += `\n\n${prd.prd_content}`;
@@ -851,13 +850,13 @@ router.post('/prd/start-run', async (req, res) => {
     // 4. Start workflow via setfarm (write task to temp file to avoid E2BIG)
     const nodefs = await import('fs');
     const nodepath = await import('path');
-    const nodeos = await import('os');
-    const tmpTask = nodepath.join(nodeos.homedir(), '.openclaw', 'setfarm', '.tmp-task-' + Date.now() + '.txt');
+    const tmpTask = nodepath.join(PATHS.setfarmDir, '.tmp-task-' + Date.now() + '.txt');
     nodefs.writeFileSync(tmpTask, task, 'utf8');
     // Fire-and-forget: spawn setfarm, don't wait for stdout (avoids timeout)
     const { spawn } = await import('child_process');
+    const userBin = config.cliPath;
     const child = spawn('setfarm', ['workflow', 'run', wf, '@' + tmpTask], {
-      env: { ...process.env, DB_BACKEND: "postgres", SETFARM_PG_URL: process.env.SETFARM_PG_URL || process.env.DATABASE_URL || "", PATH: '/home/setrox/.local/bin:/usr/local/bin:/usr/bin:/bin:' + (process.env.PATH || '') },
+      env: { ...process.env, DB_BACKEND: "postgres", SETFARM_PG_URL: process.env.SETFARM_PG_URL || process.env.DATABASE_URL || "", PATH: `${userBin}:/usr/local/bin:/usr/bin:/bin:${process.env.PATH || ''}` },
       detached: true,
       stdio: 'ignore',
     });
@@ -879,13 +878,13 @@ router.post('/prd/start-run', async (req, res) => {
       await updatePrd(prdId, { run_id: runId });
     }
 
-    res.json({ success: true, runId, output: 'Pipeline baslatildi', repoPath });
+    res.json({ success: true, runId, output: 'Pipeline started', repoPath });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET /prd/history — Gecmis PRD'ler
+// GET /prd/history - PRD history.
 router.get('/prd/history', async (_req, res) => {
   try {
     const prds = await listPrds(50);
@@ -895,13 +894,13 @@ router.get('/prd/history', async (_req, res) => {
   }
 });
 
-// GET /prd/history/:id — Tek PRD detay (auto-migrate eski PRD'ler)
+// GET /prd/history/:id - PRD detail with auto-migration for old PRDs.
 router.get('/prd/history/:id', async (req, res) => {
   try {
     let prd = await getPrd(req.params.id);
     if (!prd) { res.status(404).json({ error: 'PRD not found' }); return; }
 
-    // Auto-migrate: pages yoksa extract et ve kaydet
+    // Auto-migrate by extracting and saving pages when missing.
     let migrated = false;
     if (prd.prd_content && (!prd.pages || (prd.pages as any[]).length === 0)) {
       const pages = extractPages(prd.prd_content);
@@ -910,7 +909,7 @@ router.get('/prd/history/:id', async (req, res) => {
         migrated = true;
       }
     }
-    // Auto-migrate: stitch_project_id yoksa ekranlardan recover et
+    // Auto-migrate: recover stitch_project_id from existing mockup screens when missing.
     if (!prd.stitch_project_id && prd.mockup_screens?.length > 0) {
       const pid = (prd.mockup_screens as any[]).find((s: any) => s.projectId)?.projectId;
       if (pid) {
@@ -926,7 +925,7 @@ router.get('/prd/history/:id', async (req, res) => {
   }
 });
 
-// DELETE /prd/history/:id — PRD sil
+// DELETE /prd/history/:id - delete a PRD.
 router.delete('/prd/history/:id', async (req, res) => {
   try {
     const success = await deletePrd(req.params.id);
@@ -936,7 +935,7 @@ router.delete('/prd/history/:id', async (req, res) => {
   }
 });
 
-// GET /prd/templates — Hazir sablonlar
+// GET /prd/templates - ready-to-use templates.
 router.get('/prd/templates', async (_req, res) => {
   try {
     const templates = await listTemplates();
@@ -946,14 +945,14 @@ router.get('/prd/templates', async (_req, res) => {
   }
 });
 
-// GET /prd/benchmark/:runId — Deploy sonrasi karsilastirma (gercek setfarm DB)
+// GET /prd/benchmark/:runId - post-deploy comparison with the real Setfarm DB.
 router.get('/prd/benchmark/:runId', async (req, res) => {
   try {
-    // PRD bul
+    // Find the PRD linked to this run.
     const prds = await listPrds(100);
     const prd = prds.find(p => p.run_id === req.params.runId);
 
-    // Gercek run benchmark verisini setfarm DB'den al
+    // Load real run benchmark data from Setfarm DB.
     const runBenchmark = await getRunBenchmark(req.params.runId);
     if (!runBenchmark && !prd) {
       res.status(404).json({ error: 'Run not found' });
@@ -963,7 +962,7 @@ router.get('/prd/benchmark/:runId', async (req, res) => {
     const prdScore = prd?.score || 0;
     const estimate = prd?.cost_estimate || {};
 
-    // Basari analizi
+    // Success analysis.
     const successRate = runBenchmark
       ? Math.round((runBenchmark.completedStories / Math.max(1, runBenchmark.totalStories)) * 100)
       : 0;
@@ -990,7 +989,7 @@ router.get('/prd/benchmark/:runId', async (req, res) => {
   }
 });
 
-// GET /prd/analytics — Tum runlardan PRD format analizi
+// GET /prd/analytics - PRD format analysis across all runs.
 router.get('/prd/analytics', async (_req, res) => {
   try {
     const analysis = await analyzePrdFormats();
@@ -1000,7 +999,7 @@ router.get('/prd/analytics', async (_req, res) => {
   }
 });
 
-// POST /prd/components — PRD'den komponent eslestirmesi
+// POST /prd/components - component mapping from PRD content.
 router.post('/prd/components', async (req, res) => {
   try {
     const { content, prdId } = req.body;
@@ -1017,35 +1016,35 @@ router.post('/prd/components', async (req, res) => {
 });
 
 function getRecommendation(prdScore: number, run: any): string {
-  if (!run) return 'Run verisi bulunamadi';
+  if (!run) return 'Run data not found';
 
   const errors = run.errorCategories || {};
   const topError = Object.entries(errors).sort((a: any, b: any) => b[1] - a[1])[0];
 
   if (run.status === 'completed' || run.status === 'done') {
     if (run.retryCount > run.totalStories) {
-      return 'Basarili ama cok fazla retry — PRD daha spesifik olmali';
+      return 'Completed, but retry count is too high. Make the PRD more specific.';
     }
-    return 'Basarili tamamlandi';
+    return 'Completed successfully';
   }
 
   if (topError) {
     const [category] = topError;
     switch (category) {
-      case 'timeout': return 'Agent timeout orani yuksek — PRD daha kisa ve odakli olmali, story basina is yukunü azaltin';
-      case 'lint_error': return 'Lint hatalari fazla — PRD icinde ESLint kurallarini ve code style\'i belirtin';
-      case 'build_error': return 'Build hatalari — PRD dependency listesi ve build setup talimatlarini detayli verin';
-      case 'test_failure': return 'Test basarisizliklari — PRD acceptance criteria\'lari daha acik yazin';
-      case 'merge_conflict': return 'Merge conflictleri — Story bagimliliklarini (depends_on) PRD\'de tanimlayin';
-      case 'design_mismatch': return 'Tasarim uyumsuzluklari — PRD\'de exact CSS degerleri verin (hex renkler, px spacing)';
-      case 'missing_input': return 'Eksik input degiskenleri — PRD tum gerekli bilgileri icermeli';
-      default: return 'PRD puanini 70+ olana kadar gelistirin';
+      case 'timeout': return 'Agent timeout rate is high. Make the PRD shorter and more focused, and reduce work per story.';
+      case 'lint_error': return 'Lint errors are frequent. Specify ESLint rules and code style in the PRD.';
+      case 'build_error': return 'Build errors occurred. Provide a detailed dependency list and build setup instructions in the PRD.';
+      case 'test_failure': return 'Tests failed. Write clearer PRD acceptance criteria.';
+      case 'merge_conflict': return 'Merge conflicts occurred. Define story dependencies in the PRD.';
+      case 'design_mismatch': return 'Design mismatches occurred. Provide exact CSS values in the PRD, including hex colors and pixel spacing.';
+      case 'missing_input': return 'Required input variables are missing. The PRD should include all required information.';
+      default: return 'Improve the PRD until its score is 70 or higher.';
     }
   }
 
-  if (prdScore < 50) return 'PRD cok kisa/eksik — en az 70 puan hedefleyin';
-  if (prdScore < 70) return 'PRD orta kalite — tasarim detaylari ve veri modeli ekleyin';
-  return 'PRD kalitesi yeterli ama run basarisiz — agent loglarini kontrol edin';
+  if (prdScore < 50) return 'PRD is too short or incomplete. Target a score of at least 70.';
+  if (prdScore < 70) return 'PRD quality is medium. Add design details and a data model.';
+  return 'PRD quality is sufficient, but the run failed. Review agent logs.';
 }
 
 // POST /prd/enhance-with-trends — Enhance PRD with 2026 trends

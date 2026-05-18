@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 
 interface ProgressBarProps {
   active: boolean;
-  startedAt: number; // timestamp from store — survives page navigation
+  startedAt: number; // Timestamp from store; survives page navigation.
   label: string;
   steps?: string[];
 }
@@ -12,11 +12,11 @@ export function ProgressBar({ active, startedAt, label, steps }: ProgressBarProp
   const [currentStep, setCurrentStep] = useState(0);
 
   const defaultSteps = [
-    'Veriler hazirlaniyor...',
-    'LLM\'e gonderiliyor...',
-    'PRD yaziliyor...',
-    'Komponentler eslestiriliyor...',
-    'Puanlama yapiliyor...',
+    'Preparing data...',
+    'Sending to LLM...',
+    'Writing PRD...',
+    'Matching components...',
+    'Scoring...',
   ];
 
   const stepList = steps || defaultSteps;
@@ -31,17 +31,17 @@ export function ProgressBar({ active, startedAt, label, steps }: ProgressBarProp
       return;
     }
 
-    // Sayfa degisip geri gelindiginde elapsed time'dan progress hesapla
+    // Calculate progress from elapsed time after page navigation.
     function calcFromElapsed() {
       if (!startedAt) return;
       const elapsed = (Date.now() - startedAt) / 1000;
-      // Logaritmik ilerleme — 95%'e asimptotik yaklas
+      // Logarithmic progress approaches 95%.
       const p = Math.min(95, 95 * (1 - Math.exp(-elapsed / 60)));
       setProgress(p);
       setCurrentStep(Math.min(stepList.length - 1, Math.floor(elapsed / (60 / stepList.length))));
     }
 
-    // Initial hesapla (sayfa geri gelme durumu icin)
+    // Initial calculation for returning to the page.
     calcFromElapsed();
 
     const interval = setInterval(calcFromElapsed, 500);

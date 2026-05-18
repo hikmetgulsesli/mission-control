@@ -39,8 +39,8 @@ export function StatusBar() {
           target="_blank"
           rel="noopener noreferrer"
           className="status-bar__version-btn"
-          title="Sürüm ve değişiklikler"
-          aria-label="Versiyon"
+          title="Version and changes"
+          aria-label="Version"
         >
           v
         </a>

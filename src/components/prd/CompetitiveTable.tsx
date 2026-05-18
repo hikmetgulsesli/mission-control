@@ -10,12 +10,12 @@ export function CompetitiveTable({ analyses, urls }: CompetitiveTableProps) {
 
   return (
     <div className="prd-competitive">
-      <h3>Karsilastirmali Analiz</h3>
+      <h3>Competitive Analysis</h3>
       <div className="prd-competitive__table-wrap">
         <table className="prd-competitive__table">
           <thead>
             <tr>
-              <th>Ozellik</th>
+              <th>Feature</th>
               {analyses.map((a, i) => (
                 <th key={i}>{a.title || urls[i] || `Site ${i + 1}`}</th>
               ))}
