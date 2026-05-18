@@ -114,9 +114,9 @@ function formatContractValue(value: unknown): string {
   if (Array.isArray(value)) return normalizeVisibleText(value.map(formatContractValue).filter(Boolean).join(", "));
   if (typeof value !== "object") return normalizeVisibleText(value);
   const entry = value as Record<string, any>;
-  const name = entry.name || entry.title || entry.label || entry.screenName;
-  const type = entry.type || entry.deviceType || entry.kind;
-  const id = entry.screenId || entry.screen_id || entry.id || entry.path;
+  const name = formatContractValue(entry.name || entry.title || entry.label || entry.screenName);
+  const type = formatContractValue(entry.type || entry.deviceType || entry.kind);
+  const id = formatContractValue(entry.screenId || entry.screen_id || entry.id || entry.path || entry.status);
   if (name && type) return normalizeVisibleText(`${name} (${type})`);
   if (name) return normalizeVisibleText(name);
   if (id) return normalizeVisibleText(id);
@@ -237,8 +237,11 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
                   {(storyList.length > 0 ? storyList : safePlan.stories).map((story: any, idx: number) => {
                     const status = normalizeVisibleStatus(story.status || "pending");
                     const badge = STORY_STATUS_BADGES[status] || { color: "#888", label: status.toUpperCase() };
+                    const storyKey = formatContractValue(story.id || story.storyId || story.story_id || idx);
+                    const storyTitle = formatContractValue(story.title || story.name || story.id || `Story ${idx + 1}`);
+                    const storyAgent = formatContractValue(story.agent);
                     return (
-                      <div key={story.id || idx} className="af-plan-overview__story-row">
+                      <div key={storyKey || idx} className="af-plan-overview__story-row">
                         <span className="af-plan-overview__story-idx">{idx + 1}</span>
                         <span
                           className="af-plan-overview__story-badge"
@@ -247,10 +250,10 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
                           {badge.label}
                         </span>
                         <span className="af-plan-overview__story-title">
-                          {story.title || story.name || story.id || `Story ${idx + 1}`}
+                          {storyTitle || `Story ${idx + 1}`}
                         </span>
-                        {story.agent && (
-                          <span className="af-plan-overview__story-agent">{story.agent}</span>
+                        {storyAgent && (
+                          <span className="af-plan-overview__story-agent">{storyAgent}</span>
                         )}
                       </div>
                     );
@@ -275,7 +278,7 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
                     {Object.entries(designData.designSystem).map(([key, value]: [string, any]) => (
                       <div key={key} className="af-plan-overview__token">
                         <span className="af-plan-overview__token-key">{key}</span>
-                        <span className="af-plan-overview__token-val">{String(value)}</span>
+                        <span className="af-plan-overview__token-val">{formatContractValue(value)}</span>
                       </div>
                     ))}
                   </div>
@@ -319,12 +322,12 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
         {tab === "contract" && (
           contractData ? (
             <div className="af-contract">
-              <div className="af-contract__summary">
-                <div className="af-contract__summary-main">
-                  <span className="af-contract__kicker">RUN CONTRACT</span>
-                  <strong>{contractData.project?.displayName || "Setfarm Project"}</strong>
-                  <span>{contractData.stackPack?.label || contractData.stackPack?.id || "Unknown stack"}</span>
-                </div>
+                <div className="af-contract__summary">
+                  <div className="af-contract__summary-main">
+                    <span className="af-contract__kicker">RUN CONTRACT</span>
+                  <strong>{formatContractValue(contractData.project?.displayName) || "Setfarm Project"}</strong>
+                  <span>{formatContractValue(contractData.stackPack?.label || contractData.stackPack?.id) || "Unknown stack"}</span>
+                  </div>
                 <div className="af-contract__metrics">
                   <span className="af-contract__metric af-contract__metric--pass">{contractPass} checks pass</span>
                   <span className="af-contract__metric af-contract__metric--fail">{contractFail} checks fail</span>
@@ -347,7 +350,7 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
               <div className="af-contract__phase-rail">
                 {(contractData.phases || []).map((phase) => (
                   <div key={phase.id} className={`af-contract__phase af-contract__phase--${normalizeVisibleStatus(phase.status)}`}>
-                    <span>{phase.label}</span>
+                    <span>{formatContractValue(phase.label || phase.id)}</span>
                     <b>{contractStatusLabel(phase.status)}</b>
                   </div>
                 ))}
@@ -358,7 +361,7 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
                 {(contractData.phases || []).map((phase) => (
                   <section key={phase.id} className="af-contract__section">
                     <div className="af-contract__section-head">
-                      <h4>{phase.label}</h4>
+                      <h4>{formatContractValue(phase.label || phase.id)}</h4>
                       <span className={`af-contract__badge af-contract__badge--${normalizeVisibleStatus(phase.status)}`}>{contractItemSummary(phase.items)}</span>
                     </div>
                     <div className="af-contract__items">
@@ -368,8 +371,8 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
                         return (
                           <div key={contractItem.id} className={`af-contract__item af-contract__item--${normalizeVisibleStatus(contractItem.status)}`}>
                             <span className="af-contract__item-status">{contractStatusLabel(contractItem.status)}</span>
-                            <span className="af-contract__item-label">{contractItem.label}</span>
-                            <span className="af-contract__item-owner">{contractItem.owner}</span>
+                            <span className="af-contract__item-label">{formatContractValue(contractItem.label || contractItem.id)}</span>
+                            <span className="af-contract__item-owner">{formatContractValue(contractItem.owner)}</span>
                             {evidence && <span className="af-contract__item-evidence" title={evidence}>{evidence}</span>}
                             {blocker && <span className="af-contract__item-blocker">{blocker}</span>}
                           </div>
@@ -392,10 +395,12 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
                       const scopeFiles = formatContractList(story.scopeFiles);
                       const blocker = formatContractValue(story.blocker);
                       const storyStatus = normalizeVisibleStatus(story.status);
+                      const storyId = formatContractValue(story.storyId);
+                      const storyTitle = formatContractValue(story.title || story.storyId);
                       return (
-                        <div key={story.storyId} className={`af-contract__story ${story.deferred ? "af-contract__story--deferred" : ""}`}>
-                          <span className="af-contract__story-id">{story.storyId}</span>
-                          <span className="af-contract__story-title">{story.title}</span>
+                        <div key={storyId} className={`af-contract__story ${story.deferred ? "af-contract__story--deferred" : ""}`}>
+                          <span className="af-contract__story-id">{storyId}</span>
+                          <span className="af-contract__story-title">{storyTitle}</span>
                           <span className={`af-contract__badge af-contract__badge--${storyStatus}`}>{storyStatus.toUpperCase()}</span>
                           <span className="af-contract__story-meta" title={ownedScreens.join(", ")}>{ownedScreens.length} screens</span>
                           <span className="af-contract__story-meta" title={scopeFiles.join(", ")}>{scopeFiles.length} files</span>
@@ -431,37 +436,43 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
               <p className="af-design-notes">{designData.designNotes}</p>
             )}
             <div className="af-design-grid">
-              {designData.screens.map((screen: any) => (
-                <div key={screen.screenId} className="af-design-card">
-                  <div className="af-design-card__header">
-                    <span className="af-design-card__name">{screen.name || screen.title}</span>
-                    <span className="af-design-card__type">{screen.type || screen.deviceType}</span>
-                  </div>
-                  {screen.description && <p className="af-design-card__desc">{screen.description}</p>}
-                  {screen.screenshotUrl ? (
-                    <div className="af-design-card__img-wrap">
-                      <img
-                        src={screen.screenshotUrl}
-                        alt={screen.name || screen.title}
-                        className="af-design-card__img"
-                        loading="lazy"
-                      />
+              {designData.screens.map((screen: any, idx: number) => {
+                const screenId = formatContractValue(screen.screenId || screen.id || idx);
+                const screenName = formatContractValue(screen.name || screen.title || `Screen ${idx + 1}`);
+                const screenType = formatContractValue(screen.type || screen.deviceType || "desktop");
+                const screenDescription = formatContractValue(screen.description);
+                return (
+                  <div key={screenId || idx} className="af-design-card">
+                    <div className="af-design-card__header">
+                      <span className="af-design-card__name">{screenName}</span>
+                      <span className="af-design-card__type">{screenType}</span>
                     </div>
-                  ) : (
-                    <div className="af-design-card__no-img">No screenshot available</div>
-                  )}
-                  <div className="af-design-card__actions">
-                    {screen.htmlUrl && (
-                      <a href={screen.htmlUrl} target="_blank" rel="noopener noreferrer" className="af-design-card__btn">
-                        View HTML
-                      </a>
+                    {screenDescription && <p className="af-design-card__desc">{screenDescription}</p>}
+                    {screen.screenshotUrl ? (
+                      <div className="af-design-card__img-wrap">
+                        <img
+                          src={screen.screenshotUrl}
+                          alt={screenName}
+                          className="af-design-card__img"
+                          loading="lazy"
+                        />
+                      </div>
+                    ) : (
+                      <div className="af-design-card__no-img">No screenshot available</div>
                     )}
-                    {screen.width && screen.height && (
-                      <span className="af-design-card__size">{screen.width}x{screen.height}</span>
-                    )}
+                    <div className="af-design-card__actions">
+                      {screen.htmlUrl && (
+                        <a href={screen.htmlUrl} target="_blank" rel="noopener noreferrer" className="af-design-card__btn">
+                          View HTML
+                        </a>
+                      )}
+                      {screen.width && screen.height && (
+                        <span className="af-design-card__size">{formatContractValue(screen.width)}x{formatContractValue(screen.height)}</span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

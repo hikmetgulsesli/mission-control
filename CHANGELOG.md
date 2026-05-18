@@ -1,5 +1,11 @@
 # Mission Control Changelog
 
+## 2.0.18 - 2026-05-18
+
+- Hardened Setfarm run-contract and design responses so object-shaped evidence, labels, stories, and screen metadata are normalized before React renders them.
+- Added defensive client rendering for contract, story, and Stitch design fields to prevent minified React object-render crashes.
+- Enriched Setfarm Live events with readable project labels and coalesced repeated pipeline progress events so operator views stay readable.
+
 ## 2.0.17 - 2026-05-18
 
 - Normalized legacy Setfarm pipeline events that carried internal step UUIDs into readable workflow step names.

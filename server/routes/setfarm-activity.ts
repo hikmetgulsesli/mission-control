@@ -59,7 +59,17 @@ function safeJson(value: unknown, fallback: any = null): any {
 
 function compactDisplay(value: unknown, max = 220): string {
   if (value == null) return '';
+  if (Array.isArray(value)) {
+    return value.map((item) => compactDisplay(item, max)).filter(Boolean).join(', ').slice(0, max);
+  }
   if (typeof value !== 'object') return String(value).replace(/\s+/g, ' ').trim().slice(0, max);
+  const entry = value as Record<string, any>;
+  const name = compactDisplay(entry.name || entry.title || entry.label || entry.screenName, max);
+  const type = compactDisplay(entry.type || entry.deviceType || entry.kind, 80);
+  const id = compactDisplay(entry.screenId || entry.screen_id || entry.id || entry.path || entry.status, max);
+  if (name && type) return `${name} (${type})`.slice(0, max);
+  if (name) return name.slice(0, max);
+  if (id) return id.slice(0, max);
   try {
     return JSON.stringify(value).replace(/\s+/g, ' ').trim().slice(0, max);
   } catch {
@@ -71,12 +81,12 @@ function formatListEntry(value: unknown): string {
   if (value == null) return '';
   if (typeof value !== 'object') return String(value).trim();
   const entry = value as Record<string, any>;
-  const name = entry.name || entry.title || entry.label || entry.screenName;
-  const type = entry.type || entry.deviceType || entry.kind;
-  const id = entry.screenId || entry.screen_id || entry.id || entry.path;
+  const name = compactDisplay(entry.name || entry.title || entry.label || entry.screenName, 140);
+  const type = compactDisplay(entry.type || entry.deviceType || entry.kind, 80);
+  const id = compactDisplay(entry.screenId || entry.screen_id || entry.id || entry.path, 140);
   if (name && type) return `${name} (${type})`;
-  if (name) return String(name);
-  if (id) return String(id);
+  if (name) return name;
+  if (id) return id;
   return compactDisplay(entry, 180);
 }
 
@@ -259,13 +269,13 @@ function normalizeRunContract(contract: any, stories: any[], run?: any): any {
   }
   const normalizedStories = Array.isArray(contract?.stories)
     ? contract.stories.map((story: any) => {
-        const storyId = String(story.storyId || story.story_id || story.id || '');
+        const storyId = compactDisplay(story.storyId || story.story_id || story.id || '', 120);
         const row = storyRows.get(storyId) || storyRows.get(String(story.id || '')) || {};
         return {
           ...story,
           storyId,
-          title: story.title || row.title || storyId,
-          status: normalizeVisibleStatus(story.status || row.status || 'pending'),
+          title: compactDisplay(story.title || row.title || storyId, 180),
+          status: normalizeVisibleStatus(compactDisplay(story.status || row.status || 'pending', 80)),
           ownsScreens: parseList(row.story_screens ?? story.ownsScreens),
           scopeFiles: parseList(row.scope_files ?? story.scopeFiles),
           sharedFiles: parseList(row.shared_files ?? story.sharedFiles),
@@ -277,9 +287,16 @@ function normalizeRunContract(contract: any, stories: any[], run?: any): any {
   const normalizedPhases = Array.isArray(contract?.phases)
     ? contract.phases.map((phase: any) => ({
         ...phase,
+        id: compactDisplay(phase.id, 100),
+        label: compactDisplay(phase.label || phase.id || 'Step', 120),
         items: Array.isArray(phase.items)
           ? phase.items.map((item: any) => ({
               ...item,
+              id: compactDisplay(item.id || item.label || item.stepId || item.storyId || 'check', 140),
+              label: compactDisplay(item.label || item.id || 'Check', 180),
+              owner: compactDisplay(item.owner || item.agent || item.stepId || phase.id || 'system', 100),
+              stepId: compactDisplay(item.stepId || item.step_id || phase.id || '', 100),
+              storyId: compactDisplay(item.storyId || item.story_id || '', 120) || undefined,
               status: normalizeItemStatus(String(phase.id || ''), item),
               evidence: compactDisplay(item.evidence, 260),
               blocker: compactDisplay(item.blocker, 260),
@@ -295,6 +312,21 @@ function normalizeRunContract(contract: any, stories: any[], run?: any): any {
   }, { total: 0, pass: 0, fail: 0, pending: 0, deferred: 0, na: 0 });
   return {
     ...contract,
+    project: {
+      ...(contract?.project || {}),
+      repo: compactDisplay(contract?.project?.repo, 260),
+      branch: compactDisplay(contract?.project?.branch, 160),
+      displayName: compactDisplay(contract?.project?.displayName || contract?.project?.name || 'Setfarm Project', 160),
+      techStack: compactDisplay(contract?.project?.techStack || contract?.project?.tech_stack, 120),
+      uiLanguage: compactDisplay(contract?.project?.uiLanguage || contract?.project?.ui_language || 'English', 80),
+    },
+    stackPack: {
+      ...(contract?.stackPack || {}),
+      id: compactDisplay(contract?.stackPack?.id || 'unknown', 120),
+      label: compactDisplay(contract?.stackPack?.label || contract?.stackPack?.id || 'Unknown stack', 160),
+      confidence: compactDisplay(contract?.stackPack?.confidence || '', 80),
+      evidence: parseList(contract?.stackPack?.evidence),
+    },
     progress,
     phases: normalizedPhases,
     stories: normalizedStories,
@@ -644,7 +676,7 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
       designSystem = {};
       for (const line of dsMatch[1].split('\n')) {
         const kv = line.trim().match(/^(\w+):\s*(.+)$/);
-        if (kv) designSystem[kv[1]] = kv[2];
+        if (kv) designSystem[kv[1]] = compactDisplay(kv[2], 220);
       }
     }
 
@@ -809,10 +841,16 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
 
       return {
         ...screen,
+        screenId: compactDisplay(screen.screenId || screen.screen_id || screen.id || screen.name || 'screen', 140),
+        name: compactDisplay(screen.name || screen.title || screen.screenName || 'Screen', 160),
+        title: compactDisplay(screen.title || screen.name || screen.screenName || 'Screen', 160),
+        description: compactDisplay(screen.description || '', 260),
+        type: compactDisplay(screen.type || screen.deviceType || screen.kind || 'desktop', 100),
+        deviceType: compactDisplay(screen.deviceType || screen.type || 'desktop', 100),
         screenshotUrl: screenshotName ? designArtifactUrl(req.params.id, screenshotName) : null,
         htmlUrl: htmlName ? designArtifactUrl(req.params.id, htmlName) : null,
-        width: screen.width || null,
-        height: screen.height || null,
+        width: Number(screen.width || 0) || null,
+        height: Number(screen.height || 0) || null,
       };
     });
 

@@ -17,6 +17,7 @@ interface LiveEvent {
   detail: string | null;
   output: string | null;
   project: string | null;
+  projectLabel?: string | null;
   category?: string;
   repeatCount?: number;
   firstTs?: string;
@@ -463,7 +464,7 @@ export function LiveFeed() {
             </span>
           )}
           {ev.project && (
-            <span className="lf-row__project" title={ev.project}>{ev.project}</span>
+            <span className="lf-row__project" title={ev.project}>{compactProjectLabel(ev.project, ev.projectLabel)}</span>
           )}
           {isError && <span className="lf-row__error">ERR</span>}
           {expandable && (

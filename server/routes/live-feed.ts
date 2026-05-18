@@ -51,6 +51,7 @@ interface LiveEvent {
   detail: string | null;
   output: string | null;
   project: string | null;
+  projectLabel?: string | null;
   category: string | null;
   repeatCount?: number;
   firstTs?: string;
@@ -129,6 +130,98 @@ function compactPipelineSummary(eventName: string, stepId: string, detail: strin
   const repeat = repeatCount && repeatCount > 1 ? ` x${repeatCount}` : '';
   const source = detail || eventName;
   return `${prefix}${source}${repeat}`.replace(/\s+/g, ' ').trim().slice(0, 180);
+}
+
+function stripRepeatSuffix(text: string | null | undefined): string {
+  return String(text || '').replace(/\s+x\d+$/i, '').replace(/\s+/g, ' ').trim();
+}
+
+function coalescibleLiveEventKey(event: LiveEvent): string | null {
+  const isSetfarm = event.tool === 'setfarm' || event.model === 'setfarm';
+  if (!isSetfarm || event.action !== 'pipeline' || event.status === 'error') return null;
+  const text = `${event.summary || ''} ${event.detail || ''}`.toLowerCase();
+  const isProgress =
+    text.includes('step.progress') ||
+    text.includes('design preclaim') ||
+    text.includes('still generating stitch screens') ||
+    text.includes('generating stitch screens') ||
+    text.includes('downloading stitch html files') ||
+    text.includes('step.running');
+  if (!isProgress) return null;
+  return [
+    event.project || '',
+    event.agent || '',
+    event.action || '',
+    stripRepeatSuffix(event.summary),
+    stripRepeatSuffix(event.detail),
+  ].join('|');
+}
+
+function coalesceLiveEvents(events: LiveEvent[]): LiveEvent[] {
+  const byKey = new Map<string, LiveEvent>();
+  const passthrough: LiveEvent[] = [];
+
+  for (const event of events) {
+    const key = coalescibleLiveEventKey(event);
+    if (!key) {
+      passthrough.push(event);
+      continue;
+    }
+
+    const count = Math.max(1, Number(event.repeatCount || 1));
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, {
+        ...event,
+        summary: stripRepeatSuffix(event.summary),
+        detail: event.detail ? stripRepeatSuffix(event.detail) : event.detail,
+        repeatCount: count,
+        firstTs: event.firstTs || event.ts,
+        lastTs: event.lastTs || event.ts,
+      });
+      continue;
+    }
+
+    const existingTs = new Date(existing.ts).getTime();
+    const currentTs = new Date(event.ts).getTime();
+    const firstTs = new Date(existing.firstTs || existing.ts).getTime() <= new Date(event.firstTs || event.ts).getTime()
+      ? (existing.firstTs || existing.ts)
+      : (event.firstTs || event.ts);
+    const lastTs = new Date(existing.lastTs || existing.ts).getTime() >= new Date(event.lastTs || event.ts).getTime()
+      ? (existing.lastTs || existing.ts)
+      : (event.lastTs || event.ts);
+    byKey.set(key, {
+      ...(currentTs >= existingTs ? event : existing),
+      summary: stripRepeatSuffix(event.summary || existing.summary),
+      detail: event.detail ? stripRepeatSuffix(event.detail) : existing.detail,
+      repeatCount: Math.max(1, Number(existing.repeatCount || 1)) + count,
+      firstTs,
+      lastTs,
+      ts: currentTs >= existingTs ? event.ts : existing.ts,
+    });
+  }
+
+  return [...passthrough, ...byKey.values()]
+    .sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
+}
+
+async function enrichProjectLabels(events: LiveEvent[]): Promise<LiveEvent[]> {
+  const runIds = [...new Set(events.map((event) => String(event.project || '').trim()).filter((id) => UUIDISH_ID.test(id)))];
+  if (runIds.length === 0) return events;
+  try {
+    const rows = await pgSql.unsafe(
+      'SELECT id, workflow_id, task, status, created_at FROM runs WHERE id = ANY($1::text[])',
+      [runIds],
+    );
+    const runMap = new Map((rows as any[]).map((run) => [String(run.id), run]));
+    return events.map((event) => {
+      if (!event.project || !UUIDISH_ID.test(event.project)) return event;
+      return { ...event, projectLabel: formatProjectOption(event.project, runMap.get(event.project)).label };
+    });
+  } catch (err: any) {
+    console.error('[live-feed] Project label enrichment failed:', err.message);
+    return events;
+  }
 }
 
 function stepLookupKey(runId: unknown, stepId: unknown): string | null {
@@ -659,7 +752,7 @@ router.get('/live-feed', async (req, res) => {
   }
 });
 
-function filterAndRespond(events: LiveEvent[], req: any, res: any) {
+async function filterAndRespond(events: LiveEvent[], req: any, res: any) {
   let filtered = events;
   // Filter out step peek polling noise (runs every ~7s per agent, floods the feed)
   filtered = filtered.filter(e => !(e.summary && e.summary.includes("step peek")));
@@ -707,7 +800,8 @@ function filterAndRespond(events: LiveEvent[], req: any, res: any) {
   }
 
   // Cap at 500 events
-  res.json(filtered.slice(-500));
+  const responseEvents = await enrichProjectLabels(coalesceLiveEvents(filtered).slice(-500));
+  res.json(responseEvents);
 }
 
 router.get('/live-feed/projects', async (req, res) => {
@@ -772,7 +866,7 @@ router.get('/live-feed/errors', async (req, res) => {
     }));
     const stepNameByInternal = await resolveSetfarmStepNames(rawMapped);
     const mapped = rawMapped.map((event) => normalizePersistedSetfarmEvent(event, stepNameByInternal));
-    res.json(mapped);
+    res.json(await enrichProjectLabels(coalesceLiveEvents(mapped)));
   } catch (err: any) {
     console.error('[live-feed-db] Errors query error:', err.message);
     res.status(500).json({ error: err.message });
@@ -832,9 +926,13 @@ router.get('/live-feed/history', async (req, res) => {
     const byId = new Map<string, LiveEvent>();
     for (const event of mapped) byId.set(event.id, event);
     for (const event of setfarmEvents) byId.set(event.id, event);
-    res.json([...byId.values()]
+    const merged = [...byId.values()]
       .sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime())
-      .slice(0, limit));
+      .slice(0, limit);
+    const responseEvents = await enrichProjectLabels(
+      coalesceLiveEvents(merged).sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime()).slice(0, limit),
+    );
+    res.json(responseEvents);
   } catch (err: any) {
     console.error('[live-feed-db] History query error:', err.message);
     res.status(500).json({ error: err.message });
