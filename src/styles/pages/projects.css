@@ -89,12 +89,29 @@
   color: #ff4466;
   background: rgba(255, 68, 102, 0.1);
 }
+.project-card__status--completed {
+  color: var(--neon-green);
+  background: rgba(0, 255, 65, 0.08);
+}
+.project-card__status--cancelled {
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.06);
+}
 .project-card--building {
   border-color: rgba(255, 170, 0, 0.3);
 }
 .project-card--failed {
   border-color: rgba(255, 68, 102, 0.2);
   opacity: 0.7;
+}
+.project-card--run-completed {
+  border-left: 3px solid var(--neon-green);
+}
+.project-card--run-failed {
+  border-left: 3px solid var(--neon-red);
+}
+.project-card--run-cancelled {
+  border-left: 3px solid var(--text-dim);
 }
 
 

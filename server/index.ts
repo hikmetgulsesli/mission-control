@@ -2,6 +2,7 @@ import express from 'express';
 import { readFileSync } from 'fs';
 import helmet from 'helmet';
 import { createServer } from 'http';
+import os from 'os';
 import { resolve, join } from 'path';
 import { existsSync } from 'fs';
 import { config, PATHS } from './config.js';
@@ -64,14 +65,11 @@ app.get('/api/health', async (_req, res) => {
   
   // 1. Gateway check
   try {
-    const gwRes = await fetch(config.gatewayWs.replace('ws', 'http').replace(':18789', ':18789'));
-    checks.gateway = { status: 'up' };
-  } catch {
-    try {
-      const { execSync } = await import('child_process');
-      const result = execSync('systemctl --user is-active openclaw-gateway', { timeout: 3000 }).toString().trim();
-      checks.gateway = { status: result === 'active' ? 'up' : 'down', detail: result };
-    } catch { checks.gateway = { status: 'down' }; }
+    const gatewayUrl = config.gatewayWs.replace(/^ws/, 'http').replace(/\/?$/, '/health');
+    const gwRes = await fetch(gatewayUrl, { signal: AbortSignal.timeout(2000) });
+    checks.gateway = { status: gwRes.ok ? 'up' : 'down', detail: `${gwRes.status}` };
+  } catch (e: any) {
+    checks.gateway = { status: 'down', detail: e?.message || 'unreachable' };
   }
   
   // 2. Setfarm DB check
@@ -84,16 +82,19 @@ app.get('/api/health', async (_req, res) => {
   // 3. Disk space
   try {
     const { execSync } = await import('child_process');
-    const df = execSync('df -h / --output=pcent | tail -1', { timeout: 3000 }).toString().trim();
-    const pct = parseInt(df);
-    checks.disk = { status: pct < 90 ? 'up' : 'warning', detail: df };
+    const df = execSync('df -k /', { timeout: 3000 }).toString().trim().split(/\r?\n/).pop() || '';
+    const parts = df.split(/\s+/);
+    const pctText = parts[4] || '';
+    const pct = parseInt(pctText.replace('%', ''), 10);
+    checks.disk = { status: Number.isFinite(pct) && pct < 90 ? 'up' : 'warning', detail: pctText || df };
   } catch { checks.disk = { status: 'unknown' }; }
   
   // 4. Memory
   try {
-    const { execSync } = await import('child_process');
-    const mem = execSync("free -m | awk '/Mem:/{printf \"%.0f%%\", $3/$2*100}'", { timeout: 3000 }).toString().trim();
-    checks.memory = { status: 'up', detail: mem };
+    const total = os.totalmem();
+    const used = total - os.freemem();
+    const pct = total > 0 ? Math.round((used / total) * 100) : 0;
+    checks.memory = { status: pct < 90 ? 'up' : 'warning', detail: `${pct}%` };
   } catch { checks.memory = { status: 'unknown' }; }
   
   const allUp = Object.values(checks).every(c => c.status !== 'down');
@@ -130,7 +131,15 @@ for (const root of stitchProjectRoots) {
 }
 
 // Rate limiting
-app.use('/api', rateLimit({ windowMs: 60000, max: 200, standardHeaders: true }));
+// Mission Control keeps several read-only panels polling while a run page is open.
+// Do not count those GET refreshes against the mutation/API abuse limiter; otherwise
+// normal dashboard use trips 429s.
+app.use('/api', rateLimit({
+  windowMs: 60000,
+  max: 240,
+  standardHeaders: true,
+  skip: (req) => req.method === 'GET',
+}));
 app.use('/api/terminal', rateLimit({ windowMs: 60000, max: 20 }));
 app.use('/api/files/write', rateLimit({ windowMs: 60000, max: 30 }));
 app.use('/api/files/delete', rateLimit({ windowMs: 60000, max: 10 }));

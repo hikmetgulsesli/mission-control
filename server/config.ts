@@ -56,6 +56,18 @@ function envPath(key: string, fallback: string): string {
 
 const port = parseInt(process.env.MC_PORT || '3080', 10);
 
+function readOpenClawGatewayToken(): string {
+  if (process.env.GATEWAY_TOKEN) return process.env.GATEWAY_TOKEN;
+  try {
+    const raw = readFileSync(join(HOME, '.openclaw/openclaw.json'), 'utf-8');
+    const parsed = JSON.parse(raw);
+    const token = parsed?.gateway?.auth?.token || parsed?.gateway?.token;
+    return typeof token === 'string' ? token : '';
+  } catch {
+    return '';
+  }
+}
+
 export const config = {
   port,
   host: process.env.MC_HOST || process.env.HOST || '0.0.0.0',
@@ -69,7 +81,7 @@ export const config = {
   avatarsDir: envPath('AVATARS_DIR', join(HOME, '.openclaw/dashboard/avatars')),
   cliPath: envPath('CLI_PATH', join(HOME, '.local/bin')),
   clawtabsConfig: envPath('CLAWTABS_CONFIG', join(HOME, '.openclaw/clawtabs-config.json')),
-  gatewayToken: process.env.GATEWAY_TOKEN || '',
+  gatewayToken: readOpenClawGatewayToken(),
   projectsJson: envPath('PROJECTS_JSON', join(HOME, 'projects/mission-control/projects.json')),
   wsOrigin: process.env.WS_ORIGIN || '',
   authToken: process.env.AUTH_TOKEN || '',

@@ -54,6 +54,7 @@ router.get("/rules", async (_req, res) => {
     const params = new URLSearchParams();
     if (_req.query.category) params.set("category", String(_req.query.category));
     if (_req.query.project_type) params.set("project_type", String(_req.query.project_type));
+    if (_req.query.stack_pack_id) params.set("stack_pack_id", String(_req.query.stack_pack_id));
     if (_req.query.source) params.set("source", String(_req.query.source));
     if (_req.query.search) params.set("search", String(_req.query.search));
     const qs = params.toString();

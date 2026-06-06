@@ -100,6 +100,8 @@ export const api = {
   runPlan: (id: string) => fetchApi<any>(`/api/setfarm/runs/${id}/plan`),
   runDesign: (id: string) => fetchApi<any>(`/api/setfarm/runs/${id}/design`),
   runContract: (id: string) => fetchApi<any>(`/api/setfarm/runs/${id}/contract`),
+  runOperations: (id: string) => fetchApi<any>(`/api/setfarm/runs/${id}/operations`),
+  runOperationalModel: (id: string) => fetchApi<any>(`/api/setfarm/runs/${id}/operational-model`),
   // Terminal
   terminalExec: (command: string, args: string[]) =>
     fetchApi<{ output: string; exitCode: number; command: string }>('/api/terminal/exec', {

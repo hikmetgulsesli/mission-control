@@ -95,9 +95,10 @@ interface RunDetailData {
   currentStoryId?: string | null;
   currentStoryTitle?: string | null;
   storiesDone?: number;
+  operationalModel?: any | null;
 }
 
-type Tab = "overview" | "contract" | "supervisor" | "chat" | "files" | "stories" | "telemetry";
+type Tab = "overview" | "contract" | "stack" | "supervisor" | "chat" | "files" | "stories" | "telemetry";
 
 function asArray<T = any>(value: unknown): T[] {
   return Array.isArray(value) ? value as T[] : [];
@@ -110,7 +111,7 @@ function parseTimestamp(value: unknown): number | undefined {
   return Number.isFinite(timestamp) ? timestamp : undefined;
 }
 
-function normalizeRunDetail(raw: any): RunDetailData {
+function normalizeRunDetail(raw: any, operationalModel?: any | null): RunDetailData {
   const run = raw?.run || raw || {};
   const rawSteps = asArray<any>(raw?.fullSteps || raw?.steps);
   const rawStories = asArray<any>(raw?.stories);
@@ -135,7 +136,7 @@ function normalizeRunDetail(raw: any): RunDetailData {
     storyCount: Number(raw?.storyCount || run.story_count || rawStories.length) || rawStories.length,
     currentStoryId: raw?.currentStoryId || run.currentStoryId || run.current_story_id || null,
     currentStoryTitle: raw?.currentStoryTitle || run.currentStoryTitle || null,
-    storiesDone: Number(raw?.storiesDone ?? run.storyProgress?.completed ?? run.story_progress?.completed ?? 0),
+    storiesDone: Number(operationalModel?.stories?.completed ?? raw?.storiesDone ?? run.storyProgress?.completed ?? run.story_progress?.completed ?? 0),
     fullSteps: rawSteps.map((step: any) => ({
       id: String(step.stepId || step.step_id || step.id || ""),
       agent: String(step.agent || step.agent_id || step.step_id || ""),
@@ -157,6 +158,7 @@ function normalizeRunDetail(raw: any): RunDetailData {
     agentChats,
     progressLog: String(raw?.progressLog || raw?.progress_log || ""),
     supervisor: raw?.supervisor || null,
+    operationalModel: operationalModel || null,
   };
 }
 
@@ -175,8 +177,11 @@ export function RunDetail({ runId, onBack, initialTab = "overview" }: { runId: s
     const load = async () => {
       setRefreshing(true);
       try {
-        const d = await api.runDetail(runId);
-        if (!cancelled) { setData(normalizeRunDetail(d)); setLastRefreshed(Date.now()); }
+        const [d, operationalModel] = await Promise.all([
+          api.runDetail(runId),
+          api.runOperationalModel(runId).catch(() => null),
+        ]);
+        if (!cancelled) { setData(normalizeRunDetail(d, operationalModel)); setLastRefreshed(Date.now()); }
       } catch (e: any) {
         if (!cancelled) setError(e.message);
       } finally {
@@ -204,6 +209,7 @@ export function RunDetail({ runId, onBack, initialTab = "overview" }: { runId: s
   const tabs: { id: Tab; label: string; count?: number }[] = [
     { id: "overview", label: "Pipeline" },
     { id: "contract", label: "Run Contract", count: data.supervisor?.checklistItems || undefined },
+    { id: "stack", label: "Stack", count: data.operationalModel?.failure?.present ? 1 : undefined },
     { id: "supervisor", label: "Supervisor", count: data.supervisor?.openBlockers || data.supervisor?.visual?.issueCount || undefined },
     { id: "telemetry", label: "Telemetry" },
     { id: "chat", label: "Agent Chat", count: data.agentChats.length },
@@ -242,6 +248,12 @@ export function RunDetail({ runId, onBack, initialTab = "overview" }: { runId: s
               {data.currentStoryId}: {(data.currentStoryTitle || "").slice(0, 40)}
             </span>
           )}
+          {data.operationalModel?.stack && <span>{data.operationalModel.stack.stackPackId}</span>}
+          {data.operationalModel?.failure?.present && (
+            <span className="rd-current-story">
+              {data.operationalModel.failure.owner}: {data.operationalModel.failure.category}
+            </span>
+          )}
           {data.startedAt && <span>{new Date(data.startedAt).toLocaleString("en-US")}</span>}
         </div>
       </div>
@@ -267,6 +279,9 @@ export function RunDetail({ runId, onBack, initialTab = "overview" }: { runId: s
           <div className="rd-contract-wrap">
             <InlinePlanView runId={runId} initialTab="contract" />
           </div>
+        )}
+        {tab === "stack" && (
+          <StackTab model={data.operationalModel || null} />
         )}
         {tab === "supervisor" && (
           <SupervisorTab supervisor={data.supervisor || null} />
@@ -319,6 +334,34 @@ function SupervisorTab({ supervisor }: { supervisor: SupervisorSummary | null })
           {supervisor.visualReportText && <pre>{supervisor.visualReportText}</pre>}
         </div>
       )}
+    </div>
+  );
+}
+
+function StackTab({ model }: { model: any | null }) {
+  if (!model) return <div className="rd-empty">No operational model found for this run</div>;
+  const stack = model.stack || {};
+  const failure = model.failure || {};
+  const stories = model.stories || {};
+  const pipeline = model.pipeline || {};
+  return (
+    <div className="rd-supervisor">
+      <div className="rd-supervisor-grid">
+        <Metric label="Stack" value={String(stack.stackPackId || "unknown").toUpperCase()} tone="neutral" />
+        <Metric label="Runtime" value={String(stack.runtimeKind || "unknown").toUpperCase()} tone="neutral" />
+        <Metric label="Smoke" value={String(stack.systemSmokeRunner || "none").toUpperCase()} tone="neutral" />
+        <Metric label="Failure Owner" value={String(failure.owner || "none").toUpperCase()} tone={failure.present ? failure.owner : "passed"} />
+        <Metric label="Recovery" value={String(failure.recoveryPolicy || "no_action").toUpperCase()} tone={failure.retryable ? "warning" : failure.present ? "blocked" : "passed"} />
+        <Metric label="Stories" value={`${stories.completed || 0}/${stories.total || 0}`} tone={(stories.failed || 0) > 0 ? "blocked" : "passed"} />
+      </div>
+      <div className="rd-supervisor-meta">
+        <div><span>Label</span><code>{stack.label || "-"}</code></div>
+        <div><span>Current Step</span><code>{pipeline.currentStepId || "-"}</code></div>
+        <div><span>Failed Step</span><code>{pipeline.failedStepId || "-"}</code></div>
+        <div><span>Evidence</span><code>{Array.isArray(stack.evidenceClasses) ? stack.evidenceClasses.join(", ") : "-"}</code></div>
+        <div><span>Reason</span><code>{failure.reason || "-"}</code></div>
+        <div><span>Summary</span><code>{failure.summary || "-"}</code></div>
+      </div>
     </div>
   );
 }

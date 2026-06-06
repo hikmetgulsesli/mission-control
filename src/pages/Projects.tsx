@@ -43,6 +43,7 @@ interface Project {
   createdBy: string;
   workflowRunId?: string;
   runNumber?: number;
+  latestRunNumber?: number;
   createdAt: string;
   completedAt?: string;
   status?: string;
@@ -66,6 +67,14 @@ const TOOL_LOGOS: Record<string, string> = {
   "n8n": "https://cdn.simpleicons.org/n8n/ea4b71",
 };
 
+const HIDDEN_TERMINAL_STATUSES = new Set(["failed", "error", "cancelled", "canceled"]);
+
+function isHiddenProject(project: Project): boolean {
+  return [project.status, (project as any).latestRunStatus]
+    .map((status) => String(status || "").trim().toLowerCase())
+    .some((status) => HIDDEN_TERMINAL_STATUSES.has(status));
+}
+
 export function Projects() {
   const { toast } = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
@@ -83,8 +92,18 @@ export function Projects() {
   const importRef = useRef<HTMLInputElement>(null);
   const [toggling, setToggling] = useState<string | null>(null);
   const [bulkAction, setBulkAction] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const fetchProjects = () => api.projects().then((d) => { setProjects(d as any); setLoading(false); }).catch(() => setLoading(false));
+  const fetchProjects = () => api.projects()
+    .then((d) => {
+      setProjects(d as any);
+      setLoadError(null);
+      setLoading(false);
+    })
+    .catch((err: any) => {
+      setLoadError(err?.message || "Projects API failed");
+      setLoading(false);
+    });
 
   useEffect(() => {
     fetchProjects();
@@ -190,7 +209,12 @@ export function Projects() {
     try {
       const result = await api.toggleProject(p.id, action);
       setProjects(prev => prev.map(pr =>
-        pr.id === p.id ? { ...pr, serviceStatus: result.serviceStatus ?? (action === "start" ? "active" : "inactive"), manuallyDisabled: action === "stop" } : pr
+        pr.id === p.id ? {
+          ...pr,
+          ports: result.port ? { ...(pr.ports || {}), frontend: result.port } : pr.ports,
+          serviceStatus: result.serviceStatus ?? (action === "start" ? "active" : "inactive"),
+          manuallyDisabled: action === "stop",
+        } : pr
       ));
       toast(p.name + " " + (action === "start" ? "started" : "stopped"), "success");
     } catch (err: any) {
@@ -230,23 +254,23 @@ export function Projects() {
 
   if (loading) return <div className="page-loading">Loading projects...</div>;
 
-  const ownProjectsRaw = projects.filter((p) => p.category === "own" && p.id !== "mission-control");
+  const ownProjectsRaw = projects.filter((p) => p.category !== "external" && p.id !== "mission-control" && !isHiddenProject(p));
   const ownProjects = [...ownProjectsRaw].sort((a, b) => {
     switch (sortBy) {
       case 'date': return (b.createdAt || '').localeCompare(a.createdAt || '');
       case 'port': return (a.ports?.frontend || 9999) - (b.ports?.frontend || 9999);
       case 'name': return a.name.localeCompare(b.name);
       case 'run': {
-        // Prefer run numbers; fall back to newest projects first.
-        const aRun = a.runNumber || 0;
-        const bRun = b.runNumber || 0;
+        // Prefer Setfarm-linked latest runs; legacy local run numbers should not bury current Setfarm output.
+        const aRun = a.latestRunNumber || 0;
+        const bRun = b.latestRunNumber || 0;
         if (aRun === 0 && bRun === 0) return (b.createdAt || '').localeCompare(a.createdAt || '');
         if (aRun === 0) return 1;
         if (bRun === 0) return -1;
         return bRun - aRun;
       }
       case 'status': {
-        const order: Record<string, number> = { building: 0, active: 1, failed: 2 };
+        const order: Record<string, number> = { building: 0, active: 1, completed: 2 };
         return (order[a.status || 'active'] ?? 1) - (order[b.status || 'active'] ?? 1);
       }
       default: return 0;
@@ -272,30 +296,39 @@ export function Projects() {
         </div>
       </div>
 
-      {/* External tools - link bar */}
-      <div className="tools-bar">
-        <span className="tools-bar__label">TOOLS</span>
-        <div className="tools-bar__links">
-          {extProjects.map((p) => (
-            <a
-              key={p.id}
-              className={`tools-bar__item tools-bar__item--${p.serviceStatus === "active" ? "online" : "offline"}`}
-              href={`https://${p.domain}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              title={`${p.name} - ${p.domain}${p.serviceStatus === "active" ? " (Online)" : " (Offline)"}`}
-            >
-              {TOOL_LOGOS[p.id] ? (
-                <img className="tools-bar__logo" src={TOOL_LOGOS[p.id]} alt={p.name} />
-              ) : (
-                <span className="tools-bar__emoji">{p.emoji}</span>
-              )}
-              <span className="tools-bar__name">{p.name}</span>
-              <span className={`tools-bar__dot tools-bar__dot--${p.serviceStatus}`} />
-            </a>
-          ))}
+      {loadError && (
+        <div className="page-error">
+          <strong>Projects API failed.</strong>
+          <span>{loadError}</span>
         </div>
-      </div>
+      )}
+
+      {/* External tools - link bar */}
+      {extProjects.length > 0 && (
+        <div className="tools-bar">
+          <span className="tools-bar__label">TOOLS</span>
+          <div className="tools-bar__links">
+            {extProjects.map((p) => (
+              <a
+                key={p.id}
+                className={`tools-bar__item tools-bar__item--${p.serviceStatus === "active" ? "online" : "offline"}`}
+                href={`https://${p.domain}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={`${p.name} - ${p.domain}${p.serviceStatus === "active" ? " (Online)" : " (Offline)"}`}
+              >
+                {TOOL_LOGOS[p.id] ? (
+                  <img className="tools-bar__logo" src={TOOL_LOGOS[p.id]} alt={p.name} />
+                ) : (
+                  <span className="tools-bar__emoji">{p.emoji}</span>
+                )}
+                <span className="tools-bar__name">{p.name}</span>
+                <span className={`tools-bar__dot tools-bar__dot--${p.serviceStatus}`} />
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Sort controls */}
       <div className="projects-sort">
@@ -322,6 +355,9 @@ export function Projects() {
           />
         ))}
       </div>
+      {ownProjects.length === 0 && !loadError && (
+        <div className="page-empty">No projects found.</div>
+      )}
 
       {/* Project detail panel */}
       {sel && (

@@ -9,6 +9,8 @@ interface Rule {
   project_type: string;
   severity: string;
   applies_to: string;
+  stack_pack_ids?: string[];
+  module_owner?: string;
   source?: string;
   source_file?: string;
   readonly?: boolean;
@@ -29,6 +31,20 @@ const CAT_COLORS: Record<string, string> = {
 
 const CATEGORIES = ['design', 'implementation', 'verification', 'setup', 'lint', 'pipeline', 'general'] as const;
 const PROJECT_TYPES = ['general', 'react', 'nextjs', 'mobile'] as const;
+const STACK_PACKS = [
+  'browser-game-canvas',
+  'vite-react-web-app',
+  'nextjs-web-app',
+  'static-html-site',
+  'react-native-expo',
+  'ios-app',
+  'android-app',
+  'node-express-api',
+  'node-cli',
+  'python-web',
+  'python-cli',
+  'desktop-electron',
+] as const;
 const SEVERITIES = ['mandatory', 'advisory', 'info'] as const;
 const APPLIES_TO = ['implement', 'verify', 'setup', 'design', 'all'] as const;
 
@@ -40,6 +56,7 @@ export function Rules() {
   const [activeStage, setActiveStage] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [stackFilter, setStackFilter] = useState('');
   const [modal, setModal] = useState<{ open: boolean; rule?: Rule }>({ open: false });
 
   const load = useCallback(async () => {
@@ -63,6 +80,7 @@ export function Rules() {
       list = list.filter(r => r.title.toLowerCase().includes(s) || r.content.toLowerCase().includes(s));
     }
     if (typeFilter) list = list.filter(r => r.project_type === typeFilter);
+    if (stackFilter) list = list.filter(r => !Array.isArray(r.stack_pack_ids) || r.stack_pack_ids.length === 0 || r.stack_pack_ids.includes(stackFilter));
     return list;
   };
 
@@ -238,6 +256,14 @@ export function Rules() {
               <option value="">All Types</option>
               {PROJECT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
+            <select value={stackFilter} onChange={e => setStackFilter(e.target.value)} aria-label="Filter by stack pack" style={{
+              padding: '4px 8px', fontSize: 11, background: 'var(--bg-input)',
+              color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 4,
+              fontFamily: 'var(--font)', outline: 'none', cursor: 'pointer',
+            }}>
+              <option value="">All Stacks</option>
+              {STACK_PACKS.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
           </div>
         </div>
       )}
@@ -259,6 +285,10 @@ export function Rules() {
           <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} aria-label="Filter by project type" style={selectStyle}>
             <option value="">All Types</option>
             {PROJECT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <select value={stackFilter} onChange={e => setStackFilter(e.target.value)} aria-label="Filter by stack pack" style={selectStyle}>
+            <option value="">All Stacks</option>
+            {STACK_PACKS.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
       )}
@@ -320,6 +350,14 @@ export function Rules() {
                   }}>{r.project_type}</span>
                 )}
 
+                {Array.isArray(r.stack_pack_ids) && r.stack_pack_ids.length > 0 && (
+                  <span style={{
+                    fontSize: 8, padding: '1px 5px', borderRadius: 2,
+                    background: 'rgba(16,185,129,0.1)', color: 'rgba(16,185,129,0.8)',
+                    fontFamily: 'var(--font)', fontWeight: 600, textTransform: 'uppercase',
+                  }}>{r.stack_pack_ids.length === 1 ? r.stack_pack_ids[0] : `${r.stack_pack_ids.length} stacks`}</span>
+                )}
+
                 {/* Title */}
                 <span style={{
                   flex: 1, fontSize: 12, color: 'var(--text-primary)',
@@ -361,6 +399,8 @@ export function Rules() {
                       <span style={{ color: 'var(--neon-cyan)' }}>STAGE:</span> {r.applies_to}
                       {' '}&middot;{' '}
                       <span style={{ color: 'var(--neon-cyan)' }}>TYPE:</span> {r.project_type}
+                      {' '}&middot;{' '}
+                      <span style={{ color: 'var(--neon-cyan)' }}>STACK:</span> {Array.isArray(r.stack_pack_ids) && r.stack_pack_ids.length > 0 ? r.stack_pack_ids.join(', ') : 'global'}
                     </div>
                   )}
                   <pre style={{

@@ -23,7 +23,7 @@ export function setupWsProxy(server: Server) {
 
     try {
       gatewayWs = new WebSocket(config.gatewayWs, {
-        headers: { Origin: config.wsOrigin || `https://moltclaw.tail215fa3.ts.net:${config.port}` },
+        headers: { Origin: config.wsOrigin || config.publicOrigin || config.internalUrl },
       });
     } catch (err) {
       console.error('[WS] Failed to connect to gateway:', err);
@@ -41,9 +41,9 @@ export function setupWsProxy(server: Server) {
 
     function doHandshake() {
       sendReq('connect', {
-        minProtocol: 3,
-        maxProtocol: 3,
-        client: { id: 'webchat', version: '0.5.0', platform: 'web', mode: 'webchat' },
+        minProtocol: 4,
+        maxProtocol: 4,
+        client: { id: 'webchat-ui', version: '2.0.18', platform: 'web', mode: 'webchat' },
         role: 'operator',
         scopes: ['operator.read', 'operator.write'],
         caps: [],

@@ -8,8 +8,8 @@
     "check:version": "node scripts/check-version-contract.mjs",
     "check:prompts": "node scripts/check-prompt-language.mjs",
     "check:paths": "node scripts/check-path-contract.mjs",
-    "build": "npm run check:version && npm run check:prompts && npm run check:paths && vite build && tsc -p tsconfig.server.json && (cp -r server/*.json dist-server/ 2>/dev/null || true)",
-    "start": "node server/index.js",
+    "build": "npm run check:version && npm run check:prompts && npm run check:paths && vite build && tsc --build tsconfig.server.json --force && (cp -r server/*.json dist-server/ 2>/dev/null || true)",
+    "start": "node dist-server/index.js",
     "preview": "vite preview"
   },
   "dependencies": {

@@ -51,6 +51,46 @@ interface RunContractData {
   reason?: string;
 }
 
+interface OperationObservation {
+  id: string;
+  stepId: string;
+  storyId?: string | null;
+  agentId?: string | null;
+  label: string;
+  status: string;
+  summary?: string;
+  detail?: string;
+  eventType?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface OperationsData {
+  progress?: Record<string, number>;
+  phases?: Array<{
+    id: string;
+    label: string;
+    agentId?: string | null;
+    status: string;
+    retryCount?: number;
+    maxRetries?: number;
+    currentStoryId?: string | null;
+    observations?: OperationObservation[];
+  }>;
+  stories?: Array<{
+    storyId: string;
+    title: string;
+    status: string;
+    retryCount?: number;
+    maxRetries?: number;
+    branch?: string | null;
+    prUrl?: string | null;
+    currentObservation?: OperationObservation | null;
+    observations?: OperationObservation[];
+  }>;
+  feed?: OperationObservation[];
+}
+
 const STORY_STATUS_BADGES: Record<string, { color: string; label: string }> = {
   done: { color: "#00ff41", label: "DONE" },
   running: { color: "#4488ff", label: "RUNNING" },
@@ -85,6 +125,10 @@ const CONTRACT_STATUS_LABELS: Record<string, string> = {
   fail: "FAIL",
   pending: "PENDING",
   deferred: "DEFERRED",
+  running: "RUNNING",
+  retry: "RETRY",
+  blocked: "BLOCKED",
+  info: "INFO",
   na: "PENDING",
 };
 
@@ -132,6 +176,130 @@ function formatContractList(value: unknown): string[] {
   return value.map(formatContractValue).map((item) => item.trim()).filter(Boolean);
 }
 
+function formatTimeAgo(value: unknown): string {
+  if (!value) return "";
+  const ts = new Date(String(value)).getTime();
+  if (!Number.isFinite(ts)) return "";
+  const diff = Math.max(0, Date.now() - ts);
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h`;
+}
+
+function LiveOperationsBoard({ data }: { data: OperationsData | null }) {
+  const phases = data?.phases || [];
+  const stories = data?.stories || [];
+  const feed = data?.feed || [];
+  if (!data || (phases.length === 0 && stories.length === 0 && feed.length === 0)) {
+    return (
+      <div className="af-live-ops af-live-ops--empty">
+        <div className="af-live-ops__head">
+          <div>
+            <span className="af-contract__kicker">LIVE OPERATIONS</span>
+            <strong>Waiting for live observations</strong>
+          </div>
+          <span className="af-contract__metric af-contract__metric--pending">no events yet</span>
+        </div>
+      </div>
+    );
+  }
+
+  const progress = data.progress || {};
+  const activeStories = stories.filter((story) => ["running", "failed", "pending"].includes(normalizeVisibleStatus(story.status))).slice(0, 8);
+  const visibleStories = activeStories.length > 0 ? activeStories : stories.slice(0, 8);
+
+  return (
+    <div className="af-live-ops">
+      <div className="af-live-ops__head">
+        <div>
+          <span className="af-contract__kicker">LIVE OPERATIONS</span>
+          <strong>Pipeline workroom</strong>
+        </div>
+        <div className="af-contract__metrics">
+          <span className="af-contract__metric af-contract__metric--running">{Number(progress.running || 0)} running</span>
+          <span className="af-contract__metric af-contract__metric--retry">{Number(progress.retry || 0)} retry</span>
+          <span className="af-contract__metric af-contract__metric--blocked">{Number(progress.blocked || 0)} blocked</span>
+          <span className="af-contract__metric af-contract__metric--fail">{Number(progress.fail || 0)} fail</span>
+          <span className="af-contract__metric af-contract__metric--pass">{Number(progress.pass || 0)} pass</span>
+          <span className="af-contract__metric af-contract__metric--info">{Number(progress.info || 0)} info</span>
+        </div>
+      </div>
+
+      <div className="af-live-ops__phases">
+        {phases.map((phase) => {
+          const status = normalizeVisibleStatus(phase.status);
+          const last = phase.observations?.[0];
+          return (
+            <div key={phase.id} className={`af-live-ops__phase af-live-ops__phase--${status}`}>
+              <div className="af-live-ops__phase-top">
+                <span>{formatContractValue(phase.label || phase.id)}</span>
+                <b>{contractStatusLabel(status)}</b>
+              </div>
+              <div className="af-live-ops__phase-meta">
+                {phase.currentStoryId ? <span>{phase.currentStoryId}</span> : <span>{formatContractValue(phase.agentId || "system")}</span>}
+                {Number(phase.retryCount || 0) > 0 && <span className="af-live-ops__retry">R{phase.retryCount}/{phase.maxRetries || 0}</span>}
+              </div>
+              {last && <div className="af-live-ops__phase-last" title={last.detail || last.summary}>{formatContractValue(last.summary || last.label)}</div>}
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="af-live-ops__body">
+        <section className="af-live-ops__stories">
+          <div className="af-live-ops__subhead">Story Floor</div>
+          {visibleStories.length === 0 ? (
+            <div className="af-live-ops__empty-line">No story work visible yet.</div>
+          ) : visibleStories.map((story) => {
+            const status = normalizeVisibleStatus(story.status);
+            const current = story.currentObservation || story.observations?.[0];
+            return (
+              <article key={story.storyId} className={`af-live-ops__story af-live-ops__story--${status}`}>
+                <div className="af-live-ops__story-main">
+                  <span className="af-live-ops__story-id">{formatContractValue(story.storyId)}</span>
+                  <strong>{formatContractValue(story.title)}</strong>
+                  <span className={`af-contract__badge af-contract__badge--${status}`}>{contractStatusLabel(status)}</span>
+                </div>
+                <div className="af-live-ops__story-meta">
+                  {story.branch && <span>{formatContractValue(story.branch)}</span>}
+                  {story.prUrl && <a href={story.prUrl} target="_blank" rel="noreferrer">PR</a>}
+                  {Number(story.retryCount || 0) > 0 && <span className="af-live-ops__retry">retry {story.retryCount}/{story.maxRetries || 0}</span>}
+                </div>
+                {current && (
+                  <div className="af-live-ops__story-current" title={current.detail || current.summary}>
+                    <span className={`af-live-ops__dot af-live-ops__dot--${normalizeVisibleStatus(current.status)}`} />
+                    {formatContractValue(current.summary || current.label)}
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </section>
+
+        <section className="af-live-ops__feed">
+          <div className="af-live-ops__subhead">Live Feed</div>
+          {feed.length === 0 ? (
+            <div className="af-live-ops__empty-line">No live feed events yet.</div>
+          ) : feed.slice(0, 16).map((item) => {
+            const status = normalizeVisibleStatus(item.status);
+            return (
+              <div key={item.id} className={`af-live-ops__feed-row af-live-ops__feed-row--${status}`}>
+                <span className={`af-live-ops__dot af-live-ops__dot--${status}`} />
+                <span className="af-live-ops__feed-step">{formatContractValue(item.storyId || item.stepId)}</span>
+                <span className="af-live-ops__feed-text" title={item.detail || item.summary}>{formatContractValue(item.summary || item.label)}</span>
+                <span className="af-live-ops__feed-time">{formatTimeAgo(item.createdAt)}</span>
+              </div>
+            );
+          })}
+        </section>
+      </div>
+    </div>
+  );
+}
+
 export interface InlinePlanViewProps {
   runId: string;
   onRetry?: (storyId: string) => void;
@@ -143,6 +311,7 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
   const [planData, setPlanData] = useState<PlanData | null>(null);
   const [designData, setDesignData] = useState<any>(null);
   const [contractData, setContractData] = useState<RunContractData | null>(null);
+  const [operationsData, setOperationsData] = useState<OperationsData | null>(null);
   const [storyList, setStoryList] = useState<StoryItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -152,10 +321,12 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
       api.runDesign(runId).catch(() => null),
       api.runStories(runId).catch(() => []),
       api.runContract(runId).catch(() => null),
-    ]).then(([plan, design, stories, contract]) => {
+      api.runOperations(runId).catch(() => null),
+    ]).then(([plan, design, stories, contract, operations]) => {
       setPlanData(plan);
       if (design) setDesignData(design);
       if (contract) setContractData(contract);
+      if (operations) setOperationsData(operations);
       if (Array.isArray(stories)) setStoryList(stories);
       setLoading(false);
     }).catch(() => setLoading(false));
@@ -163,7 +334,7 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
 
   useEffect(() => {
     fetchData();
-    const id = setInterval(fetchData, 10_000);
+    const id = setInterval(fetchData, 3_000);
     return () => clearInterval(id);
   }, [fetchData]);
 
@@ -322,6 +493,8 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
         {tab === "contract" && (
           contractData ? (
             <div className="af-contract">
+              <LiveOperationsBoard data={operationsData} />
+
                 <div className="af-contract__summary">
                   <div className="af-contract__summary-main">
                     <span className="af-contract__kicker">RUN CONTRACT</span>

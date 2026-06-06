@@ -75,6 +75,12 @@ interface PipelineRun {
   nextStoryStatus?: string | null;
   blockerStepId?: string | null;
   blockerSummary?: string | null;
+  operational?: {
+    stack?: { stackPackId?: string; label?: string; runtimeKind?: string };
+    failure?: { present?: boolean; owner?: string; category?: string; recoveryPolicy?: string; retryable?: boolean };
+    stories?: { completed?: number; total?: number; verified?: number; doneAwaitingVerify?: number; failed?: number };
+    pipeline?: { currentStepId?: string | null; failedStepId?: string | null };
+  } | null;
 }
 
 /** Step detail data fetched on demand from runDetail API */
@@ -177,7 +183,8 @@ const RunCardInline = memo(function RunCardInline({
     : 0;
   const storyRetry = Number(run.currentStoryRetry || 0);
   const storyMaxRetries = Number(run.currentStoryMaxRetries || 0);
-  const hasStoryLine = Boolean(run.currentStoryId || run.nextStoryId || run.blockerSummary);
+  const operationalFailure = run.operational?.failure;
+  const hasStoryLine = Boolean(run.currentStoryId || run.nextStoryId || run.blockerSummary || operationalFailure?.present);
 
   // Phase grouping for feature-dev workflow (the main one with PIPELINE_PHASES)
   const phaseGroups = groupStepsByPhase(allSteps);
@@ -195,6 +202,11 @@ const RunCardInline = memo(function RunCardInline({
         </span>
         {run.runNumber && <span className="af-pipeline__run-id">#{run.runNumber}</span>}
         <span className="af-pipeline__wf">{run.workflow}</span>
+        {run.operational?.stack?.stackPackId && (
+          <span className="af-pipeline__wf" title={run.operational.stack.label || run.operational.stack.stackPackId}>
+            {run.operational.stack.stackPackId}
+          </span>
+        )}
         <span className="af-pipeline__task">{truncate(extractTitle(run.task), 60)}</span>
         <span className="af-pipeline__run-actions" onClick={(e) => e.stopPropagation()}>
           {run.status === "running" ? (
@@ -239,6 +251,12 @@ const RunCardInline = memo(function RunCardInline({
             <span className="af-pipeline__story-pill af-pipeline__story-pill--blocker" title={run.blockerSummary}>
               <b>{run.blockerStepId || "blocker"}</b>
               <span>{truncate(run.blockerSummary, 110)}</span>
+            </span>
+          )}
+          {operationalFailure?.present && (
+            <span className="af-pipeline__story-pill af-pipeline__story-pill--blocker" title={operationalFailure.recoveryPolicy || ""}>
+              <b>{operationalFailure.owner || "failure"}</b>
+              <span>{truncate(operationalFailure.category || "quality failure", 110)}</span>
             </span>
           )}
         </div>

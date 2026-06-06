@@ -21,7 +21,7 @@ interface Project {
   createdAt: string;
   completedAt?: string;
   status?: string;
-  stories?: { total: number; done: number };
+  stories?: { total: number; done?: number; completed?: number; verified?: number; failed?: number; skipped?: number };
   pr?: string;
   features: string[];
   tasks: string[];
@@ -67,6 +67,11 @@ export const ProjectCard = React.memo(function ProjectCard({
   onExport,
   onDelete,
 }: ProjectCardProps) {
+  const isSetfarmRun = p.category === "setfarm" || p.createdBy === "setfarm-run" || p.createdBy === "setfarm-workflow" || Boolean(p.latestRunNumber || p.workflowRunId);
+  const isServiceProject = !isSetfarmRun && p.type !== "mobile" && Boolean(p.service || p.ports?.frontend || p.ports?.backend);
+  const isLocalSetfarmProject = isSetfarmRun && p.type !== "mobile" && Boolean(p.repo);
+  const runStatus = (p.status || p.serviceStatus || "unknown").toLowerCase();
+  const storyDone = p.stories?.verified ?? p.stories?.completed ?? p.stories?.done ?? 0;
   const supervisor = p.supervisor;
   const supervisorStatus = supervisor?.available ? supervisor.status : "missing";
   const visualStatus = normalizeVisibleVisualStatus(supervisor?.visual.status);
@@ -80,7 +85,7 @@ export const ProjectCard = React.memo(function ProjectCard({
 
   return (
     <div
-      className={`project-card ${selected ? "project-card--selected" : ""} ${p.status === "building" ? "project-card--building" : p.status === "failed" ? "project-card--failed" : ""} ${p.type === "mobile" ? "project-card--mobile" : `project-card--${p.serviceStatus === "active" ? "online" : "offline"}`}`}
+      className={`project-card ${selected ? "project-card--selected" : ""} ${p.status === "building" ? "project-card--building" : p.status === "failed" ? "project-card--failed" : ""} ${p.type === "mobile" ? "project-card--mobile" : isSetfarmRun ? `project-card--run-${runStatus}` : `project-card--${p.serviceStatus === "active" ? "online" : "offline"}`}`}
       onClick={onSelect}
     >
       <div className="project-card__header">
@@ -89,11 +94,15 @@ export const ProjectCard = React.memo(function ProjectCard({
           <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--neon-cyan, #0ff)", background: "rgba(0,255,255,0.12)", border: "1px solid rgba(0,255,255,0.3)", padding: "1px 7px", borderRadius: "3px", marginRight: "8px", fontFamily: "var(--font)", letterSpacing: "0.5px" }}>#{p.latestRunNumber || p.runNumber}</span>
         ) : null}
         <span className="project-card__name">{p.name}</span>
-        {p.type === "mobile" ? (
+        {isSetfarmRun ? (
+          <span className={`project-card__status project-card__status--${runStatus}`}>
+            {runStatus.toUpperCase()}
+          </span>
+        ) : p.type === "mobile" ? (
           <span className="project-card__status project-card__status--mobile">MOBILE</span>
         ) : p.status === "building" ? (
           <span className="project-card__status project-card__status--building">BUILDING</span>
-        ) : (
+        ) : isServiceProject ? (
           <button
             className={"project-card__toggle " + (p.serviceStatus === "active" ? "project-card__toggle--on" : "project-card__toggle--off")}
             onClick={onToggle}
@@ -105,28 +114,43 @@ export const ProjectCard = React.memo(function ProjectCard({
               {toggling ? "..." : p.serviceStatus === "active" ? "ON" : "OFF"}
             </span>
           </button>
+        ) : (
+          <span className="project-card__status project-card__status--unknown">LOCAL</span>
+        )}
+        {isLocalSetfarmProject && (
+          <button
+            className={"project-card__toggle " + (p.serviceStatus === "active" ? "project-card__toggle--on" : "project-card__toggle--off")}
+            onClick={onToggle}
+            disabled={toggling}
+            title={p.serviceStatus === "active" ? "Stop local app" : "Start local app"}
+          >
+            <span className="project-card__toggle-knob" />
+            <span className="project-card__toggle-label">
+              {toggling ? "..." : p.serviceStatus === "active" ? "ON" : "OFF"}
+            </span>
+          </button>
         )}
       </div>
 
       <p className="project-card__desc" title={p.description}>{p.description}</p>
 
-      {supervisor && (
+      {supervisor?.available && (
         <div className={`project-card__supervisor project-card__supervisor--${supervisorTone}`}>
           <span className="project-card__supervisor-label">SUPERVISOR</span>
           <span className="project-card__supervisor-status">{supervisorStatus.toUpperCase()}</span>
-          {supervisor.available ? (
-            <>
-              <span>{supervisor.openBlockers} blockers</span>
-              <span>{visualStatus.toUpperCase()} visual</span>
-            </>
-          ) : (
-            <span>No ledger yet</span>
-          )}
+          <span>{supervisor.openBlockers} blockers</span>
+          <span>{visualStatus.toUpperCase()} visual</span>
         </div>
       )}
 
       <div className="project-card__meta">
-        {p.type !== "mobile" && (
+        {isSetfarmRun && p.repo && (
+          <div className="project-card__meta-row">
+            <span className="project-card__label">REPO</span>
+            <span className="project-card__value">{p.repo.split("/").pop()}</span>
+          </div>
+        )}
+        {p.type !== "mobile" && (p.ports.frontend || p.ports.backend) && (
           <div className="project-card__meta-row">
             <span className="project-card__label">PORT</span>
             <span className="project-card__value">
@@ -139,6 +163,14 @@ export const ProjectCard = React.memo(function ProjectCard({
             <span className="project-card__label">DOMAIN</span>
             <a className="project-card__link" href={`https://${p.domain}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
               {p.domain}
+            </a>
+          </div>
+        )}
+        {p.type !== "mobile" && !p.domain && p.ports.frontend && (
+          <div className="project-card__meta-row">
+            <span className="project-card__label">LOCAL</span>
+            <a className="project-card__link" href={`http://localhost:${p.ports.frontend}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+              {`localhost:${p.ports.frontend}`}
             </a>
           </div>
         )}
@@ -165,7 +197,7 @@ export const ProjectCard = React.memo(function ProjectCard({
         {p.stories && p.stories.total > 0 && (
           <div className="project-card__meta-row">
             <span className="project-card__label">STORIES</span>
-            <span className="project-card__value">{p.stories.done}/{p.stories.total}</span>
+            <span className="project-card__value">{storyDone}/{p.stories.total}</span>
           </div>
         )}
 

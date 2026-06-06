@@ -27,6 +27,21 @@ import {
 } from '../services/auto-deploy.js';
 
 import { getAgentFeed as getAgentFeedService } from '../services/agent-feed.js';
+import { sql } from '../utils/pg.js';
+
+async function fetchSetfarmOperationalModel(runId: string): Promise<any | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 10_000);
+  try {
+    const res = await fetch(`${config.setfarmUrl}/api/runs/${encodeURIComponent(runId)}/operational-model`, { signal: ctrl.signal });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /** Detect if a task describes a mobile app */
 function isMobileProject(task: string, repo: string): boolean {
@@ -473,6 +488,11 @@ router.get('/setfarm/pipeline', async (_req, res) => {
       // D2: Batch story progress (1 query instead of N)
       const allDisplayRuns = [...running, ...recent];
       const batchProgress = await getBatchStoryProgress(allDisplayRuns.map((r: any) => String(r.id))).catch(() => ({}));
+      const operationalByRunId = new Map<string, any>();
+      await Promise.all(allDisplayRuns.map(async (r: any) => {
+        const model = await fetchSetfarmOperationalModel(String(r.id));
+        if (model) operationalByRunId.set(String(r.id), model);
+      }));
 
       return allDisplayRuns.map((r: any) => {
         // Wave 1 fix #1 + #9 (plan: reactive-frolicking-cupcake): fall back includes
@@ -482,6 +502,7 @@ router.get('/setfarm/pipeline', async (_req, res) => {
         // Now the real bucket counts flow through unchanged.
             const storyProgress = (batchProgress as any)[r.id] || { completed: 0, total: 0, verified: 0, skipped: 0, running: 0, pending: 0, done: 0, failed: 0 };
         const hasFailures = (storyProgress.failed || 0) > 0;
+        const operational = operationalByRunId.get(String(r.id));
         return {
           id: r.id,
           runNumber: r.run_number,
@@ -511,6 +532,12 @@ router.get('/setfarm/pipeline', async (_req, res) => {
             abandonedCount: s.abandoned_count || 0,
           })),
           storyProgress,
+          operational: operational ? {
+            stack: operational.stack,
+            failure: operational.failure,
+            stories: operational.stories,
+            pipeline: operational.pipeline,
+          } : null,
         };
       });
     });
@@ -527,6 +554,329 @@ router.get('/setfarm/runs/:id/stories', async (req, res) => {
     res.json(stories || []);
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Stories fetch failed' });
+  }
+});
+
+// GET /setfarm/runs/:id/operational-model — canonical Setfarm run/stack/failure model.
+router.get('/setfarm/runs/:id/operational-model', async (req, res) => {
+  try {
+    const model = await fetchSetfarmOperationalModel(req.params.id);
+    if (!model) { res.status(404).json({ error: 'Operational model not found' }); return; }
+    res.json(model);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Operational model fetch failed' });
+  }
+});
+
+function normalizeObservationStatus(status: unknown): string {
+  const value = String(status || 'info').trim().toLowerCase();
+  if (value === 'done' || value === 'completed' || value === 'verified') return 'pass';
+  if (value === 'failed' || value === 'skipped' || value === 'timeout') return 'fail';
+  if (value === 'waiting') return 'pending';
+  if (['pending', 'running', 'pass', 'fail', 'retry', 'blocked', 'info'].includes(value)) return value;
+  return 'info';
+}
+
+function normalizeOperationObservation(row: any): any {
+  const metadata = safeJson(row.metadata, {});
+  const eventType = row.event_type || null;
+  const status = eventType === 'stack.evidence' && metadata?.stackStatus === 'resolved'
+    ? 'pass'
+    : normalizeObservationStatus(row.status);
+  return {
+    id: row.id,
+    runId: row.run_id,
+    stepId: row.step_id,
+    storyId: row.story_id || null,
+    agentId: row.agent_id || null,
+    phase: row.phase || null,
+    checkId: row.check_id,
+    label: compactDisplay(row.label, 180),
+    status,
+    summary: compactDisplay(row.summary, 260),
+    detail: compactDisplay(row.detail, 500),
+    evidence: safeJson(row.evidence, {}),
+    filePaths: safeJson(row.file_paths, []),
+    github: safeJson(row.github, {}),
+    metadata,
+    eventType,
+    startedAt: row.started_at || null,
+    completedAt: row.completed_at || null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function operationPhaseStatus(stepStatus: string, observations: any[]): string {
+  if (stepStatus === 'failed' || stepStatus === 'skipped') return 'fail';
+  if (stepStatus === 'running') return 'running';
+  if (stepStatus === 'done') return 'pass';
+  if (observations.some((obs) => obs.status === 'fail' || obs.status === 'blocked')) return 'fail';
+  if (observations.some((obs) => obs.status === 'retry')) return 'retry';
+  if (observations.some((obs) => obs.status === 'running')) return 'running';
+  if (observations.some((obs) => obs.status === 'pass')) return 'pass';
+  if (stepStatus === 'pending' || stepStatus === 'waiting') return 'pending';
+  return 'pending';
+}
+
+function observationScopeKey(obs: any): string {
+  return `${obs.stepId || ''}|${obs.storyId || ''}`;
+}
+
+function isTerminalPassObservation(obs: any): boolean {
+  if (obs.status !== 'pass') return false;
+  const checkId = String(obs.checkId || '');
+  const eventType = String(obs.eventType || '');
+  return (
+    eventType === 'gate.pass' ||
+    eventType === 'step.done' ||
+    eventType === 'step.output.pass' ||
+    checkId === 'supervisor-decision' ||
+    checkId.startsWith('stack-evidence:') ||
+    checkId === 'verify.pr_comments.resolve_actionable' ||
+    checkId.startsWith('synthetic:') ||
+    checkId.endsWith(':status')
+  );
+}
+
+function isTerminalOperationObservation(obs: any): boolean {
+  if (['fail', 'retry', 'blocked'].includes(obs.status)) return true;
+  return isTerminalPassObservation(obs);
+}
+
+function openOperationObservations(observations: any[]): any[] {
+  const latestTerminalByScope = new Map<string, number>();
+  const latestTerminalPassByScope = new Map<string, number>();
+  const latestActiveByScope = new Map<string, number>();
+  for (const obs of observations) {
+    if (['pending', 'running', 'retry'].includes(obs.status)) {
+      const scopeKey = observationScopeKey(obs);
+      const ts = new Date(obs.updatedAt || obs.createdAt || 0).getTime();
+      if (ts > (latestActiveByScope.get(scopeKey) || 0)) {
+        latestActiveByScope.set(scopeKey, ts);
+      }
+    }
+    if (isTerminalOperationObservation(obs)) {
+      const scopeKey = observationScopeKey(obs);
+      const ts = new Date(obs.updatedAt || obs.createdAt || 0).getTime();
+      if (ts > (latestTerminalByScope.get(scopeKey) || 0)) {
+        latestTerminalByScope.set(scopeKey, ts);
+      }
+    }
+    if (!isTerminalPassObservation(obs)) continue;
+    const scopeKey = observationScopeKey(obs);
+    const ts = new Date(obs.updatedAt || obs.createdAt || 0).getTime();
+    if (ts > (latestTerminalPassByScope.get(scopeKey) || 0)) {
+      latestTerminalPassByScope.set(scopeKey, ts);
+    }
+  }
+
+  return observations.filter((obs) => {
+    if (['pending', 'running'].includes(obs.status)) {
+      const terminalAt = latestTerminalByScope.get(observationScopeKey(obs)) || 0;
+      const obsAt = new Date(obs.updatedAt || obs.createdAt || 0).getTime();
+      return terminalAt <= 0 || obsAt >= terminalAt;
+    }
+    if (!['fail', 'retry', 'blocked'].includes(obs.status)) return true;
+    const activeAt = latestActiveByScope.get(observationScopeKey(obs)) || 0;
+    const obsAt = new Date(obs.updatedAt || obs.createdAt || 0).getTime();
+    if (activeAt > obsAt) return false;
+    const resolvedAt = latestTerminalPassByScope.get(observationScopeKey(obs)) || 0;
+    if (resolvedAt <= 0) return true;
+    return obsAt >= resolvedAt;
+  });
+}
+
+function buildRunOperations(run: any, stories: any[], observations: any[]): any {
+  const steps = Array.isArray(run.steps) ? run.steps : [];
+  const runStatus = String(run.status || '').toLowerCase();
+  const runIsTerminal = ['completed', 'failed', 'cancelled', 'canceled'].includes(runStatus);
+  const latestByCheck = new Map<string, any>();
+  for (const obs of observations) {
+    const stepId = String(obs.stepId || '').toLowerCase();
+    if (stepId === 'run' && !runIsTerminal && ['fail', 'blocked', 'retry'].includes(String(obs.status || ''))) {
+      continue;
+    }
+    const key = `${obs.stepId || ''}|${obs.storyId || ''}|${obs.checkId || obs.id || ''}`;
+    if (!latestByCheck.has(key)) latestByCheck.set(key, obs);
+  }
+  const currentObservations = [...latestByCheck.values()]
+    .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime());
+  const openObservations = openOperationObservations(currentObservations);
+  const obsByStep = new Map<string, any[]>();
+  const obsByStory = new Map<string, any[]>();
+  for (const obs of openObservations) {
+    const stepRows = obsByStep.get(obs.stepId) || [];
+    stepRows.push(obs);
+    obsByStep.set(obs.stepId, stepRows);
+    if (obs.storyId) {
+      const storyRows = obsByStory.get(obs.storyId) || [];
+      storyRows.push(obs);
+      obsByStory.set(obs.storyId, storyRows);
+    }
+  }
+
+  const phases = steps.map((step: any) => {
+    const stepId = String(step.step_id || step.stepId || '');
+    const phaseObservations = obsByStep.get(stepId) || [];
+    return {
+      id: stepId,
+      label: stepId.replace(/-/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase()),
+      agentId: step.agent_id || null,
+      status: operationPhaseStatus(String(step.status || ''), phaseObservations),
+      retryCount: Number(step.retry_count || 0),
+      maxRetries: Number(step.max_retries || 0),
+      currentStoryId: step.current_story_id || null,
+      startedAt: step.started_at || null,
+      updatedAt: step.updated_at || null,
+      observations: phaseObservations.slice(0, 12),
+    };
+  });
+  const knownPhaseIds = new Set(phases.map((phase: any) => phase.id));
+  for (const [stepId, phaseObservations] of obsByStep.entries()) {
+    if (!stepId || knownPhaseIds.has(stepId)) continue;
+    phases.push({
+      id: stepId,
+      label: stepId.replace(/-/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase()),
+      agentId: phaseObservations[0]?.agentId || null,
+      status: operationPhaseStatus('', phaseObservations),
+      retryCount: 0,
+      maxRetries: 0,
+      currentStoryId: null,
+      startedAt: phaseObservations[phaseObservations.length - 1]?.createdAt || null,
+      updatedAt: phaseObservations[0]?.updatedAt || phaseObservations[0]?.createdAt || null,
+      observations: phaseObservations.slice(0, 12),
+    });
+  }
+
+  const normalizedStories = (stories || []).map((story: any) => {
+    const storyId = String(story.story_id || story.storyId || story.id || '');
+    const storyObservations = obsByStory.get(storyId) || [];
+    return {
+      storyId,
+      title: compactDisplay(story.title || storyId, 180),
+      status: normalizeVisibleStatus(story.status || 'pending'),
+      retryCount: Number(story.retry_count || 0),
+      maxRetries: Number(story.max_retries || 0),
+      branch: story.story_branch || null,
+      prUrl: story.pr_url || null,
+      mergeStatus: story.merge_status || null,
+      currentObservation: storyObservations[0] || null,
+      observations: storyObservations.slice(0, 10),
+    };
+  });
+
+  const progress = openObservations.reduce((acc: any, obs: any) => {
+    acc.total += 1;
+    acc[obs.status] = (acc[obs.status] || 0) + 1;
+    return acc;
+  }, { total: 0, pending: 0, running: 0, pass: 0, fail: 0, retry: 0, blocked: 0, info: 0 });
+
+  return {
+    run: {
+      id: run.id,
+      runNumber: run.run_number,
+      workflowId: run.workflow_id,
+      task: compactDisplay(run.task, 260),
+      status: run.status,
+      updatedAt: run.updated_at,
+    },
+    progress,
+    phases,
+    stories: normalizedStories,
+    feed: observations.slice(0, 80),
+    observations: openObservations,
+    history: observations.slice(0, 500),
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+function syntheticOperationObservations(run: any, stories: any[]): any[] {
+  const rows: any[] = [];
+  const steps = Array.isArray(run.steps) ? run.steps : [];
+  for (const step of steps) {
+    const stepId = String(step.step_id || step.stepId || 'step');
+    const rawStatus = String(step.status || 'pending');
+    rows.push({
+      id: `synthetic-step-${stepId}`,
+      runId: run.id,
+      stepId,
+      storyId: step.current_story_id || null,
+      agentId: step.agent_id || null,
+      phase: null,
+      checkId: `synthetic:${stepId}:status`,
+      label: `${stepId} status`,
+      status: normalizeObservationStatus(rawStatus),
+      summary: rawStatus === 'running'
+        ? `${stepId} is running`
+        : rawStatus === 'done'
+          ? `${stepId} completed`
+          : rawStatus === 'failed'
+            ? `${stepId} failed`
+            : `${stepId} is ${rawStatus || 'pending'}`,
+      detail: compactDisplay(step.output || '', 500),
+      evidence: {},
+      filePaths: [],
+      github: {},
+      metadata: { synthetic: true },
+      eventType: null,
+      createdAt: step.updated_at || step.created_at || run.updated_at,
+      updatedAt: step.updated_at || step.created_at || run.updated_at,
+    });
+  }
+  for (const story of stories || []) {
+    const storyId = String(story.story_id || story.storyId || story.id || '');
+    if (!storyId) continue;
+    const rawStatus = String(story.status || 'pending');
+    rows.push({
+      id: `synthetic-story-${storyId}`,
+      runId: run.id,
+      stepId: rawStatus === 'verified' ? 'verify' : 'implement',
+      storyId,
+      agentId: story.claimed_by || null,
+      phase: null,
+      checkId: `synthetic:${storyId}:status`,
+      label: `${storyId} status`,
+      status: normalizeObservationStatus(rawStatus),
+      summary: `${storyId} ${rawStatus}`,
+      detail: compactDisplay(story.output || '', 500),
+      evidence: {},
+      filePaths: [],
+      github: story.pr_url ? { prUrl: story.pr_url, mergeStatus: story.merge_status || null } : {},
+      metadata: { synthetic: true },
+      eventType: null,
+      createdAt: story.updated_at || story.created_at || run.updated_at,
+      updatedAt: story.updated_at || story.created_at || run.updated_at,
+    });
+  }
+  return rows.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+}
+
+// GET /setfarm/runs/:id/operations — live operations board data for Mission Control.
+router.get('/setfarm/runs/:id/operations', async (req, res) => {
+  try {
+    const allRuns = (await getRuns()) as any[];
+    const run = allRuns.find((r: any) => r.id === req.params.id);
+    if (!run) { res.status(404).json({ error: 'Run not found' }); return; }
+    const stories = await getRunStories(req.params.id).catch(() => []);
+    let observationRows: any[] = [];
+    try {
+      observationRows = await sql`
+        SELECT *
+        FROM run_observations
+        WHERE run_id = ${req.params.id}
+        ORDER BY created_at DESC
+        LIMIT 500
+      `;
+    } catch {
+      observationRows = [];
+    }
+    const observations = observationRows.length > 0
+      ? observationRows.map(normalizeOperationObservation)
+      : syntheticOperationObservations(run, stories || []);
+    res.json(buildRunOperations(run, stories || [], observations));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Operations fetch failed' });
   }
 });
 

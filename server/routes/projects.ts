@@ -1,16 +1,20 @@
 import { Router } from "express";
-import { readFileSync, writeFileSync, existsSync, rmSync, mkdirSync, unlinkSync } from "fs";
-import { join } from "path";
+import { openSync, readFileSync, writeFileSync, existsSync, rmSync, mkdirSync, unlinkSync } from "fs";
+import { dirname, join } from "path";
 import { createConnection } from "net";
-import { execSync, execFileSync } from "child_process";
+import { spawn, execSync, execFileSync } from "child_process";
 import { config, PATHS } from "../config.js";
 import { deleteRunsByProject } from "../utils/setfarm-db.js";
 import { getSupervisorSummaryForRun } from "../utils/supervisor.js";
 
 const router = Router();
 const PROJECTS_FILE = (config as any).projectsJson || join(import.meta.dirname, "../../projects.json");
+const BUNDLED_PROJECTS_FILE = join(import.meta.dirname || __dirname, "../../projects.json");
 const DISABLED_DIR = join(PATHS.setfarmDir, "..", "disabled-services");
 const DELETED_FILE = join(import.meta.dirname || __dirname, "../../deleted-projects.json");
+const LOCAL_RUNNER_DIR = join(PATHS.setfarmDir, "..", "local-project-runners");
+const LOCAL_RUNNER_PORT_START = 5600;
+const LOCAL_RUNNER_PORT_END = 5999;
 
 function loadDeletedIds(): Set<string> {
   try { return new Set(JSON.parse(readFileSync(DELETED_FILE, "utf-8"))); } catch { return new Set(); }
@@ -43,12 +47,168 @@ function checkPort(port: number): Promise<boolean> {
   });
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isLocalRunnableProject(project: any): boolean {
+  const repo = String(project?.repo || project?.repoPath || "");
+  if (!repo || !existsSync(repo) || !existsSync(join(repo, "package.json"))) return false;
+  const stack = (project?.stack || []).join(" ").toLowerCase();
+  return stack.includes("vite") || stack.includes("react") || existsSync(join(repo, "vite.config.ts")) || existsSync(join(repo, "vite.config.js"));
+}
+
+function localRunnerPidFile(project: any): string {
+  return join(LOCAL_RUNNER_DIR, `${slugFromText(project.id || project.name)}.pid`);
+}
+
+function localRunnerLogFile(project: any): string {
+  return join(LOCAL_RUNNER_DIR, `${slugFromText(project.id || project.name)}.log`);
+}
+
+function writeLocalRunRuntimeArtifact(project: any, port: number) {
+  const repo = String(project?.repo || project?.repoPath || "");
+  if (!repo || !existsSync(repo)) return;
+  const setfarmDir = join(repo, ".setfarm");
+  mkdirSync(setfarmDir, { recursive: true });
+  const artifact = {
+    schema: "setfarm.run-runtime.v1",
+    generatedAt: new Date().toISOString(),
+    runId: project.latestRunId || project.workflowRunId || project.setfarmRunIds?.[0] || null,
+    runNumber: project.latestRunNumber || project.runNumber || null,
+    stepId: "mission-control-local-start",
+    status: "running",
+    runtime: {
+      band: "preview",
+      host: "127.0.0.1",
+      port,
+      url: `http://127.0.0.1:${port}`,
+      preferred: false,
+    },
+    localUrl: `http://127.0.0.1:${port}`,
+    host: "127.0.0.1",
+    port,
+    band: "preview",
+  };
+  writeFileSync(join(setfarmDir, "run-runtime.json"), JSON.stringify(artifact, null, 2));
+}
+
+function readLocalRunnerPid(project: any): number | null {
+  try {
+    const pid = Number(readFileSync(localRunnerPidFile(project), "utf-8").trim());
+    return Number.isFinite(pid) && pid > 0 ? pid : null;
+  } catch {
+    return null;
+  }
+}
+
+function killProcessGroup(pid: number) {
+  try {
+    process.kill(-pid, "SIGTERM");
+  } catch {
+    try { process.kill(pid, "SIGTERM"); } catch { /* cleanup */ }
+  }
+}
+
+function killPortListeners(port: number) {
+  try {
+    const output = execFileSync("lsof", [`-tiTCP:${port}`, "-sTCP:LISTEN"], { encoding: "utf-8", timeout: 5000 });
+    for (const raw of output.split(/\s+/).filter(Boolean)) {
+      const pid = Number(raw);
+      if (Number.isFinite(pid) && pid > 0) {
+        try { process.kill(pid, "SIGTERM"); } catch { /* cleanup */ }
+      }
+    }
+  } catch {
+    try { execFileSync("fuser", ["-k", `${port}/tcp`], { timeout: 5000, stdio: "pipe" }); } catch { /* cleanup */ }
+  }
+}
+
+async function allocateLocalProjectPort(projects: any[], preferred?: number): Promise<number> {
+  const used = new Set<number>();
+  for (const project of projects) {
+    for (const value of Object.values(project.ports || {})) {
+      if (typeof value === "number") used.add(value);
+    }
+  }
+  if (preferred && preferred >= LOCAL_RUNNER_PORT_START && preferred <= LOCAL_RUNNER_PORT_END && !used.has(preferred)) {
+    if (!(await checkPort(preferred))) return preferred;
+  }
+  for (let port = LOCAL_RUNNER_PORT_START; port <= LOCAL_RUNNER_PORT_END; port++) {
+    if (used.has(port)) continue;
+    if (!(await checkPort(port))) return port;
+  }
+  throw new Error(`No free local project port in ${LOCAL_RUNNER_PORT_START}-${LOCAL_RUNNER_PORT_END}`);
+}
+
+async function startLocalProject(project: any, projects: any[]) {
+  const repo = String(project.repo || project.repoPath || "");
+  if (!isLocalRunnableProject(project)) {
+    throw new Error("Project has no local runnable Vite/React repo");
+  }
+  const port = Number(project.ports?.frontend || 0) || await allocateLocalProjectPort(projects);
+  if (await checkPort(port)) {
+    project.ports = { ...(project.ports || {}), frontend: port };
+    project.serviceStatus = "active";
+    project.localRunner = { ...(project.localRunner || {}), port };
+    writeLocalRunRuntimeArtifact(project, port);
+    return { port, alreadyRunning: true };
+  }
+
+  mkdirSync(LOCAL_RUNNER_DIR, { recursive: true });
+  const logFd = openSync(localRunnerLogFile(project), "a");
+  const child = spawn("npm", ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], {
+    cwd: repo,
+    detached: true,
+    stdio: ["ignore", logFd, logFd],
+    env: { ...process.env, BROWSER: "none", PORT: String(port) },
+  });
+  child.unref();
+
+  const childPid = Number(child.pid || 0);
+  if (!childPid) throw new Error("Local project process did not start");
+  writeFileSync(localRunnerPidFile(project), String(childPid));
+  project.ports = { ...(project.ports || {}), frontend: port };
+  project.localRunner = {
+    pid: childPid,
+    port,
+    command: `npm run dev -- --host 127.0.0.1 --port ${port} --strictPort`,
+    startedAt: new Date().toISOString(),
+    log: localRunnerLogFile(project),
+  };
+
+  for (let i = 0; i < 30; i++) {
+    if (await checkPort(port)) {
+      project.serviceStatus = "active";
+      writeLocalRunRuntimeArtifact(project, port);
+      return { port, pid: childPid };
+    }
+    await sleep(500);
+  }
+
+  killProcessGroup(childPid);
+  project.serviceStatus = "inactive";
+  throw new Error(`Local project did not become ready on port ${port}. Log: ${localRunnerLogFile(project)}`);
+}
+
+async function stopLocalProject(project: any) {
+  const pid = Number(project.localRunner?.pid || readLocalRunnerPid(project) || 0);
+  const port = Number(project.ports?.frontend || project.localRunner?.port || 0);
+  if (pid) killProcessGroup(pid);
+  if (port) killPortListeners(port);
+  try { unlinkSync(localRunnerPidFile(project)); } catch { /* cleanup */ }
+  project.serviceStatus = "inactive";
+  project.localRunner = { ...(project.localRunner || {}), stoppedAt: new Date().toISOString() };
+}
+
 function loadProjects(): any[] {
-  if (!existsSync(PROJECTS_FILE)) return [];
-  return JSON.parse(readFileSync(PROJECTS_FILE, "utf-8"));
+  const readableFile = existsSync(PROJECTS_FILE) ? PROJECTS_FILE : BUNDLED_PROJECTS_FILE;
+  if (!existsSync(readableFile)) return [];
+  return JSON.parse(readFileSync(readableFile, "utf-8"));
 }
 
 function saveProjects(projects: any[]) {
+  mkdirSync(dirname(PROJECTS_FILE), { recursive: true });
   writeFileSync(PROJECTS_FILE, JSON.stringify(projects, null, 2));
 }
 
@@ -69,6 +229,54 @@ function slugFromText(value: string): string {
     .slice(0, 80);
 }
 
+function parseJsonObject(value: any): any {
+  if (!value) return {};
+  if (typeof value === "object") return value;
+  if (typeof value !== "string") return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function extractRunContract(context: any): any {
+  return parseJsonObject(context.run_contract || context.RUN_CONTRACT || context.contract);
+}
+
+function deriveRunProjectSlug(run: any, context: any): string {
+  const contract = extractRunContract(context);
+  const candidates = [
+    context.project_slug,
+    context.PROJECT_SLUG,
+    context.projectSlug,
+    contract?.project?.slug,
+    contract?.projectSlug,
+    contract?.project_slug,
+    context.repo ? String(context.repo).split("/").pop() : "",
+    deriveRunProjectName(run, context),
+  ];
+  for (const candidate of candidates) {
+    const slug = slugFromText(String(candidate || ""));
+    if (slug) return slug;
+  }
+  return slugFromText(`setfarm-run-${run?.run_number || run?.id || "unknown"}`);
+}
+
+function normalizedProjectIdentity(value: any): string {
+  return slugFromText(String(value || ""));
+}
+
+function isHiddenTerminalProject(project: any): boolean {
+  const statuses = [
+    project?.status,
+    project?.latestRunStatus,
+    project?.serviceStatus,
+  ].map((value) => String(value || "").trim().toLowerCase());
+  return statuses.some((status) => ["failed", "error", "cancelled", "canceled"].includes(status));
+}
+
 function toIsoString(value: any): string {
   if (!value) return new Date().toISOString();
   if (value instanceof Date) return value.toISOString();
@@ -76,7 +284,12 @@ function toIsoString(value: any): string {
 }
 
 function deriveRunProjectName(run: any, context: any): string {
+  const contract = extractRunContract(context);
   if (context.project_display_name) return String(context.project_display_name);
+  if (context.PROJECT_NAME) return String(context.PROJECT_NAME);
+  if (context.projectName) return String(context.projectName);
+  if (contract?.project?.name) return String(contract.project.name);
+  if (contract?.projectName) return String(contract.projectName);
   if (context.project_slug) {
     return String(context.project_slug)
       .split("-")
@@ -90,6 +303,18 @@ function deriveRunProjectName(run: any, context: any): string {
   return `Run #${run?.run_number || "unknown"}`;
 }
 
+function deriveProjectIdentitySlug(project: any): string {
+  const explicit = String(project?.name || project?.description || "")
+    .match(/(?:called|named|Project:)\s+([A-Za-z0-9][A-Za-z0-9 _-]{1,48})/i);
+  if (explicit?.[1]) return slugFromText(explicit[1].replace(/[.].*$/, "").trim());
+  const repoSlug = project?.repo ? slugFromText(String(project.repo).split("/").pop() || "") : "";
+  const id = slugFromText(project?.id || "");
+  const name = slugFromText(project?.name || "");
+  if (repoSlug) return repoSlug.replace(/-[0-9a-f]{8}$/i, "");
+  if (id && id.length <= 80) return id;
+  return name || id;
+}
+
 async function synthesizeSetfarmProjects(existingProjects: any[]) {
   try {
     const { getRuns } = await import("../utils/setfarm.js");
@@ -100,6 +325,8 @@ async function synthesizeSetfarmProjects(existingProjects: any[]) {
 
     for (const project of existingProjects) {
       knownProjectIds.add(project.id);
+      const identitySlug = deriveProjectIdentitySlug(project);
+      if (identitySlug) knownProjectIds.add(identitySlug);
       if (project.repo) knownRepos.add(String(project.repo).replace(/\/+$/, ""));
       for (const id of project.setfarmRunIds || []) knownRunIds.add(id);
       if (project.workflowRunId) knownRunIds.add(project.workflowRunId);
@@ -110,9 +337,9 @@ async function synthesizeSetfarmProjects(existingProjects: any[]) {
     for (const run of allRuns) {
       const context = parseRunContext(run);
       const repo = String(context.repo || "").replace(/\/+$/, "");
-      const baseSlug = String(context.project_slug || (repo ? repo.split("/").pop() : "") || slugFromText(deriveRunProjectName(run, context)));
-      const id = slugFromText(baseSlug || `setfarm-run-${run.run_number || run.id}`);
+      const id = deriveRunProjectSlug(run, context);
 
+      if (run.status === "cancelled" || run.status === "canceled") continue;
       if (knownRunIds.has(run.id)) continue;
       if (repo && knownRepos.has(repo)) continue;
       if (knownProjectIds.has(id)) continue;
@@ -154,6 +381,60 @@ async function synthesizeSetfarmProjects(existingProjects: any[]) {
   }
 }
 
+async function materializeSetfarmProject(projects: any[], id: string): Promise<any | null> {
+  try {
+    const { getRuns } = await import("../utils/setfarm.js");
+    const allRuns = (await getRuns()) as any[];
+    for (const run of allRuns) {
+      const context = parseRunContext(run);
+      const derivedId = deriveRunProjectSlug(run, context);
+      const runRepo = String(context.repo || "").replace(/\/+$/, "");
+      const ids = [
+        run.id,
+        String(run.run_number || ""),
+        derivedId,
+        runRepo ? slugFromText(runRepo.split("/").pop() || "") : "",
+      ].filter(Boolean);
+      if (!ids.includes(id)) continue;
+
+      const project = {
+        id: derivedId || slugFromText(`setfarm-run-${run.run_number || run.id}`),
+        name: deriveRunProjectName(run, context),
+        emoji: run.status === "completed" ? "\u{1F680}" : "\u{1F9EA}",
+        status: run.status === "running" || run.status === "pending" ? "building" : run.status,
+        description: run.task || "",
+        ports: {},
+        domain: "",
+        repo: runRepo,
+        stack: context.tech_stack ? [context.tech_stack] : ["setfarm"],
+        service: "",
+        serviceStatus: run.status === "running" ? "building" : "unknown",
+        createdBy: "setfarm-run",
+        createdAt: toIsoString(run.created_at),
+        updatedAt: toIsoString(run.updated_at || run.created_at),
+        stories: run.storyProgress || { total: 0, done: 0 },
+        features: [],
+        tasks: [],
+        github: "",
+        category: "setfarm",
+        checklist: DEFAULT_CHECKLIST.map((item) => ({ ...item })),
+        workflowRunId: run.id,
+        setfarmRunIds: [run.id],
+        runNumber: run.run_number || undefined,
+        latestRunNumber: run.run_number || undefined,
+        latestRunId: run.id,
+        latestRunStatus: run.status,
+      };
+      projects.push(project);
+      saveProjects(projects);
+      return project;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 async function enrichWithStatus(projects: any[]) {
   // Enrich with latest run number from setfarm DB
   try {
@@ -170,12 +451,22 @@ async function enrichWithStatus(projects: any[]) {
       const repoPath = p.repoPath || p.repo || '';
       const matching = allRuns
         .filter((r: any) => {
+          const runContext = parseRunContext(r);
+          const runSlug = deriveRunProjectSlug(r, runContext);
+          const projectIds = [
+            p.id,
+            p.name,
+            deriveProjectIdentitySlug(p),
+            p.repo ? String(p.repo).split("/").pop() : "",
+            p.repoPath ? String(p.repoPath).split("/").pop() : "",
+          ].map(normalizedProjectIdentity).filter(Boolean);
           const runIds = new Set([
             ...(Array.isArray(p.setfarmRunIds) ? p.setfarmRunIds : []),
             p.workflowRunId,
             p.latestRunId,
           ].filter(Boolean));
           if (runIds.has(r.id)) return true;
+          if (runSlug && projectIds.includes(runSlug)) return true;
           // Exact word match — substring would match "foo" against "foo-v2"
           const matchRepo = repoPath && wordBoundaryMatch(r.task || '', repoPath);
           const matchId = p.id && p.id.length > 2 && wordBoundaryMatch(r.task || '', p.id);
@@ -183,10 +474,20 @@ async function enrichWithStatus(projects: any[]) {
         })
         .sort((a: any, b: any) => (b.run_number || 0) - (a.run_number || 0));
       if (matching.length > 0) {
-        p.latestRunNumber = matching[0].run_number || 0;
-        p.latestRunId = matching[0].id;
-        p.latestRunStatus = matching[0].status;
-        p.supervisor = await getSupervisorSummaryForRun(matching[0]);
+        const latestRun = matching[0];
+        const latestContext = parseRunContext(latestRun);
+        p.latestRunNumber = latestRun.run_number || 0;
+        p.latestRunId = latestRun.id;
+        p.latestRunStatus = latestRun.status;
+        p.supervisor = await getSupervisorSummaryForRun(latestRun);
+        if (p.createdBy === "setfarm-workflow" || p.createdBy === "setfarm-run" || p.category === "setfarm") {
+          p.name = deriveRunProjectName(latestRun, latestContext);
+          p.status = latestRun.status === "running" || latestRun.status === "pending" ? "building" : latestRun.status;
+          p.description = latestRun.task || p.description || "";
+          p.repo = latestContext.repo || p.repo || "";
+          p.stack = latestContext.tech_stack ? [latestContext.tech_stack] : (p.stack?.length ? p.stack : ["setfarm"]);
+          p.stories = latestRun.storyProgress || p.stories;
+        }
       }
     }));
   } catch {}
@@ -207,15 +508,26 @@ async function enrichWithStatus(projects: any[]) {
   return projects;
 }
 
-router.get("/projects", async (_req, res) => {
+router.get("/projects", async (req, res) => {
   try {
     const registeredProjects = loadProjects();
-    const projects = await enrichWithStatus([
+    const includeTerminal = String(req.query.includeTerminal || req.query.includeFailed || req.query.includeCancelled || req.query.includeCanceled || "") === "1";
+    let projects = await enrichWithStatus([
       ...registeredProjects,
       ...(await synthesizeSetfarmProjects(registeredProjects)),
     ]);
-    // Sort by createdAt descending — newest first
+    if (!includeTerminal) {
+      projects = projects.filter((project: any) => !isHiddenTerminalProject(project));
+    }
+    // Prefer the newest Setfarm run first; fall back to date for manual projects.
     projects.sort((a: any, b: any) => {
+      const ar = Number(a.latestRunNumber || 0);
+      const br = Number(b.latestRunNumber || 0);
+      if (ar || br) {
+        if (!ar) return 1;
+        if (!br) return -1;
+        if (ar !== br) return br - ar;
+      }
       const da = toIsoString(a.createdAt || '1970-01-01');
       const db = toIsoString(b.createdAt || '1970-01-01');
       return db.localeCompare(da);
@@ -430,10 +742,37 @@ router.post("/projects/:id/toggle", async (req, res) => {
       return;
     }
     const projects = loadProjects();
-    const project = projects.find((p: any) => p.id === id);
+    let project = projects.find((p: any) => p.id === id);
+    if (!project) {
+      project = await materializeSetfarmProject(projects, id);
+    }
     if (!project) { res.status(404).json({ error: "Project not found" }); return; }
 
     const service = project.service;
+    if ((!service || !(/^[a-zA-Z0-9_.-]+$/).test(service)) && isLocalRunnableProject(project)) {
+      try {
+        if (action === "stop") {
+          await stopLocalProject(project);
+          project.manuallyDisabled = true;
+        } else {
+          await startLocalProject(project, projects);
+          project.manuallyDisabled = false;
+        }
+        saveProjects(projects);
+        res.json({
+          success: true,
+          serviceStatus: action === "start" ? "active" : "inactive",
+          port: project.ports?.frontend,
+          url: project.ports?.frontend ? `http://127.0.0.1:${project.ports.frontend}` : undefined,
+          localRunner: project.localRunner,
+        });
+      } catch (err: any) {
+        saveProjects(projects);
+        res.status(500).json({ error: err.message });
+      }
+      return;
+    }
+
     if (!service || !(/^[a-zA-Z0-9_.-]+$/).test(service)) {
       res.status(400).json({ error: "Invalid or missing service name" });
       return;
@@ -489,6 +828,16 @@ router.post("/projects/stop-all", async (_req, res) => {
       if (project.category === "external") continue;
 
       const service = project.service;
+      if ((!service || !(/^[a-zA-Z0-9_.-]+$/).test(service)) && isLocalRunnableProject(project)) {
+        try {
+          await stopLocalProject(project);
+          project.manuallyDisabled = true;
+          results.push({ id: project.id, name: project.name, stopped: true });
+        } catch (err: any) {
+          results.push({ id: project.id, name: project.name, stopped: false, error: err.message });
+        }
+        continue;
+      }
       if (!service || !(/^[a-zA-Z0-9_.-]+$/).test(service)) continue;
 
       const port = project.ports?.frontend || project.ports?.backend;
@@ -528,6 +877,15 @@ router.post("/projects/start-all", async (_req, res) => {
       if (project.manuallyDisabled) continue;
 
       const service = project.service;
+      if ((!service || !(/^[a-zA-Z0-9_.-]+$/).test(service)) && isLocalRunnableProject(project)) {
+        try {
+          await startLocalProject(project, projects);
+          results.push({ id: project.id, name: project.name, started: true });
+        } catch (err: any) {
+          results.push({ id: project.id, name: project.name, started: false, error: err.message });
+        }
+        continue;
+      }
       if (!service || !(/^[a-zA-Z0-9_.-]+$/).test(service)) continue;
 
       const port = project.ports?.frontend || project.ports?.backend;
