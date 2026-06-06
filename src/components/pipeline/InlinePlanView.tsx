@@ -75,6 +75,8 @@ interface OperationsData {
     retryCount?: number;
     maxRetries?: number;
     currentStoryId?: string | null;
+    startedAt?: string | null;
+    updatedAt?: string | null;
     observations?: OperationObservation[];
   }>;
   stories?: Array<{
@@ -189,6 +191,13 @@ function formatTimeAgo(value: unknown): string {
   return `${hours}h`;
 }
 
+function formatClock(value: unknown): string {
+  if (!value) return "-";
+  const date = new Date(String(value));
+  if (!Number.isFinite(date.getTime())) return "-";
+  return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+}
+
 function LiveOperationsBoard({ data }: { data: OperationsData | null }) {
   const phases = data?.phases || [];
   const stories = data?.stories || [];
@@ -208,37 +217,52 @@ function LiveOperationsBoard({ data }: { data: OperationsData | null }) {
   }
 
   const progress = data.progress || {};
-  const activeStories = stories.filter((story) => ["running", "failed", "pending"].includes(normalizeVisibleStatus(story.status))).slice(0, 8);
-  const visibleStories = activeStories.length > 0 ? activeStories : stories.slice(0, 8);
+  const activeStories = stories.filter((story) => ["running", "failed", "pending", "done"].includes(normalizeVisibleStatus(story.status))).slice(0, 6);
+  const visibleStories = activeStories.length > 0 ? activeStories : stories.slice(0, 6);
+  const activePhase = phases.find((phase) => ["running", "retry", "blocked", "fail"].includes(normalizeVisibleStatus(phase.status))) || phases[phases.length - 1];
+  const failedPhase = phases.find((phase) => ["fail", "failed", "blocked"].includes(normalizeVisibleStatus(phase.status)));
+  const passCount = phases.filter((phase) => normalizeVisibleStatus(phase.status) === "pass").length;
 
   return (
     <div className="af-live-ops">
       <div className="af-live-ops__head">
         <div>
           <span className="af-contract__kicker">LIVE OPERATIONS</span>
-          <strong>Pipeline workroom</strong>
+          <strong>Run command center</strong>
+          {activePhase && <em>{formatContractValue(activePhase.label || activePhase.id)} · {contractStatusLabel(activePhase.status)}</em>}
         </div>
         <div className="af-contract__metrics">
+          <span className="af-contract__metric af-contract__metric--pass">{passCount}/{phases.length} steps</span>
           <span className="af-contract__metric af-contract__metric--running">{Number(progress.running || 0)} running</span>
-          <span className="af-contract__metric af-contract__metric--retry">{Number(progress.retry || 0)} retry</span>
-          <span className="af-contract__metric af-contract__metric--blocked">{Number(progress.blocked || 0)} blocked</span>
           <span className="af-contract__metric af-contract__metric--fail">{Number(progress.fail || 0)} fail</span>
-          <span className="af-contract__metric af-contract__metric--pass">{Number(progress.pass || 0)} pass</span>
-          <span className="af-contract__metric af-contract__metric--info">{Number(progress.info || 0)} info</span>
+          <span className="af-contract__metric af-contract__metric--blocked">{Number(progress.blocked || 0)} blocked</span>
         </div>
       </div>
 
+      {failedPhase && (
+        <div className="af-live-ops__recovery">
+          <span>Supervisor lane</span>
+          <strong>{formatContractValue(failedPhase.label || failedPhase.id)}</strong>
+          <em>{formatContractValue(failedPhase.observations?.[0]?.summary || "Awaiting bounded recovery or manual review")}</em>
+        </div>
+      )}
+
       <div className="af-live-ops__phases">
-        {phases.map((phase) => {
+        {phases.map((phase, index) => {
           const status = normalizeVisibleStatus(phase.status);
           const last = phase.observations?.[0];
           return (
             <div key={phase.id} className={`af-live-ops__phase af-live-ops__phase--${status}`}>
+              <div className="af-live-ops__phase-index">{String(index + 1).padStart(2, "0")}</div>
               <div className="af-live-ops__phase-top">
                 <span>{formatContractValue(phase.label || phase.id)}</span>
                 <b>{contractStatusLabel(status)}</b>
               </div>
               <div className="af-live-ops__phase-meta">
+                <span>{formatClock(phase.startedAt)}</span>
+                <span>{formatClock(phase.updatedAt)}</span>
+              </div>
+              <div className="af-live-ops__phase-meta af-live-ops__phase-meta--agent">
                 {phase.currentStoryId ? <span>{phase.currentStoryId}</span> : <span>{formatContractValue(phase.agentId || "system")}</span>}
                 {Number(phase.retryCount || 0) > 0 && <span className="af-live-ops__retry">R{phase.retryCount}/{phase.maxRetries || 0}</span>}
               </div>
@@ -250,7 +274,7 @@ function LiveOperationsBoard({ data }: { data: OperationsData | null }) {
 
       <div className="af-live-ops__body">
         <section className="af-live-ops__stories">
-          <div className="af-live-ops__subhead">Story Floor</div>
+          <div className="af-live-ops__subhead">Stories</div>
           {visibleStories.length === 0 ? (
             <div className="af-live-ops__empty-line">No story work visible yet.</div>
           ) : visibleStories.map((story) => {
@@ -280,7 +304,7 @@ function LiveOperationsBoard({ data }: { data: OperationsData | null }) {
         </section>
 
         <section className="af-live-ops__feed">
-          <div className="af-live-ops__subhead">Live Feed</div>
+          <div className="af-live-ops__subhead">Events</div>
           {feed.length === 0 ? (
             <div className="af-live-ops__empty-line">No live feed events yet.</div>
           ) : feed.slice(0, 16).map((item) => {

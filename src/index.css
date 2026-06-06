@@ -4830,8 +4830,8 @@ html, body, #root {
 
 .af-live-ops {
   display: grid;
-  gap: 10px;
-  padding: 10px;
+  gap: 12px;
+  padding: 12px;
   border: 1px solid rgba(0, 255, 255, 0.16);
   border-radius: 4px;
   background:
@@ -4862,22 +4862,86 @@ html, body, #root {
   color: var(--text);
   font-size: 13px;
 }
-.af-live-ops__phases {
+.af-live-ops__head em {
+  color: var(--text-dim);
+  font-size: 10px;
+  font-style: normal;
+}
+.af-live-ops__recovery {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(136px, 1fr));
-  gap: 6px;
+  grid-template-columns: 110px 190px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 7px 9px;
+  border: 1px solid rgba(255, 122, 26, 0.28);
+  border-left: 3px solid #ff7a1a;
+  border-radius: 4px;
+  background: rgba(255, 122, 26, 0.055);
+}
+.af-live-ops__recovery span {
+  color: #ffb45e;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.af-live-ops__recovery strong,
+.af-live-ops__recovery em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-live-ops__recovery strong {
+  color: var(--text);
+  font-size: 11px;
+}
+.af-live-ops__recovery em {
+  color: #ffd0a0;
+  font-size: 10px;
+  font-style: normal;
+}
+.af-live-ops__phases {
+  display: flex;
+  gap: 8px;
+  min-height: 112px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 6px;
+  scrollbar-width: thin;
 }
 .af-live-ops__phase {
-  min-height: 74px;
-  padding: 8px;
+  position: relative;
+  flex: 0 0 158px;
+  min-height: 96px;
+  padding: 9px 8px 8px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 4px;
   background: rgba(0, 0, 0, 0.16);
   overflow: hidden;
 }
+.af-live-ops__phase::after {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: -22px;
+  bottom: 10px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.12);
+}
+.af-live-ops__phase:last-child::after {
+  display: none;
+}
+.af-live-ops__phase-index {
+  color: rgba(255, 255, 255, 0.28);
+  font-size: 9px;
+  font-weight: 700;
+  margin-bottom: 5px;
+}
 .af-live-ops__phase--running {
   border-color: rgba(0, 255, 255, 0.32);
   box-shadow: inset 2px 0 0 rgba(0, 255, 255, 0.9);
+  animation: af-live-pulse 1.4s ease-in-out infinite;
 }
 .af-live-ops__phase--pass {
   border-color: rgba(0, 255, 65, 0.22);
@@ -4923,13 +4987,19 @@ html, body, #root {
   justify-content: space-between;
   gap: 6px;
 }
+.af-live-ops__phase-meta--agent {
+  justify-content: flex-start;
+}
 .af-live-ops__phase-last {
   color: #b9bbd6;
 }
 .af-live-ops__body {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+  grid-template-columns: minmax(320px, 0.78fr) minmax(0, 1.22fr);
   gap: 10px;
+  max-height: 330px;
+  min-height: 220px;
+  overflow: hidden;
 }
 .af-live-ops__stories,
 .af-live-ops__feed {
@@ -4937,6 +5007,8 @@ html, body, #root {
   align-content: start;
   gap: 6px;
   min-width: 0;
+  overflow: auto;
+  padding-right: 2px;
 }
 .af-live-ops__subhead {
   color: var(--neon-cyan);
@@ -4946,7 +5018,7 @@ html, body, #root {
   text-transform: uppercase;
 }
 .af-live-ops__story {
-  padding: 8px;
+  padding: 7px 8px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 4px;
   background: rgba(0, 0, 0, 0.16);
@@ -4999,7 +5071,7 @@ html, body, #root {
 }
 .af-live-ops__feed-row {
   display: grid;
-  grid-template-columns: 10px 76px minmax(120px, 1fr) 34px;
+  grid-template-columns: 10px 82px minmax(120px, 1fr) 34px;
   gap: 6px;
   min-height: 26px;
   padding: 5px 6px;
@@ -5043,6 +5115,19 @@ html, body, #root {
 @media (max-width: 980px) {
   .af-live-ops__body {
     grid-template-columns: 1fr;
+    max-height: none;
+  }
+  .af-live-ops__recovery {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+}
+@keyframes af-live-pulse {
+  0%, 100% {
+    box-shadow: inset 2px 0 0 rgba(0, 255, 255, 0.9), 0 0 0 rgba(0, 255, 255, 0);
+  }
+  50% {
+    box-shadow: inset 2px 0 0 rgba(0, 255, 255, 1), 0 0 18px rgba(0, 255, 255, 0.18);
   }
 }
 .af-contract__grid {

@@ -24,9 +24,6 @@ function pickActiveRun(runs: PipelineRunSummary[]): PipelineRunSummary | null {
   return (
     ordered.find((run) => run.status === "running") ||
     ordered.find((run) => run.status === "pending") ||
-    ordered.find((run) => run.status === "completed" || run.status === "done") ||
-    ordered.find((run) => run.status === "failed") ||
-    ordered.find((run) => run.status === "cancelled") ||
     ordered[0] ||
     null
   );
