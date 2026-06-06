@@ -216,12 +216,15 @@ function LiveOperationsBoard({ data }: { data: OperationsData | null }) {
     );
   }
 
-  const progress = data.progress || {};
   const activeStories = stories.filter((story) => ["running", "failed", "pending", "done"].includes(normalizeVisibleStatus(story.status))).slice(0, 6);
   const visibleStories = activeStories.length > 0 ? activeStories : stories.slice(0, 6);
-  const activePhase = phases.find((phase) => ["running", "retry", "blocked", "fail"].includes(normalizeVisibleStatus(phase.status))) || phases[phases.length - 1];
   const failedPhase = phases.find((phase) => ["fail", "failed", "blocked"].includes(normalizeVisibleStatus(phase.status)));
+  const terminalFailed = phases.some((phase) => phase.id === "run" && ["fail", "failed", "blocked"].includes(normalizeVisibleStatus(phase.status)));
+  const activePhase = failedPhase || phases.find((phase) => ["running", "retry", "blocked"].includes(normalizeVisibleStatus(phase.status))) || phases[phases.length - 1];
   const passCount = phases.filter((phase) => normalizeVisibleStatus(phase.status) === "pass").length;
+  const runningCount = terminalFailed ? 0 : phases.filter((phase) => ["running", "retry"].includes(normalizeVisibleStatus(phase.status))).length;
+  const failCount = phases.filter((phase) => ["fail", "failed"].includes(normalizeVisibleStatus(phase.status))).length;
+  const blockedCount = phases.filter((phase) => normalizeVisibleStatus(phase.status) === "blocked").length;
 
   return (
     <div className="af-live-ops">
@@ -233,9 +236,9 @@ function LiveOperationsBoard({ data }: { data: OperationsData | null }) {
         </div>
         <div className="af-contract__metrics">
           <span className="af-contract__metric af-contract__metric--pass">{passCount}/{phases.length} steps</span>
-          <span className="af-contract__metric af-contract__metric--running">{Number(progress.running || 0)} running</span>
-          <span className="af-contract__metric af-contract__metric--fail">{Number(progress.fail || 0)} fail</span>
-          <span className="af-contract__metric af-contract__metric--blocked">{Number(progress.blocked || 0)} blocked</span>
+          <span className="af-contract__metric af-contract__metric--running">{runningCount} running</span>
+          <span className="af-contract__metric af-contract__metric--fail">{failCount} fail</span>
+          <span className="af-contract__metric af-contract__metric--blocked">{blockedCount} blocked</span>
         </div>
       </div>
 

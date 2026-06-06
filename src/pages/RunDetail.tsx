@@ -284,7 +284,7 @@ export function RunDetail({ runId, onBack, initialTab = "overview" }: { runId: s
           <StackTab model={data.operationalModel || null} />
         )}
         {tab === "supervisor" && (
-          <SupervisorTab supervisor={data.supervisor || null} />
+          <SupervisorTab supervisor={data.supervisor || null} model={data.operationalModel || null} />
         )}
         {tab === "telemetry" && (
           <TelemetryChart runId={runId} />
@@ -303,9 +303,11 @@ export function RunDetail({ runId, onBack, initialTab = "overview" }: { runId: s
   );
 }
 
-function SupervisorTab({ supervisor }: { supervisor: SupervisorSummary | null }) {
-  if (!supervisor) return <div className="rd-empty">No supervisor data found for this run</div>;
-  if (!supervisor.available) return <div className="rd-empty">Supervisor ledger has not been created for this run yet</div>;
+function SupervisorTab({ supervisor, model }: { supervisor: SupervisorSummary | null; model: any | null }) {
+  if (!supervisor || !supervisor.available) {
+    if (!model) return <div className="rd-empty">No supervisor data found for this run</div>;
+    return <SupervisorFallback model={model} />;
+  }
   const visual = supervisor.visual || { status: "missing", issueCount: 0, controlsChecked: 0, routesChecked: [], screenshots: [] };
   const visualStatus = normalizeVisibleVisualStatus(visual.status);
   const derivedOpenBlockers = supervisor.openBlockers || (supervisor.status === "blocked" ? 1 : 0);
@@ -334,6 +336,40 @@ function SupervisorTab({ supervisor }: { supervisor: SupervisorSummary | null })
           {supervisor.visualReportText && <pre>{supervisor.visualReportText}</pre>}
         </div>
       )}
+    </div>
+  );
+}
+
+function SupervisorFallback({ model }: { model: any }) {
+  const failure = model.failure || {};
+  const stack = model.stack || {};
+  const pipeline = model.pipeline || {};
+  const stories = model.stories || {};
+  const retryTone = failure.retryable ? "warning" : failure.present ? "blocked" : "passed";
+  const retryValue = failure.retryable ? "RETRYABLE" : failure.present ? "MANUAL" : "CLEAR";
+
+  return (
+    <div className="rd-supervisor">
+      <div className="rd-supervisor-banner">
+        <span>Operational supervisor fallback</span>
+        <strong>{failure.summary || failure.category || "No ledger, using Setfarm model"}</strong>
+      </div>
+      <div className="rd-supervisor-grid">
+        <Metric label="Stack" value={String(stack.stackPackId || "unknown").toUpperCase()} />
+        <Metric label="Failure Owner" value={String(failure.owner || "none").toUpperCase()} tone={failure.present ? failure.owner : "passed"} />
+        <Metric label="Recovery" value={String(failure.recoveryPolicy || "no_action").toUpperCase()} tone={retryTone} />
+        <Metric label="Retry Decision" value={retryValue} tone={retryTone} />
+        <Metric label="Source Step" value={String(failure.sourceStepId || pipeline.failedStepId || "-").toUpperCase()} tone={failure.present ? "blocked" : "passed"} />
+        <Metric label="Stories" value={`${stories.completed || 0}/${stories.total || 0}`} tone={(stories.failed || 0) > 0 ? "blocked" : "passed"} />
+      </div>
+      <div className="rd-supervisor-meta">
+        <div><span>Reason</span><code>{failure.reason || "-"}</code></div>
+        <div><span>Source Story</span><code>{failure.sourceStoryId || pipeline.currentStoryId || "-"}</code></div>
+        <div><span>Current Step</span><code>{pipeline.currentStepId || "-"}</code></div>
+        <div><span>Failed Step</span><code>{pipeline.failedStepId || "-"}</code></div>
+        <div><span>Runtime</span><code>{stack.runtimeKind || "-"}</code></div>
+        <div><span>Smoke Runner</span><code>{stack.systemSmokeRunner || "-"}</code></div>
+      </div>
     </div>
   );
 }
