@@ -17,6 +17,7 @@ dist-server/
 # Runtime data (project list, state)
 projects.json
 deleted-projects.json
+artifacts/
 
 # Stitch design cache (downloaded on-demand)
 stitch-cache/

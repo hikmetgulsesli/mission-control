@@ -1,4 +1,4 @@
-import { REAL_AGENT_IDS } from '../shared/agents.js';
+import { AGENT_DEFINITIONS, REAL_AGENT_IDS } from '../shared/agents.js';
 import { Router } from 'express';
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
@@ -10,6 +10,20 @@ const router = Router();
 
 const REAL_AGENTS = REAL_AGENT_IDS as unknown as string[];
 
+function fallbackAgents(): any[] {
+  return REAL_AGENTS.map((id) => {
+    const definition = AGENT_DEFINITIONS[id as keyof typeof AGENT_DEFINITIONS];
+    return {
+      id,
+      name: definition?.name || id,
+      emoji: definition?.emoji || '',
+      role: definition?.role || '',
+      model: definition?.model || 'unknown',
+      color: definition?.color || '#00ffff',
+      source: 'mission-control-fallback',
+    };
+  });
+}
 
 function getAgentActivity(agentId: string): { lastActive?: string; status: string } {
   const dir = agentId === "main" ? "main" : agentId;
@@ -78,9 +92,14 @@ function mergeProfile(agent: any, profiles: Record<string, any>) {
 router.get('/agents', async (_req, res) => {
   try {
     const [all, profiles] = await Promise.all([
-      cached('agents', 30000, () =>
-        runCliJson<any[]>('openclaw', ['agents', 'list', '--json'])
-      ),
+      cached('agents', 30000, async () => {
+        try {
+          return await runCliJson<any[]>('openclaw', ['agents', 'list', '--json']);
+        } catch (err: any) {
+          console.warn('[agents] openclaw agents list failed; using Mission Control fallback agents:', err?.message || err);
+          return fallbackAgents();
+        }
+      }),
       cached('profiles', 120000, async () => loadProfiles()),
     ]);
     const filtered = all
@@ -99,9 +118,14 @@ router.get('/agents', async (_req, res) => {
 router.get('/agents/:id', async (req, res) => {
   try {
     const [all, profiles] = await Promise.all([
-      cached('agents', 30000, () =>
-        runCliJson<any[]>('openclaw', ['agents', 'list', '--json'])
-      ),
+      cached('agents', 30000, async () => {
+        try {
+          return await runCliJson<any[]>('openclaw', ['agents', 'list', '--json']);
+        } catch (err: any) {
+          console.warn('[agents] openclaw agents list failed; using Mission Control fallback agents:', err?.message || err);
+          return fallbackAgents();
+        }
+      }),
       cached('profiles', 120000, async () => loadProfiles()),
     ]);
     const agent = all.find((a: any) => a.id === req.params.id);

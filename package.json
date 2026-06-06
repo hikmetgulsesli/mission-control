@@ -9,6 +9,8 @@
     "check:prompts": "node scripts/check-prompt-language.mjs",
     "check:paths": "node scripts/check-path-contract.mjs",
     "build": "npm run check:version && npm run check:prompts && npm run check:paths && vite build && tsc --build tsconfig.server.json --force && (cp -r server/*.json dist-server/ 2>/dev/null || true)",
+    "render:smoke": "node scripts/render-smoke.mjs",
+    "test:render": "npm run build && npm run render:smoke",
     "start": "node dist-server/index.js",
     "preview": "vite preview"
   },
@@ -37,6 +39,7 @@
     "@types/ws": "^8.18.0",
     "@vitejs/plugin-react": "^4.5.0",
     "concurrently": "^9.1.0",
+    "playwright": "^1.60.0",
     "tsx": "^4.19.0",
     "typescript": "^5.8.0",
     "vite": "^6.3.0"

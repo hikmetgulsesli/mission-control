@@ -260,9 +260,10 @@ router.get('/runs/:id/errors', async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Query failed steps
+    // Query failed steps. Use SELECT * because live Setfarm step schemas vary
+    // across migrations and older DBs may not expose a dedicated error column.
     const failedSteps = await sql`
-      SELECT step_id, agent_id, status, output, error, updated_at
+      SELECT *
       FROM steps WHERE run_id = ${id} AND status = 'failed'
       ORDER BY updated_at DESC`;
 
@@ -280,7 +281,15 @@ router.get('/runs/:id/errors', async (req, res) => {
     ];
 
     const errors = (failedSteps as any[]).map(step => {
-      const errorText = step.error || step.output || '';
+      const errorText = [
+        step.error,
+        step.error_message,
+        step.failure_reason,
+        step.summary,
+        step.output,
+        step.result,
+        step.context,
+      ].find((value) => typeof value === 'string' && value.trim().length > 0) || '';
       let category = 'UNKNOWN';
       let suggestion = 'Error could not be classified. Inspect the step output.';
       let severity: 'error' | 'warning' | 'info' = 'error';

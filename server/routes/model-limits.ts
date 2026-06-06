@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 import { cached } from '../utils/cache.js';
 import { config } from '../config.js';
@@ -26,6 +26,7 @@ router.get('/model-limits', async (_req, res) => {
         return JSON.parse(raw);
       }),
       cached('datafile-limits', 15000, async () => {
+        if (!existsSync(config.dataJson)) return {};
         const raw = readFileSync(config.dataJson, 'utf-8');
         return JSON.parse(raw);
       }),
