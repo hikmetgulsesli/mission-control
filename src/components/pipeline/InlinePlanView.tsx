@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { StoryChecklist } from "../StoryChecklist";
 import { api } from "../../lib/api";
 import { normalizeVisibleText, normalizeVisibleWorkflowStatus } from "../../lib/status";
@@ -341,8 +341,10 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
   const [operationsData, setOperationsData] = useState<OperationsData | null>(null);
   const [storyList, setStoryList] = useState<StoryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const requestSeq = useRef(0);
 
   const fetchData = useCallback(() => {
+    const seq = ++requestSeq.current;
     Promise.all([
       api.runPlan(runId),
       api.runDesign(runId).catch(() => null),
@@ -350,13 +352,19 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
       api.runContract(runId).catch(() => null),
       api.runOperations(runId).catch(() => null),
     ]).then(([plan, design, stories, contract, operations]) => {
+      if (seq !== requestSeq.current) return;
       setPlanData(plan);
-      if (design) setDesignData(design);
-      if (contract) setContractData(contract);
-      if (operations) setOperationsData(operations);
+      setDesignData(design || null);
+      setContractData(contract || null);
+      setOperationsData(operations || null);
       if (Array.isArray(stories)) setStoryList(stories);
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch(() => {
+      if (seq !== requestSeq.current) return;
+      setContractData(null);
+      setOperationsData(null);
+      setLoading(false);
+    });
   }, [runId]);
 
   useEffect(() => {
@@ -367,6 +375,12 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
 
   useEffect(() => {
     setTab(initialTab);
+    setPlanData(null);
+    setDesignData(null);
+    setContractData(null);
+    setOperationsData(null);
+    setStoryList([]);
+    setLoading(true);
   }, [runId, initialTab]);
 
   const planStories = Array.isArray(planData?.stories) ? planData.stories : [];

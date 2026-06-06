@@ -57,6 +57,12 @@ function isMobileProject(task: string, repo: string): boolean {
 let syncInProgress = false;
 const router = Router();
 
+function noStore(res: any): void {
+  res.set('Cache-Control', 'no-store, max-age=0, must-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+}
+
 function parseRunContext(run: any): any {
   try {
     const raw = run?.context || {};
@@ -549,6 +555,7 @@ router.get('/setfarm/pipeline', async (_req, res) => {
 
 // GET /setfarm/runs/:id/stories — Stories for a specific run
 router.get('/setfarm/runs/:id/stories', async (req, res) => {
+  noStore(res);
   try {
     const stories = await getRunStories(req.params.id);
     res.json(stories || []);
@@ -559,6 +566,7 @@ router.get('/setfarm/runs/:id/stories', async (req, res) => {
 
 // GET /setfarm/runs/:id/operational-model — canonical Setfarm run/stack/failure model.
 router.get('/setfarm/runs/:id/operational-model', async (req, res) => {
+  noStore(res);
   try {
     const model = await fetchSetfarmOperationalModel(req.params.id);
     if (!model) { res.status(404).json({ error: 'Operational model not found' }); return; }
@@ -854,6 +862,7 @@ function syntheticOperationObservations(run: any, stories: any[]): any[] {
 
 // GET /setfarm/runs/:id/operations — live operations board data for Mission Control.
 router.get('/setfarm/runs/:id/operations', async (req, res) => {
+  noStore(res);
   try {
     const allRuns = (await getRuns()) as any[];
     const run = allRuns.find((r: any) => r.id === req.params.id);
@@ -882,6 +891,7 @@ router.get('/setfarm/runs/:id/operations', async (req, res) => {
 
 // GET /setfarm/runs/:id/contract — machine-readable run contract/checklist.
 router.get('/setfarm/runs/:id/contract', async (req, res) => {
+  noStore(res);
   try {
     const allRuns = (await getRuns()) as any[];
     const run = allRuns.find((r: any) => r.id === req.params.id);
@@ -896,6 +906,7 @@ router.get('/setfarm/runs/:id/contract', async (req, res) => {
 
 // GET /setfarm/runs/:id/plan — PRD/Plan document for a run
 router.get('/setfarm/runs/:id/plan', async (req, res) => {
+  noStore(res);
   try {
     const allRuns = (await getRuns()) as any[];
     const run = allRuns.find((r: any) => r.id === req.params.id);
@@ -997,6 +1008,7 @@ router.get('/setfarm/runs/:id/design-artifact/:file', async (req, res) => {
 
 // GET /setfarm/runs/:id/design — Stitch design screens with local screenshots
 router.get('/setfarm/runs/:id/design', async (req, res) => {
+  noStore(res);
   try {
     const allRuns = (await getRuns()) as any[];
     const run = allRuns.find((r: any) => r.id === req.params.id);

@@ -8,7 +8,9 @@ async function fetchApi<T>(path: string, opts?: RequestInit): Promise<T> {
     ...(AUTH_TOKEN ? { 'X-MC-Token': AUTH_TOKEN } : {}),
     ...((opts?.headers as Record<string, string>) || {}),
   };
-  const res = await fetch(`${BASE}${path}`, { ...opts, headers });
+  const method = String(opts?.method || 'GET').toUpperCase();
+  const cache = opts?.cache || (method === 'GET' ? 'no-store' : undefined);
+  const res = await fetch(`${BASE}${path}`, { ...opts, headers, cache });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`API ${res.status}: ${text}`);
