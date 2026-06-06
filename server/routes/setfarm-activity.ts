@@ -588,17 +588,23 @@ function normalizeObservationStatus(status: unknown): string {
 function normalizeOperationObservation(row: any): any {
   const metadata = safeJson(row.metadata, {});
   const eventType = row.event_type || null;
+  const checkId = String(row.check_id || '');
+  const rawStepId = String(row.step_id || '');
+  const canonicalStepId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawStepId) && checkId.startsWith('verify.')
+    ? 'verify'
+    : rawStepId;
   const status = eventType === 'stack.evidence' && metadata?.stackStatus === 'resolved'
     ? 'pass'
     : normalizeObservationStatus(row.status);
   return {
     id: row.id,
     runId: row.run_id,
-    stepId: row.step_id,
+    stepId: canonicalStepId,
+    sourceStepId: rawStepId,
     storyId: row.story_id || null,
     agentId: row.agent_id || null,
     phase: row.phase || null,
-    checkId: row.check_id,
+    checkId,
     label: compactDisplay(row.label, 180),
     status,
     summary: compactDisplay(row.summary, 260),
@@ -615,10 +621,14 @@ function normalizeOperationObservation(row: any): any {
   };
 }
 
-function operationPhaseStatus(stepStatus: string, observations: any[]): string {
-  if (stepStatus === 'failed' || stepStatus === 'skipped') return 'fail';
-  if (stepStatus === 'running') return 'running';
-  if (stepStatus === 'done') return 'pass';
+function operationPhaseStatus(stepStatus: string, observations: any[], runIsTerminal = false): string {
+  const normalizedStepStatus = String(stepStatus || '').trim().toLowerCase();
+  if (['failed', 'skipped', 'fail', 'error'].includes(normalizedStepStatus)) return 'fail';
+  if (runIsTerminal && ['running', 'active'].includes(normalizedStepStatus)) return 'pending';
+  if (['running', 'active'].includes(normalizedStepStatus)) return 'running';
+  if (['done', 'completed', 'verified', 'pass'].includes(normalizedStepStatus)) return 'pass';
+  if (['pending', 'waiting', 'queued'].includes(normalizedStepStatus)) return 'pending';
+
   if (observations.some((obs) => obs.status === 'fail' || obs.status === 'blocked')) return 'fail';
   if (observations.some((obs) => obs.status === 'retry')) return 'retry';
   if (observations.some((obs) => obs.status === 'running')) return 'running';
@@ -731,7 +741,7 @@ function buildRunOperations(run: any, stories: any[], observations: any[]): any 
       id: stepId,
       label: stepId.replace(/-/g, ' ').replace(/\b\w/g, (m) => m.toUpperCase()),
       agentId: step.agent_id || null,
-      status: operationPhaseStatus(String(step.status || ''), phaseObservations),
+      status: operationPhaseStatus(String(step.status || ''), phaseObservations, runIsTerminal),
       retryCount: Number(step.retry_count || 0),
       maxRetries: Number(step.max_retries || 0),
       currentStoryId: step.current_story_id || null,
@@ -742,6 +752,7 @@ function buildRunOperations(run: any, stories: any[], observations: any[]): any 
   });
   const knownPhaseIds = new Set(phases.map((phase: any) => phase.id));
   for (const [stepId, phaseObservations] of obsByStep.entries()) {
+    if (stepId === 'run') continue;
     if (!stepId || knownPhaseIds.has(stepId)) continue;
     phases.push({
       id: stepId,

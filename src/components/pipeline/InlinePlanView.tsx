@@ -198,6 +198,19 @@ function formatClock(value: unknown): string {
   return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
 }
 
+function latestTimestamp(value: { updatedAt?: string | null; startedAt?: string | null; observations?: OperationObservation[] }): number {
+  const candidates = [
+    value.updatedAt,
+    value.startedAt,
+    value.observations?.[0]?.updatedAt,
+    value.observations?.[0]?.createdAt,
+  ];
+  return Math.max(...candidates.map((candidate) => {
+    const ts = candidate ? new Date(String(candidate)).getTime() : 0;
+    return Number.isFinite(ts) ? ts : 0;
+  }));
+}
+
 function LiveOperationsBoard({ data }: { data: OperationsData | null }) {
   const phases = data?.phases || [];
   const stories = data?.stories || [];
@@ -220,7 +233,10 @@ function LiveOperationsBoard({ data }: { data: OperationsData | null }) {
   const visibleStories = activeStories.length > 0 ? activeStories : stories.slice(0, 6);
   const failedPhase = phases.find((phase) => ["fail", "failed", "blocked"].includes(normalizeVisibleStatus(phase.status)));
   const terminalFailed = phases.some((phase) => phase.id === "run" && ["fail", "failed", "blocked"].includes(normalizeVisibleStatus(phase.status)));
-  const activePhase = failedPhase || phases.find((phase) => ["running", "retry", "blocked"].includes(normalizeVisibleStatus(phase.status))) || phases[phases.length - 1];
+  const activeRuntimePhase = phases
+    .filter((phase) => ["running", "retry", "blocked"].includes(normalizeVisibleStatus(phase.status)))
+    .sort((a, b) => latestTimestamp(b) - latestTimestamp(a))[0];
+  const activePhase = failedPhase || activeRuntimePhase || phases[phases.length - 1];
   const passCount = phases.filter((phase) => normalizeVisibleStatus(phase.status) === "pass").length;
   const runningCount = terminalFailed ? 0 : phases.filter((phase) => ["running", "retry"].includes(normalizeVisibleStatus(phase.status))).length;
   const failCount = phases.filter((phase) => ["fail", "failed"].includes(normalizeVisibleStatus(phase.status))).length;
