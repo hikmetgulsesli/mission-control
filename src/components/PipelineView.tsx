@@ -77,7 +77,7 @@ interface PipelineRun {
   blockerSummary?: string | null;
   operational?: {
     stack?: { stackPackId?: string; label?: string; runtimeKind?: string };
-    failure?: { present?: boolean; owner?: string; category?: string; recoveryPolicy?: string; retryable?: boolean };
+    failure?: { present?: boolean; owner?: string; action?: string; category?: string; recoveryPolicy?: string; retryable?: boolean; summary?: string };
     stories?: { completed?: number; total?: number; verified?: number; doneAwaitingVerify?: number; failed?: number };
     pipeline?: { currentStepId?: string | null; failedStepId?: string | null };
   } | null;
@@ -184,6 +184,13 @@ const RunCardInline = memo(function RunCardInline({
   const storyRetry = Number(run.currentStoryRetry || 0);
   const storyMaxRetries = Number(run.currentStoryMaxRetries || 0);
   const operationalFailure = run.operational?.failure;
+  const isManualReviewFailure = Boolean(
+    operationalFailure?.present &&
+    operationalFailure.recoveryPolicy === "manual_review" &&
+    operationalFailure.retryable === false
+  );
+  const canResume = (run.status === "failed" || run.status === "cancelled") && !isManualReviewFailure;
+  const failureSummary = operationalFailure?.summary || operationalFailure?.category || "quality failure";
   const hasStoryLine = Boolean(run.currentStoryId || run.nextStoryId || run.blockerSummary || operationalFailure?.present);
 
   // Phase grouping for feature-dev workflow (the main one with PIPELINE_PHASES)
@@ -213,9 +220,13 @@ const RunCardInline = memo(function RunCardInline({
             <button className="af-run-btn af-run-btn--stop" onClick={() => onStop(run.id)} disabled={actionLoading === run.id + ":stop"} title="Stop">
               {actionLoading === run.id + ":stop" ? "..." : "\u23F8"}
             </button>
-          ) : (run.status === "failed" || run.status === "cancelled") ? (
+          ) : canResume ? (
             <button className="af-run-btn af-run-btn--resume" onClick={() => onResume(run.id)} disabled={actionLoading === run.id + ":resume"} title="Resume">
               {actionLoading === run.id + ":resume" ? "..." : "\u25B6"}
+            </button>
+          ) : isManualReviewFailure ? (
+            <button className="af-run-btn af-run-btn--manual" disabled title={failureSummary}>
+              REVIEW
             </button>
           ) : null}
           <button className="af-run-btn af-run-btn--detail" onClick={() => onOpenDetail(run.id)} title="Open run detail">
@@ -254,9 +265,12 @@ const RunCardInline = memo(function RunCardInline({
             </span>
           )}
           {operationalFailure?.present && (
-            <span className="af-pipeline__story-pill af-pipeline__story-pill--blocker" title={operationalFailure.recoveryPolicy || ""}>
-              <b>{operationalFailure.owner || "failure"}</b>
-              <span>{truncate(operationalFailure.category || "quality failure", 110)}</span>
+            <span
+              className={`af-pipeline__story-pill ${isManualReviewFailure ? "af-pipeline__story-pill--manual" : "af-pipeline__story-pill--blocker"}`}
+              title={failureSummary}
+            >
+              <b>{isManualReviewFailure ? "manual review" : operationalFailure.owner || "failure"}</b>
+              <span>{truncate(failureSummary, 110)}</span>
             </span>
           )}
         </div>

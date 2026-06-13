@@ -647,7 +647,8 @@ html, body, #root {
 .rd-supervisor-metric--fail strong { color: var(--neon-red); }
 .rd-supervisor-metric--fixing strong,
 .rd-supervisor-metric--warning strong,
-.rd-supervisor-metric--skipped strong { color: var(--neon-orange); }
+.rd-supervisor-metric--skipped strong,
+.rd-supervisor-metric--manual strong { color: var(--neon-orange); }
 .rd-supervisor-meta {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2481,6 +2482,11 @@ html, body, #root {
   font-size: 10px;
 }
 
+.rd-current-story--manual {
+  color: #ffcc66;
+  text-shadow: 0 0 10px rgba(255, 176, 0, 0.35);
+}
+
 /* Task card active state (if not already added) */
 
 /* ── RunCard Story Progress ──────────────────────────────── */
@@ -3471,6 +3477,16 @@ html, body, #root {
   color: #ffcc66;
 }
 .af-pipeline__story-pill--blocker b {
+  color: #ffb000;
+}
+
+.af-pipeline__story-pill--manual {
+  border-color: rgba(255, 176, 0, 0.42);
+  background: rgba(255, 176, 0, 0.09);
+  color: #ffcc66;
+  box-shadow: 0 0 14px rgba(255, 176, 0, 0.10);
+}
+.af-pipeline__story-pill--manual b {
   color: #ffb000;
 }
 
@@ -7350,6 +7366,16 @@ html, body, #root {
 .af-run-btn--stop:hover { background: rgba(239,68,68,0.15); border-color: #ef4444; }
 .af-run-btn--resume { border-color: rgba(34,197,94,0.4); color: #22c55e; }
 .af-run-btn--resume:hover { background: rgba(34,197,94,0.15); border-color: #22c55e; }
+.af-run-btn--manual {
+  width: auto;
+  min-width: 54px;
+  padding: 0 7px;
+  border-color: rgba(255,176,0,0.42);
+  color: #ffb000;
+  font-size: 8px;
+  font-weight: 700;
+  opacity: 0.75;
+}
 .af-run-btn--delete { border-color: rgba(239,68,68,0.3); color: #888; }
 .af-run-btn--delete:hover { background: rgba(239,68,68,0.15); color: #ef4444; border-color: #ef4444; }
 .af-run-btn--detail {

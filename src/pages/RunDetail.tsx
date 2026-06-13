@@ -206,6 +206,12 @@ export function RunDetail({ runId, onBack, initialTab = "overview" }: { runId: s
   if (error) return <div className="page-loading">Error: {error}</div>;
   if (!data) return null;
 
+  const operationalFailure = data.operationalModel?.failure;
+  const isManualReviewFailure = Boolean(
+    operationalFailure?.present &&
+    operationalFailure.recoveryPolicy === "manual_review" &&
+    operationalFailure.retryable === false
+  );
   const tabs: { id: Tab; label: string; count?: number }[] = [
     { id: "overview", label: "Pipeline" },
     { id: "contract", label: "Run Contract", count: data.supervisor?.checklistItems || undefined },
@@ -249,9 +255,12 @@ export function RunDetail({ runId, onBack, initialTab = "overview" }: { runId: s
             </span>
           )}
           {data.operationalModel?.stack && <span>{data.operationalModel.stack.stackPackId}</span>}
-          {data.operationalModel?.failure?.present && (
-            <span className="rd-current-story">
-              {data.operationalModel.failure.owner}: {data.operationalModel.failure.category}
+          {operationalFailure?.present && (
+            <span
+              className={`rd-current-story ${isManualReviewFailure ? "rd-current-story--manual" : ""}`}
+              title={operationalFailure.summary || operationalFailure.category || ""}
+            >
+              {isManualReviewFailure ? "MANUAL REVIEW" : operationalFailure.owner}: {operationalFailure.category}
             </span>
           )}
           {data.startedAt && <span>{new Date(data.startedAt).toLocaleString("en-US")}</span>}
@@ -345,8 +354,9 @@ function SupervisorFallback({ model }: { model: any }) {
   const stack = model.stack || {};
   const pipeline = model.pipeline || {};
   const stories = model.stories || {};
-  const retryTone = failure.retryable ? "warning" : failure.present ? "blocked" : "passed";
-  const retryValue = failure.retryable ? "RETRYABLE" : failure.present ? "MANUAL" : "CLEAR";
+  const isManualReviewFailure = Boolean(failure.present && failure.recoveryPolicy === "manual_review" && failure.retryable === false);
+  const retryTone = failure.retryable ? "warning" : isManualReviewFailure ? "manual" : failure.present ? "blocked" : "passed";
+  const retryValue = failure.retryable ? "RETRYABLE" : isManualReviewFailure ? "MANUAL REVIEW" : failure.present ? "STOPPED" : "CLEAR";
 
   return (
     <div className="rd-supervisor">
@@ -380,6 +390,8 @@ function StackTab({ model }: { model: any | null }) {
   const failure = model.failure || {};
   const stories = model.stories || {};
   const pipeline = model.pipeline || {};
+  const isManualReviewFailure = Boolean(failure.present && failure.recoveryPolicy === "manual_review" && failure.retryable === false);
+  const recoveryTone = failure.retryable ? "warning" : isManualReviewFailure ? "manual" : failure.present ? "blocked" : "passed";
   return (
     <div className="rd-supervisor">
       <div className="rd-supervisor-grid">
@@ -387,7 +399,7 @@ function StackTab({ model }: { model: any | null }) {
         <Metric label="Runtime" value={String(stack.runtimeKind || "unknown").toUpperCase()} tone="neutral" />
         <Metric label="Smoke" value={String(stack.systemSmokeRunner || "none").toUpperCase()} tone="neutral" />
         <Metric label="Failure Owner" value={String(failure.owner || "none").toUpperCase()} tone={failure.present ? failure.owner : "passed"} />
-        <Metric label="Recovery" value={String(failure.recoveryPolicy || "no_action").toUpperCase()} tone={failure.retryable ? "warning" : failure.present ? "blocked" : "passed"} />
+        <Metric label="Recovery" value={String(failure.recoveryPolicy || "no_action").toUpperCase()} tone={recoveryTone} />
         <Metric label="Stories" value={`${stories.completed || 0}/${stories.total || 0}`} tone={(stories.failed || 0) > 0 ? "blocked" : "passed"} />
       </div>
       <div className="rd-supervisor-meta">
