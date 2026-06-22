@@ -25,11 +25,21 @@ function metric(value: unknown): string {
   return String(value);
 }
 
+function tone(value: unknown): "fail" | "retry" | "pass" | "neutral" {
+  const normalized = compact(value).toLowerCase();
+  if (/failed|fail|error|regression|violation|timeout|blocked/.test(normalized)) return "fail";
+  if (/retry|infra_retry/.test(normalized)) return "retry";
+  if (/done|completed|pass|verified|success/.test(normalized)) return "pass";
+  return "neutral";
+}
+
 export function AgentActivityDrawer({ runId, stepId, label, open, onClose }: AgentActivityDrawerProps) {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const activeClaim = data?.claims?.[0] || null;
+  const stepTone = tone(data?.step?.status || activeClaim?.outcome || data?.received?.failureCategory);
 
   useEffect(() => {
     if (!open || !stepId) return;
@@ -81,7 +91,7 @@ export function AgentActivityDrawer({ runId, stepId, label, open, onClose }: Age
   if (!open || !stepId) return null;
 
   return (
-    <div className="af-agent-activity" role="dialog" aria-modal="false" aria-label="Agent activity">
+    <div className={`af-agent-activity ${expanded ? "af-agent-activity--expanded" : ""}`} role="dialog" aria-modal="false" aria-label="Agent activity">
       <div className="af-agent-activity__panel">
         <div className="af-agent-activity__head">
           <div>
@@ -89,19 +99,28 @@ export function AgentActivityDrawer({ runId, stepId, label, open, onClose }: Age
             <strong>{label || stepId}</strong>
             <em>{data?.step?.agentId || activeClaim?.agentId || "agent not claimed"}</em>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close agent activity">x</button>
+          <div className="af-agent-activity__actions">
+            <button
+              type="button"
+              onClick={() => setExpanded((value) => !value)}
+              aria-label={expanded ? "Shrink agent activity" : "Expand agent activity"}
+            >
+              {expanded ? "[]" : "<>"}
+            </button>
+            <button type="button" onClick={onClose} aria-label="Close agent activity">x</button>
+          </div>
         </div>
 
         {error && <div className="af-agent-activity__error">{error}</div>}
         {loading && !data && <div className="af-agent-activity__empty">Loading activity...</div>}
 
-        <section className="af-agent-activity__section">
+        <section className={`af-agent-activity__section af-agent-activity__section--${stepTone}`}>
           <div className="af-agent-activity__section-head">
             <span>Active Claim</span>
-            <b>{data?.step?.status || activeClaim?.outcome || "unknown"}</b>
+            <b className={`af-agent-activity__badge af-agent-activity__badge--${stepTone}`}>{data?.step?.status || activeClaim?.outcome || "unknown"}</b>
           </div>
           {activeClaim ? (
-            <div className="af-agent-activity__claim">
+            <div className={`af-agent-activity__claim af-agent-activity__claim--${tone(activeClaim.outcome || activeClaim.diagnosticPreview)}`}>
               <span>{activeClaim.storyId || stepId}</span>
               <strong>{activeClaim.outcome || "running"}</strong>
               <em>{formatTime(activeClaim.claimedAt)} - {formatTime(activeClaim.abandonedAt)}</em>
@@ -112,7 +131,7 @@ export function AgentActivityDrawer({ runId, stepId, label, open, onClose }: Age
           )}
         </section>
 
-        <section className="af-agent-activity__section">
+        <section className={`af-agent-activity__section af-agent-activity__section--${tone(data?.received?.failureCategory || data?.received?.feedbackPreview)}`}>
           <div className="af-agent-activity__section-head">
             <span>Agent Received</span>
             <b>{receivedRows.length} signals</b>
@@ -121,7 +140,7 @@ export function AgentActivityDrawer({ runId, stepId, label, open, onClose }: Age
             {receivedRows.length === 0 ? (
               <div className="af-agent-activity__empty">No bootstrap or retry context detected.</div>
             ) : receivedRows.map(([key, value]) => (
-              <div key={key} className="af-agent-activity__metric">
+              <div key={key} className={`af-agent-activity__metric af-agent-activity__metric--${tone(value)}`}>
                 <span>{key}</span>
                 <strong title={String(value)}>{metric(value)}</strong>
               </div>
@@ -141,7 +160,7 @@ export function AgentActivityDrawer({ runId, stepId, label, open, onClose }: Age
             {(data?.trace || []).length === 0 ? (
               <div className="af-agent-activity__empty">No transcript events detected yet.</div>
             ) : data.trace.map((entry: any, index: number) => (
-              <div key={`${entry.kind}-${index}`} className={`af-agent-activity__trace-row af-agent-activity__trace-row--${entry.kind}`}>
+              <div key={`${entry.kind}-${index}`} className={`af-agent-activity__trace-row af-agent-activity__trace-row--${entry.kind} af-agent-activity__trace-row--${tone(`${entry.kind} ${entry.label} ${entry.detail || ""}`)}`}>
                 <span>{formatTime(entry.ts)}</span>
                 <strong>{entry.label}</strong>
                 {entry.detail && <em title={entry.detail}>{entry.detail}</em>}

@@ -5233,6 +5233,16 @@ html, body, #root {
   background: rgba(4, 6, 14, 0.98);
   box-shadow: -16px 0 40px rgba(0, 0, 0, 0.45);
 }
+.af-agent-activity--expanded .af-agent-activity__panel {
+  width: min(1180px, calc(100vw - 28px));
+}
+.af-agent-activity--expanded .af-agent-activity__trace {
+  max-height: 420px;
+}
+.af-agent-activity--expanded .af-agent-activity__pre,
+.af-agent-activity--expanded .af-agent-activity__raw {
+  max-height: 360px;
+}
 .af-agent-activity__head,
 .af-agent-activity__section-head {
   display: flex;
@@ -5261,7 +5271,12 @@ html, body, #root {
   font-size: 10px;
   font-style: normal;
 }
-.af-agent-activity__head button {
+.af-agent-activity__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.af-agent-activity__actions button {
   width: 30px;
   height: 30px;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -5270,12 +5285,32 @@ html, body, #root {
   background: rgba(255, 255, 255, 0.04);
   cursor: pointer;
 }
+.af-agent-activity__actions button:hover,
+.af-agent-activity__actions button:focus-visible {
+  border-color: rgba(0, 255, 255, 0.46);
+  outline: none;
+  background: rgba(0, 255, 255, 0.08);
+}
 .af-agent-activity__section {
   min-width: 0;
   padding: 10px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 4px;
   background: rgba(255, 255, 255, 0.025);
+}
+.af-agent-activity__section--fail {
+  border-color: rgba(255, 0, 64, 0.48);
+  background: linear-gradient(90deg, rgba(255, 0, 64, 0.12), rgba(255, 255, 255, 0.025) 42%);
+  box-shadow: inset 3px 0 0 rgba(255, 0, 64, 0.95);
+}
+.af-agent-activity__section--retry {
+  border-color: rgba(255, 122, 26, 0.42);
+  background: linear-gradient(90deg, rgba(255, 122, 26, 0.1), rgba(255, 255, 255, 0.025) 42%);
+  box-shadow: inset 3px 0 0 rgba(255, 122, 26, 0.9);
+}
+.af-agent-activity__section--pass {
+  border-color: rgba(0, 255, 65, 0.28);
+  box-shadow: inset 3px 0 0 rgba(0, 255, 65, 0.7);
 }
 .af-agent-activity__section-head {
   margin-bottom: 8px;
@@ -5284,6 +5319,26 @@ html, body, #root {
   color: var(--text-dim);
   font-size: 9px;
   text-transform: uppercase;
+}
+.af-agent-activity__badge {
+  padding: 2px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+}
+.af-agent-activity__badge--fail {
+  color: #ff6b8a !important;
+  border-color: rgba(255, 0, 64, 0.56);
+  background: rgba(255, 0, 64, 0.12);
+}
+.af-agent-activity__badge--retry {
+  color: #ffb06b !important;
+  border-color: rgba(255, 122, 26, 0.5);
+  background: rgba(255, 122, 26, 0.1);
+}
+.af-agent-activity__badge--pass {
+  color: var(--neon-green) !important;
+  border-color: rgba(0, 255, 65, 0.36);
+  background: rgba(0, 255, 65, 0.08);
 }
 .af-agent-activity__claim {
   display: grid;
@@ -5295,6 +5350,12 @@ html, body, #root {
 }
 .af-agent-activity__claim strong {
   color: var(--neon-green);
+}
+.af-agent-activity__claim--fail strong {
+  color: #ff6b8a;
+}
+.af-agent-activity__claim--retry strong {
+  color: #ffb06b;
 }
 .af-agent-activity__claim em {
   color: var(--text-dim);
@@ -5317,6 +5378,17 @@ html, body, #root {
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 3px;
   background: rgba(0, 0, 0, 0.18);
+}
+.af-agent-activity__metric--fail {
+  border-color: rgba(255, 0, 64, 0.42);
+  background: rgba(255, 0, 64, 0.1);
+}
+.af-agent-activity__metric--retry {
+  border-color: rgba(255, 122, 26, 0.36);
+  background: rgba(255, 122, 26, 0.08);
+}
+.af-agent-activity__metric--pass {
+  border-color: rgba(0, 255, 65, 0.26);
 }
 .af-agent-activity__metric span {
   display: block;
@@ -5368,8 +5440,19 @@ html, body, #root {
   border-color: rgba(0, 255, 65, 0.2);
 }
 .af-agent-activity__trace-row--guard_fired,
-.af-agent-activity__trace-row--failed {
-  border-color: rgba(255, 0, 64, 0.28);
+.af-agent-activity__trace-row--failed,
+.af-agent-activity__trace-row--fail {
+  border-color: rgba(255, 0, 64, 0.5);
+  background: rgba(255, 0, 64, 0.1);
+  box-shadow: inset 2px 0 0 rgba(255, 0, 64, 0.85);
+}
+.af-agent-activity__trace-row--retry {
+  border-color: rgba(255, 122, 26, 0.38);
+  background: rgba(255, 122, 26, 0.07);
+  box-shadow: inset 2px 0 0 rgba(255, 122, 26, 0.75);
+}
+.af-agent-activity__trace-row--pass {
+  border-color: rgba(0, 255, 65, 0.22);
 }
 .af-agent-activity__pre,
 .af-agent-activity__raw {
