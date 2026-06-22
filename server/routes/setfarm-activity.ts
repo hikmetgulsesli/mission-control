@@ -27,6 +27,7 @@ import {
 } from '../services/auto-deploy.js';
 
 import { getAgentFeed as getAgentFeedService } from '../services/agent-feed.js';
+import { getAgentActivity } from '../services/agent-activity.js';
 import { sql } from '../utils/pg.js';
 
 async function fetchSetfarmOperationalModel(runId: string): Promise<any | null> {
@@ -573,6 +574,17 @@ router.get('/setfarm/runs/:id/operational-model', async (req, res) => {
     res.json(model);
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Operational model fetch failed' });
+  }
+});
+
+// GET /setfarm/runs/:id/steps/:stepId/agent-activity - visible agent runtime evidence for one pipeline step.
+router.get('/setfarm/runs/:id/steps/:stepId/agent-activity', async (req, res) => {
+  noStore(res);
+  try {
+    const data = await getAgentActivity(req.params.id, req.params.stepId);
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Agent activity fetch failed' });
   }
 });
 

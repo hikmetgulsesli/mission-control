@@ -104,6 +104,8 @@ export const api = {
   runContract: (id: string) => fetchApi<any>(`/api/setfarm/runs/${id}/contract`),
   runOperations: (id: string) => fetchApi<any>(`/api/setfarm/runs/${id}/operations`),
   runOperationalModel: (id: string) => fetchApi<any>(`/api/setfarm/runs/${id}/operational-model`),
+  runAgentActivity: (id: string, stepId: string) =>
+    fetchApi<any>(`/api/setfarm/runs/${id}/steps/${encodeURIComponent(stepId)}/agent-activity`),
   // Terminal
   terminalExec: (command: string, args: string[]) =>
     fetchApi<{ output: string; exitCode: number; command: string }>('/api/terminal/exec', {

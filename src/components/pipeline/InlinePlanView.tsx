@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { StoryChecklist } from "../StoryChecklist";
 import { api } from "../../lib/api";
 import { normalizeVisibleText, normalizeVisibleWorkflowStatus } from "../../lib/status";
+import { AgentActivityDrawer } from "./AgentActivityDrawer";
 
 interface StepDuration {
   stepId: string;
@@ -211,7 +212,13 @@ function latestTimestamp(value: { updatedAt?: string | null; startedAt?: string 
   }));
 }
 
-function LiveOperationsBoard({ data }: { data: OperationsData | null }) {
+function LiveOperationsBoard({
+  data,
+  onStepClick,
+}: {
+  data: OperationsData | null;
+  onStepClick?: (stepId: string, label: string) => void;
+}) {
   const phases = data?.phases || [];
   const stories = data?.stories || [];
   const feed = data?.feed || [];
@@ -271,7 +278,12 @@ function LiveOperationsBoard({ data }: { data: OperationsData | null }) {
           const status = normalizeVisibleStatus(phase.status);
           const last = phase.observations?.[0];
           return (
-            <div key={phase.id} className={`af-live-ops__phase af-live-ops__phase--${status}`}>
+            <button
+              key={phase.id}
+              type="button"
+              className={`af-live-ops__phase af-live-ops__phase--button af-live-ops__phase--${status}`}
+              onClick={() => onStepClick?.(String(phase.id), formatContractValue(phase.label || phase.id))}
+            >
               <div className="af-live-ops__phase-index">{String(index + 1).padStart(2, "0")}</div>
               <div className="af-live-ops__phase-top">
                 <span>{formatContractValue(phase.label || phase.id)}</span>
@@ -286,7 +298,7 @@ function LiveOperationsBoard({ data }: { data: OperationsData | null }) {
                 {Number(phase.retryCount || 0) > 0 && <span className="af-live-ops__retry">R{phase.retryCount}/{phase.maxRetries || 0}</span>}
               </div>
               {last && <div className="af-live-ops__phase-last" title={last.detail || last.summary}>{formatContractValue(last.summary || last.label)}</div>}
-            </div>
+            </button>
           );
         })}
       </div>
@@ -355,6 +367,7 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
   const [designData, setDesignData] = useState<any>(null);
   const [contractData, setContractData] = useState<RunContractData | null>(null);
   const [operationsData, setOperationsData] = useState<OperationsData | null>(null);
+  const [activityStep, setActivityStep] = useState<{ stepId: string; label: string } | null>(null);
   const [storyList, setStoryList] = useState<StoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const requestSeq = useRef(0);
@@ -395,6 +408,7 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
     setDesignData(null);
     setContractData(null);
     setOperationsData(null);
+    setActivityStep(null);
     setStoryList([]);
     setLoading(true);
   }, [runId, initialTab]);
@@ -550,7 +564,10 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
         {tab === "contract" && (
           contractData ? (
             <div className="af-contract">
-              <LiveOperationsBoard data={operationsData} />
+              <LiveOperationsBoard
+                data={operationsData}
+                onStepClick={(stepId, stepLabel) => setActivityStep({ stepId, label: stepLabel })}
+              />
 
                 <div className="af-contract__summary">
                   <div className="af-contract__summary-main">
@@ -821,6 +838,13 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
           </div>
         )}
       </div>
+      <AgentActivityDrawer
+        runId={runId}
+        stepId={activityStep?.stepId || null}
+        label={activityStep?.label}
+        open={Boolean(activityStep)}
+        onClose={() => setActivityStep(null)}
+      />
     </div>
   );
 });
