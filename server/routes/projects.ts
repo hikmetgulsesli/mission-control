@@ -13,7 +13,7 @@ const BUNDLED_PROJECTS_FILE = join(import.meta.dirname || __dirname, "../../proj
 const DISABLED_DIR = join(PATHS.setfarmDir, "..", "disabled-services");
 const DELETED_FILE = join(import.meta.dirname || __dirname, "../../deleted-projects.json");
 const LOCAL_RUNNER_DIR = join(PATHS.setfarmDir, "..", "local-project-runners");
-const LOCAL_RUNNER_PORT_START = 5600;
+const LOCAL_RUNNER_PORT_START = 3507;
 const LOCAL_RUNNER_PORT_END = 5999;
 
 function loadDeletedIds(): Set<string> {
@@ -51,11 +51,21 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function isLocalRunnableProject(project: any): boolean {
+function localProjectRunMode(project: any): "vite" | "static" | null {
   const repo = String(project?.repo || project?.repoPath || "");
-  if (!repo || !existsSync(repo) || !existsSync(join(repo, "package.json"))) return false;
+  if (!repo || !existsSync(repo)) return null;
+  const hasPackage = existsSync(join(repo, "package.json"));
+  const hasStaticIndex = existsSync(join(repo, "index.html"));
   const stack = (project?.stack || []).join(" ").toLowerCase();
-  return stack.includes("vite") || stack.includes("react") || existsSync(join(repo, "vite.config.ts")) || existsSync(join(repo, "vite.config.js"));
+  if (hasPackage && (stack.includes("vite") || stack.includes("react") || existsSync(join(repo, "vite.config.ts")) || existsSync(join(repo, "vite.config.js")))) {
+    return "vite";
+  }
+  if (hasStaticIndex) return "static";
+  return null;
+}
+
+function isLocalRunnableProject(project: any): boolean {
+  return localProjectRunMode(project) !== null;
 }
 
 function localRunnerPidFile(project: any): string {
@@ -143,8 +153,9 @@ async function allocateLocalProjectPort(projects: any[], preferred?: number): Pr
 
 async function startLocalProject(project: any, projects: any[]) {
   const repo = String(project.repo || project.repoPath || "");
-  if (!isLocalRunnableProject(project)) {
-    throw new Error("Project has no local runnable Vite/React repo");
+  const runMode = localProjectRunMode(project);
+  if (!runMode) {
+    throw new Error("Project has no local runnable Vite/React/static HTML repo");
   }
   const port = Number(project.ports?.frontend || 0) || await allocateLocalProjectPort(projects);
   if (await checkPort(port)) {
@@ -157,7 +168,10 @@ async function startLocalProject(project: any, projects: any[]) {
 
   mkdirSync(LOCAL_RUNNER_DIR, { recursive: true });
   const logFd = openSync(localRunnerLogFile(project), "a");
-  const child = spawn("npm", ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], {
+  const command = runMode === "vite"
+    ? { bin: "npm", args: ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], label: `npm run dev -- --host 127.0.0.1 --port ${port} --strictPort` }
+    : { bin: "python3", args: ["-m", "http.server", String(port), "--bind", "127.0.0.1", "--directory", repo], label: `python3 -m http.server ${port} --bind 127.0.0.1 --directory ${repo}` };
+  const child = spawn(command.bin, command.args, {
     cwd: repo,
     detached: true,
     stdio: ["ignore", logFd, logFd],
@@ -172,7 +186,8 @@ async function startLocalProject(project: any, projects: any[]) {
   project.localRunner = {
     pid: childPid,
     port,
-    command: `npm run dev -- --host 127.0.0.1 --port ${port} --strictPort`,
+    mode: runMode,
+    command: command.label,
     startedAt: new Date().toISOString(),
     log: localRunnerLogFile(project),
   };

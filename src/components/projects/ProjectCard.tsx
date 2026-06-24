@@ -153,9 +153,19 @@ export const ProjectCard = React.memo(function ProjectCard({
         {p.type !== "mobile" && (p.ports.frontend || p.ports.backend) && (
           <div className="project-card__meta-row">
             <span className="project-card__label">PORT</span>
-            <span className="project-card__value">
-              {p.ports.frontend}{p.ports.backend ? ` / ${p.ports.backend}` : ""}
-            </span>
+            {p.ports.frontend ? (
+              <a
+                className="project-card__link"
+                href={`http://127.0.0.1:${p.ports.frontend}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {p.ports.frontend}{p.ports.backend ? ` / ${p.ports.backend}` : ""}
+              </a>
+            ) : (
+              <span className="project-card__value">{p.ports.backend}</span>
+            )}
           </div>
         )}
         {p.type !== "mobile" && p.domain && (
