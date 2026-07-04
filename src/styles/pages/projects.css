@@ -51,13 +51,21 @@
   align-items: center;
   gap: 8px;
   margin-bottom: 10px;
+  min-width: 0;
 }
-.project-card__emoji { font-size: 20px; }
+.project-card__emoji {
+  font-size: 20px;
+  flex: 0 0 auto;
+}
 .project-card__name {
   font-size: 15px;
   font-weight: 700;
   color: var(--text-primary);
-  flex-shrink: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .project-card__status {
   font-size: 10px;
@@ -65,6 +73,7 @@
   letter-spacing: 0.08em;
   padding: 2px 8px;
   border-radius: 3px;
+  flex: 0 0 auto;
 }
 .project-card__status--active {
   color: var(--neon-green);
@@ -148,6 +157,13 @@
   border-color: var(--neon-cyan);
   color: var(--neon-cyan);
   background: rgba(0, 255, 255, 0.08);
+}
+.projects-sort__count {
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin-left: 8px;
 }
 .project-card__dates {
   display: flex;
@@ -267,10 +283,18 @@
   letter-spacing: 0.1em;
   min-width: 50px;
 }
-.project-card__value { color: var(--text-primary); }
+.project-card__value {
+  color: var(--text-primary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .project-card__link {
   color: var(--neon-cyan);
   text-decoration: none;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .project-card__link:hover { text-decoration: underline; }
 

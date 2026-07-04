@@ -2,6 +2,15 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type { Server } from 'http';
 import { config } from './config.js';
 
+let lastGatewayUnavailableLogAt = 0;
+
+function logGatewayUnavailable(message: string) {
+  const now = Date.now();
+  if (now - lastGatewayUnavailableLogAt < 60_000) return;
+  lastGatewayUnavailableLogAt = now;
+  console.warn(`[WS] Gateway unavailable; live chat disabled: ${message}`);
+}
+
 export function setupWsProxy(server: Server) {
   const wss = new WebSocketServer({ server, path: '/ws' });
 
@@ -20,14 +29,15 @@ export function setupWsProxy(server: Server) {
     let gatewayWs: WebSocket | null = null;
     let authenticated = false;
     let reqId = 0;
+    let gatewaySettled = false;
 
     try {
       gatewayWs = new WebSocket(config.gatewayWs, {
         headers: { Origin: config.wsOrigin || config.publicOrigin || config.internalUrl },
       });
     } catch (err) {
-      console.error('[WS] Failed to connect to gateway:', err);
-      clientWs.close(1011, 'Gateway connection failed');
+      logGatewayUnavailable((err as Error)?.message || String(err));
+      clientWs.close(1013, 'Gateway unavailable');
       return;
     }
 
@@ -63,6 +73,7 @@ export function setupWsProxy(server: Server) {
     }, 20000);
 
     gatewayWs.on('open', () => {
+      gatewaySettled = true;
       console.log('[WS] Connected to gateway');
     });
 
@@ -104,16 +115,24 @@ export function setupWsProxy(server: Server) {
     });
 
     gatewayWs.on('close', (code, reason) => {
-      console.log('[WS] Gateway closed:', code, reason.toString());
+      if (!gatewaySettled) {
+        logGatewayUnavailable(reason.toString() || `closed ${code}`);
+      } else {
+        console.log('[WS] Gateway closed:', code, reason.toString());
+      }
       if (clientWs.readyState === WebSocket.OPEN) {
-        clientWs.close(code, reason.toString());
+        clientWs.close(gatewaySettled ? code : 1013, gatewaySettled ? reason.toString() : 'Gateway unavailable');
       }
     });
 
     gatewayWs.on('error', (err) => {
-      console.error('[WS] Gateway error:', err.message);
+      if (!gatewaySettled) {
+        logGatewayUnavailable(err.message);
+      } else {
+        console.error('[WS] Gateway error:', err.message);
+      }
       if (clientWs.readyState === WebSocket.OPEN) {
-        clientWs.close(1011, 'Gateway error');
+        clientWs.close(gatewaySettled ? 1011 : 1013, gatewaySettled ? 'Gateway error' : 'Gateway unavailable');
       }
     });
 

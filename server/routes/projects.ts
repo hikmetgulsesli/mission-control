@@ -523,21 +523,44 @@ async function enrichWithStatus(projects: any[]) {
   return projects;
 }
 
+function dedupeProjects(projects: any[]): any[] {
+  const byId = new Map<string, any>();
+  for (const project of projects) {
+    const id = String(project?.id || "").trim();
+    if (!id) continue;
+    const existing = byId.get(id);
+    if (!existing) {
+      byId.set(id, project);
+      continue;
+    }
+    const currentRun = Number(project.latestRunNumber || project.runNumber || 0);
+    const existingRun = Number(existing.latestRunNumber || existing.runNumber || 0);
+    if (currentRun > existingRun) {
+      byId.set(id, project);
+      continue;
+    }
+    if (currentRun === existingRun && existing.virtual && !project.virtual) {
+      byId.set(id, project);
+    }
+  }
+  return [...byId.values()];
+}
+
 router.get("/projects", async (req, res) => {
   try {
     const registeredProjects = loadProjects();
-    const includeTerminal = String(req.query.includeTerminal || req.query.includeFailed || req.query.includeCancelled || req.query.includeCanceled || "") === "1";
-    let projects = await enrichWithStatus([
+    const hideTerminal = String(req.query.hideTerminal || "") === "1";
+    let projects = dedupeProjects(await enrichWithStatus([
       ...registeredProjects,
       ...(await synthesizeSetfarmProjects(registeredProjects)),
-    ]);
-    if (!includeTerminal) {
+    ]));
+    if (hideTerminal) {
       projects = projects.filter((project: any) => !isHiddenTerminalProject(project));
     }
     // Prefer the newest Setfarm run first; fall back to date for manual projects.
     projects.sort((a: any, b: any) => {
-      const ar = Number(a.latestRunNumber || 0);
-      const br = Number(b.latestRunNumber || 0);
+      const ar = Number(a.latestRunNumber || a.runNumber || 0);
+      const br = Number(b.latestRunNumber || b.runNumber || 0);
       if (ar || br) {
         if (!ar) return 1;
         if (!br) return -1;

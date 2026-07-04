@@ -1,12 +1,14 @@
 import { execFile as execFileCb } from 'child_process';
 import { promisify } from 'util';
+import { dirname } from 'path';
 import { config } from '../config.js';
 
 const execFileAsync = promisify(execFileCb);
+const nodeBinDir = dirname(process.execPath);
 
 const env = {
   ...process.env,
-  PATH: `${config.cliPath}:/usr/local/bin:/usr/bin:/bin:${process.env.PATH || ''}`,
+  PATH: `${config.cliPath}:${nodeBinDir}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${process.env.PATH || ''}`,
 };
 
 // 2026-04-19 CPU meltdown postmortem:

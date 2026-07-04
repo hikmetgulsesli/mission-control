@@ -63,13 +63,14 @@ app.use(helmet({
 app.get('/api/health', async (_req, res) => {
   const checks: Record<string, { status: string; detail?: string }> = {};
   
-  // 1. Gateway check
+  // 1. Gateway check. Gateway is optional in local Mission Control development;
+  // server deployments can attach it for live chat/agent control.
   try {
     const gatewayUrl = config.gatewayWs.replace(/^ws/, 'http').replace(/\/?$/, '/health');
     const gwRes = await fetch(gatewayUrl, { signal: AbortSignal.timeout(2000) });
     checks.gateway = { status: gwRes.ok ? 'up' : 'down', detail: `${gwRes.status}` };
   } catch (e: any) {
-    checks.gateway = { status: 'down', detail: e?.message || 'unreachable' };
+    checks.gateway = { status: 'optional', detail: e?.message || 'unreachable' };
   }
   
   // 2. Setfarm DB check
@@ -97,8 +98,11 @@ app.get('/api/health', async (_req, res) => {
     checks.memory = { status: pct < 90 ? 'up' : 'warning', detail: `${pct}%` };
   } catch { checks.memory = { status: 'unknown' }; }
   
-  const allUp = Object.values(checks).every(c => c.status !== 'down');
-  res.status(allUp ? 200 : 503).json({ status: allUp ? 'healthy' : 'degraded', checks, timestamp: new Date().toISOString() });
+  const requiredUp = Object.entries(checks)
+    .filter(([name]) => name !== 'gateway')
+    .every(([, c]) => c.status !== 'down');
+  const gatewayUp = checks.gateway?.status === 'up';
+  res.status(requiredUp ? 200 : 503).json({ status: requiredUp && gatewayUp ? 'healthy' : 'degraded', checks, timestamp: new Date().toISOString() });
 });
 
 // Public changelog page (no auth — mount BEFORE authMiddleware)
