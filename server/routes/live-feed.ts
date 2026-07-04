@@ -119,6 +119,7 @@ function normalizeSetfarmAgent(raw: unknown): string {
 
 function setfarmEventStatus(eventName: string, detail: string): string {
   const text = `${eventName} ${detail}`;
+  if (/(\.pass|\.done|^step\.done$|^story\.done$|^run\.completed$)/i.test(eventName)) return 'completed';
   if (/^(story\.retry|step\.failed|run\.failed|step\.timeout)$/i.test(eventName)) return 'error';
   if (/(failed|failure|unavailable|blocked|\bblock\b|exhausted|error|PR_REVIEW_COMMENTS_OPEN|unresolved[\s\S]{0,120}review\s+thread|actionable[\s\S]{0,120}review\s+comments)/i.test(text)) return 'error';
   if (/(running|started|pending|progress|retry)/i.test(text)) return 'running';
