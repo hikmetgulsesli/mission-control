@@ -6,6 +6,41 @@ import { sql } from './pg.js';
 const USE_PG = true; // Phase 7: PG-only
 import { readFile } from "fs/promises";
 const BASE = config.setfarmUrl;
+
+const FEATURE_DEV_STEPS = [
+    { id: 'plan', agent: 'planner' },
+    { id: 'design', agent: 'designer' },
+    { id: 'stories', agent: 'planner' },
+    { id: 'setup-repo', agent: 'setup-repo' },
+    { id: 'setup-build', agent: 'setup-build' },
+    { id: 'implement', agent: 'developer' },
+    { id: 'verify', agent: 'reviewer' },
+    { id: 'security-gate', agent: 'security-gate' },
+    { id: 'qa-test', agent: 'qa-tester' },
+    { id: 'final-test', agent: 'tester' },
+    { id: 'deploy', agent: 'deployer' },
+];
+
+const WORKFLOWS = [
+    { id: 'feature-dev', name: 'Feature Development', steps: FEATURE_DEV_STEPS },
+    { id: 'bug-fix', name: 'Bug Fix', steps: [
+        { id: 'triage', agent: 'planner' },
+        { id: 'investigate', agent: 'developer' },
+        { id: 'fix', agent: 'developer' },
+        { id: 'verify', agent: 'reviewer' },
+    ] },
+    { id: 'daily-standup', name: 'Daily Standup', steps: [
+        { id: 'collect', agent: 'collector' },
+        { id: 'report', agent: 'reporter' },
+    ] },
+    { id: 'security-audit', name: 'Security Audit', steps: [
+        { id: 'scan', agent: 'security-gate' },
+        { id: 'prioritize', agent: 'security-gate' },
+        { id: 'report', agent: 'reporter' },
+    ] },
+    { id: 'ui-refactor', name: 'UI Refactor', steps: FEATURE_DEV_STEPS },
+];
+
 async function setfarmFetch(path: string): Promise<any> {
     const res = await fetch(`${BASE}${path}`, { signal: AbortSignal.timeout(5000) });
     if (!res.ok)
@@ -67,8 +102,7 @@ function summarizeRunBlocker(run: any, steps: any[], stories: any[]): { blockerS
 
 export async function getWorkflows() {
     if (USE_PG) {
-        // Workflows are defined in YAML files, not DB. Return static list.
-        return [{ id: 'feature-dev', name: 'Feature Development' }, { id: 'bug-fix', name: 'Bug Fix' }, { id: 'daily-standup', name: 'Daily Standup' }, { id: 'security-audit', name: 'Security Audit' }, { id: 'ui-refactor', name: 'UI Refactor' }];
+        return WORKFLOWS;
     }
     return setfarmFetch('/api/workflows');
 }
@@ -129,8 +163,17 @@ export async function getRuns() {
                     firstByStatus(runStories, ['pending']);
                 const blocker = summarizeRunBlocker(r, runSteps, runStories);
                 (r as any).steps = runSteps;
+                (r as any).workflow = r.workflow_id;
+                (r as any).runNumber = r.run_number;
+                (r as any).startedAt = r.created_at ? new Date(r.created_at).getTime() : undefined;
+                (r as any).finishedAt = ['completed', 'failed', 'cancelled'].includes(String(r.status || ''))
+                    ? new Date(r.updated_at).getTime()
+                    : undefined;
                 const sp = storyMap[r.id] || { total: 0, completed: 0, done: 0, verified: 0, skipped: 0, running: 0, pending: 0, failed: 0 };
                 (r as any).storyProgress = sp;
+                (r as any).storyCount = sp.total;
+                (r as any).storiesDone = (sp.verified || 0) + (sp.done || 0);
+                (r as any).storiesRemaining = Math.max(0, (sp.total || 0) - ((r as any).storiesDone || 0));
                 (r as any).hasFailures = (sp.failed || 0) > 0;
                 (r as any).currentStoryId = currentStory?.story_id || null;
                 (r as any).currentStoryTitle = currentStory?.title || null;
@@ -264,10 +307,47 @@ export async function getSetfarmActivity(limit = 50) {
     try {
         const content = await readEventsContent();
         const events = parseEventsFile(content);
-        return coalesceActivityEvents(events, limit);
+        const activity = coalesceActivityEvents(events, limit);
+        if (activity.length >= limit) return activity;
+        const rows = await sql`
+            SELECT ro.created_at AS ts, ro.status, ro.summary, ro.detail, ro.step_id, ro.agent_id, ro.run_id, r.workflow_id
+            FROM run_observations ro
+            LEFT JOIN runs r ON r.id = ro.run_id
+            ORDER BY ro.created_at DESC
+            LIMIT ${limit}
+        `.catch(() => []);
+        const observed = rows.map((row: any) => ({
+            ts: row.ts,
+            event: row.status === 'fail' ? 'observation.failed' : row.status === 'pass' ? 'observation.pass' : 'observation.info',
+            runId: row.run_id,
+            workflowId: row.workflow_id,
+            stepId: row.step_id,
+            agentId: row.agent_id,
+            detail: compactText(row.summary || row.detail, 300),
+        }));
+        return [...activity, ...observed].slice(0, limit);
     }
     catch {
-        return [];
+        try {
+            const rows = await sql`
+                SELECT ro.created_at AS ts, ro.status, ro.summary, ro.detail, ro.step_id, ro.agent_id, ro.run_id, r.workflow_id
+                FROM run_observations ro
+                LEFT JOIN runs r ON r.id = ro.run_id
+                ORDER BY ro.created_at DESC
+                LIMIT ${limit}
+            `;
+            return rows.map((row: any) => ({
+                ts: row.ts,
+                event: row.status === 'fail' ? 'observation.failed' : row.status === 'pass' ? 'observation.pass' : 'observation.info',
+                runId: row.run_id,
+                workflowId: row.workflow_id,
+                stepId: row.step_id,
+                agentId: row.agent_id,
+                detail: compactText(row.summary || row.detail, 300),
+            }));
+        } catch {
+            return [];
+        }
     }
 }
 export async function getSetfarmAgentStats() {
@@ -423,9 +503,32 @@ export async function getSetfarmAlerts() {
             .filter((e: any) => ['step.timeout', 'step.failed', 'run.failed'].includes(e.event))
             .slice(-20)
             .reverse();
-        return { counts, recent };
+        if (recent.length > 0) return { counts, recent };
     }
     catch {
+        // Fall through to DB observations.
+    }
+    try {
+        const rows = await sql`
+            SELECT ro.created_at AS ts, ro.summary, ro.detail, ro.step_id, ro.run_id, r.workflow_id
+            FROM run_observations ro
+            LEFT JOIN runs r ON r.id = ro.run_id
+            WHERE ro.status = 'fail'
+            ORDER BY ro.created_at DESC
+            LIMIT 20
+        `;
+        return {
+            counts: { abandoned: 0, timeout: 0, failed: rows.length },
+            recent: rows.map((row: any) => ({
+                ts: row.ts,
+                event: 'observation.failed',
+                runId: row.run_id,
+                workflowId: row.workflow_id,
+                stepId: row.step_id,
+                detail: compactText(row.summary || row.detail, 300),
+            })),
+        };
+    } catch {
         return { counts: { abandoned: 0, timeout: 0, failed: 0 }, recent: [] };
     }
 }

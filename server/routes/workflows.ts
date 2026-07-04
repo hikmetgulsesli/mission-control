@@ -7,9 +7,9 @@ const router = Router();
 router.get('/workflows', async (_req, res) => {
   try {
     const data = await cached('workflows', 30000, getWorkflows);
-    res.json(data);
+    res.json(Array.isArray(data) ? data : []);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.json([]);
   }
 });
 

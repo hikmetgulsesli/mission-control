@@ -134,6 +134,32 @@ function killPortListeners(port: number) {
   }
 }
 
+function portListenerCwds(port: number): string[] {
+  try {
+    const output = execFileSync("lsof", [`-tiTCP:${port}`, "-sTCP:LISTEN"], { encoding: "utf-8", timeout: 5000 });
+    const cwds: string[] = [];
+    for (const raw of output.split(/\s+/).filter(Boolean)) {
+      const pid = Number(raw);
+      if (!Number.isFinite(pid) || pid <= 0) continue;
+      try {
+        const detail = execFileSync("lsof", ["-a", "-p", String(pid), "-d", "cwd", "-Fn"], { encoding: "utf-8", timeout: 5000 });
+        for (const line of detail.split("\n")) {
+          if (line.startsWith("n")) cwds.push(line.slice(1).replace(/\/+$/, ""));
+        }
+      } catch { /* ignore one process */ }
+    }
+    return cwds;
+  } catch {
+    return [];
+  }
+}
+
+function portServesRepo(port: number, repo: string): boolean {
+  const normalizedRepo = repo.replace(/\/+$/, "");
+  const cwds = portListenerCwds(port);
+  return cwds.length > 0 && cwds.some((cwd) => cwd === normalizedRepo);
+}
+
 async function allocateLocalProjectPort(projects: any[], preferred?: number): Promise<number> {
   const used = new Set<number>();
   for (const project of projects) {
@@ -159,11 +185,16 @@ async function startLocalProject(project: any, projects: any[]) {
   }
   const port = Number(project.ports?.frontend || 0) || await allocateLocalProjectPort(projects);
   if (await checkPort(port)) {
+    if (!portServesRepo(port, repo)) {
+      killPortListeners(port);
+      await sleep(500);
+    } else {
     project.ports = { ...(project.ports || {}), frontend: port };
     project.serviceStatus = "active";
     project.localRunner = { ...(project.localRunner || {}), port };
     writeLocalRunRuntimeArtifact(project, port);
     return { port, alreadyRunning: true };
+    }
   }
 
   mkdirSync(LOCAL_RUNNER_DIR, { recursive: true });
@@ -500,6 +531,11 @@ async function enrichWithStatus(projects: any[]) {
           p.status = latestRun.status === "running" || latestRun.status === "pending" ? "building" : latestRun.status;
           p.description = latestRun.task || p.description || "";
           p.repo = latestContext.repo || p.repo || "";
+          p.workflowRunId = latestRun.id;
+          p.latestRunId = latestRun.id;
+          p.latestRunNumber = latestRun.run_number || p.latestRunNumber || p.runNumber || 0;
+          p.latestRunStatus = latestRun.status;
+          p.setfarmRunIds = [...new Set([...(Array.isArray(p.setfarmRunIds) ? p.setfarmRunIds : []), latestRun.id].filter(Boolean))];
           p.stack = latestContext.tech_stack ? [latestContext.tech_stack] : (p.stack?.length ? p.stack : ["setfarm"]);
           p.stories = latestRun.storyProgress || p.stories;
         }
@@ -515,7 +551,9 @@ async function enrichWithStatus(projects: any[]) {
     }
     const port = p.ports?.frontend || p.ports?.backend;
     if (port) {
-      p.serviceStatus = (await checkPort(port)) ? "active" : "inactive";
+      const active = await checkPort(port);
+      const repo = String(p.repo || p.repoPath || "");
+      p.serviceStatus = active && (!repo || portServesRepo(Number(port), repo)) ? "active" : "inactive";
     } else {
       p.serviceStatus = "unknown";
     }
@@ -579,7 +617,7 @@ router.get("/projects", async (req, res) => {
 
 router.get("/projects/next-port", async (_req, res) => {
   try {
-    const projects = loadProjects();
+    const projects = await enrichWithStatus(loadProjects());
     const usedPorts = new Set<number>();
     for (const p of projects) {
       for (const v of Object.values(p.ports || {})) {
@@ -608,7 +646,7 @@ router.get("/projects/next-port", async (_req, res) => {
 
 router.get("/projects/:id", async (req, res) => {
   try {
-    const projects = loadProjects();
+    const projects = await enrichWithStatus(loadProjects());
     const project = findProjectByIdOrRepo(projects, req.params.id);
     if (!project) { res.status(404).json({ error: "Project not found" }); return; }
     res.json(project);
@@ -779,12 +817,13 @@ router.post("/projects/:id/toggle", async (req, res) => {
       res.status(403).json({ error: "Cannot toggle Mission Control" });
       return;
     }
-    const projects = loadProjects();
+    const projects = await enrichWithStatus(loadProjects());
     let project = projects.find((p: any) => p.id === id);
     if (!project) {
       project = await materializeSetfarmProject(projects, id);
     }
     if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+    saveProjects(projects);
 
     const service = project.service;
     if ((!service || !(/^[a-zA-Z0-9_.-]+$/).test(service)) && isLocalRunnableProject(project)) {
@@ -905,7 +944,8 @@ router.post("/projects/stop-all", async (_req, res) => {
 
 router.post("/projects/start-all", async (_req, res) => {
   try {
-    const projects = loadProjects();
+    const projects = await enrichWithStatus(loadProjects());
+    saveProjects(projects);
     const results: { id: string; name: string; started: boolean; error?: string }[] = [];
 
     for (const project of projects) {

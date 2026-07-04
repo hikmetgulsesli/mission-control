@@ -82,6 +82,17 @@ export const ProjectCard = React.memo(function ProjectCard({
       : supervisorStatus === "fixing"
         ? "fixing"
         : "muted";
+  const displayEmoji = isSetfarmRun
+    ? runStatus === "completed"
+      ? "✅"
+      : runStatus === "failed"
+        ? "❌"
+        : runStatus === "cancelled" || runStatus === "canceled"
+          ? "⏹"
+          : runStatus === "building" || runStatus === "running" || runStatus === "pending"
+            ? "🏗️"
+            : p.emoji
+    : p.emoji;
 
   return (
     <div
@@ -89,7 +100,7 @@ export const ProjectCard = React.memo(function ProjectCard({
       onClick={onSelect}
     >
       <div className="project-card__header">
-        <span className="project-card__emoji">{p.emoji}</span>
+        <span className="project-card__emoji">{displayEmoji}</span>
         {(p.latestRunNumber || p.runNumber) ? (
           <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--neon-cyan, #0ff)", background: "rgba(0,255,255,0.12)", border: "1px solid rgba(0,255,255,0.3)", padding: "1px 7px", borderRadius: "3px", marginRight: "8px", fontFamily: "var(--font)", letterSpacing: "0.5px" }}>#{p.latestRunNumber || p.runNumber}</span>
         ) : null}

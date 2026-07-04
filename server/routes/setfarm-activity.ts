@@ -44,6 +44,46 @@ async function fetchSetfarmOperationalModel(runId: string): Promise<any | null> 
   }
 }
 
+function clearedOperationalFailure() {
+  return {
+    present: false,
+    owner: null,
+    action: null,
+    category: null,
+    reason: null,
+    retryable: false,
+    recoveryPolicy: null,
+    postMergeQualityRegression: false,
+    mergedPrQualityFailure: false,
+    sourceStepId: null,
+    sourceStoryId: null,
+    summary: null,
+  };
+}
+
+async function getMissionControlOperationalModel(runId: string, runHint?: any): Promise<any | null> {
+  const model = await fetchSetfarmOperationalModel(runId);
+  if (!model) return null;
+  if (String(model?.run?.status || '').toLowerCase() !== 'completed') return model;
+
+  const run = runHint || (await getRuns()).find((candidate: any) => candidate.id === runId);
+  if (!run) return model;
+  const stories = await getRunStories(runId).catch(() => []);
+  const contract = normalizeRunContract(readRepoContract(run) || buildFallbackContract(run, stories || []), stories || [], run);
+  const progress = contract?.progress || {};
+  const hasContractFailure =
+    Number(progress.fail || 0) > 0 ||
+    Number(progress.pending || 0) > 0 ||
+    (Array.isArray(contract?.blockers) && contract.blockers.length > 0) ||
+    (Array.isArray(contract?.phases) && contract.phases.some((phase: any) => phase?.status === 'fail'));
+  if (hasContractFailure) return model;
+
+  return {
+    ...model,
+    failure: clearedOperationalFailure(),
+  };
+}
+
 /** Detect if a task describes a mobile app */
 function isMobileProject(task: string, repo: string): boolean {
   const mobileKeywords = [
@@ -497,7 +537,7 @@ router.get('/setfarm/pipeline', async (_req, res) => {
       const batchProgress = await getBatchStoryProgress(allDisplayRuns.map((r: any) => String(r.id))).catch(() => ({}));
       const operationalByRunId = new Map<string, any>();
       await Promise.all(allDisplayRuns.map(async (r: any) => {
-        const model = await fetchSetfarmOperationalModel(String(r.id));
+        const model = await getMissionControlOperationalModel(String(r.id), r);
         if (model) operationalByRunId.set(String(r.id), model);
       }));
 
@@ -569,7 +609,7 @@ router.get('/setfarm/runs/:id/stories', async (req, res) => {
 router.get('/setfarm/runs/:id/operational-model', async (req, res) => {
   noStore(res);
   try {
-    const model = await fetchSetfarmOperationalModel(req.params.id);
+    const model = await getMissionControlOperationalModel(req.params.id);
     if (!model) { res.status(404).json({ error: 'Operational model not found' }); return; }
     res.json(model);
   } catch (err: any) {

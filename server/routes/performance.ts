@@ -50,6 +50,22 @@ function loadAgentModels(): Record<string, string> {
   }
 }
 
+function emptyPerformanceData() {
+  const agentModels = loadAgentModels();
+  const agents = Object.fromEntries(Object.entries(agentModels).map(([id, model]) => [
+    id,
+    { id, model, sessionCount: 0, totalTokens: 0, lastActive: null },
+  ]));
+  return {
+    agents,
+    modelCosts: {},
+    modelCostsToday: {},
+    modelTokens: {},
+    totalCostToday: 0,
+    totalCostAllTime: 0,
+  };
+}
+
 router.get('/performance', async (_req, res) => {
   try {
     const data = await cached('performance', 30000, async () => {
@@ -115,6 +131,10 @@ router.get('/performance', async (_req, res) => {
     });
     res.json(data);
   } catch (err: any) {
+    if (String(err?.code || '') === 'ENOENT') {
+      res.json(emptyPerformanceData());
+      return;
+    }
     res.status(500).json({ error: err.message });
   }
 });
