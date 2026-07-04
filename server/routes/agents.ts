@@ -102,8 +102,9 @@ router.get('/agents', async (_req, res) => {
       }),
       cached('profiles', 120000, async () => loadProfiles()),
     ]);
-    const filtered = all
-      .filter((a: any) => REAL_AGENTS.includes(a.id))
+    const byId = new Map((Array.isArray(all) ? all : []).map((agent: any) => [agent.id, agent]));
+    const filtered = fallbackAgents()
+      .map((fallback) => ({ ...fallback, ...(byId.get(fallback.id) || {}) }))
       .map((a: any) => {
         const enriched = mergeProfile(a, profiles);
         const activity = getAgentActivity(a.id);
