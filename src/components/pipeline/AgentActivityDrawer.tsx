@@ -176,9 +176,11 @@ export function AgentActivityDrawer({ runId, stepId, label, open, onClose }: Age
           </div>
           <div className="af-agent-activity__paths">
             <span title={data?.raw?.transcriptPath || ""}>transcript: {data?.raw?.transcriptPath || "-"}</span>
+            <span title={data?.raw?.sessionPath || ""}>session: {data?.raw?.sessionPath || "-"}</span>
             <span title={data?.raw?.claimSummaryPath || ""}>claim summary: {data?.raw?.claimSummaryPath || "-"}</span>
           </div>
           {data?.raw?.transcriptPreview && <pre className="af-agent-activity__raw">{data.raw.transcriptPreview}</pre>}
+          {data?.raw?.sessionPreview && <pre className="af-agent-activity__raw">{data.raw.sessionPreview}</pre>}
         </section>
       </div>
     </div>

@@ -5,6 +5,8 @@ import { sql } from "../utils/pg.js";
 
 const PREVIEW_LIMIT = 1600;
 const RAW_TRANSCRIPT_LIMIT = 6000;
+const RAW_SESSION_LIMIT = 12000;
+const SESSION_TRACE_LIMIT = 120;
 
 export interface AgentTraceEntry {
   ts?: string;
@@ -18,7 +20,9 @@ export interface AgentTraceEntry {
     | "completed"
     | "retried"
     | "failed"
-    | "claim_lifecycle";
+    | "claim_lifecycle"
+    | "tool_call"
+    | "tool_result";
   label: string;
   detail?: string;
 }
@@ -59,7 +63,9 @@ export interface AgentActivityResponse {
     outputPreview: string;
     diagnosticPreview: string;
     transcriptPreview: string;
+    sessionPreview: string;
     transcriptPath: string | null;
+    sessionPath: string | null;
     claimSummaryPath: string | null;
   };
 }
@@ -82,6 +88,10 @@ function parseLineValue(raw: string, key: string): string | null {
 
 function compactDetail(value: string, max = 260): string {
   return value.replace(/\s+/g, " ").trim().slice(0, max);
+}
+
+function compactMultiline(value: unknown, max = 1200): string {
+  return String(value || "").trim().slice(0, max);
 }
 
 function scrubReasoning(value: any): any {
@@ -145,6 +155,167 @@ function toolPath(line: string): string {
 
 function shellCommand(line: string): string {
   return extractJsonArgument(line, "command");
+}
+
+function extractSessionPathFromText(value: unknown): string | null {
+  const text = String(value || "");
+  const direct = text.match(/(?:^|\n)SESSION:\s*([^\n]+)/);
+  if (direct?.[1] && existsSync(direct[1].trim())) return direct[1].trim();
+  const pathMatch = text.match(/\/Users\/[^\s"']+\/\.openclaw\/agents\/[^\s"']+\/sessions\/[^\s"']+\.jsonl/);
+  return pathMatch?.[0] && existsSync(pathMatch[0]) ? pathMatch[0] : null;
+}
+
+function sessionCandidates(agentId: string | null, claimedAt: string | null): Array<{ path: string; mtime: number }> {
+  if (!agentId || !existsSync(PATHS.agentsDir)) return [];
+  const sessionsDir = join(PATHS.agentsDir, agentId, "sessions");
+  if (!existsSync(sessionsDir)) return [];
+  const files: Array<{ path: string; mtime: number }> = [];
+  for (const file of readdirSync(sessionsDir)) {
+    if (!file.endsWith(".jsonl")) continue;
+    const full = join(sessionsDir, file);
+    try {
+      const stat = statSync(full);
+      files.push({ path: full, mtime: stat.mtimeMs });
+    } catch {
+      // Ignore disappearing or unreadable session files.
+    }
+  }
+  const claimedMs = claimedAt ? new Date(claimedAt).getTime() : 0;
+  return files.sort((a, b) => {
+    if (claimedMs) return Math.abs(a.mtime - claimedMs) - Math.abs(b.mtime - claimedMs);
+    return b.mtime - a.mtime;
+  });
+}
+
+function textFromToolResult(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((block: any) => block?.type === "text")
+      .map((block: any) => String(block.text || ""))
+      .join("\n");
+  }
+  if (content && typeof content === "object" && typeof (content as any).text === "string") {
+    return (content as any).text;
+  }
+  return "";
+}
+
+function parseToolArguments(raw: unknown): any {
+  if (!raw) return {};
+  if (typeof raw !== "string") return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+function shortPath(value: unknown): string {
+  const pathValue = String(value || "");
+  if (!pathValue) return "";
+  const worktreeMatch = pathValue.match(/story-worktrees\/([^/]+)\/(.+)$/);
+  if (worktreeMatch) return `${worktreeMatch[1]}/${worktreeMatch[2]}`;
+  return pathValue.split("/").slice(-3).join("/");
+}
+
+function toolTraceFromCall(ts: string | undefined, toolName: string, args: any): AgentTraceEntry {
+  const name = String(toolName || "tool");
+  const lower = name.toLowerCase();
+  const pathValue = args?.path || args?.file_path || args?.filePath || "";
+  if (lower === "write" || lower === "write_file" || lower === "create_file") {
+    return {
+      ts,
+      kind: "edit_applied",
+      label: `write ${shortPath(pathValue) || "file"}`,
+      detail: compactMultiline(args?.content, 2200),
+    };
+  }
+  if (lower === "edit" || lower === "edit_file" || lower === "str_replace_editor") {
+    const edits = Array.isArray(args?.edits) ? args.edits : [];
+    const diff = edits.length
+      ? edits.map((edit: any) => `- ${String(edit.oldText || edit.old_string || "").slice(0, 700)}\n+ ${String(edit.newText || edit.new_string || "").slice(0, 700)}`).join("\n")
+      : JSON.stringify(args);
+    return {
+      ts,
+      kind: "edit_applied",
+      label: `edit ${shortPath(pathValue) || "file"}`,
+      detail: compactMultiline(diff, 2200),
+    };
+  }
+  if (lower === "read" || lower === "read_file" || lower === "view_file") {
+    return {
+      ts,
+      kind: "file_read",
+      label: `read ${shortPath(pathValue) || "file"}`,
+      detail: compactDetail(String(pathValue || JSON.stringify(args)), 500),
+    };
+  }
+  if (lower === "exec" || lower === "bash" || lower === "shell") {
+    const command = String(args?.command || args?.cmd || "");
+    const checkLike = /\b(npm run|node --check|pytest|vitest|tsx --test|build|test|lint)\b/i.test(command);
+    return {
+      ts,
+      kind: checkLike ? "checks_run" : "tool_call",
+      label: checkLike ? "Command/check run" : "Shell command",
+      detail: compactMultiline(command || JSON.stringify(args), 1600),
+    };
+  }
+  if (lower === "update_plan") {
+    const steps = Array.isArray(args?.plan)
+      ? args.plan.map((item: any) => `${item.status || "?"}: ${item.step || ""}`).join("\n")
+      : JSON.stringify(args);
+    return { ts, kind: "tool_call", label: "Plan update", detail: compactMultiline(steps, 1600) };
+  }
+  return { ts, kind: "tool_call", label: name, detail: compactMultiline(JSON.stringify(args), 1000) };
+}
+
+export function normalizeOpenClawSessionTrace(raw: string): AgentTraceEntry[] {
+  const out: AgentTraceEntry[] = [];
+  const toolNames = new Map<string, string>();
+  for (const line of raw.split(/\r?\n/).filter(Boolean)) {
+    let parsed: any;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    const ts = parsed.timestamp || parsed.message?.timestamp;
+    const msg = parsed.message || {};
+    if (parsed.type === "session") {
+      out.push({ ts, kind: "input_received", label: "OpenClaw session", detail: parsed.id || "" });
+      continue;
+    }
+    if (parsed.type === "model_change") {
+      out.push({ ts, kind: "input_received", label: "Model selected", detail: compactDetail(`${parsed.provider || ""} ${parsed.modelId || ""}`) });
+      continue;
+    }
+    if (parsed.type !== "message") continue;
+    if (msg.role === "assistant" && Array.isArray(msg.content)) {
+      const text = msg.content
+        .filter((block: any) => block?.type === "text")
+        .map((block: any) => String(block.text || "").trim())
+        .filter(Boolean)
+        .join("\n");
+      if (text) out.push({ ts, kind: "tool_call", label: "Assistant message", detail: compactMultiline(text, 1000) });
+      for (const block of msg.content) {
+        if (block?.type !== "toolCall") continue;
+        toolNames.set(String(block.id || ""), String(block.name || "tool"));
+        out.push(toolTraceFromCall(ts, block.name, parseToolArguments(block.arguments)));
+      }
+    } else if (msg.role === "toolResult") {
+      const toolName = msg.toolName || toolNames.get(String(msg.toolCallId || "")) || "tool";
+      const resultText = textFromToolResult(msg.content) || msg.details?.aggregated || "";
+      const status = msg.details?.status || (msg.isError ? "error" : "completed");
+      out.push({
+        ts,
+        kind: "tool_result",
+        label: `${toolName} result ${status}`,
+        detail: compactMultiline(resultText || JSON.stringify(msg.details || {}), 1600),
+      });
+    }
+  }
+  return out.slice(-SESSION_TRACE_LIMIT);
 }
 
 export function normalizeTranscriptTrace(raw: string): AgentTraceEntry[] {
@@ -263,6 +434,12 @@ export async function getAgentActivity(runId: string, stepId: string): Promise<A
   const primaryClaim = claims[0] || null;
   const transcriptPath = transcriptCandidates(primaryClaim?.agent_id || step?.agent_id || null, primaryClaim?.claimed_at || null)[0]?.path || null;
   const transcriptRaw = transcriptPath && existsSync(transcriptPath) ? readFileSync(transcriptPath, "utf-8") : "";
+  const sessionPath =
+    extractSessionPathFromText(step?.output) ||
+    extractSessionPathFromText(primaryClaim?.diagnostic) ||
+    sessionCandidates(primaryClaim?.agent_id || step?.agent_id || null, primaryClaim?.claimed_at || null)[0]?.path ||
+    null;
+  const sessionRaw = sessionPath && existsSync(sessionPath) ? readFileSync(sessionPath, "utf-8") : "";
   const claimSummaryPath = inferClaimSummaryPath(transcriptRaw);
   const received = mergeReceived(extractBootstrapContext(transcriptRaw), readClaimSummary(claimSummaryPath));
   const trace = [
@@ -273,6 +450,7 @@ export async function getAgentActivity(runId: string, stepId: string): Promise<A
       detail: `${claim.agent_id || "agent"} ${claim.story_id || stepId}`,
     })),
     ...normalizeTranscriptTrace(transcriptRaw),
+    ...normalizeOpenClawSessionTrace(sessionRaw),
   ].slice(-160);
 
   return {
@@ -301,7 +479,9 @@ export async function getAgentActivity(runId: string, stepId: string): Promise<A
       outputPreview: preview(step?.output),
       diagnosticPreview: preview(primaryClaim?.diagnostic),
       transcriptPreview: sanitizeTranscriptForDisplay(transcriptRaw).slice(0, RAW_TRANSCRIPT_LIMIT),
+      sessionPreview: sanitizeTranscriptForDisplay(sessionRaw).slice(-RAW_SESSION_LIMIT),
       transcriptPath,
+      sessionPath,
       claimSummaryPath,
     },
   };
