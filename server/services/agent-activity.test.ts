@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { extractBootstrapContext, normalizeTranscriptTrace, sanitizeTranscriptForDisplay } from "./agent-activity.js";
+import {
+  extractBootstrapContext,
+  normalizeTranscriptTrace,
+  sanitizeTranscriptForDisplay,
+  sortRuntimeCandidatesForClaim,
+} from "./agent-activity.js";
 
 test("extractBootstrapContext parses retry category, scope, snapshot, and memory signals", () => {
   const raw = [
@@ -53,4 +58,18 @@ test("sanitizeTranscriptForDisplay redacts model reasoning fields", () => {
   assert.match(sanitized, /reasoning redacted/);
   assert.doesNotMatch(sanitized, /hidden reasoning/);
   assert.doesNotMatch(sanitized, /secret/);
+});
+
+test("sortRuntimeCandidatesForClaim prefers sessions updated after the claim", () => {
+  const claimedAt = "2026-07-05T13:01:44.785Z";
+  const claimedMs = new Date(claimedAt).getTime();
+  const candidates = [
+    { path: "old-abandoned.jsonl", mtime: claimedMs - 5_000 },
+    { path: "current-running.jsonl", mtime: claimedMs + 30_000 },
+    { path: "future-other.jsonl", mtime: claimedMs + 120_000 },
+  ];
+
+  const sorted = sortRuntimeCandidatesForClaim(candidates, claimedAt);
+
+  assert.equal(sorted[0].path, "current-running.jsonl");
 });

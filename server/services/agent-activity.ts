@@ -55,6 +55,7 @@ export interface AgentActivityResponse {
     durationMs: number | null;
     diagnosticPreview: string;
     transcriptPath: string | null;
+    sessionPath: string | null;
     claimSummaryPath: string | null;
   }>;
   received: AgentReceivedContext;
@@ -165,6 +166,17 @@ function extractSessionPathFromText(value: unknown): string | null {
   return pathMatch?.[0] && existsSync(pathMatch[0]) ? pathMatch[0] : null;
 }
 
+export function sortRuntimeCandidatesForClaim<T extends { mtime: number }>(files: T[], claimedAt: string | null): T[] {
+  const claimedMs = claimedAt ? new Date(claimedAt).getTime() : 0;
+  if (!claimedMs || !Number.isFinite(claimedMs)) return files.slice().sort((a, b) => b.mtime - a.mtime);
+  return files.slice().sort((a, b) => {
+    const aAfterClaim = a.mtime >= claimedMs;
+    const bAfterClaim = b.mtime >= claimedMs;
+    if (aAfterClaim !== bAfterClaim) return aAfterClaim ? -1 : 1;
+    return Math.abs(a.mtime - claimedMs) - Math.abs(b.mtime - claimedMs);
+  });
+}
+
 function sessionCandidates(agentId: string | null, claimedAt: string | null): Array<{ path: string; mtime: number }> {
   if (!agentId || !existsSync(PATHS.agentsDir)) return [];
   const sessionsDir = join(PATHS.agentsDir, agentId, "sessions");
@@ -180,11 +192,7 @@ function sessionCandidates(agentId: string | null, claimedAt: string | null): Ar
       // Ignore disappearing or unreadable session files.
     }
   }
-  const claimedMs = claimedAt ? new Date(claimedAt).getTime() : 0;
-  return files.sort((a, b) => {
-    if (claimedMs) return Math.abs(a.mtime - claimedMs) - Math.abs(b.mtime - claimedMs);
-    return b.mtime - a.mtime;
-  });
+  return sortRuntimeCandidatesForClaim(files, claimedAt);
 }
 
 function textFromToolResult(content: unknown): string {
@@ -371,11 +379,7 @@ function transcriptCandidates(agentId: string | null, claimedAt: string | null):
       }
     }
   }
-  const claimedMs = claimedAt ? new Date(claimedAt).getTime() : 0;
-  return files.sort((a, b) => {
-    if (claimedMs) return Math.abs(a.mtime - claimedMs) - Math.abs(b.mtime - claimedMs);
-    return b.mtime - a.mtime;
-  });
+  return sortRuntimeCandidatesForClaim(files, claimedAt);
 }
 
 function inferClaimSummaryPath(raw: string): string | null {
@@ -471,6 +475,7 @@ export async function getAgentActivity(runId: string, stepId: string): Promise<A
       durationMs: claim.duration_ms == null ? null : Number(claim.duration_ms),
       diagnosticPreview: preview(claim.diagnostic),
       transcriptPath: claim.id === primaryClaim?.id ? transcriptPath : null,
+      sessionPath: claim.id === primaryClaim?.id ? sessionPath : null,
       claimSummaryPath: claim.id === primaryClaim?.id ? claimSummaryPath : null,
     })),
     received,
