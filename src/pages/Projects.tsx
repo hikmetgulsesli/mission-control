@@ -6,6 +6,10 @@ import { ProjectCard } from "../components/projects/ProjectCard";
 import { ProjectDetailPanel } from "../components/projects/ProjectDetailPanel";
 import { CreateProjectModal } from "../components/projects/CreateProjectModal";
 import { DeleteProjectModal } from "../components/projects/DeleteProjectModal";
+import {
+  PROJECT_OBSERVATION_DISPLAY_TICK_MS,
+  PROJECT_OBSERVATION_POLL_INTERVAL_MS,
+} from "../lib/project-health";
 
 
 function formatDuration(createdAt?: string, completedAt?: string, buildStartedAt?: string, buildCompletedAt?: string): string | null {
@@ -36,11 +40,16 @@ interface Project {
   description: string;
   ports: { frontend?: number; backend?: number };
   domain: string;
+  deployUrl?: string;
   repo: string;
   stack: string[];
   service: string;
   serviceStatus?: string;
+  observedServiceStatus?: string;
+  observedServiceCheckedAt?: string;
+  observedServiceReasonCode?: string;
   createdBy: string;
+  productCompilerProtocol?: string;
   workflowRunId?: string;
   runNumber?: number;
   latestRunNumber?: number;
@@ -67,12 +76,15 @@ const TOOL_LOGOS: Record<string, string> = {
   "n8n": "https://cdn.simpleicons.org/n8n/ea4b71",
 };
 
-const HIDDEN_TERMINAL_STATUSES = new Set(["failed", "error", "cancelled", "canceled"]);
+const FAILED_PROJECT_STATUSES = new Set(["failed", "error", "cancelled"]);
 
-function isHiddenProject(project: Project): boolean {
-  return [project.status, (project as any).latestRunStatus]
-    .map((status) => String(status || "").trim().toLowerCase())
-    .some((status) => HIDDEN_TERMINAL_STATUSES.has(status));
+function isFailedProject(project: Project): boolean {
+  return FAILED_PROJECT_STATUSES.has(String(project.status || "").toLowerCase());
+}
+
+function isCanonicalV3Project(project: Project): boolean {
+  return project.productCompilerProtocol === "v3"
+    && project.createdBy === "setfarm-v3-terminal-projector";
 }
 
 export function Projects() {
@@ -89,10 +101,12 @@ export function Projects() {
   const [createForm, setCreateForm] = useState({ name: "", description: "", emoji: "", category: "own", type: "web" as string });
   const [createLoading, setCreateLoading] = useState(false);
   const [sortBy, setSortBy] = useState<'date' | 'port' | 'name' | 'status' | 'run'>('run');
+  const [statusFilter, setStatusFilter] = useState<'ok' | 'failed' | 'all'>('ok');
   const importRef = useRef<HTMLInputElement>(null);
   const [toggling, setToggling] = useState<string | null>(null);
   const [bulkAction, setBulkAction] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [, setHealthClock] = useState(0);
 
   const fetchProjects = () => api.projects()
     .then((d) => {
@@ -107,8 +121,15 @@ export function Projects() {
 
   useEffect(() => {
     fetchProjects();
-    const interval = setInterval(fetchProjects, 30000);
-    return () => clearInterval(interval);
+    const interval = setInterval(fetchProjects, PROJECT_OBSERVATION_POLL_INTERVAL_MS);
+    const displayClock = setInterval(
+      () => setHealthClock((value) => value + 1),
+      PROJECT_OBSERVATION_DISPLAY_TICK_MS,
+    );
+    return () => {
+      clearInterval(interval);
+      clearInterval(displayClock);
+    };
   }, []);
 
   const handleDelete = async () => {
@@ -203,7 +224,7 @@ export function Projects() {
 
   const handleToggle = async (e: React.MouseEvent, p: Project) => {
     e.stopPropagation();
-    if (p.id === "mission-control" || p.type === "mobile") return;
+    if (p.id === "mission-control" || p.type === "mobile" || isCanonicalV3Project(p)) return;
     const action = p.serviceStatus === "active" ? "stop" : "start";
     setToggling(p.id);
     try {
@@ -226,7 +247,7 @@ export function Projects() {
 
   const handleBulkToggle = async (action: "start" | "stop") => {
     const targets = ownProjects.filter(p =>
-      p.id !== "mission-control" && p.type !== "mobile" && p.service &&
+      p.id !== "mission-control" && p.type !== "mobile" && !isCanonicalV3Project(p) && p.service &&
       (action === "start" ? p.serviceStatus !== "active" : p.serviceStatus === "active")
     );
     if (targets.length === 0) { toast("No service needs this action", "error"); return; }
@@ -254,7 +275,12 @@ export function Projects() {
 
   if (loading) return <div className="page-loading">Loading projects...</div>;
 
-  const ownProjectsRaw = projects.filter((p) => p.category !== "external" && p.id !== "mission-control" && !isHiddenProject(p));
+  const ownProjectsRaw = projects.filter((p) => p.category !== "external" && p.id !== "mission-control");
+  const visibleOwnProjects = ownProjectsRaw.filter((p) => {
+    if (statusFilter === "all") return true;
+    const failed = isFailedProject(p);
+    return statusFilter === "failed" ? failed : !failed;
+  });
   const ownProjects = [...ownProjectsRaw].sort((a, b) => {
     switch (sortBy) {
       case 'date': return (b.createdAt || '').localeCompare(a.createdAt || '');
@@ -262,8 +288,8 @@ export function Projects() {
       case 'name': return a.name.localeCompare(b.name);
       case 'run': {
         // Prefer Setfarm-linked latest runs; legacy local run numbers should not bury current Setfarm output.
-        const aRun = a.latestRunNumber || 0;
-        const bRun = b.latestRunNumber || 0;
+        const aRun = a.latestRunNumber || a.runNumber || 0;
+        const bRun = b.latestRunNumber || b.runNumber || 0;
         if (aRun === 0 && bRun === 0) return (b.createdAt || '').localeCompare(a.createdAt || '');
         if (aRun === 0) return 1;
         if (bRun === 0) return -1;
@@ -276,6 +302,27 @@ export function Projects() {
       default: return 0;
     }
   });
+  const filteredOwnProjects = [...visibleOwnProjects].sort((a, b) => {
+    switch (sortBy) {
+      case 'date': return (b.createdAt || '').localeCompare(a.createdAt || '');
+      case 'port': return (a.ports?.frontend || 9999) - (b.ports?.frontend || 9999);
+      case 'name': return a.name.localeCompare(b.name);
+      case 'run': {
+        const aRun = a.latestRunNumber || a.runNumber || 0;
+        const bRun = b.latestRunNumber || b.runNumber || 0;
+        if (aRun === 0 && bRun === 0) return (b.createdAt || '').localeCompare(a.createdAt || '');
+        if (aRun === 0) return 1;
+        if (bRun === 0) return -1;
+        return bRun - aRun;
+      }
+      case 'status': {
+        const order: Record<string, number> = { building: 0, active: 1, completed: 2 };
+        return (order[a.status || 'active'] ?? 1) - (order[b.status || 'active'] ?? 1);
+      }
+      default: return 0;
+    }
+  });
+  const hiddenFailedCount = ownProjectsRaw.length - visibleOwnProjects.length;
   const extProjects = projects.filter((p) => p.category === "external");
   const sel = projects.find((p) => p.id === selected);
 
@@ -332,17 +379,27 @@ export function Projects() {
 
       {/* Sort controls */}
       <div className="projects-sort">
+        <span className="projects-sort__label">FILTER:</span>
+        {(['ok', 'failed', 'all'] as const).map((s) => (
+          <button key={s} className={`projects-sort__btn ${statusFilter === s ? 'projects-sort__btn--active' : ''}`} onClick={() => setStatusFilter(s)}>
+            {s === 'ok' ? 'OK' : s === 'failed' ? 'FAILED' : 'ALL'}
+          </button>
+        ))}
         <span className="projects-sort__label">SORT:</span>
         {(['run', 'date', 'port', 'name', 'status'] as const).map((s) => (
           <button key={s} className={`projects-sort__btn ${sortBy === s ? 'projects-sort__btn--active' : ''}`} onClick={() => setSortBy(s)}>
             {s === 'run' ? 'RUN' : s === 'date' ? 'DATE' : s === 'port' ? 'PORT' : s === 'name' ? 'NAME' : 'STATUS'}
           </button>
         ))}
+        <span className="projects-sort__count">
+          {filteredOwnProjects.length} / {ownProjectsRaw.length} PROJECTS
+          {statusFilter === "ok" && hiddenFailedCount > 0 ? ` · ${hiddenFailedCount} FAILED HIDDEN` : ""}
+        </span>
       </div>
 
       {/* Own projects - full cards */}
       <div className="projects-grid">
-        {ownProjects.map((p) => (
+        {filteredOwnProjects.map((p) => (
           <ProjectCard
             key={p.id}
             project={p}
@@ -355,7 +412,7 @@ export function Projects() {
           />
         ))}
       </div>
-      {ownProjects.length === 0 && !loadError && (
+      {filteredOwnProjects.length === 0 && !loadError && (
         <div className="page-empty">No projects found.</div>
       )}
 

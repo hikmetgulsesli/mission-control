@@ -85,7 +85,7 @@ export function ActiveRun() {
   return (
     <RunDetail
       runId={activeRun.id}
-      initialTab="contract"
+      initialTab="execution"
       onBack={() => navigate("/setfarm")}
     />
   );

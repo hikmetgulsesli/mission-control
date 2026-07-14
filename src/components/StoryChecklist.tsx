@@ -10,7 +10,7 @@ interface Story {
   retry_count?: number;
 }
 
-export function StoryChecklist({ runId, onRetry }: { runId: string; onRetry?: (storyId: string) => void }) {
+export function StoryChecklist({ runId }: { runId: string }) {
   const [stories, setStories] = useState<Story[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -44,11 +44,6 @@ export function StoryChecklist({ runId, onRetry }: { runId: string; onRetry?: (s
               </span>
               {(story.retry_count || 0) > 0 && (
                 <span className="story-checklist__retry-badge">R{story.retry_count}</span>
-              )}
-              {storyStatus === 'failed' && onRetry && (
-                <button className="btn btn--small btn--danger story-checklist__retry-btn" onClick={() => onRetry(story.id)}>
-                  RETRY
-                </button>
               )}
             </div>
             {story.acceptance_criteria && Array.isArray(story.acceptance_criteria) && story.acceptance_criteria.length > 0 && (

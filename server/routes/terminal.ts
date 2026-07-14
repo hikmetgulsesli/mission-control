@@ -27,7 +27,7 @@ const MAX_CONCURRENT = 3;
 const MAX_OUTPUT = 64 * 1024;
 const TIMEOUT = 30_000;
 
-function validateCommand(command: string, args: string[]): string | null {
+export function validateCommand(command: string, args: string[]): string | null {
   if (!ALLOWED_COMMANDS.has(command)) {
     return `Command "${command}" is not allowed`;
   }
@@ -61,8 +61,15 @@ function validateCommand(command: string, args: string[]): string | null {
   }
 
   if (command === 'setfarm') {
-    const safeSubcmds = new Set(['workflow', 'step', 'medic', 'logs', 'version', 'runs']);
-    if (args[0] && !safeSubcmds.has(args[0])) return `setfarm subcommand "${args[0]}" not allowed`;
+    const readOnlyForm =
+      (args.length === 1 && args[0] === 'version')
+      || (args[0] === 'logs'
+        && args.length <= 2
+        && (args.length === 1 || /^(?:#\d+|[A-Za-z0-9_][A-Za-z0-9_-]*)$/.test(args[1] || '')))
+      || (args.length === 2 && args[0] === 'workflow' && args[1] === 'runs');
+    if (!readOnlyForm) {
+      return 'Only read-only Setfarm forms are allowed: version, logs [run], workflow runs';
+    }
   }
 
   return null;

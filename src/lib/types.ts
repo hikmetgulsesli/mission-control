@@ -185,6 +185,11 @@ export interface ProjectData {
   repo?: string;
   stack?: string[];
   status?: string;
+  serviceStatus?: string;
+  observedServiceStatus?: string;
+  observedServiceCheckedAt?: string;
+  observedServiceReasonCode?: string;
+  productCompilerProtocol?: string;
   supervisor?: unknown;
 }
 

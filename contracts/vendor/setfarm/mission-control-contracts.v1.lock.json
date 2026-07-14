@@ -1,0 +1,37 @@
+{
+  "schema": "mission-control.setfarm-contract-vendor-lock.v1",
+  "producerRepository": "https://github.com/hikmetgulsesli/setfarm.git",
+  "producerCommit": "ca78d039c3f67439cc33f00dfbaa7821507c92a4",
+  "artifacts": [
+    {
+      "producerPath": "contracts/generated/mission-control/run-operational-snapshot.v1.compatibility.json",
+      "vendoredPath": "contracts/vendor/setfarm/run-operational-snapshot.v1.compatibility.json",
+      "sha256": "0a8b58f4dc4fb2426c406219384c47f3772970dbcb5da4485f76412b5bab31db"
+    },
+    {
+      "producerPath": "contracts/generated/mission-control/run-operational-snapshot.v1.schema.json",
+      "vendoredPath": "contracts/vendor/setfarm/run-operational-snapshot.v1.schema.json",
+      "sha256": "be9d2acbd74c58f5297c4abdc168d76be40eb571e1d14fe17aeb3902242eaa43"
+    },
+    {
+      "producerPath": "contracts/generated/mission-control/deployment-observation.v1.compatibility.json",
+      "vendoredPath": "contracts/vendor/setfarm/deployment-observation.v1.compatibility.json",
+      "sha256": "dfd4105d98de9ed3b186fddb3183c1f7390eddc744f52451faaf90970ebb8d83"
+    },
+    {
+      "producerPath": "contracts/generated/mission-control/deployment-observation.v1.schema.json",
+      "vendoredPath": "contracts/vendor/setfarm/deployment-observation.v1.schema.json",
+      "sha256": "834480b3d1dc93e2f5f01fe43be9076c58b018afb5262d05d2be48e09b8aeddc"
+    },
+    {
+      "producerPath": "contracts/generated/mission-control/project-transfer-ack.v1.compatibility.json",
+      "vendoredPath": "contracts/vendor/setfarm/project-transfer-ack.v1.compatibility.json",
+      "sha256": "3f670f1f76fc12cf728f859618203d1142bc30ccf592c2b35f2f9233c07f423a"
+    },
+    {
+      "producerPath": "contracts/generated/mission-control/project-transfer-ack.v1.schema.json",
+      "vendoredPath": "contracts/vendor/setfarm/project-transfer-ack.v1.schema.json",
+      "sha256": "9187602c40e9ea4ae1c3f0c4e5256415a5c0bbce8525fc1a881fa7ba3baf13da"
+    }
+  ]
+}

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { StoryChecklist } from "../StoryChecklist";
 import { api } from "../../lib/api";
 import { normalizeVisibleText, normalizeVisibleWorkflowStatus } from "../../lib/status";
+import { AgentActivityDrawer } from "./AgentActivityDrawer";
 
 interface StepDuration {
   stepId: string;
@@ -211,7 +212,13 @@ function latestTimestamp(value: { updatedAt?: string | null; startedAt?: string 
   }));
 }
 
-function LiveOperationsBoard({ data }: { data: OperationsData | null }) {
+function LiveOperationsBoard({
+  data,
+  onStepClick,
+}: {
+  data: OperationsData | null;
+  onStepClick?: (stepId: string, label: string) => void;
+}) {
   const phases = data?.phases || [];
   const stories = data?.stories || [];
   const feed = data?.feed || [];
@@ -271,7 +278,12 @@ function LiveOperationsBoard({ data }: { data: OperationsData | null }) {
           const status = normalizeVisibleStatus(phase.status);
           const last = phase.observations?.[0];
           return (
-            <div key={phase.id} className={`af-live-ops__phase af-live-ops__phase--${status}`}>
+            <button
+              key={phase.id}
+              type="button"
+              className={`af-live-ops__phase af-live-ops__phase--button af-live-ops__phase--${status}`}
+              onClick={() => onStepClick?.(String(phase.id), formatContractValue(phase.label || phase.id))}
+            >
               <div className="af-live-ops__phase-index">{String(index + 1).padStart(2, "0")}</div>
               <div className="af-live-ops__phase-top">
                 <span>{formatContractValue(phase.label || phase.id)}</span>
@@ -286,7 +298,7 @@ function LiveOperationsBoard({ data }: { data: OperationsData | null }) {
                 {Number(phase.retryCount || 0) > 0 && <span className="af-live-ops__retry">R{phase.retryCount}/{phase.maxRetries || 0}</span>}
               </div>
               {last && <div className="af-live-ops__phase-last" title={last.detail || last.summary}>{formatContractValue(last.summary || last.label)}</div>}
-            </div>
+            </button>
           );
         })}
       </div>
@@ -345,16 +357,16 @@ function LiveOperationsBoard({ data }: { data: OperationsData | null }) {
 
 export interface InlinePlanViewProps {
   runId: string;
-  onRetry?: (storyId: string) => void;
   initialTab?: "overview" | "contract" | "prd" | "design" | "stories" | "raw" | "memory";
 }
 
-export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetry, initialTab = "overview" }: InlinePlanViewProps) {
+export const InlinePlanView = React.memo(function InlinePlanView({ runId, initialTab = "overview" }: InlinePlanViewProps) {
   const [tab, setTab] = useState<"overview" | "contract" | "prd" | "design" | "stories" | "raw" | "memory">(initialTab);
   const [planData, setPlanData] = useState<PlanData | null>(null);
   const [designData, setDesignData] = useState<any>(null);
   const [contractData, setContractData] = useState<RunContractData | null>(null);
   const [operationsData, setOperationsData] = useState<OperationsData | null>(null);
+  const [activityStep, setActivityStep] = useState<{ stepId: string; label: string } | null>(null);
   const [storyList, setStoryList] = useState<StoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const requestSeq = useRef(0);
@@ -395,6 +407,7 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
     setDesignData(null);
     setContractData(null);
     setOperationsData(null);
+    setActivityStep(null);
     setStoryList([]);
     setLoading(true);
   }, [runId, initialTab]);
@@ -403,7 +416,7 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
 
   if (loading) return <div className="af-inline-plan__loading">Loading plan data...</div>;
   if (!planData || (!planData.prd && planStories.length === 0 && !contractData)) {
-    return <StoryChecklist runId={runId} onRetry={onRetry} />;
+    return <StoryChecklist runId={runId} />;
   }
 
   const safePlan: PlanData = { prd: planData?.prd || "", stories: planStories, rawOutput: planData?.rawOutput || "", projectMemory: planData?.projectMemory, stepDurations: planData?.stepDurations, storyStats: planData?.storyStats };
@@ -550,7 +563,10 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
         {tab === "contract" && (
           contractData ? (
             <div className="af-contract">
-              <LiveOperationsBoard data={operationsData} />
+              <LiveOperationsBoard
+                data={operationsData}
+                onStepClick={(stepId, stepLabel) => setActivityStep({ stepId, label: stepLabel })}
+              />
 
                 <div className="af-contract__summary">
                   <div className="af-contract__summary-main">
@@ -708,7 +724,7 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
         )}
 
         {tab === "stories" && (
-          <StoryChecklist runId={runId} onRetry={onRetry} />
+          <StoryChecklist runId={runId} />
         )}
 
         {tab === "raw" && (
@@ -821,6 +837,13 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
           </div>
         )}
       </div>
+      <AgentActivityDrawer
+        runId={runId}
+        stepId={activityStep?.stepId || null}
+        label={activityStep?.label}
+        open={Boolean(activityStep)}
+        onClose={() => setActivityStep(null)}
+      />
     </div>
   );
 });

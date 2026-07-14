@@ -4,7 +4,9 @@ import { GlitchText } from "../components/GlitchText";
 import { StoryList } from "../components/run-detail/StoryList";
 import { StepTimeline } from "../components/run-detail/StepTimeline";
 import { TelemetryChart } from "../components/run-detail/TelemetryChart";
+import { OperationalEvidence } from "../components/run-detail/OperationalEvidence";
 import { InlinePlanView } from "../components/pipeline/InlinePlanView";
+import { useOperationalSnapshot } from "../hooks/useOperationalSnapshot";
 import { normalizeVisibleVisualStatus } from "../lib/status";
 
 interface ChatMessage {
@@ -78,7 +80,6 @@ interface StepDetail {
 interface RunDetailData {
   id: string;
   workflow: string;
-  status: string;
   currentStep?: string;
   task?: string;
   startedAt?: number;
@@ -95,10 +96,9 @@ interface RunDetailData {
   currentStoryId?: string | null;
   currentStoryTitle?: string | null;
   storiesDone?: number;
-  operationalModel?: any | null;
 }
 
-type Tab = "overview" | "contract" | "stack" | "supervisor" | "chat" | "files" | "stories" | "telemetry";
+type Tab = "execution" | "overview" | "contract" | "supervisor" | "chat" | "files" | "stories" | "telemetry";
 
 function asArray<T = any>(value: unknown): T[] {
   return Array.isArray(value) ? value as T[] : [];
@@ -111,7 +111,7 @@ function parseTimestamp(value: unknown): number | undefined {
   return Number.isFinite(timestamp) ? timestamp : undefined;
 }
 
-function normalizeRunDetail(raw: any, operationalModel?: any | null): RunDetailData {
+function normalizeRunDetail(raw: any): RunDetailData {
   const run = raw?.run || raw || {};
   const rawSteps = asArray<any>(raw?.fullSteps || raw?.steps);
   const rawStories = asArray<any>(raw?.stories);
@@ -128,7 +128,6 @@ function normalizeRunDetail(raw: any, operationalModel?: any | null): RunDetailD
   return {
     id: String(raw?.id || run.id || ""),
     workflow: String(raw?.workflow || run.workflow || run.workflow_id || ""),
-    status: String(raw?.status || run.status || "unknown"),
     currentStep: raw?.currentStep || run.current_step || run.currentStep,
     task: String(raw?.task || run.task || ""),
     startedAt: raw?.startedAt || parseTimestamp(run.started_at || run.created_at || raw?.createdAt),
@@ -136,7 +135,7 @@ function normalizeRunDetail(raw: any, operationalModel?: any | null): RunDetailD
     storyCount: Number(raw?.storyCount || run.story_count || rawStories.length) || rawStories.length,
     currentStoryId: raw?.currentStoryId || run.currentStoryId || run.current_story_id || null,
     currentStoryTitle: raw?.currentStoryTitle || run.currentStoryTitle || null,
-    storiesDone: Number(operationalModel?.stories?.completed ?? raw?.storiesDone ?? run.storyProgress?.completed ?? run.story_progress?.completed ?? 0),
+    storiesDone: Number(raw?.storiesDone ?? run.storyProgress?.completed ?? run.story_progress?.completed ?? 0),
     fullSteps: rawSteps.map((step: any) => ({
       id: String(step.stepId || step.step_id || step.id || ""),
       agent: String(step.agent || step.agent_id || step.step_id || ""),
@@ -158,11 +157,10 @@ function normalizeRunDetail(raw: any, operationalModel?: any | null): RunDetailD
     agentChats,
     progressLog: String(raw?.progressLog || raw?.progress_log || ""),
     supervisor: raw?.supervisor || null,
-    operationalModel: operationalModel || null,
   };
 }
 
-export function RunDetail({ runId, onBack, initialTab = "overview" }: { runId: string; onBack: () => void; initialTab?: Tab }) {
+export function RunDetail({ runId, onBack, initialTab = "execution" }: { runId: string; onBack: () => void; initialTab?: Tab }) {
   const [data, setData] = useState<RunDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -171,17 +169,15 @@ export function RunDetail({ runId, onBack, initialTab = "overview" }: { runId: s
   const [lastRefreshed, setLastRefreshed] = useState(Date.now());
   const [refreshing, setRefreshing] = useState(false);
   const [, setTick] = useState(0);
+  const operationalSnapshot = useOperationalSnapshot(runId, 3_000);
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       setRefreshing(true);
       try {
-        const [d, operationalModel] = await Promise.all([
-          api.runDetail(runId),
-          api.runOperationalModel(runId).catch(() => null),
-        ]);
-        if (!cancelled) { setData(normalizeRunDetail(d, operationalModel)); setLastRefreshed(Date.now()); }
+        const d = await api.runDetail(runId);
+        if (!cancelled) { setData(normalizeRunDetail(d)); setLastRefreshed(Date.now()); setError(""); }
       } catch (e: any) {
         if (!cancelled) setError(e.message);
       } finally {
@@ -206,16 +202,16 @@ export function RunDetail({ runId, onBack, initialTab = "overview" }: { runId: s
   if (error) return <div className="page-loading">Error: {error}</div>;
   if (!data) return null;
 
-  const operationalFailure = data.operationalModel?.failure;
-  const isManualReviewFailure = Boolean(
-    operationalFailure?.present &&
-    operationalFailure.recoveryPolicy === "manual_review" &&
-    operationalFailure.retryable === false
-  );
+  const canonicalSnapshot = operationalSnapshot.status === "ok" ? operationalSnapshot.snapshot : null;
+  const canonicalStatus = canonicalSnapshot?.run.status || "unknown";
   const tabs: { id: Tab; label: string; count?: number }[] = [
+    {
+      id: "execution",
+      label: "Execution",
+      count: canonicalSnapshot?.invariants.length || (operationalSnapshot.status === "ok" ? undefined : 1),
+    },
     { id: "overview", label: "Pipeline" },
     { id: "contract", label: "Run Contract", count: data.supervisor?.checklistItems || undefined },
-    { id: "stack", label: "Stack", count: data.operationalModel?.failure?.present ? 1 : undefined },
     { id: "supervisor", label: "Supervisor", count: data.supervisor?.openBlockers || data.supervisor?.visual?.issueCount || undefined },
     { id: "telemetry", label: "Telemetry" },
     { id: "chat", label: "Agent Chat", count: data.agentChats.length },
@@ -229,11 +225,11 @@ export function RunDetail({ runId, onBack, initialTab = "overview" }: { runId: s
         <button className="rd-back" onClick={onBack}>← Back</button>
         <div className="rd-title-row">
           <GlitchText text={data.task?.split("\n")[0].slice(0, 60) || "Run Detail"} tag="h2" />
-          <span className={`rd-status rd-status--${data.status}`}>
-            {data.status === "running" && <span className="rd-status-pulse" />}
-            {data.status}
+          <span className={`rd-status rd-status--${canonicalStatus}`} title="Canonical operational snapshot status">
+            {canonicalStatus === "running" && <span className="rd-status-pulse" />}
+            {canonicalStatus}
           </span>
-          <span className={`rd-refresh-indicator ${refreshing ? "rd-refresh-indicator--active" : ""}`} title="Auto-refreshing every 10s">
+          <span className={`rd-refresh-indicator ${refreshing ? "rd-refresh-indicator--active" : ""}`} title="Auto-refreshing every 3s">
             {(() => { const ago = Math.floor((Date.now() - lastRefreshed) / 1000); return ago < 5 ? "just now" : `${ago}s ago`; })()}
           </span>
         </div>
@@ -242,7 +238,7 @@ export function RunDetail({ runId, onBack, initialTab = "overview" }: { runId: s
           <span>{data.workflow}</span>
           {data.progress && <span>{data.progress}</span>}
           {data.storiesDone !== undefined && data.storyCount ? (
-            <span className="rd-story-progress">
+            <span className="rd-story-progress" title="Legacy planning projection; not operational authority">
               <span className="rd-story-bar">
                 <span className="rd-story-fill" style={{ width: `${(data.storiesDone / data.storyCount) * 100}%` }} />
               </span>
@@ -250,19 +246,11 @@ export function RunDetail({ runId, onBack, initialTab = "overview" }: { runId: s
             </span>
           ) : data.storyCount ? <span>{data.storyCount} stories</span> : null}
           {data.currentStoryId && (
-            <span className="rd-current-story">
+            <span className="rd-current-story" title="Legacy planning context; canonical refs are in Execution">
               {data.currentStoryId}: {(data.currentStoryTitle || "").slice(0, 40)}
             </span>
           )}
-          {data.operationalModel?.stack && <span>{data.operationalModel.stack.stackPackId}</span>}
-          {operationalFailure?.present && (
-            <span
-              className={`rd-current-story ${isManualReviewFailure ? "rd-current-story--manual" : ""}`}
-              title={operationalFailure.summary || operationalFailure.category || ""}
-            >
-              {isManualReviewFailure ? "MANUAL REVIEW" : operationalFailure.owner}: {operationalFailure.category}
-            </span>
-          )}
+          <span title="Operational status source">{canonicalSnapshot ? canonicalSnapshot.schema : "canonical evidence unavailable"}</span>
           {data.startedAt && <span>{new Date(data.startedAt).toLocaleString("en-US")}</span>}
         </div>
       </div>
@@ -281,6 +269,9 @@ export function RunDetail({ runId, onBack, initialTab = "overview" }: { runId: s
       </div>
 
       <div className="rd-content">
+        {tab === "execution" && (
+          <OperationalEvidence state={operationalSnapshot} />
+        )}
         {tab === "overview" && (
           <StepTimeline steps={data.fullSteps} progressLog={data.progressLog} />
         )}
@@ -289,11 +280,8 @@ export function RunDetail({ runId, onBack, initialTab = "overview" }: { runId: s
             <InlinePlanView runId={runId} initialTab="contract" />
           </div>
         )}
-        {tab === "stack" && (
-          <StackTab model={data.operationalModel || null} />
-        )}
         {tab === "supervisor" && (
-          <SupervisorTab supervisor={data.supervisor || null} model={data.operationalModel || null} />
+          <SupervisorTab supervisor={data.supervisor || null} />
         )}
         {tab === "telemetry" && (
           <TelemetryChart runId={runId} />
@@ -312,10 +300,9 @@ export function RunDetail({ runId, onBack, initialTab = "overview" }: { runId: s
   );
 }
 
-function SupervisorTab({ supervisor, model }: { supervisor: SupervisorSummary | null; model: any | null }) {
+function SupervisorTab({ supervisor }: { supervisor: SupervisorSummary | null }) {
   if (!supervisor || !supervisor.available) {
-    if (!model) return <div className="rd-empty">No supervisor data found for this run</div>;
-    return <SupervisorFallback model={model} />;
+    return <div className="rd-empty">No supervisor artifact found. Operational authority remains in the Execution tab.</div>;
   }
   const visual = supervisor.visual || { status: "missing", issueCount: 0, controlsChecked: 0, routesChecked: [], screenshots: [] };
   const visualStatus = normalizeVisibleVisualStatus(visual.status);
@@ -323,6 +310,10 @@ function SupervisorTab({ supervisor, model }: { supervisor: SupervisorSummary | 
 
   return (
     <div className="rd-supervisor">
+      <div className="rd-supervisor-banner">
+        <span>Advisory artifact</span>
+        <strong>Supervisor prose and reports do not authorize operational mutations.</strong>
+      </div>
       <div className="rd-supervisor-grid">
         <Metric label="Status" value={supervisor.status.toUpperCase()} tone={supervisor.status} />
         <Metric label="Blockers" value={String(derivedOpenBlockers)} tone={derivedOpenBlockers > 0 ? "blocked" : "passed"} />
@@ -345,71 +336,6 @@ function SupervisorTab({ supervisor, model }: { supervisor: SupervisorSummary | 
           {supervisor.visualReportText && <pre>{supervisor.visualReportText}</pre>}
         </div>
       )}
-    </div>
-  );
-}
-
-function SupervisorFallback({ model }: { model: any }) {
-  const failure = model.failure || {};
-  const stack = model.stack || {};
-  const pipeline = model.pipeline || {};
-  const stories = model.stories || {};
-  const isManualReviewFailure = Boolean(failure.present && failure.recoveryPolicy === "manual_review" && failure.retryable === false);
-  const retryTone = failure.retryable ? "warning" : isManualReviewFailure ? "manual" : failure.present ? "blocked" : "passed";
-  const retryValue = failure.retryable ? "RETRYABLE" : isManualReviewFailure ? "MANUAL REVIEW" : failure.present ? "STOPPED" : "CLEAR";
-
-  return (
-    <div className="rd-supervisor">
-      <div className="rd-supervisor-banner">
-        <span>Operational supervisor fallback</span>
-        <strong>{failure.summary || failure.category || "No ledger, using Setfarm model"}</strong>
-      </div>
-      <div className="rd-supervisor-grid">
-        <Metric label="Stack" value={String(stack.stackPackId || "unknown").toUpperCase()} />
-        <Metric label="Failure Owner" value={String(failure.owner || "none").toUpperCase()} tone={failure.present ? failure.owner : "passed"} />
-        <Metric label="Recovery" value={String(failure.recoveryPolicy || "no_action").toUpperCase()} tone={retryTone} />
-        <Metric label="Retry Decision" value={retryValue} tone={retryTone} />
-        <Metric label="Source Step" value={String(failure.sourceStepId || pipeline.failedStepId || "-").toUpperCase()} tone={failure.present ? "blocked" : "passed"} />
-        <Metric label="Stories" value={`${stories.completed || 0}/${stories.total || 0}`} tone={(stories.failed || 0) > 0 ? "blocked" : "passed"} />
-      </div>
-      <div className="rd-supervisor-meta">
-        <div><span>Reason</span><code>{failure.reason || "-"}</code></div>
-        <div><span>Source Story</span><code>{failure.sourceStoryId || pipeline.currentStoryId || "-"}</code></div>
-        <div><span>Current Step</span><code>{pipeline.currentStepId || "-"}</code></div>
-        <div><span>Failed Step</span><code>{pipeline.failedStepId || "-"}</code></div>
-        <div><span>Runtime</span><code>{stack.runtimeKind || "-"}</code></div>
-        <div><span>Smoke Runner</span><code>{stack.systemSmokeRunner || "-"}</code></div>
-      </div>
-    </div>
-  );
-}
-
-function StackTab({ model }: { model: any | null }) {
-  if (!model) return <div className="rd-empty">No operational model found for this run</div>;
-  const stack = model.stack || {};
-  const failure = model.failure || {};
-  const stories = model.stories || {};
-  const pipeline = model.pipeline || {};
-  const isManualReviewFailure = Boolean(failure.present && failure.recoveryPolicy === "manual_review" && failure.retryable === false);
-  const recoveryTone = failure.retryable ? "warning" : isManualReviewFailure ? "manual" : failure.present ? "blocked" : "passed";
-  return (
-    <div className="rd-supervisor">
-      <div className="rd-supervisor-grid">
-        <Metric label="Stack" value={String(stack.stackPackId || "unknown").toUpperCase()} tone="neutral" />
-        <Metric label="Runtime" value={String(stack.runtimeKind || "unknown").toUpperCase()} tone="neutral" />
-        <Metric label="Smoke" value={String(stack.systemSmokeRunner || "none").toUpperCase()} tone="neutral" />
-        <Metric label="Failure Owner" value={String(failure.owner || "none").toUpperCase()} tone={failure.present ? failure.owner : "passed"} />
-        <Metric label="Recovery" value={String(failure.recoveryPolicy || "no_action").toUpperCase()} tone={recoveryTone} />
-        <Metric label="Stories" value={`${stories.completed || 0}/${stories.total || 0}`} tone={(stories.failed || 0) > 0 ? "blocked" : "passed"} />
-      </div>
-      <div className="rd-supervisor-meta">
-        <div><span>Label</span><code>{stack.label || "-"}</code></div>
-        <div><span>Current Step</span><code>{pipeline.currentStepId || "-"}</code></div>
-        <div><span>Failed Step</span><code>{pipeline.failedStepId || "-"}</code></div>
-        <div><span>Evidence</span><code>{Array.isArray(stack.evidenceClasses) ? stack.evidenceClasses.join(", ") : "-"}</code></div>
-        <div><span>Reason</span><code>{failure.reason || "-"}</code></div>
-        <div><span>Summary</span><code>{failure.summary || "-"}</code></div>
-      </div>
     </div>
   );
 }

@@ -29,6 +29,10 @@ router.get('/system/docker', async (_req, res) => {
     });
     res.json(data);
   } catch (err: any) {
+    if (String(err?.message || '').includes('ENOENT')) {
+      res.json([]);
+      return;
+    }
     res.status(500).json({ error: err.message });
   }
 });

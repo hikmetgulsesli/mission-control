@@ -65,11 +65,27 @@ function safeName(route) {
 function assertNoFatalConsole(route, messages) {
   const fatal = messages.filter((msg) => {
     const text = msg.text;
-    if (/favicon|ResizeObserver loop limit exceeded/i.test(text)) return false;
+    // Network failures are checked with their exact URL and typed response
+    // below; Chromium's generic console line carries no request identity.
+    if (/favicon|ResizeObserver loop limit exceeded|Failed to load resource/i.test(text)) return false;
     return msg.type === "error" || /uncaught|typeerror|referenceerror|react minified error/i.test(text);
   });
   if (fatal.length > 0) {
     throw new Error(`${route} emitted fatal browser console output:\n${fatal.map((msg) => `- ${msg.type}: ${msg.text}`).join("\n")}`);
+  }
+}
+
+async function isExpectedTypedNotFound(response) {
+  if (response.status() !== 404) return false;
+  const url = new URL(response.url());
+  if (!/^\/api\/setfarm\/runs\/[^/]+\/operational-snapshot$/.test(url.pathname)) return false;
+  try {
+    const body = await response.json();
+    return body?.status === "unavailable"
+      && body?.code === "SETFARM_OPERATIONAL_SNAPSHOT_NOT_FOUND"
+      && body?.reason === "not_found";
+  } catch {
+    return false;
   }
 }
 
@@ -129,6 +145,7 @@ async function main() {
       const page = await browser.newPage({ viewport: { width: 1440, height: 950 }, deviceScaleFactor: 1 });
       const messages = [];
       const failures = [];
+      const responseChecks = [];
       page.on("console", (msg) => messages.push({ type: msg.type(), text: msg.text() }));
       page.on("pageerror", (err) => messages.push({ type: "error", text: err.message }));
       page.on("requestfailed", (request) => {
@@ -139,13 +156,17 @@ async function main() {
       page.on("response", (response) => {
         const status = response.status();
         const url = response.url();
-        if (status >= 500 && !/favicon/i.test(url)) {
-          failures.push({ status, url });
+        if (status >= 400 && !/favicon/i.test(url)) {
+          responseChecks.push((async () => {
+            if (await isExpectedTypedNotFound(response)) return;
+            failures.push({ status, url });
+          })());
         }
       });
       const target = `${baseUrl}${route.startsWith("/") ? route : `/${route}`}`;
       await page.goto(target, { waitUntil: "domcontentloaded", timeout: 15_000 });
       const state = await assertRendered(page, route);
+      await Promise.all(responseChecks);
       assertNoFailedRequests(route, failures);
       assertNoFatalConsole(route, messages);
       const screenshotPath = resolve(screenshotDir, `${safeName(route)}.png`);

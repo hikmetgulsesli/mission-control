@@ -5,6 +5,20 @@ import { cached } from '../utils/cache.js';
 
 const router = Router();
 
+function emptyCostData() {
+  return {
+    totalToday: 0,
+    totalAllTime: 0,
+    projectedMonthly: 0,
+    breakdownAllTime: [],
+    breakdownToday: [],
+    subagentCostAllTime: 0,
+    subagentCostToday: 0,
+    tokenUsage: [],
+    tokenUsageToday: [],
+  };
+}
+
 router.get('/costs', async (_req, res) => {
   try {
     const data = await cached('costs', 60000, async () => {
@@ -24,6 +38,10 @@ router.get('/costs', async (_req, res) => {
     });
     res.json(data);
   } catch (err: any) {
+    if (String(err?.code || '') === 'ENOENT') {
+      res.json(emptyCostData());
+      return;
+    }
     res.status(500).json({ error: err.message });
   }
 });

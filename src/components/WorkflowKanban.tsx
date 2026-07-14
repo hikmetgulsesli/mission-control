@@ -33,11 +33,14 @@ function stepStatusClass(status: string): string {
 
 export function WorkflowKanban({ workflows, runs }: Props) {
   const [selectedStep, setSelectedStep] = useState<any>(null);
+  const safeWorkflows = Array.isArray(workflows) ? workflows : [];
+  const safeRuns = Array.isArray(runs) ? runs : [];
 
   return (
     <div className="af-pipeline">
-      {workflows.map(wf => {
-        const wfRuns = runs.filter(r => r.workflow === wf.id);
+      {safeWorkflows.map(wf => {
+        const steps = Array.isArray(wf.steps) ? wf.steps : [];
+        const wfRuns = safeRuns.filter((r: any) => (r.workflow || r.workflow_id) === wf.id);
         const activeRun = wfRuns.find(r => r.status === 'running');
         const lastRun = wfRuns[0];
         const runSteps = activeRun?.steps || [];
@@ -69,8 +72,8 @@ export function WorkflowKanban({ workflows, runs }: Props) {
             </div>
 
             <div className="af-pipeline__steps">
-              {wf.steps.map((step: any, i: number) => {
-                const runStep = runSteps.find((rs: any) => rs.id === step.id);
+              {steps.map((step: any, i: number) => {
+                const runStep = runSteps.find((rs: any) => (rs.id || rs.step_id || rs.stepId) === step.id);
                 const status = runStep?.status || 'waiting';
                 const isClickable = runStep && (status === 'done' || status === 'failed');
 

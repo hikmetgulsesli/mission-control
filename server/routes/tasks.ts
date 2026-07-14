@@ -9,6 +9,41 @@ import { sql } from "../utils/pg.js";
 const router = Router();
 const UPLOADS_DIR = resolve(import.meta.dirname || __dirname, "..", "..", "uploads");
 const USE_PG = true; // Phase 7: PG-only (SQLite removed)
+let tasksTableReady: Promise<void> | null = null;
+
+function safeImages(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String);
+  if (typeof value !== 'string' || value.length === 0) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+function mapTaskRow(row: any) {
+  return { ...row, images: safeImages(row.images) };
+}
+
+function ensureTasksTable(): Promise<void> {
+  if (!tasksTableReady) {
+    tasksTableReady = sql`
+      CREATE TABLE IF NOT EXISTS tasks (
+        id text PRIMARY KEY,
+        title text NOT NULL DEFAULT '',
+        description text NOT NULL DEFAULT '',
+        assigned_agent text NOT NULL DEFAULT '',
+        priority text NOT NULL DEFAULT 'medium',
+        status text NOT NULL DEFAULT 'todo',
+        images text NOT NULL DEFAULT '[]',
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      )
+    `.then(() => undefined);
+  }
+  return tasksTableReady;
+}
 
 async function proxy(url: string, opts?: RequestInit) {
   const ctrl = new AbortController();
@@ -41,6 +76,7 @@ async function syncTasksWithStories() {
 
   try {
     if (USE_PG) {
+      await ensureTasksTable();
       const runs = await sql`SELECT id, status FROM runs WHERE status IN ('running','pending') ORDER BY created_at DESC LIMIT 1`;
       if (runs.length === 0) return;
       const activeRun = runs[0];
@@ -137,10 +173,11 @@ router.get("/tasks", async (_req, res) => {
   try {
     syncTasksWithStories();
     if (USE_PG) {
+      await ensureTasksTable();
       const rows = await sql`SELECT * FROM tasks ORDER BY
         CASE priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
         created_at DESC`;
-      const tasks = rows.map((r: any) => ({ ...r, images: typeof r.images === 'string' ? JSON.parse(r.images) : (r.images || []) }));
+      const tasks = rows.map(mapTaskRow);
       return res.json(tasks);
     }
     const data = await proxy(`${config.setfarmUrl}/api/tasks`);
@@ -153,15 +190,14 @@ router.get("/tasks", async (_req, res) => {
 router.post("/tasks", async (req, res) => {
   try {
     if (USE_PG) {
+      await ensureTasksTable();
       const { title, description, assigned_agent, priority, status, images } = req.body;
       const id = randomUUID();
       const imagesJson = JSON.stringify(images || []);
       const rows = await sql`INSERT INTO tasks (id, title, description, assigned_agent, priority, status, images, created_at, updated_at)
         VALUES (${id}, ${title || ''}, ${description || ''}, ${assigned_agent || ''}, ${priority || 'medium'}, ${status || 'todo'}, ${imagesJson}, now(), now())
         RETURNING *`;
-      const task = rows[0];
-      task.images = JSON.parse(task.images);
-      return res.status(201).json(task);
+      return res.status(201).json(mapTaskRow(rows[0]));
     }
     const data = await proxy(`${config.setfarmUrl}/api/tasks`, {
       method: "POST",
@@ -177,6 +213,7 @@ router.post("/tasks", async (req, res) => {
 router.put("/tasks/:id", async (req, res) => {
   try {
     if (USE_PG) {
+      await ensureTasksTable();
       const { title, description, assigned_agent, priority, status, images } = req.body;
       const imagesJson = images ? JSON.stringify(images) : undefined;
       const rows = await sql`UPDATE tasks SET
@@ -189,8 +226,7 @@ router.put("/tasks/:id", async (req, res) => {
         updated_at = now()
         WHERE id = ${req.params.id} RETURNING *`;
       if (rows.length === 0) return res.status(404).json({ error: 'Task not found' });
-      rows[0].images = typeof rows[0].images === 'string' ? JSON.parse(rows[0].images) : (rows[0].images || []);
-      return res.json(rows[0]);
+      return res.json(mapTaskRow(rows[0]));
     }
     const data = await proxy(`${config.setfarmUrl}/api/tasks/${req.params.id}`, {
       method: "PUT",
@@ -206,11 +242,11 @@ router.put("/tasks/:id", async (req, res) => {
 router.patch("/tasks/:id/status", async (req, res) => {
   try {
     if (USE_PG) {
+      await ensureTasksTable();
       const { status } = req.body;
       const rows = await sql`UPDATE tasks SET status = ${status}, updated_at = now() WHERE id = ${req.params.id} RETURNING *`;
       if (rows.length === 0) return res.status(404).json({ error: 'Task not found' });
-      rows[0].images = typeof rows[0].images === 'string' ? JSON.parse(rows[0].images) : (rows[0].images || []);
-      return res.json(rows[0]);
+      return res.json(mapTaskRow(rows[0]));
     }
     const data = await proxy(`${config.setfarmUrl}/api/tasks/${req.params.id}/status`, {
       method: "PATCH",
@@ -226,6 +262,7 @@ router.patch("/tasks/:id/status", async (req, res) => {
 router.delete("/tasks/:id", async (req, res) => {
   try {
     if (USE_PG) {
+      await ensureTasksTable();
       await sql`DELETE FROM tasks WHERE id = ${req.params.id}`;
       return res.json({ ok: true });
     }
@@ -252,9 +289,10 @@ router.post("/tasks/:id/images", express.json({ limit: "10mb" }), async (req, re
     writeFileSync(filePath, Buffer.from(base64, "base64"));
 
     if (USE_PG) {
+      await ensureTasksTable();
       const rows = await sql`SELECT images FROM tasks WHERE id = ${req.params.id}`;
       if (rows.length > 0) {
-        const images = typeof rows[0].images === 'string' ? JSON.parse(rows[0].images) : (rows[0].images || []);
+        const images = safeImages(rows[0].images);
         images.push(savedName);
         await sql`UPDATE tasks SET images = ${JSON.stringify(images)}, updated_at = now() WHERE id = ${req.params.id}`;
       }
@@ -287,9 +325,10 @@ router.delete("/tasks/:id/images/:filename", async (req, res) => {
     if (existsSync(filePath)) unlinkSync(filePath);
 
     if (USE_PG) {
+      await ensureTasksTable();
       const rows = await sql`SELECT images FROM tasks WHERE id = ${req.params.id}`;
       if (rows.length > 0) {
-        const images = (typeof rows[0].images === 'string' ? JSON.parse(rows[0].images) : (rows[0].images || [])).filter((i: string) => i !== req.params.filename);
+        const images = safeImages(rows[0].images).filter((i: string) => i !== req.params.filename);
         await sql`UPDATE tasks SET images = ${JSON.stringify(images)}, updated_at = now() WHERE id = ${req.params.id}`;
       }
       return res.json({ ok: true });

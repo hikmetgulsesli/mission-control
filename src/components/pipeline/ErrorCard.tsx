@@ -4,8 +4,6 @@ interface ErrorCardProps {
   suggestion: string;
   severity: "error" | "warning" | "info";
   stepId: string;
-  runId: string;
-  onRetry?: () => void;
 }
 
 const SEVERITY_STYLES: Record<string, { bg: string; border: string; badge: string; badgeBg: string }> = {
@@ -14,7 +12,7 @@ const SEVERITY_STYLES: Record<string, { bg: string; border: string; badge: strin
   info: { bg: 'rgba(0, 255, 255, 0.04)', border: 'rgba(0, 255, 255, 0.2)', badge: '#00ffff', badgeBg: 'rgba(0, 255, 255, 0.1)' },
 };
 
-export function ErrorCard({ category, message, suggestion, severity, stepId, runId, onRetry }: ErrorCardProps) {
+export function ErrorCard({ category, message, suggestion, severity, stepId }: ErrorCardProps) {
   const style = SEVERITY_STYLES[severity] || SEVERITY_STYLES.error;
   const isLong = message.length > 200;
 
@@ -31,6 +29,7 @@ export function ErrorCard({ category, message, suggestion, severity, stepId, run
     >
       {/* Top row: severity badge + category pill */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <span style={{ fontSize: 8, color: 'var(--text-dim)', letterSpacing: 0.7 }}>LEGACY DIAGNOSTIC</span>
         <span
           style={{
             fontSize: 10,
@@ -105,28 +104,6 @@ export function ErrorCard({ category, message, suggestion, severity, stepId, run
           lineHeight: 1.5,
         }}>
           {suggestion}
-        </div>
-      )}
-
-      {/* Retry button */}
-      {onRetry && (
-        <div style={{ marginTop: 10 }}>
-          <button
-            onClick={onRetry}
-            style={{
-              fontSize: 11,
-              padding: '4px 14px',
-              borderRadius: 4,
-              border: `1px solid ${style.badge}`,
-              background: 'transparent',
-              color: style.badge,
-              cursor: 'pointer',
-              fontWeight: 600,
-              letterSpacing: 0.5,
-            }}
-          >
-            RETRY
-          </button>
         </div>
       )}
     </div>

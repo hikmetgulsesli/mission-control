@@ -7,7 +7,12 @@ import { getBatchStoryProgress } from '../utils/setfarm-db.js';
 import { config, PATHS } from '../config.js';
 import { readFileSync as readSync, writeFileSync as writeSync, renameSync } from 'fs';
 import { tmpdir } from 'os';
-import { createProjectProgrammatic, updateProjectById } from './projects.js';
+import {
+  createProjectProgrammatic,
+  readCanonicalV3ProjectRecords,
+  updateProjectById,
+  upsertCanonicalV3ProjectProjection,
+} from './projects.js';
 import { getRuns, getRunStories, getSetfarmActivity, getSetfarmAgentStats, getSetfarmAlerts, getStories } from '../utils/setfarm.js';
 import { ensureAgentFeedTable, insertFeedEntry, getAgentFeed as getAgentFeedFromDb, pruneAgentFeed, clearAgentFeed } from "../utils/setfarm-db.js";
 
@@ -27,7 +32,18 @@ import {
 } from '../services/auto-deploy.js';
 
 import { getAgentFeed as getAgentFeedService } from '../services/agent-feed.js';
+import { getAgentActivity } from '../services/agent-activity.js';
 import { sql } from '../utils/pg.js';
+import { setfarmOperationalSnapshotClient } from '../services/setfarm-operational-snapshot.js';
+import { setfarmProjectTransferAckClient } from '../services/setfarm-project-transfer-ack.js';
+import { isV3RunProtocol } from '../services/v3-project-transfer.js';
+import { coordinateV3ProjectTransfer } from '../services/v3-project-transfer-coordinator.js';
+import {
+  FileV3ProjectTransferSchedulerStateStore,
+  PostgresV3ProjectTransferCandidateSource,
+  runIncrementalV3ProjectTransfers,
+  type V3PendingTransferRun,
+} from '../services/v3-project-transfer-scheduler.js';
 
 async function fetchSetfarmOperationalModel(runId: string): Promise<any | null> {
   const ctrl = new AbortController();
@@ -43,6 +59,46 @@ async function fetchSetfarmOperationalModel(runId: string): Promise<any | null> 
   }
 }
 
+function clearedOperationalFailure() {
+  return {
+    present: false,
+    owner: null,
+    action: null,
+    category: null,
+    reason: null,
+    retryable: false,
+    recoveryPolicy: null,
+    postMergeQualityRegression: false,
+    mergedPrQualityFailure: false,
+    sourceStepId: null,
+    sourceStoryId: null,
+    summary: null,
+  };
+}
+
+async function getMissionControlOperationalModel(runId: string, runHint?: any): Promise<any | null> {
+  const model = await fetchSetfarmOperationalModel(runId);
+  if (!model) return null;
+  if (String(model?.run?.status || '').toLowerCase() !== 'completed') return model;
+
+  const run = runHint || (await getRuns()).find((candidate: any) => candidate.id === runId);
+  if (!run) return model;
+  const stories = await getRunStories(runId).catch(() => []);
+  const contract = normalizeRunContract(readRepoContract(run) || buildFallbackContract(run, stories || []), stories || [], run);
+  const progress = contract?.progress || {};
+  const hasContractFailure =
+    Number(progress.fail || 0) > 0 ||
+    Number(progress.pending || 0) > 0 ||
+    (Array.isArray(contract?.blockers) && contract.blockers.length > 0) ||
+    (Array.isArray(contract?.phases) && contract.phases.some((phase: any) => phase?.status === 'fail'));
+  if (hasContractFailure) return model;
+
+  return {
+    ...model,
+    failure: clearedOperationalFailure(),
+  };
+}
+
 /** Detect if a task describes a mobile app */
 function isMobileProject(task: string, repo: string): boolean {
   const mobileKeywords = [
@@ -55,6 +111,11 @@ function isMobileProject(task: string, repo: string): boolean {
 }
 
 let syncInProgress = false;
+let incrementalV3SyncInFlight: Promise<{ synced: any[]; skipped: string[] }> | null = null;
+const v3TransferCandidateSource = new PostgresV3ProjectTransferCandidateSource();
+const v3TransferSchedulerState = new FileV3ProjectTransferSchedulerStateStore(
+  join(PATHS.setfarmDir, 'mc-v3-project-transfer-scheduler-state.json'),
+);
 const router = Router();
 
 function noStore(res: any): void {
@@ -476,7 +537,10 @@ router.get('/setfarm/pipeline', async (_req, res) => {
       const finishedIds = new Set(allRuns.filter((r: any) => r.status !== 'running' && r.status !== 'pending').map((r: any) => r.id));
       const newlyFinished = [...finishedIds].filter(id => !lastSeenFinishedIds.has(id));
       if (newlyFinished.length > 0 && lastSeenFinishedIds.size > 0) {
-        if (!syncInProgress) { syncInProgress = true; syncProjectsFromRuns().catch(() => {}).finally(() => { syncInProgress = false; }); }
+        if (!syncInProgress) {
+          syncInProgress = true;
+          syncProjectsFromRuns({ excludeV3: true }).catch(() => {}).finally(() => { syncInProgress = false; });
+        }
       }
       lastSeenFinishedIds = finishedIds;
 
@@ -496,7 +560,7 @@ router.get('/setfarm/pipeline', async (_req, res) => {
       const batchProgress = await getBatchStoryProgress(allDisplayRuns.map((r: any) => String(r.id))).catch(() => ({}));
       const operationalByRunId = new Map<string, any>();
       await Promise.all(allDisplayRuns.map(async (r: any) => {
-        const model = await fetchSetfarmOperationalModel(String(r.id));
+        const model = await getMissionControlOperationalModel(String(r.id), r);
         if (model) operationalByRunId.set(String(r.id), model);
       }));
 
@@ -568,11 +632,22 @@ router.get('/setfarm/runs/:id/stories', async (req, res) => {
 router.get('/setfarm/runs/:id/operational-model', async (req, res) => {
   noStore(res);
   try {
-    const model = await fetchSetfarmOperationalModel(req.params.id);
+    const model = await getMissionControlOperationalModel(req.params.id);
     if (!model) { res.status(404).json({ error: 'Operational model not found' }); return; }
     res.json(model);
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Operational model fetch failed' });
+  }
+});
+
+// GET /setfarm/runs/:id/steps/:stepId/agent-activity - visible agent runtime evidence for one pipeline step.
+router.get('/setfarm/runs/:id/steps/:stepId/agent-activity', async (req, res) => {
+  noStore(res);
+  try {
+    const data = await getAgentActivity(req.params.id, req.params.stepId);
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Agent activity fetch failed' });
   }
 });
 
@@ -1275,6 +1350,7 @@ async function createBuildingProject(run: any): Promise<void> {
   // bug-fix and ui-refactor work on EXISTING projects, no new project creation needed
   const allowedWorkflows = ["feature-dev"];
   if (!allowedWorkflows.includes(run.workflow_id)) return;
+  if (isV3RunProtocol(run)) return;
   if (!run.task) return;
   const name = extractProjectName(run.task);
   if (!name || name.length < 2) return;
@@ -1407,12 +1483,77 @@ function autoUpdateChecklist(project: any) {
   }
 }
 
-async function syncProjectsFromRuns(): Promise<{ synced: any[]; skipped: string[] }> {
+async function transferSelectedV3Run(run: Readonly<{
+  id: string;
+  status: string;
+  protocol: "v3";
+  runNumber?: number;
+}>): Promise<Awaited<ReturnType<typeof coordinateV3ProjectTransfer>>> {
+  return coordinateV3ProjectTransfer({
+    run,
+    snapshotReader: setfarmOperationalSnapshotClient,
+    acknowledgementPublisher: setfarmProjectTransferAckClient,
+    persist: upsertCanonicalV3ProjectProjection,
+  });
+}
+
+export async function syncIncrementalV3ProjectTransfers(): Promise<{ synced: any[]; skipped: string[] }> {
+  if (incrementalV3SyncInFlight) return incrementalV3SyncInFlight;
+  const operation = runIncrementalV3ProjectTransfersOnce();
+  incrementalV3SyncInFlight = operation;
+  try {
+    return await operation;
+  } finally {
+    if (incrementalV3SyncInFlight === operation) incrementalV3SyncInFlight = null;
+  }
+}
+
+async function runIncrementalV3ProjectTransfersOnce(): Promise<{ synced: any[]; skipped: string[] }> {
+  const synced: any[] = [];
+  const skipped: string[] = [];
+  await runIncrementalV3ProjectTransfers({
+    source: v3TransferCandidateSource,
+    stateStore: v3TransferSchedulerState,
+    projects: readCanonicalV3ProjectRecords(),
+    pendingPageSize: 8,
+    acknowledgedAuditPageSize: 32,
+    concurrency: 2,
+    processRun: async (run: V3PendingTransferRun) => {
+      const transfer = await transferSelectedV3Run({
+        id: run.id,
+        status: run.status,
+        protocol: "v3",
+        ...(run.runNumber ? { runNumber: run.runNumber } : {}),
+      });
+      if (transfer.status !== "synchronized") {
+        skipped.push(`${run.id}: ${transfer.code}`);
+      } else if (transfer.persistence.status === "created") {
+        synced.push(transfer.persistence.project);
+      }
+    },
+  });
+  return { synced, skipped };
+}
+
+async function syncProjectsFromRuns(options: Readonly<{
+  onlyV3?: boolean;
+  excludeV3?: boolean;
+  runId?: string;
+}> = {}): Promise<{ synced: any[]; skipped: string[] }> {
+  if (options.onlyV3 && !options.runId) return syncIncrementalV3ProjectTransfers();
   const allRuns = (await getRuns()) as any[];
   // Deploy completed runs AND failed/cancelled runs that have a built dist
   // Only feature-dev creates deployable projects
   const allowedDeployWorkflows = new Set(["feature-dev"]);
   const deployable = allRuns.filter((r: any) => {
+    const context = parseRunContext(r);
+    const protocol = String(r.protocol || context.product_compiler_mode || context.protocol || 'legacy');
+    if (options.runId && String(r.id) !== options.runId) return false;
+    if (options.onlyV3 && protocol !== 'v3') return false;
+    if (options.excludeV3 && protocol === 'v3') return false;
+    if (protocol === 'v3') {
+      return (r.status === 'completed' || r.status === 'done') && allowedDeployWorkflows.has(r.workflow_id);
+    }
     if (r.status === 'completed') return allowedDeployWorkflows.has(r.workflow_id);
     if ((r.status === 'failed' || r.status === 'cancelled') && allowedDeployWorkflows.has(r.workflow_id)) {
       try {
@@ -1427,6 +1568,29 @@ async function syncProjectsFromRuns(): Promise<{ synced: any[]; skipped: string[
   const skipped: string[] = [];
 
   for (const run of deployable) {
+    const runContext = parseRunContext(run);
+    const protocol = String(run.protocol || runContext.product_compiler_mode || runContext.protocol || 'legacy');
+    if (protocol === 'v3') {
+      const transfer = await transferSelectedV3Run({
+        id: String(run.id),
+        status: String(run.status),
+        protocol: 'v3',
+        ...(Number.isSafeInteger(Number(run.run_number)) && Number(run.run_number) > 0
+          ? { runNumber: Number(run.run_number) }
+          : {}),
+      });
+      if (transfer.status !== 'synchronized') {
+        skipped.push(`${run.id}: ${transfer.code}`);
+        continue;
+      }
+      if (transfer.persistence.status === 'created') {
+        synced.push(transfer.persistence.project);
+      }
+      // This continue is the v3 side-effect boundary. Every legacy heuristic,
+      // autoDeploy call and DNS mutation below is structurally unreachable.
+      continue;
+    }
+
     if (!run.task) { skipped.push(run.id + ': no task'); continue; }
 
     const name = extractProjectName(run.task);
@@ -1476,6 +1640,7 @@ async function syncProjectsFromRuns(): Promise<{ synced: any[]; skipped: string[
       runNumber: run.run_number,
       task: run.task.split('\n').slice(0, 3).join(' ').slice(0, 200),
       type: mobile ? 'mobile' : 'web',
+      status: protocol === 'v3' ? 'completed' : undefined,
     });
 
     // Skip deleted projects — don't update or sync them
@@ -1499,7 +1664,8 @@ async function syncProjectsFromRuns(): Promise<{ synced: any[]; skipped: string[
       }
     }
 
-    const needsDeploy = !mobile && (result.created || (result.reason === 'exists' && !result.project?.service));
+    const needsDeploy = !mobile
+      && (result.created || (result.reason === 'exists' && !result.project?.service));
     if (needsDeploy && repo) {
       const deploy = autoDeployProject(result.project.id, result.project.name, repo, run.task);
       if (deploy.deployed) {
@@ -1581,7 +1747,9 @@ async function syncProjectsFromRuns(): Promise<{ synced: any[]; skipped: string[
       autoUpdateChecklist(result.project);
       updateProjectById(result.project.id, { checklist: result.project.checklist });
       if (result.project?.status === 'building' || result.project?.status === 'failed') {
-        const st = run.status === 'completed' ? 'active' : 'failed';
+        const st = protocol === 'v3'
+          ? (result.project?.service ? 'active' : 'completed')
+          : (run.status === 'completed' ? 'active' : 'failed');
         updateProjectById(result.project.id, { status: st, emoji: st === 'active' ? '🚀' : '❌' });
       }
       skipped.push(run.id + ': exists' + (needsDeploy ? ' (deploy retried)' : ''));
@@ -1592,9 +1760,38 @@ async function syncProjectsFromRuns(): Promise<{ synced: any[]; skipped: string[
 }
 
 // POST /setfarm/sync-projects - manual trigger
-router.post('/setfarm/sync-projects', async (_req, res) => {
+router.post('/setfarm/sync-projects', async (req, res) => {
   try {
-    const result = await syncProjectsFromRuns();
+    const runId = typeof req.query.runId === 'string' ? req.query.runId.trim() : '';
+    let result: { synced: any[]; skipped: string[] };
+    if (runId) {
+      const selected = await v3TransferCandidateSource.findByRunId(runId);
+      if (!selected) {
+        result = { synced: [], skipped: [`${runId}: no terminal feature-dev v3 run`] };
+      } else {
+        const transfer = await transferSelectedV3Run({
+          id: selected.id,
+          status: selected.status,
+          protocol: 'v3',
+          ...(selected.runNumber ? { runNumber: selected.runNumber } : {}),
+        });
+        result = transfer.status === 'synchronized'
+          ? {
+              synced: transfer.persistence.status === 'created' ? [transfer.persistence.project] : [],
+              skipped: [],
+            }
+          : { synced: [], skipped: [`${runId}: ${transfer.code}`] };
+      }
+    } else {
+      const [legacy, v3] = await Promise.all([
+        syncProjectsFromRuns({ excludeV3: true }),
+        syncIncrementalV3ProjectTransfers(),
+      ]);
+      result = {
+        synced: [...legacy.synced, ...v3.synced],
+        skipped: [...legacy.skipped, ...v3.skipped],
+      };
+    }
     res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Sync failed' });

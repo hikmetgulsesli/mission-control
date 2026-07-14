@@ -11,6 +11,17 @@ const router = Router();
 
 const REAL_AGENTS = REAL_AGENT_IDS as unknown as string[];
 
+async function isLocalPortOnline(port: number): Promise<boolean> {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/`, {
+      signal: AbortSignal.timeout(1000),
+    });
+    return res.status > 0;
+  } catch {
+    return false;
+  }
+}
+
 // Fetch open PRs from GitHub (cached 5 min)
 async function fetchOpenPRs(): Promise<any[]> {
   try {
@@ -42,11 +53,7 @@ async function fetchRecentDeploys(): Promise<any[]> {
     const results = await Promise.allSettled(
       sorted.map(async (p: any) => {
         const port = p.ports?.frontend || p.ports?.main;
-        let online = false;
-        try {
-          await runCli('curl', ['-s', '-o', '/dev/null', '-w', '%{http_code}', '--connect-timeout', '1', 'http://127.0.0.1:' + port + '/']);
-          online = true;
-        } catch { /* CLI call failed */ }
+        const online = await isLocalPortOnline(port);
         const subdomain = p.domain ? p.domain.replace('.setrox.com.tr', '') : '';
         return { id: p.id, name: p.name, port, subdomain, online, emoji: p.emoji || '' };
       })

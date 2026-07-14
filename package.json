@@ -3,21 +3,26 @@
   "version": "2.0.18",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "^22.13.0 || >=23.4.0"
+  },
   "scripts": {
     "dev": "concurrently \"tsx watch server/index.ts\" \"vite\"",
+    "test": "node --import tsx --test server/routes/*.test.ts server/services/*.test.ts tests/*.test.ts",
     "check:version": "node scripts/check-version-contract.mjs",
     "check:prompts": "node scripts/check-prompt-language.mjs",
     "check:paths": "node scripts/check-path-contract.mjs",
-    "build": "npm run check:version && npm run check:prompts && npm run check:paths && vite build && tsc --build tsconfig.server.json --force && (cp -r server/*.json dist-server/ 2>/dev/null || true)",
+    "check:setfarm-contract": "node --import tsx scripts/check-setfarm-contract.mjs",
+    "sync:setfarm-contract": "node scripts/sync-setfarm-contract.mjs",
+    "build": "npm run check:version && npm run check:prompts && npm run check:paths && npm run check:setfarm-contract && vite build && tsc --build tsconfig.server.json --force && (cp -r server/*.json dist-server/ 2>/dev/null || true)",
     "render:smoke": "node scripts/render-smoke.mjs",
     "test:render": "npm run build && npm run render:smoke",
     "start": "node dist-server/index.js",
     "preview": "vite preview"
   },
   "dependencies": {
-    "better-sqlite3": "^12.8.0",
     "date-fns": "^4.1.0",
-    "dompurify": "^3.4.9",
+    "dompurify": "^3.4.12",
     "express": "^5.1.0",
     "express-rate-limit": "^8.5.2",
     "helmet": "^8.1.0",
@@ -31,7 +36,6 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^5.0.0",
     "@types/node": "^22.15.0",
     "@types/react": "^19.1.0",
