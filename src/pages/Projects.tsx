@@ -6,6 +6,10 @@ import { ProjectCard } from "../components/projects/ProjectCard";
 import { ProjectDetailPanel } from "../components/projects/ProjectDetailPanel";
 import { CreateProjectModal } from "../components/projects/CreateProjectModal";
 import { DeleteProjectModal } from "../components/projects/DeleteProjectModal";
+import {
+  PROJECT_OBSERVATION_DISPLAY_TICK_MS,
+  PROJECT_OBSERVATION_POLL_INTERVAL_MS,
+} from "../lib/project-health";
 
 
 function formatDuration(createdAt?: string, completedAt?: string, buildStartedAt?: string, buildCompletedAt?: string): string | null {
@@ -36,11 +40,16 @@ interface Project {
   description: string;
   ports: { frontend?: number; backend?: number };
   domain: string;
+  deployUrl?: string;
   repo: string;
   stack: string[];
   service: string;
   serviceStatus?: string;
+  observedServiceStatus?: string;
+  observedServiceCheckedAt?: string;
+  observedServiceReasonCode?: string;
   createdBy: string;
+  productCompilerProtocol?: string;
   workflowRunId?: string;
   runNumber?: number;
   latestRunNumber?: number;
@@ -73,6 +82,11 @@ function isFailedProject(project: Project): boolean {
   return FAILED_PROJECT_STATUSES.has(String(project.status || "").toLowerCase());
 }
 
+function isCanonicalV3Project(project: Project): boolean {
+  return project.productCompilerProtocol === "v3"
+    && project.createdBy === "setfarm-v3-terminal-projector";
+}
+
 export function Projects() {
   const { toast } = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
@@ -92,6 +106,7 @@ export function Projects() {
   const [toggling, setToggling] = useState<string | null>(null);
   const [bulkAction, setBulkAction] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [, setHealthClock] = useState(0);
 
   const fetchProjects = () => api.projects()
     .then((d) => {
@@ -106,8 +121,15 @@ export function Projects() {
 
   useEffect(() => {
     fetchProjects();
-    const interval = setInterval(fetchProjects, 30000);
-    return () => clearInterval(interval);
+    const interval = setInterval(fetchProjects, PROJECT_OBSERVATION_POLL_INTERVAL_MS);
+    const displayClock = setInterval(
+      () => setHealthClock((value) => value + 1),
+      PROJECT_OBSERVATION_DISPLAY_TICK_MS,
+    );
+    return () => {
+      clearInterval(interval);
+      clearInterval(displayClock);
+    };
   }, []);
 
   const handleDelete = async () => {
@@ -202,7 +224,7 @@ export function Projects() {
 
   const handleToggle = async (e: React.MouseEvent, p: Project) => {
     e.stopPropagation();
-    if (p.id === "mission-control" || p.type === "mobile") return;
+    if (p.id === "mission-control" || p.type === "mobile" || isCanonicalV3Project(p)) return;
     const action = p.serviceStatus === "active" ? "stop" : "start";
     setToggling(p.id);
     try {
@@ -225,7 +247,7 @@ export function Projects() {
 
   const handleBulkToggle = async (action: "start" | "stop") => {
     const targets = ownProjects.filter(p =>
-      p.id !== "mission-control" && p.type !== "mobile" && p.service &&
+      p.id !== "mission-control" && p.type !== "mobile" && !isCanonicalV3Project(p) && p.service &&
       (action === "start" ? p.serviceStatus !== "active" : p.serviceStatus === "active")
     );
     if (targets.length === 0) { toast("No service needs this action", "error"); return; }

@@ -2,13 +2,90 @@ import { Router } from 'express';
 import { getRuns, getEvents } from '../utils/setfarm.js';
 import { cached, invalidateCache, clearAllCache } from '../utils/cache.js';
 import { runCli } from '../utils/cli.js';
-import { config } from '../config.js';
 import { sql } from '../utils/pg.js';
-import { getStuckRuns, unstickRun, getRunDetail, diagnoseStuckStep, tryAutoFix, skipStory, deleteRun } from '../utils/setfarm-db.js';
+import { getStuckRuns, getRunDetail, diagnoseStuckStep } from '../utils/setfarm-db.js';
 import { getSupervisorSummaryByRunId } from '../utils/supervisor.js';
+import { setfarmOperationalSnapshotClient } from '../services/setfarm-operational-snapshot.js';
+import {
+  authorizeOperationalAction,
+  type OperationalAuthorityFailure,
+} from '../services/run-operational-authority.js';
 
 const router = Router();
-const USE_PG = true; // Phase 7: PG-only
+
+function sendOperationalAuthorityFailure(res: any, failure: OperationalAuthorityFailure): void {
+  res.status(failure.statusCode).json({
+    error: failure.code,
+    code: failure.code,
+    ...(failure.reason === undefined ? {} : { reason: failure.reason }),
+  });
+}
+
+function sendRecoveryOwnerRequired(res: any): void {
+  res.status(405).json({
+    error: 'SETFARM_RECOVERY_OWNER_REQUIRED',
+    code: 'SETFARM_RECOVERY_OWNER_REQUIRED',
+  });
+}
+
+export function operationalActionCliArgs(
+  action: "stop" | "resume",
+  runId: string,
+  expectedSnapshotHash: string,
+): string[] {
+  if (!runId.trim()) throw new Error("OPERATIONAL_ACTION_RUN_ID_REQUIRED");
+  if (!/^[a-f0-9]{64}$/.test(expectedSnapshotHash)) {
+    throw new Error("OPERATIONAL_ACTION_SNAPSHOT_HASH_INVALID");
+  }
+  return [
+    "workflow",
+    action,
+    runId,
+    "--expected-snapshot-hash",
+    expectedSnapshotHash,
+    ...(action === "stop" ? ["--force"] : []),
+  ];
+}
+
+const REFRESH_REQUIRED_ACTION_CODES = new Set([
+  "RUN_OPERATIONAL_ACTION_RUN_NOT_FOUND",
+  "RUN_OPERATIONAL_ACTION_TARGET_AMBIGUOUS",
+  "RUN_OPERATIONAL_ACTION_STALE_SNAPSHOT",
+  "RUN_OPERATIONAL_ACTION_PROJECTION_INCOMPLETE",
+  "RUN_OPERATIONAL_ACTION_INVARIANT_BLOCKED",
+  "RUN_OPERATIONAL_ACTION_DENIED",
+  "RUN_OPERATIONAL_ACTION_CONFLICT",
+]);
+
+export function operationalActionCliFailure(error: unknown): {
+  statusCode: 409;
+  code: string;
+  reason: string;
+} | null {
+  const candidate = error as { message?: unknown; stderr?: unknown; stdout?: unknown };
+  const diagnostic = [candidate?.stderr, candidate?.stdout, candidate?.message, error]
+    .filter((value) => typeof value === "string")
+    .join("\n");
+  const code = diagnostic.match(/\bRUN_OPERATIONAL_ACTION_[A-Z_]+\b/)?.[0];
+  if (!code || !REFRESH_REQUIRED_ACTION_CODES.has(code)) return null;
+  return {
+    statusCode: 409,
+    code,
+    reason: "Canonical run state changed or no longer authorizes this action. Refresh operational evidence before retrying.",
+  };
+}
+
+function sendOperationalActionCliFailure(res: any, error: unknown): boolean {
+  const failure = operationalActionCliFailure(error);
+  if (!failure) return false;
+  res.status(failure.statusCode).json({
+    error: failure.code,
+    code: failure.code,
+    reason: failure.reason,
+    refreshRequired: true,
+  });
+  return true;
+}
 
 // Wave 4 fix #15 (plan: reactive-frolicking-cupcake): structured errors with
 // classification and log context instead of a bare 500. Previously a PG outage
@@ -89,73 +166,8 @@ router.post('/runs', async (req, res) => {
 
 // POST /runs/:id/retry — Retry a failed step/story
 router.post('/runs/:id/retry', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { step_id, message } = req.body;
-
-    const args = ['workflow', 'retry', id];
-    if (step_id) args.push('--step', step_id);
-    if (message) args.push('--message', message);
-
-    try {
-      const out = await runCli('setfarm', args);
-      console.log(`[RETRY] CLI success: run=${id} step=${step_id || 'all'}`);
-      res.json({ success: true, source: 'cli', output: out });
-    } catch (cliErr: any) {
-      console.warn(`[RETRY] CLI failed: run=${id} err=${cliErr.message}, falling back`);
-
-      // PG path: reset failed step/story status directly
-      if (USE_PG) {
-        try {
-          // P1-08: Add max_retries guard to prevent infinite retries
-          if (step_id) {
-            const stepCheck = await sql`SELECT retry_count, max_retries FROM steps WHERE run_id = ${id} AND step_id = ${step_id} AND status = 'failed'`;
-            if (stepCheck.length > 0 && stepCheck[0].retry_count >= stepCheck[0].max_retries + 2) {
-              res.status(400).json({ error: `Step ${step_id} has exceeded max retries (${stepCheck[0].retry_count}/${stepCheck[0].max_retries})` });
-              return;
-            }
-            await sql`UPDATE steps SET status = 'waiting', retry_count = retry_count + 1, updated_at = now() WHERE run_id = ${id} AND step_id = ${step_id} AND status = 'failed'`;
-            // Only reset stories for this specific step's loop (not ALL stories)
-            const loopStep = await sql`SELECT id, type FROM steps WHERE run_id = ${id} AND step_id = ${step_id}`;
-            if (loopStep.length > 0 && loopStep[0].type === 'loop') {
-              await sql`UPDATE stories SET status = 'pending', retry_count = retry_count + 1, updated_at = now() WHERE run_id = ${id} AND status = 'failed'`;
-            }
-          } else {
-            // No step_id: require explicit step_id for safety
-            res.status(400).json({ error: 'step_id required for PG retry — use CLI for full run retry' });
-            return;
-          }
-          await sql`UPDATE runs SET status = 'running', updated_at = now() WHERE id = ${id}`;
-          console.log(`[RETRY] PG fallback success: run=${id}`);
-          res.json({ success: true, source: 'pg', output: 'Reset failed steps/stories via PG' });
-          return;
-        } catch (pgErr: any) {
-          console.warn(`[RETRY] PG fallback failed: ${pgErr.message}`);
-        }
-      }
-
-      // HTTP API fallback
-      try {
-        const body: any = { step_id };
-        if (message) body.message = message;
-        const apiRes = await fetch(`${config.setfarmUrl}/api/runs/${id}/retry`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-          signal: AbortSignal.timeout(10000),
-        });
-        if (!apiRes.ok) throw new Error(`Setfarm API ${apiRes.status}`);
-        const data = await apiRes.json();
-        console.log(`[RETRY] API fallback success: run=${id}`);
-        res.json({ success: true, source: 'api', output: data });
-      } catch (apiErr: any) {
-        console.error(`[RETRY] All fallbacks failed: run=${id} cli=${cliErr.message} api=${apiErr.message}`);
-        res.status(500).json({ error: `Retry failed (CLI: ${cliErr.message}, API: ${apiErr.message})` });
-      }
-    }
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+  void req;
+  sendRecoveryOwnerRequired(res);
 });
 
 router.get('/runs/stuck', async (_req, res) => {
@@ -190,12 +202,8 @@ router.get('/runs/:id/supervisor', async (req, res) => {
 });
 
 router.post('/runs/:id/unstick', async (req, res) => {
-  try {
-    const result = await unstickRun(req.params.id, req.body?.stepId);
-    res.json(result);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+  void req;
+  sendRecoveryOwnerRequired(res);
 });
 
 
@@ -209,25 +217,13 @@ router.get('/runs/:id/diagnose', async (req, res) => {
 });
 
 router.post('/runs/:id/autofix', async (req, res) => {
-  try {
-    const { cause, storyId } = req.body;
-    if (!cause) { res.status(400).json({ error: 'cause required' }); return; }
-    const result = await tryAutoFix(req.params.id, cause, storyId);
-    res.json(result);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+  void req;
+  sendRecoveryOwnerRequired(res);
 });
 
 router.post('/runs/:id/skip-story', async (req, res) => {
-  try {
-    const { storyId, reason } = req.body;
-    if (!storyId) { res.status(400).json({ error: 'storyId required' }); return; }
-    const result = await skipStory(req.params.id, storyId, reason || 'Manual skip');
-    res.json(result);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+  void req;
+  sendRecoveryOwnerRequired(res);
 });
 
 
@@ -235,9 +231,20 @@ router.post('/runs/:id/skip-story', async (req, res) => {
 router.post('/runs/:id/stop', async (req, res) => {
   try {
     const { id } = req.params;
-    const out = await runCli('setfarm', ['workflow', 'stop', id]);
-    res.json({ success: true, output: out });
+    const authority = await authorizeOperationalAction({
+      action: 'stop',
+      runId: id,
+      expectedSnapshotHash: req.body?.expectedSnapshotHash,
+      snapshotReader: setfarmOperationalSnapshotClient,
+    });
+    if (authority.status !== 'authorized') {
+      sendOperationalAuthorityFailure(res, authority);
+      return;
+    }
+    const out = await runCli('setfarm', operationalActionCliArgs('stop', id, authority.snapshotHash));
+    res.json({ success: true, snapshotHash: authority.snapshotHash, output: out });
   } catch (err: any) {
+    if (sendOperationalActionCliFailure(res, err)) return;
     res.status(500).json({ error: err.message });
   }
 });
@@ -248,9 +255,20 @@ router.post('/runs/:id/stop', async (req, res) => {
 router.post('/runs/:id/resume', async (req, res) => {
   try {
     const { id } = req.params;
-    const out = await runCli('setfarm', ['workflow', 'resume', id]);
-    res.json({ success: true, output: out });
+    const authority = await authorizeOperationalAction({
+      action: 'resume',
+      runId: id,
+      expectedSnapshotHash: req.body?.expectedSnapshotHash,
+      snapshotReader: setfarmOperationalSnapshotClient,
+    });
+    if (authority.status !== 'authorized') {
+      sendOperationalAuthorityFailure(res, authority);
+      return;
+    }
+    const out = await runCli('setfarm', operationalActionCliArgs('resume', id, authority.snapshotHash));
+    res.json({ success: true, snapshotHash: authority.snapshotHash, output: out });
   } catch (err: any) {
+    if (sendOperationalActionCliFailure(res, err)) return;
     res.status(500).json({ error: err.message });
   }
 });
@@ -320,14 +338,11 @@ router.get('/runs/:id/errors', async (req, res) => {
 
 // DELETE /runs/:id — Delete a workflow run from DB (optionally cleanup project)
 router.delete('/runs/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { cleanupProject } = req.body || {};
-    const result = await deleteRun(id, !!cleanupProject);
-    res.json({ success: true, ...result });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+  void req;
+  res.status(405).json({
+    error: 'SETFARM_OPERATIONAL_HISTORY_IMMUTABLE',
+    code: 'SETFARM_OPERATIONAL_HISTORY_IMMUTABLE',
+  });
 });
 
 

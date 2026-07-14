@@ -3,12 +3,18 @@
   "version": "2.0.18",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "^22.13.0 || >=23.4.0"
+  },
   "scripts": {
     "dev": "concurrently \"tsx watch server/index.ts\" \"vite\"",
+    "test": "node --import tsx --test server/routes/*.test.ts server/services/*.test.ts tests/*.test.ts",
     "check:version": "node scripts/check-version-contract.mjs",
     "check:prompts": "node scripts/check-prompt-language.mjs",
     "check:paths": "node scripts/check-path-contract.mjs",
-    "build": "npm run check:version && npm run check:prompts && npm run check:paths && vite build && tsc --build tsconfig.server.json --force && (cp -r server/*.json dist-server/ 2>/dev/null || true)",
+    "check:setfarm-contract": "node --import tsx scripts/check-setfarm-contract.mjs",
+    "sync:setfarm-contract": "node scripts/sync-setfarm-contract.mjs",
+    "build": "npm run check:version && npm run check:prompts && npm run check:paths && npm run check:setfarm-contract && vite build && tsc --build tsconfig.server.json --force && (cp -r server/*.json dist-server/ 2>/dev/null || true)",
     "render:smoke": "node scripts/render-smoke.mjs",
     "test:render": "npm run build && npm run render:smoke",
     "start": "node dist-server/index.js",

@@ -1,11 +1,34 @@
 import { Router } from "express";
-import { openSync, readFileSync, writeFileSync, existsSync, rmSync, mkdirSync, unlinkSync } from "fs";
-import { dirname, join } from "path";
+import {
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from "fs";
+import { join } from "path";
 import { createConnection } from "net";
 import { spawn, execSync, execFileSync } from "child_process";
 import { config, PATHS } from "../config.js";
-import { deleteRunsByProject } from "../utils/setfarm-db.js";
 import { getSupervisorSummaryForRun } from "../utils/supervisor.js";
+import {
+  upsertV3CanonicalProjectProjection,
+  isV3RunProtocol,
+  type V3CanonicalProjectProjection,
+  type V3CanonicalProjectRehydrationAuthority,
+} from "../services/v3-project-transfer.js";
+import {
+  ProjectsJsonRepository,
+  ProjectsJsonCommittedLockReleaseError,
+  ProjectsJsonRevisionConflictError,
+} from "../services/projects-json-repository.js";
+import { setfarmOperationalSnapshotClient } from "../services/setfarm-operational-snapshot.js";
+import {
+  CanonicalV3DeploymentObservationBatcher,
+  setfarmDeploymentObservationClient,
+} from "../services/setfarm-deployment-observation.js";
 
 const router = Router();
 const PROJECTS_FILE = (config as any).projectsJson || join(import.meta.dirname, "../../projects.json");
@@ -15,6 +38,70 @@ const DELETED_FILE = join(import.meta.dirname || __dirname, "../../deleted-proje
 const LOCAL_RUNNER_DIR = join(PATHS.setfarmDir, "..", "local-project-runners");
 const LOCAL_RUNNER_PORT_START = 3507;
 const LOCAL_RUNNER_PORT_END = 5999;
+const projectsRepository = new ProjectsJsonRepository({
+  filePath: PROJECTS_FILE,
+  fallbackPath: BUNDLED_PROJECTS_FILE,
+});
+const canonicalV3ObservationBatcher = new CanonicalV3DeploymentObservationBatcher({
+  snapshotReader: setfarmOperationalSnapshotClient,
+  observationReader: setfarmDeploymentObservationClient,
+  concurrency: 4,
+  deadlineMs: 4_500,
+});
+
+const V3_CANONICAL_PROJECT_FIELDS = new Set([
+  "id",
+  "name",
+  "description",
+  "type",
+  "ports",
+  "deployUrl",
+  "service",
+  "serviceStatus",
+  "status",
+  "stack",
+  "createdBy",
+  "productCompilerProtocol",
+  "workflowRunId",
+  "setfarmRunIds",
+  "runNumber",
+  "acceptedCandidateId",
+  "acceptedCandidateHash",
+  "acceptedPacketHash",
+  "acceptedSourceSha",
+  "acceptedSourceTreeHash",
+  "deploymentReceiptHash",
+  "deploymentReceiptRef",
+  "deploymentHealthRef",
+  "deploymentHealthUrl",
+  "deployedAt",
+  "completedAt",
+  "canonicalProjectionHash",
+  "canonicalProjectionPersistedAt",
+  "canonicalProjectRecordHash",
+  "observedServiceStatus",
+  "observedServiceCheckedAt",
+  "observedServiceReasonCode",
+]);
+
+const V3_TRANSIENT_VIEW_FIELDS = [
+  "observedServiceStatus",
+  "observedServiceCheckedAt",
+  "observedServiceReasonCode",
+  "latestRunNumber",
+  "latestRunId",
+  "latestRunStatus",
+  "supervisor",
+] as const;
+
+function isCanonicalV3Project(project: any): boolean {
+  return project?.productCompilerProtocol === "v3"
+    && project?.createdBy === "setfarm-v3-terminal-projector";
+}
+
+function mutatesCanonicalV3Projection(updates: Record<string, unknown>): boolean {
+  return Object.keys(updates).some((key) => V3_CANONICAL_PROJECT_FIELDS.has(key));
+}
 
 function loadDeletedIds(): Set<string> {
   try { return new Set(JSON.parse(readFileSync(DELETED_FILE, "utf-8"))); } catch { return new Set(); }
@@ -248,18 +335,62 @@ async function stopLocalProject(project: any) {
 }
 
 function loadProjects(): any[] {
-  const readableFile = existsSync(PROJECTS_FILE) ? PROJECTS_FILE : BUNDLED_PROJECTS_FILE;
-  if (!existsSync(readableFile)) return [];
-  return JSON.parse(readFileSync(readableFile, "utf-8"));
+  return projectsRepository.load();
 }
 
-function saveProjects(projects: any[]) {
-  mkdirSync(dirname(PROJECTS_FILE), { recursive: true });
-  writeFileSync(PROJECTS_FILE, JSON.stringify(projects, null, 2));
+/** Bounded v3 ACK audit reads only immutable registry identity fields. */
+export function readCanonicalV3ProjectRecords(): Readonly<Record<string, unknown>>[] {
+  return loadProjects()
+    .filter(isCanonicalV3Project)
+    .map((project) => ({
+      id: project.id,
+      productCompilerProtocol: project.productCompilerProtocol,
+      workflowRunId: project.workflowRunId,
+      canonicalProjectionHash: project.canonicalProjectionHash,
+      canonicalProjectRecordHash: project.canonicalProjectRecordHash,
+      canonicalProjectionPersistedAt: project.canonicalProjectionPersistedAt,
+    }));
+}
+
+function saveProjects(projects: any[], source: any[] = projects): any[] {
+  // Runtime observations and read-time operational enrichment are views, not
+  // durable v3 receipt fields. A later legacy mutation must never fossilize
+  // them into the canonical Projects record.
+  for (const project of projects) {
+    if (!isCanonicalV3Project(project)) continue;
+    for (const field of V3_TRANSIENT_VIEW_FIELDS) delete project[field];
+  }
+  return projectsRepository.save(projects, source).projects;
+}
+
+function sendProjectsWriteError(res: any, error: unknown): void {
+  if (error instanceof ProjectsJsonCommittedLockReleaseError) {
+    res.status(202).json({
+      error: error.code,
+      code: error.code,
+      committed: true,
+      repairNeeded: true,
+      revision: error.committedRevision,
+      reason: "The registry write is durable, but mutex release verification failed. Do not retry blindly; reconcile the committed revision.",
+    });
+    return;
+  }
+  if (error instanceof ProjectsJsonRevisionConflictError) {
+    res.status(409).json({
+      error: error.code,
+      code: error.code,
+      projectId: error.projectId,
+      reason: "The project registry changed concurrently; refresh before retrying.",
+    });
+    return;
+  }
+  res.status(500).json({ error: error instanceof Error ? error.message : String(error) });
 }
 
 function parseRunContext(run: any): any {
-  if (!run?.context || typeof run.context !== "string") return {};
+  if (!run?.context) return {};
+  if (typeof run.context === "object" && !Array.isArray(run.context)) return run.context;
+  if (typeof run.context !== "string") return {};
   try {
     return JSON.parse(run.context);
   } catch {
@@ -381,6 +512,9 @@ async function synthesizeSetfarmProjects(existingProjects: any[]) {
 
     const synthesized: any[] = [];
     for (const run of allRuns) {
+      // V3 has one Projects ingress only: a completed canonical receipt projected
+      // by syncProjectsFromRuns. Never synthesize running/failed/stale v3 cards.
+      if (isV3RunProtocol(run)) continue;
       const context = parseRunContext(run);
       const repo = String(context.repo || "").replace(/\/+$/, "");
       const id = deriveRunProjectSlug(run, context);
@@ -432,6 +566,7 @@ async function materializeSetfarmProject(projects: any[], id: string): Promise<a
     const { getRuns } = await import("../utils/setfarm.js");
     const allRuns = (await getRuns()) as any[];
     for (const run of allRuns) {
+      if (isV3RunProtocol(run)) continue;
       const context = parseRunContext(run);
       const derivedId = deriveRunProjectSlug(run, context);
       const runRepo = String(context.repo || "").replace(/\/+$/, "");
@@ -511,6 +646,10 @@ async function enrichWithStatus(projects: any[]) {
             p.workflowRunId,
             p.latestRunId,
           ].filter(Boolean));
+          // A canonical v3 card is permanently bound to the run named by the
+          // deployment receipt. Never let a newer same-name/repo/prose run
+          // replace its operational metadata during read-time enrichment.
+          if (p.productCompilerProtocol === "v3") return runIds.has(r.id);
           if (runIds.has(r.id)) return true;
           if (runSlug && projectIds.includes(runSlug)) return true;
           // Exact word match — substring would match "foo" against "foo-v2"
@@ -543,7 +682,17 @@ async function enrichWithStatus(projects: any[]) {
     }));
   } catch {}
 
+  const canonicalV3Projects = projects.filter(isCanonicalV3Project);
+  const canonicalObservations = await canonicalV3ObservationBatcher.observe(canonicalV3Projects);
+  canonicalV3Projects.forEach((project, index) => {
+    const observed = canonicalObservations[index]!;
+    project.observedServiceStatus = observed.status;
+    project.observedServiceCheckedAt = observed.checkedAt;
+    project.observedServiceReasonCode = observed.reasonCode;
+  });
+
   for (const p of projects) {
+    if (isCanonicalV3Project(p)) continue;
     // Respect manually disabled state — don't override with port check
     if (p.manuallyDisabled) {
       p.serviceStatus = "inactive";
@@ -610,7 +759,7 @@ router.get("/projects", async (req, res) => {
     });
     res.json(projects);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendProjectsWriteError(res, err);
   }
 });
 
@@ -640,7 +789,7 @@ router.get("/projects/next-port", async (_req, res) => {
     while (usedPorts.has(port)) port++;
     res.json({ port });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendProjectsWriteError(res, err);
   }
 });
 
@@ -651,7 +800,7 @@ router.get("/projects/:id", async (req, res) => {
     if (!project) { res.status(404).json({ error: "Project not found" }); return; }
     res.json(project);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendProjectsWriteError(res, err);
   }
 });
 
@@ -699,7 +848,7 @@ router.post("/projects", async (req, res) => {
     saveProjects(projects);
     res.json(project);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendProjectsWriteError(res, err);
   }
 });
 
@@ -710,6 +859,11 @@ router.patch("/projects/:id", async (req, res) => {
     if (idx === -1) { res.status(404).json({ error: "Project not found" }); return; }
 
     const updates = req.body;
+
+    if (isCanonicalV3Project(projects[idx]) && mutatesCanonicalV3Projection(updates)) {
+      res.status(409).json({ error: "Canonical v3 projection fields require a new Setfarm receipt" });
+      return;
+    }
 
     if (updates.checklistToggle) {
       const { itemId, completed } = updates.checklistToggle;
@@ -732,7 +886,7 @@ router.patch("/projects/:id", async (req, res) => {
     saveProjects(projects);
     res.json(projects[idx]);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendProjectsWriteError(res, err);
   }
 });
 
@@ -757,7 +911,7 @@ router.get("/projects/:id/export", async (req, res) => {
     res.setHeader("Content-Disposition", "attachment; filename=\"" + filename + "\"");
     res.json({ version: "1.0", exportedAt: new Date().toISOString(), project, runs });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendProjectsWriteError(res, err);
   }
 });
 
@@ -766,6 +920,10 @@ router.post("/projects/import", async (req, res) => {
     const { project } = req.body;
     if (!project || !project.name) {
       res.status(400).json({ error: "Invalid import data" });
+      return;
+    }
+    if (project.productCompilerProtocol === "v3" || project.createdBy === "setfarm-v3-terminal-projector") {
+      res.status(409).json({ error: "Canonical v3 projects can only enter through the Setfarm transfer authority" });
       return;
     }
 
@@ -787,7 +945,7 @@ router.post("/projects/import", async (req, res) => {
     saveProjects(projects);
     res.json(project);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendProjectsWriteError(res, err);
   }
 });
 
@@ -823,8 +981,10 @@ router.post("/projects/:id/toggle", async (req, res) => {
       project = await materializeSetfarmProject(projects, id);
     }
     if (!project) { res.status(404).json({ error: "Project not found" }); return; }
-    saveProjects(projects);
-
+    if (isCanonicalV3Project(project)) {
+      res.status(409).json({ error: "Canonical v3 runtime controls require a new operational receipt" });
+      return;
+    }
     const service = project.service;
     if ((!service || !(/^[a-zA-Z0-9_.-]+$/).test(service)) && isLocalRunnableProject(project)) {
       try {
@@ -891,7 +1051,7 @@ router.post("/projects/:id/toggle", async (req, res) => {
 
     res.json({ success: true, serviceStatus });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendProjectsWriteError(res, err);
   }
 });
 
@@ -902,6 +1062,7 @@ router.post("/projects/stop-all", async (_req, res) => {
 
     for (const project of projects) {
       if (project.id === "mission-control") continue;
+      if (isCanonicalV3Project(project)) continue;
       if (project.category === "external") continue;
 
       const service = project.service;
@@ -938,18 +1099,18 @@ router.post("/projects/stop-all", async (_req, res) => {
     saveProjects(projects);
     res.json({ success: true, results });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendProjectsWriteError(res, err);
   }
 });
 
 router.post("/projects/start-all", async (_req, res) => {
   try {
     const projects = await enrichWithStatus(loadProjects());
-    saveProjects(projects);
     const results: { id: string; name: string; started: boolean; error?: string }[] = [];
 
     for (const project of projects) {
       if (project.id === "mission-control") continue;
+      if (isCanonicalV3Project(project)) continue;
       if (project.category === "external") continue;
       // Skip individually disabled projects — respect user intent
       if (project.manuallyDisabled) continue;
@@ -982,9 +1143,10 @@ router.post("/projects/start-all", async (_req, res) => {
       }
     }
 
+    saveProjects(projects);
     res.json({ success: true, results });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendProjectsWriteError(res, err);
   }
 });
 
@@ -1002,6 +1164,10 @@ router.delete("/projects/:id", async (req, res) => {
     }
     if (id === "mission-control") {
       res.status(403).json({ error: "Cannot delete Mission Control" });
+      return;
+    }
+    if (isCanonicalV3Project(project)) {
+      res.status(409).json({ error: "Canonical v3 project deletion requires an explicit decommission receipt" });
       return;
     }
 
@@ -1053,24 +1219,18 @@ router.delete("/projects/:id", async (req, res) => {
     }
 
     const updated = projects.filter((p: any) => p.id !== id);
-    saveProjects(updated);
+    saveProjects(updated, projects);
     addDeletedId(id);
     log.push("Removed from projects.json");
 
-    // Clean setfarm DB records (runs, steps, stories, claim_log) for this project
-    try {
-      const dbResult = await deleteRunsByProject(id);
-      if (dbResult.deleted > 0) {
-        log.push(...dbResult.log);
-        log.push(`Setfarm: ${dbResult.deleted} run(s) cleaned`);
-      }
-    } catch (err: any) {
-      log.push('Setfarm DB cleanup failed: ' + err.message);
-    }
+    // Project lifecycle is not Setfarm evidence lifecycle. Canonical run,
+    // claim, attempt, story, and receipt ledgers are append-only operational
+    // evidence and must never be inferred/deleted from a project slug.
+    log.push("Setfarm operational history preserved");
 
     res.json({ success: true, deleted: project.name, log });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendProjectsWriteError(res, err);
   }
 });
 
@@ -1092,12 +1252,54 @@ export function updateProjectById(id: string, fields: Record<string, any>): any 
   const projects = loadProjects();
   const idx = projects.findIndex((p: any) => p.id === id);
   if (idx === -1) return null;
+  if (isCanonicalV3Project(projects[idx]) && mutatesCanonicalV3Projection(fields)) {
+    throw new Error("V3_CANONICAL_PROJECT_MUTATION_REQUIRES_RECEIPT");
+  }
   for (const [key, val] of Object.entries(fields)) {
     if (key !== "id") projects[idx][key] = key === "github" ? normalizeGithub(val) : val;
   }
   projects[idx].updatedAt = new Date().toISOString();
   saveProjects(projects);
   return projects[idx];
+}
+
+/**
+ * File-backed wrapper around the pure exact-authority v3 upsert. This path does
+ * no repo/name/prefix matching and invokes no deploy, service, port allocation,
+ * DNS, or filesystem inference outside the Projects registry write itself.
+ */
+export function upsertCanonicalV3ProjectProjection(
+  projection: V3CanonicalProjectProjection,
+  rehydration?: V3CanonicalProjectRehydrationAuthority,
+): { status: "created" | "unchanged" | "conflict" | "deleted"; project: any } {
+  const deletedIds = loadDeletedIds();
+  if (deletedIds.has(projection.id)) {
+    return { status: "deleted", project: { id: projection.id, name: projection.name } };
+  }
+  const source = loadProjects();
+  const result = upsertV3CanonicalProjectProjection(
+    source,
+    projection,
+    rehydration?.persistedAt,
+    rehydration ? {
+      projectionHash: rehydration.projectionHash,
+      projectRecordHash: rehydration.projectRecordHash,
+    } : undefined,
+  );
+  if (result.status === "conflict") return { status: "conflict", project: result.project };
+  const committed = saveProjects(result.projects, source);
+  const readback = committed.find((project: any) => project.id === projection.id);
+  if (!readback
+    || readback.canonicalProjectionHash !== (result.project as any).canonicalProjectionHash
+    || readback.canonicalProjectRecordHash !== (result.project as any).canonicalProjectRecordHash
+    || (rehydration && (
+      readback.canonicalProjectionPersistedAt !== rehydration.persistedAt
+      || readback.canonicalProjectionHash !== rehydration.projectionHash
+      || readback.canonicalProjectRecordHash !== rehydration.projectRecordHash
+    ))) {
+    throw new Error("V3_CANONICAL_PROJECT_DURABLE_READBACK_MISMATCH");
+  }
+  return { status: result.status, project: readback };
 }
 
 /** Normalize ID for duplicate detection: strip articles, common suffixes */
@@ -1181,9 +1383,11 @@ export function createProjectProgrammatic(data: {
       // Backfill repo path if empty on existing entry
       if (!repoMatch.repo && data.repo) {
         try {
-          const all = JSON.parse(readFileSync(PROJECTS_FILE, "utf-8"));
-          const idx = all.findIndex((p: any) => p.id === repoMatch.id);
-          if (idx >= 0) { all[idx].repo = data.repo; writeFileSync(PROJECTS_FILE, JSON.stringify(all, null, 2)); }
+          const idx = projects.findIndex((p: any) => p.id === repoMatch.id);
+          if (idx >= 0) {
+            projects[idx].repo = data.repo;
+            saveProjects(projects);
+          }
         } catch { /* JSON parse failed */ }
       }
       return { created: false, project: repoMatch, reason: "exists" };
@@ -1223,7 +1427,7 @@ export function createProjectProgrammatic(data: {
     id,
     name: data.name,
     emoji: data.emoji || "\u{1F527}",
-    status: "active",
+    status: data.status || "active",
     description: data.task || "",
     ports: data.port ? { frontend: data.port } : {},
     domain: "",
@@ -1295,7 +1499,7 @@ export function deduplicateProjects(): number {
   }
   if (idsToRemove.size > 0) {
     const cleaned = projects.filter((p: any) => !idsToRemove.has(p.id));
-    saveProjects(cleaned);
+    saveProjects(cleaned, projects);
     console.log('[dedup] Removed', idsToRemove.size, 'duplicate project(s):', [...idsToRemove].join(', '));
   }
   return idsToRemove.size;

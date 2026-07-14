@@ -1,4 +1,5 @@
 import React from "react";
+import { projectRuntimeObservation } from "../../lib/project-health";
 import { normalizeVisibleVisualStatus } from "../../lib/status";
 
 interface Project {
@@ -9,11 +10,16 @@ interface Project {
   description: string;
   ports: { frontend?: number; backend?: number };
   domain: string;
+  deployUrl?: string;
   repo: string;
   stack: string[];
   service: string;
   serviceStatus?: string;
+  observedServiceStatus?: string;
+  observedServiceCheckedAt?: string;
+  observedServiceReasonCode?: string;
   createdBy: string;
+  productCompilerProtocol?: string;
   workflowRunId?: string;
   runNumber?: number;
   latestRunNumber?: number;
@@ -67,10 +73,13 @@ export const ProjectCard = React.memo(function ProjectCard({
   onExport,
   onDelete,
 }: ProjectCardProps) {
+  const isCanonicalV3 = p.productCompilerProtocol === "v3"
+    && p.createdBy === "setfarm-v3-terminal-projector";
   const isSetfarmRun = p.category === "setfarm" || p.createdBy === "setfarm-run" || p.createdBy === "setfarm-workflow" || Boolean(p.latestRunNumber || p.workflowRunId);
   const isServiceProject = !isSetfarmRun && p.type !== "mobile" && Boolean(p.service || p.ports?.frontend || p.ports?.backend);
   const isLocalSetfarmProject = isSetfarmRun && p.type !== "mobile" && Boolean(p.repo);
   const runStatus = (p.status || p.serviceStatus || "unknown").toLowerCase();
+  const observedHealth = projectRuntimeObservation(p);
   const storyDone = p.stories?.verified ?? p.stories?.completed ?? p.stories?.done ?? 0;
   const supervisor = p.supervisor;
   const supervisorStatus = supervisor?.available ? supervisor.status : "missing";
@@ -106,8 +115,11 @@ export const ProjectCard = React.memo(function ProjectCard({
         ) : null}
         <span className="project-card__name">{p.name}</span>
         {isSetfarmRun ? (
-          <span className={`project-card__status project-card__status--${runStatus}`}>
-            {runStatus.toUpperCase()}
+          <span
+            className={`project-card__status project-card__status--${runStatus}`}
+            title={isCanonicalV3 ? "Immutable deployment receipt status" : undefined}
+          >
+            {isCanonicalV3 ? `RECEIPT ${runStatus.toUpperCase()}` : runStatus.toUpperCase()}
           </span>
         ) : p.type === "mobile" ? (
           <span className="project-card__status project-card__status--mobile">MOBILE</span>
@@ -127,6 +139,16 @@ export const ProjectCard = React.memo(function ProjectCard({
           </button>
         ) : (
           <span className="project-card__status project-card__status--unknown">LOCAL</span>
+        )}
+        {isCanonicalV3 && (
+          <span
+            className={`project-card__live-health project-card__live-health--${observedHealth.status}`}
+            title={observedHealth.checkedAt
+              ? `Observed ${observedHealth.checkedAt} · ${p.observedServiceReasonCode || observedHealth.reason}`
+              : "No current runtime observation"}
+          >
+            LIVE {observedHealth.label}
+          </span>
         )}
         {isLocalSetfarmProject && (
           <button
@@ -167,7 +189,7 @@ export const ProjectCard = React.memo(function ProjectCard({
             {p.ports.frontend ? (
               <a
                 className="project-card__link"
-                href={`http://127.0.0.1:${p.ports.frontend}`}
+                href={p.deployUrl || `http://127.0.0.1:${p.ports.frontend}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
@@ -187,7 +209,15 @@ export const ProjectCard = React.memo(function ProjectCard({
             </a>
           </div>
         )}
-        {p.type !== "mobile" && !p.domain && p.ports.frontend && (
+        {p.type !== "mobile" && p.deployUrl && (
+          <div className="project-card__meta-row">
+            <span className="project-card__label">DEPLOY</span>
+            <a className="project-card__link" href={p.deployUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+              {p.deployUrl}
+            </a>
+          </div>
+        )}
+        {p.type !== "mobile" && !p.domain && !p.deployUrl && p.ports.frontend && (
           <div className="project-card__meta-row">
             <span className="project-card__label">LOCAL</span>
             <a className="project-card__link" href={`http://localhost:${p.ports.frontend}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>

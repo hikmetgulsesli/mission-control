@@ -8,7 +8,8 @@ import { existsSync } from 'fs';
 import { config, PATHS } from './config.js';
 import { warmupAll } from './utils/cache.js';
 import { setupWsProxy } from './ws-proxy.js';
-import { getStuckRuns, unstickRun, diagnoseStuckStep, tryAutoFix, skipStory, getLimboRuns, resumeLimboRun, detectInfiniteLoop, checkMissingInput, failEntireRun, STUCK_THRESHOLD_MS, MAX_AUTO_UNSTICK } from './utils/setfarm-db.js';
+import { assertProjectsJsonLockCapability } from './services/projects-json-repository.js';
+import { SingleFlightBackgroundIntervalOwner } from './services/background-interval-owner.js';
 
 import overviewRouter from './routes/overview.js';
 import agentsRouter from './routes/agents.js';
@@ -26,7 +27,7 @@ import kimiQuotaRouter from './routes/kimi-quota.js';
 import tasksRouter from './routes/tasks.js';
 import approvalsRouter from './routes/approvals.js';
 import projectsRouter from "./routes/projects.js";
-import setfarmActivityRouter from "./routes/setfarm-activity.js";
+import setfarmActivityRouter, { syncIncrementalV3ProjectTransfers } from "./routes/setfarm-activity.js";
 import officeRouter from "./routes/office.js";
 import terminalRouter from "./routes/terminal.js";
 import filesRouter from "./routes/files.js";
@@ -38,8 +39,13 @@ import liveFeedRouter from "./routes/live-feed.js";
 import telemetryRouter from "./routes/telemetry.js";
 import changelogRouter from "./routes/changelog.js";
 import changelogPageRouter from "./routes/changelog-page.js";
+import setfarmOperationalRouter from "./routes/setfarm-operational.js";
 import { authMiddleware } from './middleware/auth.js';
 import rateLimit from 'express-rate-limit';
+
+// projects.json writes require Node's kernel-backed SQLite transaction mutex.
+// There is deliberately no unsafe PID-file fallback on unsupported runtimes.
+assertProjectsJsonLockCapability();
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
@@ -176,6 +182,7 @@ app.use("/api", rulesRouter);
 app.use("/api", liveFeedRouter);
 app.use("/api", telemetryRouter);
 app.use("/api", changelogRouter);
+app.use("/api", setfarmOperationalRouter);
 
 // Serve avatars
 if (existsSync(config.avatarsDir)) {
@@ -231,68 +238,27 @@ app.use((err: any, _req: express.Request, res: express.Response, _next: express.
 
 const server = createServer(app);
 setupWsProxy(server);
+const v3ProjectTransferOwner = new SingleFlightBackgroundIntervalOwner({
+  intervalMs: 30_000,
+  async run() {
+    const result = await syncIncrementalV3ProjectTransfers();
+    if (result.skipped.length > 0) {
+      console.warn(`[MC] v3 project transfer skipped ${result.skipped.length} run(s)`);
+    }
+  },
+  onError(error) {
+    console.error('[MC] v3 project transfer background tick failed:', error);
+  },
+});
 
 server.listen(config.port, config.host, () => {
   const displayHost = config.host === '0.0.0.0' ? 'localhost' : config.host;
   const displayUrl = config.publicOrigin || `http://${displayHost}:${config.port}`;
   console.log(`Mission Control running on ${displayUrl}`);
+  v3ProjectTransferOwner.start();
   // Pre-warm cache so first request is instant
   warmupAll().then(() => console.log('Cache pre-warmed')).catch(() => {});
 });
-
-// Medic cron v4: diagnose -> LOOP CHECK -> MISSING CHECK -> auto-fix -> unstick
-const MEDIC_INTERVAL_MS = 5 * 60 * 1000;
-// P1-07: MC medic disabled — all stuck detection delegated to Setfarm medic
-const MC_MEDIC_DISABLED = true;
-if (!MC_MEDIC_DISABLED) setInterval(async () => {
-  try {
-    const stuckRuns = await getStuckRuns(STUCK_THRESHOLD_MS);
-    for (const run of stuckRuns) {
-      // A) Check for infinite loop (claim count >= 5)
-      const loopCheck = await detectInfiniteLoop(run.id);
-      if (loopCheck.isLooping) {
-        console.warn(`[MEDIC] INFINITE LOOP detected: run=${run.id} step=${loopCheck.stepName} claims=${loopCheck.claimCount}`);
-        await failEntireRun(run.id, `Infinite loop: ${loopCheck.reason}`);
-        continue; // Skip to next run, this one is dead
-      }
-
-      // B) Check for missing input variables ([missing: X])
-      const missingCheck = await checkMissingInput(run.id);
-      if (missingCheck.hasMissing) {
-        console.warn(`[MEDIC] MISSING INPUT detected: run=${run.id} step=${missingCheck.stepName} var=${missingCheck.missingVar}`);
-        await failEntireRun(run.id, `Missing input: ${missingCheck.reason}`);
-        continue; // Skip to next run
-      }
-
-      for (const step of run.stuckSteps) {
-        // C) Diagnose and auto-fix (existing logic)
-        const diagnosis = await diagnoseStuckStep(run.id, step.id);
-        console.warn(`[MEDIC] Diagnosed: run=${run.id} step=${step.name} cause=${diagnosis.cause} fixable=${diagnosis.fixable} retries=${step.abandonResets}`);
-
-        if (diagnosis.fixable) {
-          const fixResult = await tryAutoFix(run.id, diagnosis.cause, diagnosis.storyId);
-          console.warn(`[MEDIC] Auto-fix ${diagnosis.cause}: ${fixResult.success ? 'OK' : 'FAILED'} - ${fixResult.message}`);
-          if (fixResult.success) continue;
-        }
-
-        // D) Unstick and retry
-        console.warn(`[MEDIC] Auto-unstick: run=${run.id} step=${step.name} stuck=${step.stuckMinutes}min retries=${step.abandonResets} cause=${diagnosis.cause}`);
-        await unstickRun(run.id, step.id);
-      }
-    }
-    // E) Check for limbo runs: running but no active steps
-    const limboRuns = await getLimboRuns();
-    for (const limbo of limboRuns) {
-      console.warn(`[MEDIC] Limbo run detected: ${limbo.run_id} (${limbo.done_steps} done, ${limbo.failed_steps} failed, 0 running) - auto-resuming from ${limbo.first_failed_step}`);
-      const result = await resumeLimboRun(limbo.run_id);
-      console.warn(`[MEDIC] Limbo resume: ${result.success ? 'OK' : 'FAILED'} - ${result.message}`);
-    }
-  } catch (err: any) {
-    console.error('[MEDIC] Stuck check failed:', err.message);
-  }
-}, MEDIC_INTERVAL_MS);
-
-
 
 // Unhandled rejection handler
 process.on('unhandledRejection', (reason) => {
@@ -300,12 +266,19 @@ process.on('unhandledRejection', (reason) => {
 });
 
 // Graceful shutdown — release port on SIGTERM/SIGINT
+let shutdownStarted = false;
 function shutdown(signal: string) {
+  if (shutdownStarted) return;
+  shutdownStarted = true;
   console.log(`[${signal}] Shutting down gracefully...`);
-  server.close(() => {
-    console.log('Server closed');
-    process.exit(0);
+  const serverClosed = new Promise<void>((resolve) => {
+    server.close(() => {
+      console.log('Server closed');
+      resolve();
+    });
   });
+  void Promise.allSettled([serverClosed, v3ProjectTransferOwner.stop()])
+    .then(() => process.exit(0));
   // Force exit after 5s if connections hang
   setTimeout(() => {
     console.warn('Forced exit after timeout');

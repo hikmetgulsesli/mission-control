@@ -1,5 +1,7 @@
 import React from "react";
 import { ProjectChecklist } from "../ProjectChecklist";
+import { OperationalEvidenceLoader } from "../run-detail/OperationalEvidence";
+import { projectRuntimeObservation } from "../../lib/project-health";
 import { normalizeVisibleVisualStatus } from "../../lib/status";
 
 interface Project {
@@ -10,11 +12,16 @@ interface Project {
   description: string;
   ports: { frontend?: number; backend?: number };
   domain: string;
+  deployUrl?: string;
   repo: string;
   stack: string[];
   service: string;
   serviceStatus?: string;
+  observedServiceStatus?: string;
+  observedServiceCheckedAt?: string;
+  observedServiceReasonCode?: string;
   createdBy: string;
+  productCompilerProtocol?: string;
   workflowRunId?: string;
   runNumber?: number;
   createdAt: string;
@@ -76,6 +83,9 @@ export const ProjectDetailPanel = React.memo(function ProjectDetailPanel({
 }: ProjectDetailPanelProps) {
   const supervisor = sel.supervisor;
   const visualStatus = normalizeVisibleVisualStatus(supervisor?.visual.status);
+  const isCanonicalV3 = sel.productCompilerProtocol === "v3"
+    && sel.createdBy === "setfarm-v3-terminal-projector";
+  const observedHealth = projectRuntimeObservation(sel);
 
   return (
     <div className="project-detail">
@@ -90,10 +100,25 @@ export const ProjectDetailPanel = React.memo(function ProjectDetailPanel({
           <h4>General Info</h4>
           <table className="project-detail__table">
             <tbody>
-              <tr><td>Status</td><td>{sel.serviceStatus === "active" ? "Running" : "Stopped"}</td></tr>
+              {isCanonicalV3 ? (
+                <>
+                  <tr><td>Receipt status</td><td>{String(sel.serviceStatus || sel.status || "unknown").toUpperCase()} (immutable)</td></tr>
+                  <tr>
+                    <td>Observed live health</td>
+                    <td>
+                      {observedHealth.label}
+                      {observedHealth.checkedAt ? ` · ${new Date(observedHealth.checkedAt).toLocaleString("en-US")}` : " · no observation"}
+                      {sel.observedServiceReasonCode ? ` · ${sel.observedServiceReasonCode}` : ""}
+                    </td>
+                  </tr>
+                </>
+              ) : (
+                <tr><td>Status</td><td>{sel.serviceStatus === "active" ? "Running" : "Stopped"}</td></tr>
+              )}
               <tr><td>Service</td><td><code>{sel.service}</code></td></tr>
               {sel.type !== "mobile" && <tr><td>Port</td><td>{sel.ports.frontend}{sel.ports.backend ? ` (frontend) / ${sel.ports.backend} (backend)` : ""}</td></tr>}
               {sel.type !== "mobile" && sel.domain && <tr><td>Domain</td><td><a href={`https://${sel.domain}`} target="_blank" rel="noopener noreferrer">{sel.domain}</a></td></tr>}
+              {sel.type !== "mobile" && sel.deployUrl && <tr><td>Deploy URL</td><td><a href={sel.deployUrl} target="_blank" rel="noopener noreferrer">{sel.deployUrl}</a></td></tr>}
               {sel.type === "mobile" && <tr><td>Platform</td><td>React Native / Expo</td></tr>}
               <tr><td>Repo</td><td><code>{sel.repo}</code></td></tr>
               {sel.github && <tr><td>GitHub</td><td><a href={sel.github} target="_blank" rel="noopener noreferrer">{sel.github.replace("https://github.com/", "")}</a></td></tr>}
@@ -124,9 +149,16 @@ export const ProjectDetailPanel = React.memo(function ProjectDetailPanel({
           </div>
         )}
 
+        {sel.workflowRunId && (
+          <div className="project-detail__section project-detail__section--wide project-detail__section--operational">
+            <OperationalEvidenceLoader runId={sel.workflowRunId} />
+          </div>
+        )}
+
         {supervisor && (
           <div className="project-detail__section project-detail__section--wide">
             <h4>Supervisor</h4>
+            <p className="project-detail__prd">Advisory artifact only. Canonical run authority is shown in Operational Evidence.</p>
             {supervisor.available ? (
               <>
                 <div className="project-detail__supervisor-grid">

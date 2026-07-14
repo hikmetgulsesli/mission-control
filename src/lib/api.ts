@@ -1,4 +1,8 @@
 import type { OverviewData, Agent, Session, CronJob, Workflow, Run, SystemMetrics, DockerContainer, CostData, Task, ProjectData, TaskCreateData } from './types';
+import {
+  parseOperationalSnapshotResponse,
+  type OperationalSnapshotFetchResult,
+} from './operational-snapshot';
 
 const BASE = '';
 const AUTH_TOKEN = (document.querySelector('meta[name="mc-token"]') as HTMLMetaElement)?.content || '';
@@ -16,6 +20,34 @@ async function fetchApi<T>(path: string, opts?: RequestInit): Promise<T> {
     throw new Error(`API ${res.status}: ${text}`);
   }
   return res.json();
+}
+
+async function fetchOperationalSnapshot(runId: string): Promise<OperationalSnapshotFetchResult> {
+  try {
+    const res = await fetch(`${BASE}/api/setfarm/runs/${encodeURIComponent(runId)}/operational-snapshot`, {
+      headers: AUTH_TOKEN ? { 'X-MC-Token': AUTH_TOKEN } : {},
+      cache: 'no-store',
+    });
+    const text = await res.text();
+    let body: unknown;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      return {
+        status: 'upstream_error',
+        code: 'SETFARM_OPERATIONAL_SNAPSHOT_UPSTREAM_ERROR',
+        reason: 'invalid_json',
+        upstreamStatus: res.status,
+      };
+    }
+    return parseOperationalSnapshotResponse(res.status, body, runId);
+  } catch {
+    return {
+      status: 'unavailable',
+      code: 'SETFARM_OPERATIONAL_SNAPSHOT_UNAVAILABLE',
+      reason: 'network',
+    };
+  }
 }
 
 const CT_JSON = { 'Content-Type': 'application/json' };
@@ -52,15 +84,17 @@ export const api = {
     }),
   deleteRun: (id: string, cleanupProject = false) =>
     fetchApi<any>(`/api/runs/${id}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cleanupProject }) }),
-  stopRun: (id: string) =>
-    fetchApi<any>(`/api/runs/${id}/stop`, { method: 'POST' }),
-  resumeRun: (id: string) =>
-    fetchApi<any>(`/api/runs/${id}/resume`, { method: 'POST' }),
-  retryRun: (id: string, step_id?: string, message?: string) =>
-    fetchApi<any>(`/api/runs/${id}/retry`, {
+  stopRun: (id: string, expectedSnapshotHash: string) =>
+    fetchApi<any>(`/api/runs/${id}/stop`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ step_id, message }),
+      headers: CT_JSON,
+      body: JSON.stringify({ expectedSnapshotHash }),
+    }),
+  resumeRun: (id: string, expectedSnapshotHash: string) =>
+    fetchApi<any>(`/api/runs/${id}/resume`, {
+      method: 'POST',
+      headers: CT_JSON,
+      body: JSON.stringify({ expectedSnapshotHash }),
     }),
   system: () => fetchApi<SystemMetrics>('/api/system'),
   docker: () => fetchApi<DockerContainer[]>('/api/system/docker'),
@@ -103,7 +137,7 @@ export const api = {
   runDesign: (id: string) => fetchApi<any>(`/api/setfarm/runs/${id}/design`),
   runContract: (id: string) => fetchApi<any>(`/api/setfarm/runs/${id}/contract`),
   runOperations: (id: string) => fetchApi<any>(`/api/setfarm/runs/${id}/operations`),
-  runOperationalModel: (id: string) => fetchApi<any>(`/api/setfarm/runs/${id}/operational-model`),
+  runOperationalSnapshot: (id: string) => fetchOperationalSnapshot(id),
   runAgentActivity: (id: string, stepId: string) =>
     fetchApi<any>(`/api/setfarm/runs/${id}/steps/${encodeURIComponent(stepId)}/agent-activity`),
   // Terminal
@@ -130,27 +164,9 @@ export const api = {
     fetchApi<any>('/api/files/upload', { method: 'POST', headers: CT_JSON, body: JSON.stringify({ directory, filename, content }) }),
   // Stuck Recovery
   stuckRuns: () => fetchApi<any>("/api/runs/stuck"),
-  unstickRun: (id: string, stepId?: string) =>
-    fetchApi<any>(`/api/runs/${id}/unstick`, {
-      method: "POST",
-      headers: CT_JSON,
-      body: JSON.stringify({ stepId }),
-    }),
   // Smart Stuck Recovery v2
   diagnoseRun: (id: string, stepId?: string) =>
     fetchApi<any>(`/api/runs/${id}/diagnose${stepId ? `?stepId=${stepId}` : ""}`),
-  autofixRun: (id: string, cause: string, storyId?: string) =>
-    fetchApi<any>(`/api/runs/${id}/autofix`, {
-      method: "POST",
-      headers: CT_JSON,
-      body: JSON.stringify({ cause, storyId }),
-    }),
-  skipStory: (runId: string, storyId: string, reason: string) =>
-    fetchApi<any>(`/api/runs/${runId}/skip-story`, {
-      method: "POST",
-      headers: CT_JSON,
-      body: JSON.stringify({ storyId, reason }),
-    }),
   // Rules
   rules: (params?: Record<string, string>) => {
     const qs = params ? '?' + new URLSearchParams(params).toString() : '';

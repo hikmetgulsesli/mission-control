@@ -2,8 +2,13 @@ import React, { useState, useCallback, useEffect, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { DeleteRunModal } from "./pipeline/DeleteRunModal";
 import { ErrorCard } from "./pipeline/ErrorCard";
+import { useOperationalSnapshots } from "../hooks/useOperationalSnapshot";
+import {
+  evaluateOperationalAction,
+  operationalStateReason,
+  type OperationalSnapshotState,
+} from "../lib/operational-snapshot";
 import { normalizeVisibleWorkflowStatus } from "../lib/status";
 
 const STEP_ORDER = ["plan", "design", "stories", "setup-repo", "setup-build", "implement", "verify", "security-gate", "qa-test", "final-test", "deploy"];
@@ -75,12 +80,6 @@ interface PipelineRun {
   nextStoryStatus?: string | null;
   blockerStepId?: string | null;
   blockerSummary?: string | null;
-  operational?: {
-    stack?: { stackPackId?: string; label?: string; runtimeKind?: string };
-    failure?: { present?: boolean; owner?: string; action?: string; category?: string; recoveryPolicy?: string; retryable?: boolean; summary?: string };
-    stories?: { completed?: number; total?: number; verified?: number; doneAwaitingVerify?: number; failed?: number };
-    pipeline?: { currentStepId?: string | null; failedStepId?: string | null };
-  } | null;
 }
 
 /** Step detail data fetched on demand from runDetail API */
@@ -126,36 +125,32 @@ interface ClassifiedError {
 
 interface RunCardInlineProps {
   run: PipelineRun;
+  operationalSnapshot: OperationalSnapshotState;
   isExpanded: boolean;
-  retrying: string | null;
   actionLoading: string | null;
   selectedStep: string | null;
   stepDetailData: StepDetailData | null;
   stepDetailLoading: boolean;
   errorCards: ClassifiedError[];
   onToggleExpand: () => void;
-  onRetry: (runId: string, stepId: string) => void;
-  onStop: (runId: string) => void;
-  onResume: (runId: string) => void;
-  onDelete: (run: PipelineRun) => void;
+  onStop: (runId: string, snapshotHash: string) => void;
+  onResume: (runId: string, snapshotHash: string) => void;
   onStepClick: (runId: string, stepId: string) => void;
   onOpenDetail: (runId: string) => void;
 }
 
 const RunCardInline = memo(function RunCardInline({
   run,
+  operationalSnapshot,
   isExpanded,
-  retrying,
   actionLoading,
   selectedStep,
   stepDetailData,
   stepDetailLoading,
   errorCards,
   onToggleExpand,
-  onRetry,
   onStop,
   onResume,
-  onDelete,
   onStepClick,
   onOpenDetail,
 }: RunCardInlineProps) {
@@ -183,15 +178,13 @@ const RunCardInline = memo(function RunCardInline({
     : 0;
   const storyRetry = Number(run.currentStoryRetry || 0);
   const storyMaxRetries = Number(run.currentStoryMaxRetries || 0);
-  const operationalFailure = run.operational?.failure;
-  const isManualReviewFailure = Boolean(
-    operationalFailure?.present &&
-    operationalFailure.recoveryPolicy === "manual_review" &&
-    operationalFailure.retryable === false
-  );
-  const canResume = (run.status === "failed" || run.status === "cancelled") && !isManualReviewFailure;
-  const failureSummary = operationalFailure?.summary || operationalFailure?.category || "quality failure";
-  const hasStoryLine = Boolean(run.currentStoryId || run.nextStoryId || run.blockerSummary || operationalFailure?.present);
+  const canonicalSnapshot = operationalSnapshot.status === "ok" ? operationalSnapshot.snapshot : null;
+  const canonicalStatus = canonicalSnapshot?.run.status || "unknown";
+  const stopAuthority = evaluateOperationalAction(operationalSnapshot, "stop");
+  const resumeAuthority = evaluateOperationalAction(operationalSnapshot, "resume");
+  const showStop = canonicalSnapshot ? !canonicalSnapshot.run.terminal : run.status === "running";
+  const showResume = canonicalSnapshot ? canonicalSnapshot.run.terminal : run.status === "failed" || run.status === "cancelled";
+  const hasStoryLine = Boolean(run.currentStoryId || run.nextStoryId || run.blockerSummary);
 
   // Phase grouping for feature-dev workflow (the main one with PIPELINE_PHASES)
   const phaseGroups = groupStepsByPhase(allSteps);
@@ -201,44 +194,59 @@ const RunCardInline = memo(function RunCardInline({
   const selectedStepData = selectedStep ? allSteps.find(s => s.stepId === selectedStep) : null;
 
   return (
-    <div className={`af-pipeline__run af-pipeline__run--${run.status}`}>
+    <div className={`af-pipeline__run af-pipeline__run--${canonicalStatus}`}>
       <div className="af-pipeline__header">
-        <span className={`af-pipeline__status af-pipeline__status--${run.status}`}>
-          {run.status === "running" && <span className="af-pulse" />}
-          {run.status.toUpperCase()}
+        <span
+          className={`af-pipeline__status af-pipeline__status--${canonicalStatus}`}
+          title={operationalStateReason(operationalSnapshot)}
+        >
+          {canonicalStatus === "running" && <span className="af-pulse" />}
+          {canonicalStatus.toUpperCase()}
         </span>
         {run.runNumber && <span className="af-pipeline__run-id">#{run.runNumber}</span>}
         <span className="af-pipeline__wf">{run.workflow}</span>
-        {run.operational?.stack?.stackPackId && (
-          <span className="af-pipeline__wf" title={run.operational.stack.label || run.operational.stack.stackPackId}>
-            {run.operational.stack.stackPackId}
-          </span>
-        )}
+        <span className={`af-pipeline__evidence af-pipeline__evidence--${canonicalSnapshot?.source.projection || operationalSnapshot.status}`}>
+          {canonicalSnapshot ? `${canonicalSnapshot.source.projection} · ${canonicalSnapshot.summary.lifecycleState}` : operationalSnapshot.status.replace("_", " ")}
+        </span>
         <span className="af-pipeline__task">{truncate(extractTitle(run.task), 60)}</span>
         <span className="af-pipeline__run-actions" onClick={(e) => e.stopPropagation()}>
-          {run.status === "running" ? (
-            <button className="af-run-btn af-run-btn--stop" onClick={() => onStop(run.id)} disabled={actionLoading === run.id + ":stop"} title="Stop">
+          {showStop ? (
+            <button
+              className="af-run-btn af-run-btn--stop"
+              onClick={() => stopAuthority.snapshotHash && onStop(run.id, stopAuthority.snapshotHash)}
+              disabled={!stopAuthority.allowed || actionLoading === run.id + ":stop"}
+              title={stopAuthority.reasonCode}
+            >
               {actionLoading === run.id + ":stop" ? "..." : "\u23F8"}
             </button>
-          ) : canResume ? (
-            <button className="af-run-btn af-run-btn--resume" onClick={() => onResume(run.id)} disabled={actionLoading === run.id + ":resume"} title="Resume">
+          ) : showResume ? (
+            <button
+              className="af-run-btn af-run-btn--resume"
+              onClick={() => resumeAuthority.snapshotHash && onResume(run.id, resumeAuthority.snapshotHash)}
+              disabled={!resumeAuthority.allowed || actionLoading === run.id + ":resume"}
+              title={resumeAuthority.reasonCode}
+            >
               {actionLoading === run.id + ":resume" ? "..." : "\u25B6"}
-            </button>
-          ) : isManualReviewFailure ? (
-            <button className="af-run-btn af-run-btn--manual" disabled title={failureSummary}>
-              REVIEW
             </button>
           ) : null}
           <button className="af-run-btn af-run-btn--detail" onClick={() => onOpenDetail(run.id)} title="Open run detail">
             DETAIL
           </button>
-          <button className="af-run-btn af-run-btn--delete" onClick={() => onDelete(run)} disabled={actionLoading === run.id + ":delete"} title="Delete">
-            {actionLoading === run.id + ":delete" ? "..." : "\u2715"}
+          <button
+            className="af-run-btn af-run-btn--delete"
+            disabled
+            title="OPERATIONAL_ACTION_NOT_DEFINED_IN_SNAPSHOT_V1"
+          >
+            LOCKED
           </button>
           <button className="af-run-btn af-run-btn--expand" onClick={onToggleExpand} title={isExpanded ? "Hide preview" : "Show preview"}>
             {isExpanded ? "\u25B2" : "\u25BC"}
           </button>
         </span>
+      </div>
+
+      <div className="af-pipeline__legacy-note">
+        Pipeline steps, story progress, and diagnostic text below are read-only planning context. Canonical snapshot controls status and actions.
       </div>
 
       {hasStoryLine && (
@@ -264,15 +272,6 @@ const RunCardInline = memo(function RunCardInline({
               <span>{truncate(run.blockerSummary, 110)}</span>
             </span>
           )}
-          {operationalFailure?.present && (
-            <span
-              className={`af-pipeline__story-pill ${isManualReviewFailure ? "af-pipeline__story-pill--manual" : "af-pipeline__story-pill--blocker"}`}
-              title={failureSummary}
-            >
-              <b>{isManualReviewFailure ? "manual review" : operationalFailure.owner || "failure"}</b>
-              <span>{truncate(failureSummary, 110)}</span>
-            </span>
-          )}
         </div>
       )}
 
@@ -295,10 +294,11 @@ const RunCardInline = memo(function RunCardInline({
                 {stepStatus === "failed" && (
                   <button
                     className="af-step__retry-btn"
-                    onClick={(e) => { e.stopPropagation(); onRetry(run.id, step.stepId); }}
-                    disabled={retrying === step.stepId}
+                    onClick={(e) => e.stopPropagation()}
+                    disabled
+                    title="OPERATIONAL_ACTION_NOT_DEFINED_IN_SNAPSHOT_V1"
                   >
-                    {retrying === step.stepId ? "..." : "RETRY"}
+                    LOCKED
                   </button>
                 )}
               </div>
@@ -374,8 +374,6 @@ const RunCardInline = memo(function RunCardInline({
                     suggestion={err.suggestion}
                     severity={err.severity}
                     stepId={err.stepId}
-                    runId={run.id}
-                    onRetry={() => onRetry(run.id, err.stepId)}
                   />
                 ));
               }
@@ -469,16 +467,11 @@ const RunCardInline = memo(function RunCardInline({
 export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefresh?: () => void }) {
   const navigate = useNavigate();
   const [expandedRun, setExpandedRun] = useState<string | null>(null);
-  const [retrying, setRetrying] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [hiddenRuns, setHiddenRuns] = useState<Set<string>>(new Set());
-  const [deleteModal, setDeleteModal] = useState<{ runId: string; runNumber: number; task: string } | null>(null);
-  const [deleteInput, setDeleteInput] = useState("");
-  const [deleteSteps, setDeleteSteps] = useState<Array<{id: string; label: string; status: string; detail?: string}>>([]);
-  const [deleteResult, setDeleteResult] = useState<{success?: boolean; error?: string} | null>(null);
-  const [deleteCleanup, setDeleteCleanup] = useState(false);
+  const [actionNotice, setActionNotice] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [stopConfirm, setStopConfirm] = useState<string | null>(null);
+  const [stopConfirm, setStopConfirm] = useState<{ runId: string; snapshotHash: string } | null>(null);
+  const operationalSnapshots = useOperationalSnapshots((runs || []).map((run) => run.id), 5_000);
 
   // Task 2: Step detail drill-down state — keyed by "runId:stepId"
   const [selectedStepKey, setSelectedStepKey] = useState<string | null>(null);
@@ -556,9 +549,13 @@ export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefre
   }, [selectedStepKey]);
 
   const HIDDEN_WORKFLOWS = ["daily-standup"];
+  const canonicalStatus = (run: PipelineRun): string | null => {
+    const state = operationalSnapshots[run.id];
+    return state?.status === "ok" ? state.snapshot.run.status : null;
+  };
   const filteredRuns = (runs || [])
-    .filter(r => !HIDDEN_WORKFLOWS.includes(r.workflow) && !hiddenRuns.has(r.id))
-    .filter(r => statusFilter === "all" || r.status === statusFilter)
+    .filter(r => !HIDDEN_WORKFLOWS.includes(r.workflow))
+    .filter(r => statusFilter === "all" || canonicalStatus(r) === statusFilter)
     .sort((a, b) => (b.runNumber || 0) - (a.runNumber || 0));
 
   const filterBar = (
@@ -571,7 +568,7 @@ export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefre
         >
           {s.toUpperCase()}
           {s !== "all" && <span className="af-pipeline__filter-count">
-            {(runs || []).filter(r => !HIDDEN_WORKFLOWS.includes(r.workflow) && r.status === s).length}
+            {(runs || []).filter(r => !HIDDEN_WORKFLOWS.includes(r.workflow) && canonicalStatus(r) === s).length}
           </span>}
         </button>
       ))}
@@ -582,108 +579,34 @@ export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefre
     return <div className="af-pipeline">{filterBar}<div className="af-empty">No runs found</div></div>;
   }
 
-  const handleRetry = async (runId: string, stepId: string) => {
-    setRetrying(stepId);
-    try {
-      await api.retryRun(runId, stepId);
-    } catch (err: any) {
-      console.error("Retry failed:", err);
-    } finally {
-      setRetrying(null);
-    }
-  };
-
-  const handleStop = async (runId: string) => {
-    setStopConfirm(runId);
+  const handleStop = (runId: string, snapshotHash: string) => {
+    setStopConfirm({ runId, snapshotHash });
   };
 
   const handleStopConfirmed = async () => {
     if (!stopConfirm) return;
-    const runId = stopConfirm;
+    const { runId, snapshotHash } = stopConfirm;
     setStopConfirm(null);
     setActionLoading(runId + ":stop");
-    try { await api.stopRun(runId); if (onRefresh) onRefresh(); } catch (err: any) { console.error("Stop failed:", err); }
-    finally { setActionLoading(null); }
-  };
-
-  const openDeleteModal = (run: PipelineRun) => {
-    setDeleteModal({ runId: run.id, runNumber: run.runNumber || 0, task: run.task });
-    setDeleteInput("");
-    setDeleteCleanup(false);
-    setDeleteSteps([]);
-    setDeleteResult(null);
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!deleteModal) return;
-    setActionLoading(deleteModal.runId + ":delete");
-    setDeleteResult(null);
-
-    const steps: { id: string; label: string; status: "waiting" | "done" | "fail"; detail?: string }[] = [
-      { id: "db", label: "DB records", status: "waiting", detail: "runs, steps, stories" },
-    ];
-    if (deleteCleanup) {
-      steps.push(
-        { id: "github", label: "GitHub repo", status: "waiting" },
-        { id: "files", label: "Local files", status: "waiting" },
-        { id: "service", label: "Systemd service", status: "waiting" },
-        { id: "json", label: "projects.json", status: "waiting" },
-        { id: "tunnel", label: "Cloudflare tunnel", status: "waiting" },
-      );
-    }
-    setDeleteSteps(steps);
-
     try {
-      const result = await api.deleteRun(deleteModal.runId, deleteCleanup);
-      const log = ((result as any).log || []).join("\n");
-
-      const updates = steps.map(s => {
-        if (s.id === "db") return { ...s, status: "done" as const };
-        if (s.id === "github") {
-          if (log.includes("GitHub repo deleted")) return { ...s, status: "done" as const };
-          if (log.includes("GitHub delete failed")) return { ...s, status: "fail" as const };
-          return { ...s, status: "done" as const, detail: "repo not found" };
-        }
-        if (s.id === "files") {
-          if (log.includes("Local repo deleted") || (log.includes("Repo") && log.includes("deleted"))) return { ...s, status: "done" as const };
-          if (log.includes("delete failed") || log.includes("deletion failed")) return { ...s, status: "fail" as const };
-          return { ...s, status: "done" as const, detail: "file not found" };
-        }
-        if (s.id === "service") {
-          if (log.includes("Service stopped")) return { ...s, status: "done" as const };
-          return { ...s, status: "done" as const, detail: "no service" };
-        }
-        if (s.id === "json") {
-          if (log.includes("Removed from projects.json")) return { ...s, status: "done" as const };
-          return { ...s, status: "done" as const, detail: "already clean" };
-        }
-        if (s.id === "tunnel") {
-          if (log.includes("Tunnel:") || log.includes("Tunnel entry")) return { ...s, status: "done" as const };
-          if (log.includes("Tunnel cleanup failed")) return { ...s, status: "fail" as const };
-          return { ...s, status: "done" as const, detail: "no tunnel" };
-        }
-        return s;
-      });
-
-      for (let i = 0; i < updates.length; i++) {
-        await new Promise(r => setTimeout(r, 200));
-        setDeleteSteps(prev => prev.map((s, j) => j <= i ? updates[j] : s));
-      }
-
-      setDeleteResult({ success: true });
-      setHiddenRuns(prev => new Set([...prev, deleteModal.runId]));
+      await api.stopRun(runId, snapshotHash);
+      setActionNotice("");
       if (onRefresh) onRefresh();
     } catch (err: any) {
-      console.error("Delete failed:", err);
-      setDeleteResult({ error: err.message });
-      setDeleteSteps(prev => prev.map(s => s.status === "waiting" ? { ...s, status: "fail" as const } : s));
+      setActionNotice(`Stop failed: ${err.message || String(err)}`);
     }
     finally { setActionLoading(null); }
   };
 
-  const handleResume = async (runId: string) => {
+  const handleResume = async (runId: string, snapshotHash: string) => {
     setActionLoading(runId + ":resume");
-    try { await api.resumeRun(runId); if (onRefresh) onRefresh(); } catch (err: any) { console.error("Resume failed:", err); }
+    try {
+      await api.resumeRun(runId, snapshotHash);
+      setActionNotice("");
+      if (onRefresh) onRefresh();
+    } catch (err: any) {
+      setActionNotice(`Resume failed: ${err.message || String(err)}`);
+    }
     finally { setActionLoading(null); }
   };
 
@@ -694,6 +617,7 @@ export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefre
   return (
     <div className="af-pipeline">
       {filterBar}
+      {actionNotice && <div className="af-pipeline__authority-notice">{actionNotice}</div>}
       {filteredRuns.map((run) => {
         const runStepKey = selectedStepKey?.startsWith(run.id + ":") ? selectedStepKey : null;
         const currentSelectedStep = runStepKey ? runStepKey.split(":").slice(1).join(":") : null;
@@ -701,36 +625,21 @@ export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefre
           <RunCardInline
             key={run.id}
             run={run}
+            operationalSnapshot={operationalSnapshots[run.id] || { status: "loading" }}
             isExpanded={expandedRun === run.id}
-            retrying={retrying}
             actionLoading={actionLoading}
             selectedStep={currentSelectedStep}
             stepDetailData={runStepKey ? stepDetailData : null}
             stepDetailLoading={runStepKey ? stepDetailLoading : false}
             errorCards={errorCardsMap[run.id] || []}
             onToggleExpand={() => setExpandedRun(expandedRun === run.id ? null : run.id)}
-            onRetry={handleRetry}
             onStop={handleStop}
             onResume={handleResume}
-            onDelete={openDeleteModal}
             onStepClick={handleStepClick}
             onOpenDetail={handleOpenDetail}
           />
         );
       })}
-
-      <DeleteRunModal
-        modal={deleteModal}
-        input={deleteInput}
-        cleanup={deleteCleanup}
-        steps={deleteSteps}
-        result={deleteResult}
-        loading={actionLoading === (deleteModal?.runId + ":delete")}
-        onInputChange={setDeleteInput}
-        onCleanupChange={setDeleteCleanup}
-        onConfirm={handleDeleteConfirm}
-        onClose={() => setDeleteModal(null)}
-      />
 
       <ConfirmDialog
         open={!!stopConfirm}

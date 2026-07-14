@@ -12,12 +12,10 @@ export function Ops() {
   const { data: crons, refresh: refreshCrons } = usePolling<CronJob[]>(api.cron, 30000);
   const { data: system } = usePolling<SystemMetrics>(api.system, 15000);
   const { data: docker } = usePolling<DockerContainer[]>(api.docker, 30000);
-  const { data: stuckData, refresh: refreshStuck } = usePolling<{ runs: StuckRun[] }>(api.stuckRuns, 30000);
+  const { data: stuckData } = usePolling<{ runs: StuckRun[] }>(api.stuckRuns, 30000);
 
-  const [unsticking, setUnsticking] = useState<string | null>(null);
   const [diagnosing, setDiagnosing] = useState<string | null>(null);
   const [diagnoses, setDiagnoses] = useState<Record<string, Diagnosis>>({});
-  const [fixing, setFixing] = useState<string | null>(null);
 
   const handleToggle = async (id: string) => {
     try {
@@ -25,24 +23,6 @@ export function Ops() {
       refreshCrons();
     } catch (err: any) {
       toast(`Toggle failed: ${err.message}`, 'error');
-    }
-  };
-
-  const handleUnstick = async (runId: string, stepId?: string) => {
-    setUnsticking(runId);
-    try {
-      const res = await api.unstickRun(runId, stepId);
-      if (res.success) {
-        const names = res.unstuckedSteps.map((s: any) => s.name).join(', ');
-        toast(`Unstuck: ${names}`, 'success');
-      } else {
-        toast(res.message || 'No stuck steps found', 'error');
-      }
-      refreshStuck();
-    } catch (err: any) {
-      toast(err.message, 'error');
-    } finally {
-      setUnsticking(null);
     }
   };
 
@@ -59,32 +39,6 @@ export function Ops() {
     }
   };
 
-  const handleAutoFix = async (runId: string, cause: string, storyId?: string) => {
-    setFixing(runId);
-    try {
-      const result = await api.autofixRun(runId, cause, storyId);
-      toast(result.message, result.success ? 'success' : 'error');
-      refreshStuck();
-    } catch (err: any) {
-      toast(err.message, 'error');
-    } finally {
-      setFixing(null);
-    }
-  };
-
-  const handleSkipStory = async (runId: string, storyId: string, reason: string) => {
-    setFixing(runId);
-    try {
-      const result = await api.skipStory(runId, storyId, reason);
-      toast(result.message, result.success ? 'success' : 'error');
-      refreshStuck();
-    } catch (err: any) {
-      toast(err.message, 'error');
-    } finally {
-      setFixing(null);
-    }
-  };
-
   const stuckRuns = stuckData?.runs || [];
 
   return (
@@ -93,7 +47,10 @@ export function Ops() {
 
       {stuckRuns.length > 0 && (
         <div className="stuck-banner">
-          <div className="stuck-banner__title">[!] Stuck Runs Detected</div>
+          <div className="stuck-banner__title">[!] Legacy Diagnostic Candidates — Read Only</div>
+          <div className="stuck-banner__msg">
+            Recovery mutations are locked because operational snapshot v1 does not authorize unstick, auto-fix, or skip-story actions.
+          </div>
           {stuckRuns.map((run) =>
             run.stuckSteps.map((step) => {
               const dKey = `${run.id}-${step.id}`;
@@ -108,10 +65,10 @@ export function Ops() {
                   <div className="stuck-banner__actions" style={{ display: 'flex', gap: '0.5rem' }}>
                     <button
                       className="stuck-banner__btn"
-                      disabled={unsticking === run.id}
-                      onClick={() => handleUnstick(run.id, step.id)}
+                      disabled
+                      title="OPERATIONAL_ACTION_NOT_DEFINED_IN_SNAPSHOT_V1"
                     >
-                      {unsticking === run.id ? 'UNSTICKING...' : 'UNSTICK'}
+                      UNSTICK LOCKED
                     </button>
                     <button
                       className="stuck-banner__btn"
@@ -128,13 +85,13 @@ export function Ops() {
                       {diag.excerpt && <div style={{ color: '#888', marginTop: '0.25rem', fontFamily: 'monospace', fontSize: '0.75rem' }}>{diag.excerpt}</div>}
                       <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem' }}>
                         {diag.fixable && (
-                          <button className="stuck-banner__btn" style={{ borderColor: '#0f0' }} disabled={fixing === run.id} onClick={() => handleAutoFix(run.id, diag.cause, diag.storyId ?? undefined)}>
-                            {fixing === run.id ? 'FIXING...' : 'AUTO-FIX'}
+                          <button className="stuck-banner__btn" style={{ borderColor: '#0f0' }} disabled title="OPERATIONAL_ACTION_NOT_DEFINED_IN_SNAPSHOT_V1">
+                            AUTO-FIX LOCKED
                           </button>
                         )}
                         {diag.storyId && !diag.fixable && (
-                          <button className="stuck-banner__btn" style={{ borderColor: '#f80' }} disabled={fixing === run.id} onClick={() => handleSkipStory(run.id, diag.storyId ?? '', diag.description)}>
-                            {fixing === run.id ? 'SKIPPING...' : 'SKIP STORY'}
+                          <button className="stuck-banner__btn" style={{ borderColor: '#f80' }} disabled title="OPERATIONAL_ACTION_NOT_DEFINED_IN_SNAPSHOT_V1">
+                            SKIP STORY LOCKED
                           </button>
                         )}
                       </div>

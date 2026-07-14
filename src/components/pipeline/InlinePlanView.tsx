@@ -357,11 +357,10 @@ function LiveOperationsBoard({
 
 export interface InlinePlanViewProps {
   runId: string;
-  onRetry?: (storyId: string) => void;
   initialTab?: "overview" | "contract" | "prd" | "design" | "stories" | "raw" | "memory";
 }
 
-export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetry, initialTab = "overview" }: InlinePlanViewProps) {
+export const InlinePlanView = React.memo(function InlinePlanView({ runId, initialTab = "overview" }: InlinePlanViewProps) {
   const [tab, setTab] = useState<"overview" | "contract" | "prd" | "design" | "stories" | "raw" | "memory">(initialTab);
   const [planData, setPlanData] = useState<PlanData | null>(null);
   const [designData, setDesignData] = useState<any>(null);
@@ -417,7 +416,7 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
 
   if (loading) return <div className="af-inline-plan__loading">Loading plan data...</div>;
   if (!planData || (!planData.prd && planStories.length === 0 && !contractData)) {
-    return <StoryChecklist runId={runId} onRetry={onRetry} />;
+    return <StoryChecklist runId={runId} />;
   }
 
   const safePlan: PlanData = { prd: planData?.prd || "", stories: planStories, rawOutput: planData?.rawOutput || "", projectMemory: planData?.projectMemory, stepDurations: planData?.stepDurations, storyStats: planData?.storyStats };
@@ -725,7 +724,7 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, onRetr
         )}
 
         {tab === "stories" && (
-          <StoryChecklist runId={runId} onRetry={onRetry} />
+          <StoryChecklist runId={runId} />
         )}
 
         {tab === "raw" && (

@@ -75,6 +75,7 @@ export const config = {
   internalUrl: process.env.MC_INTERNAL_URL || `http://127.0.0.1:${port}`,
   gatewayWs: process.env.GATEWAY_WS || 'ws://127.0.0.1:18789',
   setfarmUrl: process.env.SETFARM_URL || process.env.ANTFARM_URL || 'http://127.0.0.1:3333',
+  setfarmOperationalWriteToken: process.env.SETFARM_OPERATIONAL_WRITE_TOKEN || '',
   prometheusUrl: process.env.PROMETHEUS_URL || 'http://127.0.0.1:9090',
   dataJson: envPath('DATA_JSON', join(HOME, '.openclaw/dashboard/data.json')),
   jobsJson: envPath('JOBS_JSON', join(HOME, '.openclaw/cron/jobs.json')),
