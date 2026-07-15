@@ -6,13 +6,20 @@ import { resolve } from "node:path";
 
 import { parseSetfarmMissionControlCompatibilityEnvelopeV1 } from "../server/services/setfarm-contract-compatibility.ts";
 import { parseSetfarmV3DeploymentObservation } from "../server/services/setfarm-deployment-observation.ts";
-import { parseRunOperationalSnapshotV1 } from "../server/services/setfarm-operational-snapshot.ts";
+import {
+  parseRunOperationalSnapshotV1,
+  parseRunOperationalSnapshotV2,
+} from "../server/services/setfarm-operational-snapshot.ts";
 import { hashCanonicalJson, matchExistingV3ProjectTransferAckProjection } from "../server/services/v3-project-transfer-ack.ts";
 
 const CONTRACTS = [
   {
     contract: "setfarm.run-operational-snapshot.v1",
     stem: "run-operational-snapshot.v1",
+  },
+  {
+    contract: "setfarm.run-operational-snapshot.v2",
+    stem: "run-operational-snapshot.v2",
   },
   {
     contract: "setfarm.v3-deployment-observation.v1",
@@ -78,6 +85,7 @@ for (const descriptor of CONTRACTS) {
 }
 
 const snapshot = parseRunOperationalSnapshotV1(fixtures.get("setfarm.run-operational-snapshot.v1"));
+const snapshotV2 = parseRunOperationalSnapshotV2(fixtures.get("setfarm.run-operational-snapshot.v2"));
 parseSetfarmV3DeploymentObservation(fixtures.get("setfarm.v3-deployment-observation.v1"));
 
 const acknowledgement = fixtures.get("setfarm.v3-project-transfer-ack.v1");
@@ -85,8 +93,10 @@ if (typeof acknowledgement !== "object" || acknowledgement === null || Array.isA
   throw new Error("SETFARM_PROJECT_TRANSFER_ACK_COMPATIBILITY_INVALID");
 }
 const snapshotAcknowledgement = snapshot.projectTransferAck?.acknowledgement;
-if (!snapshotAcknowledgement
-  || hashCanonicalJson(acknowledgement) !== hashCanonicalJson(snapshotAcknowledgement)) {
+const snapshotV2Acknowledgement = snapshotV2.projectTransferAck?.acknowledgement;
+if (!snapshotAcknowledgement || !snapshotV2Acknowledgement
+  || hashCanonicalJson(acknowledgement) !== hashCanonicalJson(snapshotAcknowledgement)
+  || hashCanonicalJson(acknowledgement) !== hashCanonicalJson(snapshotV2Acknowledgement)) {
   throw new Error("SETFARM_PROJECT_TRANSFER_ACK_COMPATIBILITY_MISMATCH");
 }
 const ack = acknowledgement;

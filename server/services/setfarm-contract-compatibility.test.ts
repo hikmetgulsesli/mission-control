@@ -7,6 +7,7 @@ import { hashCanonicalJson } from "./v3-project-transfer-ack.js";
 function fixture(
   contract:
     | "setfarm.run-operational-snapshot.v1"
+    | "setfarm.run-operational-snapshot.v2"
     | "setfarm.v3-deployment-observation.v1"
     | "setfarm.v3-project-transfer-ack.v1" = "setfarm.run-operational-snapshot.v1",
 ) {

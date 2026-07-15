@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA,
+  RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA,
   collectOperationalEvidenceRefs,
   evaluateOperationalAction,
   parseOperationalSnapshotResponse,
   type RunOperationalSnapshotV1,
+  type RunOperationalSnapshotV2,
 } from "../src/lib/operational-snapshot.ts";
 
 const HASH = "a".repeat(64);
@@ -108,6 +110,23 @@ function makeSnapshot(): RunOperationalSnapshotV1 {
   };
 }
 
+function makeV2Snapshot(): RunOperationalSnapshotV2 {
+  const v1 = makeSnapshot();
+  return {
+    ...v1,
+    schema: RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA,
+    source: {
+      ...v1.source,
+      migrationVersions: [...v1.source.migrationVersions, 19],
+      capabilities: {
+        ...v1.source.capabilities,
+        implementationSubmissionEvidence: true,
+      },
+    },
+    completionRequests: [],
+  };
+}
+
 test("accepts a fresh complete invariant-free snapshot as stop authority", () => {
   const decision = evaluateOperationalAction({ status: "ok", snapshot: makeSnapshot() }, "stop", NOW);
   assert.deepEqual(decision, { allowed: true, reasonCode: "STOP_ALLOWED", snapshotHash: HASH });
@@ -175,7 +194,52 @@ test("fails closed when canonical evidence is loading, unavailable, or unsupport
 test("maps HTTP success and error bodies without a prose fallback", () => {
   const snapshot = makeSnapshot();
   assert.equal(parseOperationalSnapshotResponse(200, snapshot, "run-1").status, "ok");
-  assert.equal(parseOperationalSnapshotResponse(200, { ...snapshot, schema: "setfarm.run-operational-snapshot.v2" }, "run-1").status, "unsupported_schema");
+  const v2 = makeV2Snapshot();
+  assert.equal(parseOperationalSnapshotResponse(200, v2, "run-1").status, "ok");
+  assert.equal(evaluateOperationalAction({ status: "ok", snapshot: v2 }, "stop", NOW).allowed, true);
+  const unicodeBoundary = makeV2Snapshot();
+  const requestId = "request-1";
+  const sourceProposalHash = "e".repeat(64);
+  unicodeBoundary.completionRequests = [{
+    requestId,
+    outputHash: HASH,
+    implementationSubmissionEvidence: {
+      receipt: {
+        schema: "setfarm.runtime-completion-submission-evidence.v1",
+        compiler: "setfarm.v3-implementation-output-compilation.v1",
+        sourceSchema: "setfarm.v3-implementation-agent-proposal.v1",
+        sourceProposalHash,
+        canonicalOutputHash: HASH,
+        ignoredFieldPaths: [`/${"\u00fc".repeat(1_999)}`],
+      },
+      sourceProposalRef: `setfarm://runtime-completion/${requestId}/source-proposal/${sourceProposalHash}`,
+    },
+  }] as unknown as RunOperationalSnapshotV2["completionRequests"];
+  assert.equal(parseOperationalSnapshotResponse(200, unicodeBoundary, "run-1").status, "ok");
+  unicodeBoundary.completionRequests[0]!.implementationSubmissionEvidence!.receipt.ignoredFieldPaths = Array.from(
+    { length: 20_000 },
+    (_, index) => `/${index.toString(36).padStart(3, "0")}`,
+  );
+  assert.equal(parseOperationalSnapshotResponse(200, unicodeBoundary, "run-1").status, "ok");
+  const preV19 = makeV2Snapshot();
+  preV19.source.migrationVersions = preV19.source.migrationVersions.filter((version) => version !== 19);
+  preV19.source.capabilities.implementationSubmissionEvidence = false;
+  assert.equal(parseOperationalSnapshotResponse(200, preV19, "run-1").status, "ok");
+  assert.equal(evaluateOperationalAction({ status: "ok", snapshot: preV19 }, "stop", NOW).allowed, true);
+  const missingMigrationAuthority = makeV2Snapshot();
+  missingMigrationAuthority.source.migrationVersions = missingMigrationAuthority.source.migrationVersions
+    .filter((version) => version !== 19);
+  assert.equal(
+    parseOperationalSnapshotResponse(200, missingMigrationAuthority, "run-1").status,
+    "upstream_error",
+  );
+  const unattestedAuthority = makeV2Snapshot();
+  unattestedAuthority.source.verifiedReleaseSha = null;
+  assert.equal(
+    parseOperationalSnapshotResponse(200, unattestedAuthority, "run-1").status,
+    "upstream_error",
+  );
+  assert.equal(parseOperationalSnapshotResponse(200, { ...snapshot, schema: "setfarm.run-operational-snapshot.v3" }, "run-1").status, "unsupported_schema");
   assert.deepEqual(parseOperationalSnapshotResponse(503, {
     status: "unavailable",
     code: "SETFARM_OPERATIONAL_SNAPSHOT_UNAVAILABLE",

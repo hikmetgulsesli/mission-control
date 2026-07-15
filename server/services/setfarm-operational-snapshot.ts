@@ -11,6 +11,7 @@ import {
 } from "./setfarm-v3-runtime-contract.js";
 
 export const RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA = "setfarm.run-operational-snapshot.v1" as const;
+export const RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA = "setfarm.run-operational-snapshot.v2" as const;
 
 type Nullable<T> = T | null;
 
@@ -27,12 +28,41 @@ export interface OperationalProjectionCapabilitiesV1 {
   projectTransferAck: boolean;
 }
 
+export interface OperationalProjectionCapabilitiesV2 extends OperationalProjectionCapabilitiesV1 {
+  implementationSubmissionEvidence: boolean;
+}
+
+export const OPERATIONAL_LIFECYCLE_CAPABILITY_KEYS = [
+  "attempts",
+  "claimBinding",
+  "runtimeOwnership",
+  "managerCompletion",
+  "effectLedger",
+  "findingRecovery",
+  "evidenceLedger",
+  "acceptedCandidate",
+  "deploymentReceipt",
+  "projectTransferAck",
+] as const;
+
+export function hasCompleteOperationalLifecycleCapabilities(
+  capabilities: OperationalProjectionCapabilitiesV1 | OperationalProjectionCapabilitiesV2,
+): boolean {
+  return OPERATIONAL_LIFECYCLE_CAPABILITY_KEYS.every(
+    (capability) => capabilities[capability],
+  );
+}
+
 export interface OperationalProjectionSourceV1 {
   database: "postgres";
   projection: "complete" | "partial" | "unavailable";
   migrationVersions: number[];
   verifiedReleaseSha: Nullable<string>;
   capabilities: OperationalProjectionCapabilitiesV1;
+}
+
+export interface OperationalProjectionSourceV2 extends Omit<OperationalProjectionSourceV1, "capabilities"> {
+  capabilities: OperationalProjectionCapabilitiesV2;
 }
 
 export interface OperationalRunV1 {
@@ -180,6 +210,26 @@ export interface OperationalCompletionRequestV1 {
   createdAt: string;
   updatedAt: string;
   effects: OperationalCompletionEffectV1[];
+}
+
+export interface RuntimeCompletionSubmissionEvidenceV1 {
+  schema: "setfarm.runtime-completion-submission-evidence.v1";
+  compiler: "setfarm.v3-implementation-output-compilation.v1";
+  sourceSchema:
+    | "setfarm.v3-implementation-agent-proposal.v1"
+    | "setfarm.v3-implementation-agent-output.v1";
+  sourceProposalHash: string;
+  canonicalOutputHash: string;
+  ignoredFieldPaths: string[];
+}
+
+export interface OperationalImplementationSubmissionEvidenceV2 {
+  receipt: RuntimeCompletionSubmissionEvidenceV1;
+  sourceProposalRef: string;
+}
+
+export interface OperationalCompletionRequestV2 extends OperationalCompletionRequestV1 {
+  implementationSubmissionEvidence: Nullable<OperationalImplementationSubmissionEvidenceV2>;
 }
 
 export type V3DeployAuthorityCode =
@@ -639,8 +689,19 @@ export interface RunOperationalSnapshotV1 {
   projectTransferAck?: Nullable<OperationalV3ProjectTransferAckV1>;
 }
 
+export interface RunOperationalSnapshotV2 extends Omit<
+  RunOperationalSnapshotV1,
+  "schema" | "source" | "completionRequests"
+> {
+  schema: typeof RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA;
+  source: OperationalProjectionSourceV2;
+  completionRequests: OperationalCompletionRequestV2[];
+}
+
+export type RunOperationalSnapshot = RunOperationalSnapshotV1 | RunOperationalSnapshotV2;
+
 export type OperationalSnapshotFetchResult =
-  | { status: "ok"; snapshot: RunOperationalSnapshotV1 }
+  | { status: "ok"; snapshot: RunOperationalSnapshot }
   | { status: "unavailable"; reason: "not_found" | "timeout" | "network" | "circuit_open"; upstreamStatus?: number }
   | { status: "upstream_error"; reason: "http_error" | "invalid_json" | "invalid_payload"; upstreamStatus?: number }
   | { status: "unsupported_schema"; schema: string | null };
@@ -671,6 +732,10 @@ const TIMESTAMP_WITH_OFFSET = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:
 const V3_BUILD_ARTIFACT_MAX_FILES = 50_000;
 const V3_BUILD_ARTIFACT_MAX_FILE_BYTES = 1_073_741_824;
 const V3_BUILD_ARTIFACT_MAX_TOTAL_BYTES = 4_294_967_296;
+const IMPLEMENTATION_IGNORED_PATH_MAX_ITEMS = 20_000;
+const IMPLEMENTATION_IGNORED_PATH_MAX_BYTES = 128 * 1024;
+const IMPLEMENTATION_IGNORED_PATH_MAX_ITEM_LENGTH = 2_000;
+const JSON_POINTER = /^\/(?:[^~/]|~[01])*(?:\/(?:[^~/]|~[01])*)*$/;
 
 class SnapshotValidationError extends Error {}
 
@@ -876,6 +941,33 @@ function projectionCapabilitiesAt(value: unknown, path: string): OperationalProj
   };
 }
 
+function projectionCapabilitiesV2At(value: unknown, path: string): OperationalProjectionCapabilitiesV2 {
+  const capabilities = objectAt(
+    value,
+    path,
+    [
+      "attempts", "claimBinding", "runtimeOwnership", "managerCompletion", "implementationSubmissionEvidence",
+      "effectLedger", "findingRecovery", "evidenceLedger", "acceptedCandidate", "deploymentReceipt", "projectTransferAck",
+    ],
+  );
+  return {
+    attempts: booleanAt(capabilities.attempts, `${path}.attempts`),
+    claimBinding: booleanAt(capabilities.claimBinding, `${path}.claimBinding`),
+    runtimeOwnership: booleanAt(capabilities.runtimeOwnership, `${path}.runtimeOwnership`),
+    managerCompletion: booleanAt(capabilities.managerCompletion, `${path}.managerCompletion`),
+    implementationSubmissionEvidence: booleanAt(
+      capabilities.implementationSubmissionEvidence,
+      `${path}.implementationSubmissionEvidence`,
+    ),
+    effectLedger: booleanAt(capabilities.effectLedger, `${path}.effectLedger`),
+    findingRecovery: booleanAt(capabilities.findingRecovery, `${path}.findingRecovery`),
+    evidenceLedger: booleanAt(capabilities.evidenceLedger, `${path}.evidenceLedger`),
+    acceptedCandidate: booleanAt(capabilities.acceptedCandidate, `${path}.acceptedCandidate`),
+    deploymentReceipt: booleanAt(capabilities.deploymentReceipt, `${path}.deploymentReceipt`),
+    projectTransferAck: booleanAt(capabilities.projectTransferAck, `${path}.projectTransferAck`),
+  };
+}
+
 function projectionSourceAt(value: unknown, path: string): OperationalProjectionSourceV1 {
   const source = objectAt(value, path, ["database", "projection", "migrationVersions", "verifiedReleaseSha", "capabilities"]);
   const migrationVersions = arrayAt(source.migrationVersions, `${path}.migrationVersions`, (item, itemPath) => integerAt(item, itemPath, 1), 1_000);
@@ -884,12 +976,50 @@ function projectionSourceAt(value: unknown, path: string): OperationalProjection
   }
   const capabilities = projectionCapabilitiesAt(source.capabilities, `${path}.capabilities`);
   const projection = enumAt(source.projection, `${path}.projection`, ["complete", "partial", "unavailable"] as const);
-  if (projection === "complete" && !Object.values(capabilities).every(Boolean)) fail(`${path}.projection`, "complete projection requires all capabilities");
+  if (projection === "complete" && !hasCompleteOperationalLifecycleCapabilities(capabilities)) {
+    fail(`${path}.projection`, "complete projection requires all lifecycle capabilities");
+  }
   return {
     database: enumAt(source.database, `${path}.database`, ["postgres"] as const),
     projection,
     migrationVersions,
     verifiedReleaseSha: optionalGitHashAt(source.verifiedReleaseSha, `${path}.verifiedReleaseSha`),
+    capabilities,
+  };
+}
+
+function projectionSourceV2At(value: unknown, path: string): OperationalProjectionSourceV2 {
+  const source = objectAt(value, path, ["database", "projection", "migrationVersions", "verifiedReleaseSha", "capabilities"]);
+  const migrationVersions = arrayAt(source.migrationVersions, `${path}.migrationVersions`, (item, itemPath) => integerAt(item, itemPath, 1), 1_000);
+  if (new Set(migrationVersions).size !== migrationVersions.length || migrationVersions.some((item, index) => index > 0 && item <= migrationVersions[index - 1])) {
+    fail(`${path}.migrationVersions`, "expected unique ascending versions");
+  }
+  const capabilities = projectionCapabilitiesV2At(source.capabilities, `${path}.capabilities`);
+  const projection = enumAt(source.projection, `${path}.projection`, ["complete", "partial", "unavailable"] as const);
+  if (
+    projection === "complete"
+    && !hasCompleteOperationalLifecycleCapabilities(capabilities)
+  ) {
+    fail(`${path}.projection`, "complete projection requires every lifecycle capability");
+  }
+  const verifiedReleaseSha = optionalGitHashAt(source.verifiedReleaseSha, `${path}.verifiedReleaseSha`);
+  if (capabilities.implementationSubmissionEvidence && !capabilities.managerCompletion) {
+    fail(`${path}.capabilities.implementationSubmissionEvidence`, "requires manager completion authority");
+  }
+  if (
+    capabilities.implementationSubmissionEvidence
+    && (!migrationVersions.includes(19) || verifiedReleaseSha === null)
+  ) {
+    fail(
+      `${path}.capabilities.implementationSubmissionEvidence`,
+      "requires an attested migration 19 shape",
+    );
+  }
+  return {
+    database: enumAt(source.database, `${path}.database`, ["postgres"] as const),
+    projection,
+    migrationVersions,
+    verifiedReleaseSha,
     capabilities,
   };
 }
@@ -1074,6 +1204,99 @@ function completionRequestAt(value: unknown, path: string): OperationalCompletio
     createdAt: timestampAt(request.createdAt, `${path}.createdAt`),
     updatedAt: timestampAt(request.updatedAt, `${path}.updatedAt`),
     effects: arrayAt(request.effects, `${path}.effects`, completionEffectAt),
+  };
+}
+
+function implementationSubmissionReceiptAt(
+  value: unknown,
+  path: string,
+): RuntimeCompletionSubmissionEvidenceV1 {
+  const receipt = objectAt(value, path, [
+    "schema", "compiler", "sourceSchema", "sourceProposalHash", "canonicalOutputHash", "ignoredFieldPaths",
+  ]);
+  if (receipt.schema !== "setfarm.runtime-completion-submission-evidence.v1") {
+    fail(`${path}.schema`, "unsupported schema");
+  }
+  if (receipt.compiler !== "setfarm.v3-implementation-output-compilation.v1") {
+    fail(`${path}.compiler`, "unsupported compiler");
+  }
+  const ignoredFieldPaths = arrayAt(
+    receipt.ignoredFieldPaths,
+    `${path}.ignoredFieldPaths`,
+    (item, itemPath) => stringAt(item, itemPath, {
+      regex: JSON_POINTER,
+      max: IMPLEMENTATION_IGNORED_PATH_MAX_ITEM_LENGTH,
+    }),
+    IMPLEMENTATION_IGNORED_PATH_MAX_ITEMS,
+  );
+  const encodedPaths = ignoredFieldPaths.map((pointer) => ({
+    pointer,
+    bytes: Buffer.from(pointer, "utf8"),
+  }));
+  const totalBytes = encodedPaths.reduce((bytes, item) => bytes + item.bytes.length, 0);
+  if (totalBytes > IMPLEMENTATION_IGNORED_PATH_MAX_BYTES) {
+    fail(`${path}.ignoredFieldPaths`, "aggregate byte capacity exceeded");
+  }
+  encodedPaths.sort((left, right) => Buffer.compare(left.bytes, right.bytes));
+  for (let index = 0; index < encodedPaths.length; index += 1) {
+    const item = encodedPaths[index]!;
+    if (
+      item.pointer !== ignoredFieldPaths[index]
+      || (index > 0 && item.pointer === encodedPaths[index - 1]!.pointer)
+    ) {
+      fail(`${path}.ignoredFieldPaths`, "expected unique canonical order");
+    }
+  }
+  return {
+    schema: "setfarm.runtime-completion-submission-evidence.v1",
+    compiler: "setfarm.v3-implementation-output-compilation.v1",
+    sourceSchema: enumAt(receipt.sourceSchema, `${path}.sourceSchema`, [
+      "setfarm.v3-implementation-agent-proposal.v1",
+      "setfarm.v3-implementation-agent-output.v1",
+    ] as const),
+    sourceProposalHash: sha256At(receipt.sourceProposalHash, `${path}.sourceProposalHash`),
+    canonicalOutputHash: sha256At(receipt.canonicalOutputHash, `${path}.canonicalOutputHash`),
+    ignoredFieldPaths,
+  };
+}
+
+function implementationSubmissionEvidenceAt(
+  value: unknown,
+  requestId: string,
+  outputHash: string,
+  path: string,
+): OperationalImplementationSubmissionEvidenceV2 {
+  const evidence = objectAt(value, path, ["receipt", "sourceProposalRef"]);
+  const receipt = implementationSubmissionReceiptAt(evidence.receipt, `${path}.receipt`);
+  const sourceProposalRef = canonicalRefAt(evidence.sourceProposalRef, `${path}.sourceProposalRef`);
+  if (receipt.canonicalOutputHash !== outputHash) {
+    fail(`${path}.receipt.canonicalOutputHash`, "does not bind completion output hash");
+  }
+  const expectedRef = `setfarm://runtime-completion/${requestId}/source-proposal/${receipt.sourceProposalHash}`;
+  if (sourceProposalRef !== expectedRef) {
+    fail(`${path}.sourceProposalRef`, "does not bind request and source proposal hash");
+  }
+  return { receipt, sourceProposalRef };
+}
+
+function completionRequestV2At(value: unknown, path: string): OperationalCompletionRequestV2 {
+  const request = objectAt(value, path, [
+    "ref", "requestId", "runRef", "runtimeSessionRef", "claimRef", "attemptRef", "stepRef", "storyRef", "workflowStepId", "storyId", "outputHash",
+    "implementationSubmissionEvidence", "applyPhase", "claimOutcome", "completionPlanHash", "state", "requestedAt", "drainedAt", "processingAt",
+    "acceptedAt", "rejectedAt", "createdAt", "updatedAt", "effects",
+  ]);
+  const { implementationSubmissionEvidence, ...v1Request } = request;
+  const parsed = completionRequestAt(v1Request, path);
+  return {
+    ...parsed,
+    implementationSubmissionEvidence: implementationSubmissionEvidence === null
+      ? null
+      : implementationSubmissionEvidenceAt(
+          implementationSubmissionEvidence,
+          parsed.requestId,
+          parsed.outputHash,
+          `${path}.implementationSubmissionEvidence`,
+        ),
   };
 }
 
@@ -2043,7 +2266,7 @@ function assertUniqueProjectionIdentities(
   }
 }
 
-export function computeOperationalSnapshotHash(snapshot: RunOperationalSnapshotV1): string {
+export function computeOperationalSnapshotHash(snapshot: RunOperationalSnapshot): string {
   const { snapshotHash: _snapshotHash, generatedAt: _generatedAt, ...state } = snapshot;
   return hashCanonicalJson({
     ...state,
@@ -2051,7 +2274,7 @@ export function computeOperationalSnapshotHash(snapshot: RunOperationalSnapshotV
   });
 }
 
-function validateCoreOperationalBindings(snapshot: RunOperationalSnapshotV1): void {
+function validateCoreOperationalBindings(snapshot: RunOperationalSnapshot): void {
   const segment = (value: string) => encodeURIComponent(value);
   const expectedRunRef = `setfarm://run/${segment(snapshot.run.id)}`;
   if (snapshot.run.ref !== expectedRunRef) fail("snapshot.run.ref", "does not bind run id");
@@ -2151,24 +2374,32 @@ export function validateRunOperationalSnapshotV1(value: unknown): value is RunOp
   }
 }
 
-export function parseRunOperationalSnapshotV1(value: unknown): RunOperationalSnapshotV1 {
+function parseRunOperationalSnapshotVersion(
+  value: unknown,
+  expectedSchema: typeof RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA | typeof RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA,
+): RunOperationalSnapshot {
   const snapshot = objectWithOptionalAt(value, "snapshot", [
     "schema", "generatedAt", "snapshotHash", "source", "run", "summary", "claims", "attempts", "runtimeSessions",
     "completionRequests", "terminationRequests", "outbox", "invariants",
   ], ["findingSets", "evidenceBundles", "recoveryCases", "recoveryDispatches", "acceptedCandidate", "deploymentReceipt", "projectTransferAck"]);
-  if (snapshot.schema !== RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA) fail("snapshot.schema", "unsupported schema");
+  if (snapshot.schema !== expectedSchema) fail("snapshot.schema", "unsupported schema");
+  const v2 = expectedSchema === RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA;
 
-  const parsed: RunOperationalSnapshotV1 = {
-    schema: RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA,
+  const parsed = {
+    schema: expectedSchema,
     generatedAt: timestampAt(snapshot.generatedAt, "snapshot.generatedAt"),
     snapshotHash: sha256At(snapshot.snapshotHash, "snapshot.snapshotHash"),
-    source: projectionSourceAt(snapshot.source, "snapshot.source"),
+    source: v2
+      ? projectionSourceV2At(snapshot.source, "snapshot.source")
+      : projectionSourceAt(snapshot.source, "snapshot.source"),
     run: runAt(snapshot.run, "snapshot.run"),
     summary: summaryAt(snapshot.summary, "snapshot.summary"),
     claims: arrayAt(snapshot.claims, "snapshot.claims", claimAt),
     attempts: arrayAt(snapshot.attempts, "snapshot.attempts", attemptAt),
     runtimeSessions: arrayAt(snapshot.runtimeSessions, "snapshot.runtimeSessions", runtimeSessionAt),
-    completionRequests: arrayAt(snapshot.completionRequests, "snapshot.completionRequests", completionRequestAt),
+    completionRequests: v2
+      ? arrayAt(snapshot.completionRequests, "snapshot.completionRequests", completionRequestV2At)
+      : arrayAt(snapshot.completionRequests, "snapshot.completionRequests", completionRequestAt),
     terminationRequests: arrayAt(snapshot.terminationRequests, "snapshot.terminationRequests", terminationRequestAt),
     outbox: arrayAt(snapshot.outbox, "snapshot.outbox", outboxItemAt),
     invariants: arrayAt(snapshot.invariants, "snapshot.invariants", invariantAt),
@@ -2199,7 +2430,15 @@ export function parseRunOperationalSnapshotV1(value: unknown): RunOperationalSna
       : { projectTransferAck: snapshot.projectTransferAck === null
         ? null
         : projectTransferAckAt(snapshot.projectTransferAck, "snapshot.projectTransferAck") }),
-  };
+  } as RunOperationalSnapshot;
+
+  if (
+    parsed.schema === RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA
+    && !parsed.source.capabilities.implementationSubmissionEvidence
+    && parsed.completionRequests.some((request) => request.implementationSubmissionEvidence !== null)
+  ) {
+    fail("snapshot.completionRequests", "implementation submission evidence requires explicit capability");
+  }
 
   const findingRecoveryCollectionsPresent = [snapshot.findingSets, snapshot.recoveryCases, snapshot.recoveryDispatches]
     .filter((item) => item !== undefined).length;
@@ -2383,7 +2622,34 @@ export function parseRunOperationalSnapshotV1(value: unknown): RunOperationalSna
 
   // Validation intentionally returns the original object. The proxy must never
   // normalize, enrich, or otherwise mutate Setfarm's canonical payload.
-  return value as RunOperationalSnapshotV1;
+  return value as RunOperationalSnapshot;
+}
+
+export function parseRunOperationalSnapshotV1(value: unknown): RunOperationalSnapshotV1 {
+  return parseRunOperationalSnapshotVersion(value, RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA) as RunOperationalSnapshotV1;
+}
+
+export function validateRunOperationalSnapshotV2(value: unknown): value is RunOperationalSnapshotV2 {
+  try {
+    parseRunOperationalSnapshotV2(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function parseRunOperationalSnapshotV2(value: unknown): RunOperationalSnapshotV2 {
+  return parseRunOperationalSnapshotVersion(value, RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA) as RunOperationalSnapshotV2;
+}
+
+export function parseRunOperationalSnapshot(value: unknown): RunOperationalSnapshot {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    fail("snapshot", "expected object");
+  }
+  const schema = (value as JsonRecord).schema;
+  if (schema === RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA) return parseRunOperationalSnapshotV1(value);
+  if (schema === RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA) return parseRunOperationalSnapshotV2(value);
+  fail("snapshot.schema", "unsupported schema");
 }
 
 export interface SetfarmOperationalSnapshotClientOptions {
@@ -2454,12 +2720,12 @@ export class SetfarmOperationalSnapshotClient {
       const schema = typeof payload === "object" && payload !== null && !Array.isArray(payload)
         ? (payload as JsonRecord).schema
         : null;
-      if (schema !== RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA) {
+      if (schema !== RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA && schema !== RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA) {
         return { status: "unsupported_schema", schema: typeof schema === "string" ? schema : null };
       }
 
       try {
-        const snapshot = parseRunOperationalSnapshotV1(payload);
+        const snapshot = parseRunOperationalSnapshot(payload);
         this.resetCircuit();
         return { status: "ok", snapshot };
       } catch {

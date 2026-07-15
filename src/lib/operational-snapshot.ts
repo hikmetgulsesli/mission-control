@@ -1,4 +1,5 @@
 export const RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA = "setfarm.run-operational-snapshot.v1" as const;
+export const RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA = "setfarm.run-operational-snapshot.v2" as const;
 export const OPERATIONAL_SNAPSHOT_MAX_AGE_MS = 15_000;
 
 type Nullable<T> = T | null;
@@ -16,12 +17,20 @@ export interface OperationalProjectionCapabilitiesV1 {
   projectTransferAck: boolean;
 }
 
+export interface OperationalProjectionCapabilitiesV2 extends OperationalProjectionCapabilitiesV1 {
+  implementationSubmissionEvidence: boolean;
+}
+
 export interface OperationalProjectionSourceV1 {
   database: "postgres";
   projection: "complete" | "partial" | "unavailable";
   migrationVersions: number[];
   verifiedReleaseSha: Nullable<string>;
   capabilities: OperationalProjectionCapabilitiesV1;
+}
+
+export interface OperationalProjectionSourceV2 extends Omit<OperationalProjectionSourceV1, "capabilities"> {
+  capabilities: OperationalProjectionCapabilitiesV2;
 }
 
 export interface OperationalRunV1 {
@@ -169,6 +178,26 @@ export interface OperationalCompletionRequestV1 {
   createdAt: string;
   updatedAt: string;
   effects: OperationalCompletionEffectV1[];
+}
+
+export interface RuntimeCompletionSubmissionEvidenceV1 {
+  schema: "setfarm.runtime-completion-submission-evidence.v1";
+  compiler: "setfarm.v3-implementation-output-compilation.v1";
+  sourceSchema:
+    | "setfarm.v3-implementation-agent-proposal.v1"
+    | "setfarm.v3-implementation-agent-output.v1";
+  sourceProposalHash: string;
+  canonicalOutputHash: string;
+  ignoredFieldPaths: string[];
+}
+
+export interface OperationalImplementationSubmissionEvidenceV2 {
+  receipt: RuntimeCompletionSubmissionEvidenceV1;
+  sourceProposalRef: string;
+}
+
+export interface OperationalCompletionRequestV2 extends OperationalCompletionRequestV1 {
+  implementationSubmissionEvidence: Nullable<OperationalImplementationSubmissionEvidenceV2>;
 }
 
 export type V3DeployAuthorityCode =
@@ -592,8 +621,19 @@ export interface RunOperationalSnapshotV1 {
   projectTransferAck?: Nullable<OperationalV3ProjectTransferAckV1>;
 }
 
+export interface RunOperationalSnapshotV2 extends Omit<
+  RunOperationalSnapshotV1,
+  "schema" | "source" | "completionRequests"
+> {
+  schema: typeof RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA;
+  source: OperationalProjectionSourceV2;
+  completionRequests: OperationalCompletionRequestV2[];
+}
+
+export type RunOperationalSnapshot = RunOperationalSnapshotV1 | RunOperationalSnapshotV2;
+
 export type OperationalSnapshotFetchResult =
-  | { status: "ok"; snapshot: RunOperationalSnapshotV1 }
+  | { status: "ok"; snapshot: RunOperationalSnapshot }
   | {
       status: "unavailable";
       code: string;
@@ -621,7 +661,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-const OPERATIONAL_CAPABILITY_KEYS = [
+const OPERATIONAL_CAPABILITY_V1_KEYS = [
   "attempts",
   "claimBinding",
   "runtimeOwnership",
@@ -634,13 +674,85 @@ const OPERATIONAL_CAPABILITY_KEYS = [
   "projectTransferAck",
 ] as const;
 
-function hasExactOperationalCapabilities(value: unknown): value is OperationalProjectionCapabilitiesV1 {
+const OPERATIONAL_CAPABILITY_V2_KEYS = [
+  ...OPERATIONAL_CAPABILITY_V1_KEYS,
+  "implementationSubmissionEvidence",
+] as const;
+
+function hasExactOperationalCapabilities(
+  value: unknown,
+  schema: typeof RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA | typeof RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA,
+): value is OperationalProjectionCapabilitiesV1 | OperationalProjectionCapabilitiesV2 {
   if (!isRecord(value)) return false;
   const keys = Object.keys(value).sort();
-  const expected = [...OPERATIONAL_CAPABILITY_KEYS].sort();
+  const expectedKeys = schema === RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA
+    ? OPERATIONAL_CAPABILITY_V2_KEYS
+    : OPERATIONAL_CAPABILITY_V1_KEYS;
+  const expected = [...expectedKeys].sort();
   return keys.length === expected.length
     && keys.every((key, index) => key === expected[index])
-    && OPERATIONAL_CAPABILITY_KEYS.every((key) => typeof value[key] === "boolean");
+    && expectedKeys.every((key) => typeof value[key] === "boolean");
+}
+
+const SHA256 = /^[a-f0-9]{64}$/;
+const GIT_OBJECT_HASH = /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/;
+const CANONICAL_REF = /^setfarm:\/\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]+$/;
+const JSON_POINTER = /^\/(?:[^~/]|~[01])*(?:\/(?:[^~/]|~[01])*)*$/;
+const UTF8_ENCODER = new TextEncoder();
+
+function compareUtf8Bytes(leftBytes: Uint8Array, rightBytes: Uint8Array): number {
+  const length = Math.min(leftBytes.length, rightBytes.length);
+  for (let index = 0; index < length; index += 1) {
+    if (leftBytes[index] !== rightBytes[index]) return leftBytes[index]! - rightBytes[index]!;
+  }
+  return leftBytes.length - rightBytes.length;
+}
+
+function hasExactImplementationSubmissionEvidence(value: unknown, requestId: unknown, outputHash: unknown): boolean {
+  if (value === null) return true;
+  if (!isRecord(value) || JSON.stringify(Object.keys(value).sort()) !== JSON.stringify(["receipt", "sourceProposalRef"].sort())) return false;
+  if (!isRecord(value.receipt)
+    || JSON.stringify(Object.keys(value.receipt).sort()) !== JSON.stringify([
+      "schema", "compiler", "sourceSchema", "sourceProposalHash", "canonicalOutputHash", "ignoredFieldPaths",
+    ].sort())) return false;
+  const receipt = value.receipt;
+  if (receipt.schema !== "setfarm.runtime-completion-submission-evidence.v1"
+    || receipt.compiler !== "setfarm.v3-implementation-output-compilation.v1"
+    || typeof receipt.sourceSchema !== "string" || ![
+      "setfarm.v3-implementation-agent-proposal.v1",
+      "setfarm.v3-implementation-agent-output.v1",
+    ].includes(receipt.sourceSchema)
+    || typeof receipt.sourceProposalHash !== "string" || !SHA256.test(receipt.sourceProposalHash)
+    || typeof receipt.canonicalOutputHash !== "string" || !SHA256.test(receipt.canonicalOutputHash)
+    || receipt.canonicalOutputHash !== outputHash
+    || typeof requestId !== "string"
+    || typeof value.sourceProposalRef !== "string" || !CANONICAL_REF.test(value.sourceProposalRef)
+    || value.sourceProposalRef !== `setfarm://runtime-completion/${requestId}/source-proposal/${receipt.sourceProposalHash}`
+    || !Array.isArray(receipt.ignoredFieldPaths)
+    || receipt.ignoredFieldPaths.length > 20_000) return false;
+  let totalBytes = 0;
+  const encodedPaths: Array<{ pointer: string; bytes: Uint8Array }> = [];
+  for (const pointer of receipt.ignoredFieldPaths) {
+    if (
+      typeof pointer !== "string"
+      || pointer.length < 1
+      || pointer.length > 2_000
+      || !JSON_POINTER.test(pointer)
+    ) return false;
+    const bytes = UTF8_ENCODER.encode(pointer);
+    totalBytes += bytes.byteLength;
+    encodedPaths.push({ pointer, bytes });
+  }
+  if (totalBytes > 128 * 1024) return false;
+  encodedPaths.sort((left, right) => compareUtf8Bytes(left.bytes, right.bytes));
+  for (let index = 0; index < encodedPaths.length; index += 1) {
+    const item = encodedPaths[index]!;
+    if (
+      item.pointer !== receipt.ignoredFieldPaths[index]
+      || (index > 0 && item.pointer === encodedPaths[index - 1]!.pointer)
+    ) return false;
+  }
+  return true;
 }
 
 export function parseOperationalSnapshotResponse(
@@ -652,7 +764,7 @@ export function parseOperationalSnapshotResponse(
     if (!isRecord(body)) {
       return { status: "upstream_error", code: "SETFARM_OPERATIONAL_SNAPSHOT_INVALID_PAYLOAD", reason: "invalid_payload" };
     }
-    if (body.schema !== RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA) {
+    if (body.schema !== RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA && body.schema !== RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA) {
       return {
         status: "unsupported_schema",
         code: "SETFARM_OPERATIONAL_SNAPSHOT_UNSUPPORTED_SCHEMA",
@@ -662,10 +774,41 @@ export function parseOperationalSnapshotResponse(
     if (!isRecord(body.run) || body.run.id !== requestedRunId) {
       return { status: "upstream_error", code: "SETFARM_OPERATIONAL_SNAPSHOT_INVALID_PAYLOAD", reason: "invalid_payload" };
     }
-    if (!isRecord(body.source) || !hasExactOperationalCapabilities(body.source.capabilities)) {
+    if (!isRecord(body.source) || !hasExactOperationalCapabilities(body.source.capabilities, body.schema)) {
       return { status: "upstream_error", code: "SETFARM_OPERATIONAL_SNAPSHOT_INVALID_PAYLOAD", reason: "invalid_payload" };
     }
-    return { status: "ok", snapshot: body as unknown as RunOperationalSnapshotV1 };
+    if (body.schema === RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA) {
+      const capabilities = body.source.capabilities as OperationalProjectionCapabilitiesV2;
+      if (capabilities.implementationSubmissionEvidence && !capabilities.managerCompletion) {
+        return { status: "upstream_error", code: "SETFARM_OPERATIONAL_SNAPSHOT_INVALID_PAYLOAD", reason: "invalid_payload" };
+      }
+      if (
+        capabilities.implementationSubmissionEvidence
+        && (
+          !Array.isArray(body.source.migrationVersions)
+          || !body.source.migrationVersions.includes(19)
+          || typeof body.source.verifiedReleaseSha !== "string"
+          || !GIT_OBJECT_HASH.test(body.source.verifiedReleaseSha)
+        )
+      ) {
+        return { status: "upstream_error", code: "SETFARM_OPERATIONAL_SNAPSHOT_INVALID_PAYLOAD", reason: "invalid_payload" };
+      }
+      if (!Array.isArray(body.completionRequests) || body.completionRequests.length > 100_000) {
+        return { status: "upstream_error", code: "SETFARM_OPERATIONAL_SNAPSHOT_INVALID_PAYLOAD", reason: "invalid_payload" };
+      }
+      for (const request of body.completionRequests) {
+        if (!isRecord(request) || !Object.hasOwn(request, "implementationSubmissionEvidence")
+          || !hasExactImplementationSubmissionEvidence(
+            request.implementationSubmissionEvidence,
+            request.requestId,
+            request.outputHash,
+          )
+          || (!capabilities.implementationSubmissionEvidence && request.implementationSubmissionEvidence !== null)) {
+          return { status: "upstream_error", code: "SETFARM_OPERATIONAL_SNAPSHOT_INVALID_PAYLOAD", reason: "invalid_payload" };
+        }
+      }
+    }
+    return { status: "ok", snapshot: body as unknown as RunOperationalSnapshot };
   }
 
   if (isRecord(body) && body.status === "unsupported_schema") {
@@ -727,8 +870,11 @@ export function evaluateOperationalAction(
   if (snapshot.source.projection !== "complete") {
     return { allowed: false, reasonCode: "OPERATIONAL_PROJECTION_INCOMPLETE", snapshotHash: snapshot.snapshotHash };
   }
-  if (!hasExactOperationalCapabilities(snapshot.source.capabilities)
-    || OPERATIONAL_CAPABILITY_KEYS.some((key) => !snapshot.source.capabilities[key])) {
+  const capabilitiesComplete = OPERATIONAL_CAPABILITY_V1_KEYS.every(
+    (key) => snapshot.source.capabilities[key],
+  );
+  if (!hasExactOperationalCapabilities(snapshot.source.capabilities, snapshot.schema)
+    || !capabilitiesComplete) {
     return { allowed: false, reasonCode: "OPERATIONAL_CAPABILITY_INCOMPLETE", snapshotHash: snapshot.snapshotHash };
   }
 
@@ -744,7 +890,7 @@ export function evaluateOperationalAction(
   return { allowed: decision.allowed, reasonCode: decision.reasonCode, snapshotHash: snapshot.snapshotHash };
 }
 
-export function collectOperationalEvidenceRefs(snapshot: RunOperationalSnapshotV1): {
+export function collectOperationalEvidenceRefs(snapshot: RunOperationalSnapshot): {
   stepRefs: string[];
   storyRefs: string[];
 } {

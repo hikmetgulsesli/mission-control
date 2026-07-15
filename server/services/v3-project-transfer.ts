@@ -3,6 +3,7 @@ import type {
   OperationalSnapshotFetchResult,
   OperationalV3DeployReceiptV1,
 } from "./setfarm-operational-snapshot.js";
+import { hasCompleteOperationalLifecycleCapabilities } from "./setfarm-operational-snapshot.js";
 import { createV3CanonicalProjectRecordIdentity } from "./v3-project-transfer-ack.js";
 
 export type V3ProjectTransferBlockCode =
@@ -86,7 +87,7 @@ export function evaluateV3ProjectTransfer(input: Readonly<{
   const snapshot = input.snapshotResult.snapshot;
   if (
     snapshot.source.projection !== "complete"
-    || !Object.values(snapshot.source.capabilities).every(Boolean)
+    || !hasCompleteOperationalLifecycleCapabilities(snapshot.source.capabilities)
   ) {
     return { status: "blocked", code: "V3_PROJECT_TRANSFER_PROJECTION_INCOMPLETE" };
   }

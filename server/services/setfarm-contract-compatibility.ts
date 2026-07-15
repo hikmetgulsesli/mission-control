@@ -18,6 +18,7 @@ export interface SetfarmMissionControlCompatibilityEnvelopeV1 {
   schema: "setfarm.mission-control-contract-compatibility.v1";
   contract:
     | "setfarm.run-operational-snapshot.v1"
+    | "setfarm.run-operational-snapshot.v2"
     | "setfarm.v3-deployment-observation.v1"
     | "setfarm.v3-project-transfer-ack.v1";
   producer: { name: "setfarm"; contractVersion: 1 };

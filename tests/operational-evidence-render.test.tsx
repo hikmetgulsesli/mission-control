@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA,
   type RunOperationalSnapshotV1,
+  type RunOperationalSnapshotV2,
 } from "../src/lib/operational-snapshot.ts";
 
 (globalThis as { document?: unknown }).document = { querySelector: () => null };
@@ -408,4 +410,38 @@ test("renders canonical deployment receipt fields without a service-name heurist
   assert.match(html, /http:\/\/127\.0\.0\.1:4123\//);
   assert.match(html, /mission-control-terminal-projector/);
   assert.doesNotMatch(html, /probably|same-name|prefix match/i);
+});
+
+test("renders bounded v2 implementation receipt metadata without raw proposal or result", () => {
+  const envelope = JSON.parse(readFileSync(
+    new URL("../contracts/vendor/setfarm/run-operational-snapshot.v2.compatibility.json", import.meta.url),
+    "utf8",
+  )) as { fixture: RunOperationalSnapshotV2 };
+  const snapshot = envelope.fixture;
+  const evidence = snapshot.completionRequests[0]?.implementationSubmissionEvidence;
+  assert.ok(evidence);
+  const html = renderToStaticMarkup(
+    <OperationalEvidence
+      state={{ status: "ok", snapshot }}
+      now={Date.parse(snapshot.generatedAt)}
+    />,
+  );
+  assert.match(html, new RegExp(evidence.receipt.sourceSchema.replaceAll(".", "\\.")));
+  assert.match(html, new RegExp(evidence.receipt.sourceProposalHash.slice(0, 12)));
+  assert.match(html, new RegExp(evidence.receipt.canonicalOutputHash.slice(0, 12)));
+  assert.match(html, new RegExp(`ignored provider field paths · ${evidence.receipt.ignoredFieldPaths.length}`));
+  evidence.receipt.ignoredFieldPaths.forEach((pointer) => assert.match(html, new RegExp(pointer.replace("/", "\\/"))));
+  assert.doesNotMatch(html, /providerAnnotation.*transport-only|raw proposal|completion result/i);
+
+  const manyPaths = structuredClone(snapshot);
+  manyPaths.completionRequests[0]!.implementationSubmissionEvidence!.receipt.ignoredFieldPaths = Array.from(
+    { length: 101 },
+    (_, index) => `/field-${String(index).padStart(3, "0")}`,
+  );
+  const boundedHtml = renderToStaticMarkup(
+    <OperationalEvidence state={{ status: "ok", snapshot: manyPaths }} now={Date.parse(manyPaths.generatedAt)} />,
+  );
+  assert.match(boundedHtml, /ignored provider field paths · 101/);
+  assert.match(boundedHtml, /1 additional path\(s\) omitted from rendering/);
+  assert.doesNotMatch(boundedHtml, /\/field-100/);
 });
