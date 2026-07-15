@@ -1,7 +1,7 @@
 {
   "schema": "mission-control.setfarm-contract-vendor-lock.v1",
   "producerRepository": "https://github.com/hikmetgulsesli/setfarm.git",
-  "producerCommit": "7be5c3079cac1cbd993e25581c03a5ffd1002a15",
+  "producerCommit": "9030d5d5ed7494739ec1e8466171a39e662a61f8",
   "artifacts": [
     {
       "producerPath": "contracts/generated/mission-control/run-operational-snapshot.v1.compatibility.json",
