@@ -1229,17 +1229,23 @@ function implementationSubmissionReceiptAt(
     }),
     IMPLEMENTATION_IGNORED_PATH_MAX_ITEMS,
   );
-  const canonical = [...new Set(ignoredFieldPaths)].sort((left, right) =>
-    Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8")));
-  if (
-    canonical.length !== ignoredFieldPaths.length
-    || ignoredFieldPaths.some((pointer, index) => pointer !== canonical[index])
-  ) {
-    fail(`${path}.ignoredFieldPaths`, "expected unique canonical order");
-  }
-  if (ignoredFieldPaths.reduce((bytes, pointer) => bytes + Buffer.byteLength(pointer, "utf8"), 0)
-    > IMPLEMENTATION_IGNORED_PATH_MAX_BYTES) {
+  const encodedPaths = ignoredFieldPaths.map((pointer) => ({
+    pointer,
+    bytes: Buffer.from(pointer, "utf8"),
+  }));
+  const totalBytes = encodedPaths.reduce((bytes, item) => bytes + item.bytes.length, 0);
+  if (totalBytes > IMPLEMENTATION_IGNORED_PATH_MAX_BYTES) {
     fail(`${path}.ignoredFieldPaths`, "aggregate byte capacity exceeded");
+  }
+  encodedPaths.sort((left, right) => Buffer.compare(left.bytes, right.bytes));
+  for (let index = 0; index < encodedPaths.length; index += 1) {
+    const item = encodedPaths[index]!;
+    if (
+      item.pointer !== ignoredFieldPaths[index]
+      || (index > 0 && item.pointer === encodedPaths[index - 1]!.pointer)
+    ) {
+      fail(`${path}.ignoredFieldPaths`, "expected unique canonical order");
+    }
   }
   return {
     schema: "setfarm.runtime-completion-submission-evidence.v1",

@@ -216,6 +216,11 @@ test("maps HTTP success and error bodies without a prose fallback", () => {
     },
   }] as unknown as RunOperationalSnapshotV2["completionRequests"];
   assert.equal(parseOperationalSnapshotResponse(200, unicodeBoundary, "run-1").status, "ok");
+  unicodeBoundary.completionRequests[0]!.implementationSubmissionEvidence!.receipt.ignoredFieldPaths = Array.from(
+    { length: 20_000 },
+    (_, index) => `/${index.toString(36).padStart(3, "0")}`,
+  );
+  assert.equal(parseOperationalSnapshotResponse(200, unicodeBoundary, "run-1").status, "ok");
   const preV19 = makeV2Snapshot();
   preV19.source.migrationVersions = preV19.source.migrationVersions.filter((version) => version !== 19);
   preV19.source.capabilities.implementationSubmissionEvidence = false;

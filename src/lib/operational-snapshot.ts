@@ -700,9 +700,7 @@ const CANONICAL_REF = /^setfarm:\/\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]+$/;
 const JSON_POINTER = /^\/(?:[^~/]|~[01])*(?:\/(?:[^~/]|~[01])*)*$/;
 const UTF8_ENCODER = new TextEncoder();
 
-function compareUtf8(left: string, right: string): number {
-  const leftBytes = UTF8_ENCODER.encode(left);
-  const rightBytes = UTF8_ENCODER.encode(right);
+function compareUtf8Bytes(leftBytes: Uint8Array, rightBytes: Uint8Array): number {
   const length = Math.min(leftBytes.length, rightBytes.length);
   for (let index = 0; index < length; index += 1) {
     if (leftBytes[index] !== rightBytes[index]) return leftBytes[index]! - rightBytes[index]!;
@@ -733,7 +731,7 @@ function hasExactImplementationSubmissionEvidence(value: unknown, requestId: unk
     || !Array.isArray(receipt.ignoredFieldPaths)
     || receipt.ignoredFieldPaths.length > 20_000) return false;
   let totalBytes = 0;
-  const paths: string[] = [];
+  const encodedPaths: Array<{ pointer: string; bytes: Uint8Array }> = [];
   for (const pointer of receipt.ignoredFieldPaths) {
     if (
       typeof pointer !== "string"
@@ -741,13 +739,20 @@ function hasExactImplementationSubmissionEvidence(value: unknown, requestId: unk
       || pointer.length > 2_000
       || !JSON_POINTER.test(pointer)
     ) return false;
-    const byteLength = UTF8_ENCODER.encode(pointer).byteLength;
-    totalBytes += byteLength;
-    paths.push(pointer);
+    const bytes = UTF8_ENCODER.encode(pointer);
+    totalBytes += bytes.byteLength;
+    encodedPaths.push({ pointer, bytes });
   }
   if (totalBytes > 128 * 1024) return false;
-  const canonical = [...new Set(paths)].sort(compareUtf8);
-  return canonical.length === paths.length && paths.every((pointer, index) => pointer === canonical[index]);
+  encodedPaths.sort((left, right) => compareUtf8Bytes(left.bytes, right.bytes));
+  for (let index = 0; index < encodedPaths.length; index += 1) {
+    const item = encodedPaths[index]!;
+    if (
+      item.pointer !== receipt.ignoredFieldPaths[index]
+      || (index > 0 && item.pointer === encodedPaths[index - 1]!.pointer)
+    ) return false;
+  }
+  return true;
 }
 
 export function parseOperationalSnapshotResponse(

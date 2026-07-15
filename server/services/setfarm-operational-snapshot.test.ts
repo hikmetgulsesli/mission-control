@@ -695,6 +695,14 @@ test("v2 validator preserves v1 semantics and strictly binds implementation prop
   seal(unicodeBoundary);
   assert.doesNotThrow(() => parseRunOperationalSnapshotV2(unicodeBoundary));
 
+  const maxItems = structuredClone(snapshot);
+  maxItems.completionRequests[0]!.implementationSubmissionEvidence!.receipt.ignoredFieldPaths = Array.from(
+    { length: 20_000 },
+    (_, index) => `/${index.toString(36).padStart(3, "0")}`,
+  );
+  seal(maxItems);
+  assert.doesNotThrow(() => parseRunOperationalSnapshotV2(maxItems));
+
   const preV19 = structuredClone(legacy);
   preV19.source.migrationVersions = preV19.source.migrationVersions.filter((version) => version !== 19);
   preV19.source.capabilities.implementationSubmissionEvidence = false;
