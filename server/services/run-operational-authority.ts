@@ -1,6 +1,7 @@
 import {
+  hasCompleteOperationalLifecycleCapabilities,
   type OperationalSnapshotFetchResult,
-  type RunOperationalSnapshotV1,
+  type RunOperationalSnapshot,
 } from "./setfarm-operational-snapshot.js";
 
 export const OPERATIONAL_ACTION_SNAPSHOT_MAX_AGE_MS = 15_000;
@@ -63,7 +64,7 @@ function validateFreshCanonicalSnapshot(input: {
   snapshotResult: OperationalSnapshotFetchResult;
   nowMs: number;
   requireExpectedHash: boolean;
-}): RunOperationalSnapshotV1 | OperationalAuthorityFailure {
+}): RunOperationalSnapshot | OperationalAuthorityFailure {
   if (input.requireExpectedHash && !input.expectedSnapshotHash) {
     return {
       status: "blocked",
@@ -99,7 +100,7 @@ function validateFreshCanonicalSnapshot(input: {
     };
   }
   if (snapshot.source.projection !== "complete"
-    || !Object.values(snapshot.source.capabilities).every(Boolean)) {
+    || !hasCompleteOperationalLifecycleCapabilities(snapshot.source.capabilities)) {
     return {
       status: "blocked",
       statusCode: 409,

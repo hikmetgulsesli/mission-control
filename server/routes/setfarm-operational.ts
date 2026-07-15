@@ -2,11 +2,11 @@ import { Router } from "express";
 import {
   setfarmOperationalSnapshotClient,
   type OperationalSnapshotFetchResult,
-  type RunOperationalSnapshotV1,
+  type RunOperationalSnapshot,
 } from "../services/setfarm-operational-snapshot.js";
 
 export type OperationalSnapshotHttpResult =
-  | { statusCode: 200; body: RunOperationalSnapshotV1 }
+  | { statusCode: 200; body: RunOperationalSnapshot }
   | {
       statusCode: 404 | 501 | 502 | 503;
       body: {

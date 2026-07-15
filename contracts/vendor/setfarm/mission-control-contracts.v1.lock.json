@@ -1,7 +1,7 @@
 {
   "schema": "mission-control.setfarm-contract-vendor-lock.v1",
   "producerRepository": "https://github.com/hikmetgulsesli/setfarm.git",
-  "producerCommit": "c5e6ad9a345857bbd96e9b3ff46a2bfbc32146dc",
+  "producerCommit": "2a3b90b64453b27ffd3f8ae97e081290d9729acd",
   "artifacts": [
     {
       "producerPath": "contracts/generated/mission-control/run-operational-snapshot.v1.compatibility.json",
@@ -12,6 +12,16 @@
       "producerPath": "contracts/generated/mission-control/run-operational-snapshot.v1.schema.json",
       "vendoredPath": "contracts/vendor/setfarm/run-operational-snapshot.v1.schema.json",
       "sha256": "be9d2acbd74c58f5297c4abdc168d76be40eb571e1d14fe17aeb3902242eaa43"
+    },
+    {
+      "producerPath": "contracts/generated/mission-control/run-operational-snapshot.v2.compatibility.json",
+      "vendoredPath": "contracts/vendor/setfarm/run-operational-snapshot.v2.compatibility.json",
+      "sha256": "652d66101969099925a7137573f969e91fd2ad7a175bd64dc54457d38e8e7160"
+    },
+    {
+      "producerPath": "contracts/generated/mission-control/run-operational-snapshot.v2.schema.json",
+      "vendoredPath": "contracts/vendor/setfarm/run-operational-snapshot.v2.schema.json",
+      "sha256": "87495c108d732ea13c99a819a52f3e423e706b492236da907634f71a194aabe8"
     },
     {
       "producerPath": "contracts/generated/mission-control/deployment-observation.v1.compatibility.json",

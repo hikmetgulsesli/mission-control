@@ -10,6 +10,7 @@ import {
 } from "./v3-project-transfer.js";
 import { createV3ProjectTransferAckV1, hashCanonicalJson } from "./v3-project-transfer-ack.js";
 import { coordinateV3ProjectTransfer } from "./v3-project-transfer-coordinator.js";
+import type { OperationalSnapshotFetchResult } from "./setfarm-operational-snapshot.js";
 
 function snapshotResult() {
   const candidateHash = "a".repeat(64);
@@ -285,6 +286,31 @@ test("authorizes v3 Projects transfer only from a complete invariant-free Accept
     snapshotResult: snapshotResult(),
   });
   assert.equal(result.status, "authorized");
+});
+
+test("keeps pre-v19 snapshot v2 transfer independent from optional submission evidence", () => {
+  const baseline = snapshotResult().snapshot;
+  const preV19: OperationalSnapshotFetchResult = {
+    status: "ok",
+    snapshot: {
+      ...baseline,
+      schema: "setfarm.run-operational-snapshot.v2",
+      source: {
+        ...baseline.source,
+        migrationVersions: [18],
+        capabilities: {
+          ...baseline.source.capabilities,
+          implementationSubmissionEvidence: false,
+        },
+      },
+      completionRequests: [],
+    },
+  };
+
+  assert.equal(evaluateV3ProjectTransfer({
+    run: { id: "run-1", status: "completed", protocol: "v3" },
+    snapshotResult: preV19,
+  }).status, "authorized");
 });
 
 test("blocks failed v3 runs and missing candidates instead of using generated dist files", () => {

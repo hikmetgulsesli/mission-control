@@ -1,13 +1,18 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { toOperationalSnapshotHttpResult } from "../routes/setfarm-operational.js";
 import {
   RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA,
+  RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA,
   SetfarmOperationalSnapshotClient,
   computeOperationalSnapshotHash,
   parseRunOperationalSnapshotV1,
+  parseRunOperationalSnapshotV2,
+  type RunOperationalSnapshot,
   type RunOperationalSnapshotV1,
+  type RunOperationalSnapshotV2,
 } from "./setfarm-operational-snapshot.js";
 
 function snapshotFixture(): RunOperationalSnapshotV1 {
@@ -68,9 +73,17 @@ function snapshotFixture(): RunOperationalSnapshotV1 {
   return seal(snapshot);
 }
 
-function seal<T extends RunOperationalSnapshotV1>(snapshot: T): T {
+function seal<T extends RunOperationalSnapshot>(snapshot: T): T {
   snapshot.snapshotHash = computeOperationalSnapshotHash(snapshot);
   return snapshot;
+}
+
+function snapshotV2Fixture(): RunOperationalSnapshotV2 {
+  const envelope = JSON.parse(readFileSync(
+    new URL("../../contracts/vendor/setfarm/run-operational-snapshot.v2.compatibility.json", import.meta.url),
+    "utf8",
+  )) as { fixture: RunOperationalSnapshotV2 };
+  return structuredClone(envelope.fixture);
 }
 
 function deployTerminationProjectionFixture(): RunOperationalSnapshotV1 {
@@ -631,6 +644,81 @@ test("v1 validator is strict and preserves the canonical payload object", () => 
   assert.throws(() => parseRunOperationalSnapshotV1(missingActionStateHash));
 });
 
+test("v2 validator preserves v1 semantics and strictly binds implementation proposal receipts", () => {
+  const snapshot = snapshotV2Fixture();
+  const parsed = parseRunOperationalSnapshotV2(snapshot);
+  assert.equal(parsed, snapshot);
+  assert.equal(parsed.schema, RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA);
+  assert.equal(parsed.source.capabilities.implementationSubmissionEvidence, true);
+  const evidence = parsed.completionRequests[0]?.implementationSubmissionEvidence;
+  assert.ok(evidence);
+  assert.equal(evidence.receipt.canonicalOutputHash, parsed.completionRequests[0]?.outputHash);
+  assert.equal(
+    evidence.sourceProposalRef,
+    `setfarm://runtime-completion/${parsed.completionRequests[0]?.requestId}/source-proposal/${evidence.receipt.sourceProposalHash}`,
+  );
+
+  const cases: Array<(value: RunOperationalSnapshotV2) => void> = [
+    (value) => { (value.completionRequests[0]!.implementationSubmissionEvidence!.receipt as unknown as Record<string, unknown>).agentSummary = "trusted"; },
+    (value) => { value.completionRequests[0]!.implementationSubmissionEvidence!.receipt.sourceSchema = "setfarm.v3-unknown" as never; },
+    (value) => { value.completionRequests[0]!.implementationSubmissionEvidence!.receipt.canonicalOutputHash = "f".repeat(64); },
+    (value) => { value.completionRequests[0]!.implementationSubmissionEvidence!.receipt.sourceProposalHash = "A".repeat(64); },
+    (value) => { value.completionRequests[0]!.implementationSubmissionEvidence!.sourceProposalRef = "setfarm://runtime-completion/foreign/source-proposal/" + "a".repeat(64); },
+    (value) => { value.completionRequests[0]!.implementationSubmissionEvidence!.receipt.ignoredFieldPaths = ["/z", "/a"]; },
+    (value) => { value.completionRequests[0]!.implementationSubmissionEvidence!.receipt.ignoredFieldPaths = ["/a", "/a"]; },
+    (value) => { value.completionRequests[0]!.implementationSubmissionEvidence!.receipt.ignoredFieldPaths = ["not-a-pointer"]; },
+    (value) => { value.completionRequests[0]!.implementationSubmissionEvidence!.receipt.ignoredFieldPaths = [`/${"a".repeat(2_001)}`]; },
+    (value) => {
+      value.completionRequests[0]!.implementationSubmissionEvidence!.receipt.ignoredFieldPaths = Array.from(
+        { length: 66 },
+        (_, index) => `/${String(index).padStart(2, "0")}${"a".repeat(1_997)}`,
+      );
+    },
+    (value) => { value.source.capabilities.implementationSubmissionEvidence = false; },
+  ];
+  for (const mutate of cases) {
+    const invalid = structuredClone(snapshot);
+    mutate(invalid);
+    seal(invalid);
+    assert.throws(() => parseRunOperationalSnapshotV2(invalid));
+  }
+
+  const legacy = structuredClone(snapshot);
+  legacy.completionRequests[0]!.implementationSubmissionEvidence = null;
+  seal(legacy);
+  assert.doesNotThrow(() => parseRunOperationalSnapshotV2(legacy));
+
+  const unicodeBoundary = structuredClone(snapshot);
+  unicodeBoundary.completionRequests[0]!.implementationSubmissionEvidence!.receipt.ignoredFieldPaths = [
+    `/${"\u00fc".repeat(1_999)}`,
+  ];
+  seal(unicodeBoundary);
+  assert.doesNotThrow(() => parseRunOperationalSnapshotV2(unicodeBoundary));
+
+  const preV19 = structuredClone(legacy);
+  preV19.source.migrationVersions = preV19.source.migrationVersions.filter((version) => version !== 19);
+  preV19.source.capabilities.implementationSubmissionEvidence = false;
+  seal(preV19);
+  assert.doesNotThrow(() => parseRunOperationalSnapshotV2(preV19));
+
+  const unattestedV19 = structuredClone(preV19);
+  unattestedV19.source.migrationVersions.push(19);
+  unattestedV19.source.verifiedReleaseSha = null;
+  seal(unattestedV19);
+  assert.doesNotThrow(() => parseRunOperationalSnapshotV2(unattestedV19));
+
+  const missingMigrationAuthority = structuredClone(snapshot);
+  missingMigrationAuthority.source.migrationVersions = missingMigrationAuthority.source.migrationVersions
+    .filter((version) => version !== 19);
+  seal(missingMigrationAuthority);
+  assert.throws(() => parseRunOperationalSnapshotV2(missingMigrationAuthority));
+
+  const unattestedAuthority = structuredClone(snapshot);
+  unattestedAuthority.source.verifiedReleaseSha = null;
+  seal(unattestedAuthority);
+  assert.throws(() => parseRunOperationalSnapshotV2(unattestedAuthority));
+});
+
 test("typed termination projection preserves canonical refusal evidence and fails closed on drift", () => {
   const snapshot = deployTerminationProjectionFixture();
   const parsed = parseRunOperationalSnapshotV1(snapshot);
@@ -1027,19 +1115,25 @@ test("client returns a valid partial snapshot byte-structure without enrichment"
   assert.equal(http.body, result.snapshot);
 });
 
-test("unknown schema fails closed as unsupported and never becomes an inferred legacy model", async () => {
+test("client reads strict v2 and unknown schema fails closed without inferred legacy state", async () => {
+  const v2 = snapshotV2Fixture();
+  const v2Client = new SetfarmOperationalSnapshotClient({ fetchImpl: async () => jsonResponse(v2) });
+  const v2Result = await v2Client.get(v2.run.id);
+  assert.equal(v2Result.status, "ok");
+  if (v2Result.status === "ok") assert.deepEqual(v2Result.snapshot, v2);
+
   const client = new SetfarmOperationalSnapshotClient({
-    fetchImpl: async () => jsonResponse({ schema: "setfarm.run-operational-snapshot.v2", narrative: "completed" }),
+    fetchImpl: async () => jsonResponse({ schema: "setfarm.run-operational-snapshot.v3", narrative: "completed" }),
   });
 
   const result = await client.get("run-1");
-  assert.deepEqual(result, { status: "unsupported_schema", schema: "setfarm.run-operational-snapshot.v2" });
+  assert.deepEqual(result, { status: "unsupported_schema", schema: "setfarm.run-operational-snapshot.v3" });
   assert.deepEqual(toOperationalSnapshotHttpResult(result), {
     statusCode: 501,
     body: {
       status: "unsupported_schema",
       code: "SETFARM_OPERATIONAL_SNAPSHOT_UNSUPPORTED_SCHEMA",
-      schema: "setfarm.run-operational-snapshot.v2",
+      schema: "setfarm.run-operational-snapshot.v3",
     },
   });
 });

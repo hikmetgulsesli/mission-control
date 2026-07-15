@@ -5,12 +5,14 @@ import {
   evaluateOperationalAction,
   operationalStateReason,
   type OperationalSnapshotState,
+  type OperationalCompletionRequestV1,
+  type OperationalCompletionRequestV2,
   type OperationalTerminationLifecycleEvidenceV1,
   type OperationalTerminationRequestV1,
   type OperationalV3DeployTerminationEvidenceV1,
   type OperationalV3DownstreamTerminationEvidenceV1,
   type OperationalV3PlanClarificationTerminationEvidenceV1,
-  type RunOperationalSnapshotV1,
+  type RunOperationalSnapshot,
 } from "../../lib/operational-snapshot";
 
 function shortHash(value: string | null | undefined): string {
@@ -66,6 +68,35 @@ function RefLine({ refValue, children }: { refValue: string; children: ReactNode
     <div className="oe-row">
       <div className="oe-row__summary">{children}</div>
       <code title={refValue}>{refValue}</code>
+    </div>
+  );
+}
+
+const MAX_RENDERED_IGNORED_FIELD_PATHS = 100;
+
+function CompletionSubmissionEvidence({
+  request,
+}: {
+  request: OperationalCompletionRequestV1 | OperationalCompletionRequestV2;
+}) {
+  if (!("implementationSubmissionEvidence" in request)) return null;
+  const evidence = request.implementationSubmissionEvidence;
+  if (!evidence) return null;
+  const receipt = evidence.receipt;
+  const visiblePaths = receipt.ignoredFieldPaths.slice(0, MAX_RENDERED_IGNORED_FIELD_PATHS);
+  return (
+    <div className="oe-nested" data-testid="implementation-submission-evidence">
+      <span>source schema {receipt.sourceSchema}</span>
+      <span title={receipt.sourceProposalHash}>source {shortHash(receipt.sourceProposalHash)}</span>
+      <span title={receipt.canonicalOutputHash}>canonical {shortHash(receipt.canonicalOutputHash)}</span>
+      <details>
+        <summary>ignored provider field paths · {receipt.ignoredFieldPaths.length}</summary>
+        {visiblePaths.map((pointer) => <code key={pointer}>{pointer}</code>)}
+        {receipt.ignoredFieldPaths.length > visiblePaths.length && (
+          <span>{receipt.ignoredFieldPaths.length - visiblePaths.length} additional path(s) omitted from rendering</span>
+        )}
+      </details>
+      <code title={evidence.sourceProposalRef}>{evidence.sourceProposalRef}</code>
     </div>
   );
 }
@@ -144,7 +175,7 @@ function TerminationEvidenceDetails({ request }: { request: OperationalTerminati
   return <code title="Canonical termination evidence">{JSON.stringify(evidence)}</code>;
 }
 
-function OperationalEvidenceBody({ snapshot, now }: { snapshot: RunOperationalSnapshotV1; now: number }) {
+function OperationalEvidenceBody({ snapshot, now }: { snapshot: RunOperationalSnapshot; now: number }) {
   const refs = collectOperationalEvidenceRefs(snapshot);
   const fresh = freshness(snapshot.generatedAt, now);
   const stop = evaluateOperationalAction({ status: "ok", snapshot }, "stop", now);
@@ -468,6 +499,7 @@ function OperationalEvidenceBody({ snapshot, now }: { snapshot: RunOperationalSn
                 <b>{request.workflowStepId}{request.storyId ? ` / ${request.storyId}` : ""}</b>
                 <span>{request.state} · {request.applyPhase} · {request.effects.length} effect(s)</span>
               </RefLine>
+              <CompletionSubmissionEvidence request={request} />
               {request.effects.map((effect) => (
                 <RefLine key={effect.ref} refValue={effect.ref}>
                   <span>#{effect.ordinal} {effect.effectType} · {effect.state} · attempts {effect.attemptCount}</span>

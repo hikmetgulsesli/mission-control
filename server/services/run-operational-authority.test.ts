@@ -7,6 +7,7 @@ import {
 import type {
   OperationalSnapshotFetchResult,
   RunOperationalSnapshotV1,
+  RunOperationalSnapshotV2,
 } from "./setfarm-operational-snapshot.js";
 
 const NOW = Date.parse("2026-07-13T12:00:10.000Z");
@@ -90,8 +91,27 @@ function snapshotFixture(overrides: {
   };
 }
 
-function ok(snapshot = snapshotFixture()): OperationalSnapshotFetchResult {
+function ok(
+  snapshot: RunOperationalSnapshotV1 | RunOperationalSnapshotV2 = snapshotFixture(),
+): OperationalSnapshotFetchResult {
   return { status: "ok", snapshot };
+}
+
+function preV19SnapshotV2Fixture(): RunOperationalSnapshotV2 {
+  const snapshot = snapshotFixture();
+  return {
+    ...snapshot,
+    schema: "setfarm.run-operational-snapshot.v2",
+    source: {
+      ...snapshot.source,
+      migrationVersions: [18],
+      capabilities: {
+        ...snapshot.source.capabilities,
+        implementationSubmissionEvidence: false,
+      },
+    },
+    completionRequests: [],
+  };
 }
 
 function blockedCode(result: ReturnType<typeof evaluateOperationalActionAuthority>): string {
@@ -206,6 +226,23 @@ test("allows monotonic stop for compiler protocols but never manual compiler res
     snapshotResult: ok(v3),
     nowMs: NOW,
   })), "COMPILER_PROTOCOL_MANUAL_RESUME_DISABLED");
+});
+
+test("keeps pre-v19 snapshot v2 stop authority independent from optional submission evidence", () => {
+  const snapshot = preV19SnapshotV2Fixture();
+  assert.deepEqual(evaluateOperationalActionAuthority({
+    action: "stop",
+    runId: "run-1",
+    expectedSnapshotHash: snapshot.snapshotHash,
+    snapshotResult: ok(snapshot),
+    nowMs: NOW,
+  }), {
+    status: "authorized",
+    action: "stop",
+    runId: "run-1",
+    snapshotHash: snapshot.snapshotHash,
+    protocol: "legacy",
+  });
 });
 
 test("fails closed when canonical operational evidence is unavailable", () => {
