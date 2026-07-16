@@ -68,9 +68,55 @@ export interface ProductBuildAuthorityV1 {
   authorityHash: string;
 }
 
+export interface ProductBuildRefusalV2 {
+  terminationRequestRef: string;
+  failureIdentity: {
+    schema: "setfarm.operational-failure-identity.v2";
+    requestedBy: string;
+    evidenceSchema: string;
+    operationalCause: {
+      schema: "setfarm.operational-failure-cause.v1";
+      workflowStepId: string;
+      boundary: string;
+      failureClass: string;
+      failureCode: string;
+    };
+    operationalCauseHash: string;
+    exactFailure: {
+      schema: "setfarm.operational-exact-failure-identity.v2";
+      kind: "stitch_target_candidate_selection";
+      refKey: string;
+      artifactType: string;
+      failureArtifactHash: string;
+      failureFingerprint: string;
+      candidateSelectionHash: string;
+    };
+  };
+  failureArtifact: {
+    refKey: string;
+    artifactHash: string;
+    envelope: {
+      schema: "setfarm.semantic-artifact-envelope.v1";
+      artifactType: string;
+      payload: Record<string, unknown> & { fingerprint: string; candidateSelectionHash: string };
+    } & Record<string, unknown>;
+  };
+}
+
+export type ProductBuildAuthorityV2 = {
+  schema: "setfarm.product-build-authority.v2";
+  runId: string;
+  authorityHash: string;
+} & (
+  | { disposition: "sealed_packet"; packetAuthority: ProductBuildAuthorityV1; refusal: null }
+  | { disposition: "refused_before_packet"; packetAuthority: null; refusal: ProductBuildRefusalV2 }
+);
+
+export type ProductBuildAuthority = ProductBuildAuthorityV1 | ProductBuildAuthorityV2;
+
 export type ProductBuildAuthorityState =
   | { status: "loading" }
-  | { status: "ok"; authority: ProductBuildAuthorityV1 }
+  | { status: "ok"; authority: ProductBuildAuthority }
   | { status: "unavailable"; code: string; reason: string; upstreamStatus?: number; upstreamCode?: string }
   | { status: "upstream_error"; code: string; reason: string; upstreamStatus?: number; upstreamCode?: string }
   | { status: "unsupported_schema"; code: string; schema: string | null };
@@ -203,6 +249,59 @@ function isRenderableProductBuildAuthority(
   return hasRenderableDesignSources(record.designSources);
 }
 
+function hasExactKeys(record: Record<string, unknown>, keys: readonly string[]): boolean {
+  const actual = Object.keys(record).sort();
+  const expected = [...keys].sort();
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
+}
+
+function isProductBuildRefusalV2(value: unknown): value is ProductBuildRefusalV2 {
+  if (!isRecord(value) || !hasExactKeys(value, ["terminationRequestRef", "failureIdentity", "failureArtifact"])) return false;
+  if (!isString(value.terminationRequestRef) || !value.terminationRequestRef.startsWith("setfarm://run-termination/")) return false;
+  const identity = value.failureIdentity;
+  const artifact = value.failureArtifact;
+  if (!isRecord(identity) || !isRecord(artifact) || !isRecord(identity.exactFailure)) return false;
+  if (identity.schema !== "setfarm.operational-failure-identity.v2"
+    || identity.requestedBy !== "setfarm.product-compiler.design-refusal"
+    || identity.evidenceSchema !== "setfarm.v3-design-candidate-authority-termination.v1"
+    || !isSha(identity.operationalCauseHash)
+    || !isRecord(identity.operationalCause)
+    || identity.operationalCause.schema !== "setfarm.operational-failure-cause.v1"
+    || identity.operationalCause.workflowStepId !== "design"
+    || identity.operationalCause.boundary !== "product_compiler.design_candidate_authority") return false;
+  const exact = identity.exactFailure;
+  if (exact.schema !== "setfarm.operational-exact-failure-identity.v2"
+    || exact.kind !== "stitch_target_candidate_selection"
+    || exact.refKey !== "STITCH_TARGET_CANDIDATE_SELECTION_FAILURE"
+    || exact.artifactType !== "setfarm.stitch-target-candidate-selection-failure.v1"
+    || !isSha(exact.failureArtifactHash)
+    || !isSha(exact.failureFingerprint)
+    || !isSha(exact.candidateSelectionHash)) return false;
+  if (artifact.refKey !== exact.refKey || artifact.artifactHash !== exact.failureArtifactHash || !isSha(artifact.artifactHash)) return false;
+  if (!isRecord(artifact.envelope) || artifact.envelope.schema !== "setfarm.semantic-artifact-envelope.v1"
+    || artifact.envelope.artifactType !== exact.artifactType || !isRecord(artifact.envelope.payload)) return false;
+  return artifact.envelope.payload.fingerprint === exact.failureFingerprint
+    && artifact.envelope.payload.candidateSelectionHash === exact.candidateSelectionHash;
+}
+
+function isRenderableProductBuildAuthorityV2(
+  record: Record<string, unknown>,
+  expectedRunId: string,
+): record is Record<string, unknown> & ProductBuildAuthorityV2 {
+  if (!hasExactKeys(record, ["schema", "runId", "disposition", "packetAuthority", "refusal", "authorityHash"])
+    || record.schema !== "setfarm.product-build-authority.v2"
+    || record.runId !== expectedRunId
+    || !isSha(record.authorityHash)) return false;
+  if (record.disposition === "sealed_packet") {
+    return record.refusal === null
+      && isRecord(record.packetAuthority)
+      && isRenderableProductBuildAuthority(record.packetAuthority, expectedRunId);
+  }
+  return record.disposition === "refused_before_packet"
+    && record.packetAuthority === null
+    && isProductBuildRefusalV2(record.refusal);
+}
+
 export function parseProductBuildAuthorityResponse(
   statusCode: number,
   body: unknown,
@@ -212,14 +311,17 @@ export function parseProductBuildAuthorityResponse(
     ? body as Record<string, unknown>
     : {};
   if (statusCode === 200) {
-    if (record.schema !== "setfarm.product-build-authority.v1") {
+    if (!["setfarm.product-build-authority.v1", "setfarm.product-build-authority.v2"].includes(String(record.schema))) {
       return {
         status: "unsupported_schema",
         code: "SETFARM_PRODUCT_BUILD_AUTHORITY_UNSUPPORTED_SCHEMA",
         schema: typeof record.schema === "string" ? record.schema : null,
       };
     }
-    if (!isRenderableProductBuildAuthority(record, expectedRunId)) {
+    const valid = record.schema === "setfarm.product-build-authority.v1"
+      ? isRenderableProductBuildAuthority(record, expectedRunId)
+      : isRenderableProductBuildAuthorityV2(record, expectedRunId);
+    if (!valid) {
       return {
         status: "upstream_error",
         code: "SETFARM_PRODUCT_BUILD_AUTHORITY_UPSTREAM_ERROR",
@@ -227,7 +329,7 @@ export function parseProductBuildAuthorityResponse(
         upstreamStatus: statusCode,
       };
     }
-    return { status: "ok", authority: body as ProductBuildAuthorityV1 };
+    return { status: "ok", authority: body as ProductBuildAuthority };
   }
   const status = record.status;
   const code = typeof record.code === "string"

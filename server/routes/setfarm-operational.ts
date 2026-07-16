@@ -6,8 +6,8 @@ import {
 } from "../services/setfarm-operational-snapshot.js";
 import {
   setfarmProductBuildAuthorityClient,
+  type ProductBuildAuthority,
   type ProductBuildAuthorityFetchResult,
-  type ProductBuildAuthorityV1,
 } from "../services/setfarm-product-build-authority.js";
 
 export type OperationalSnapshotHttpResult =
@@ -60,7 +60,7 @@ export function toOperationalSnapshotHttpResult(result: OperationalSnapshotFetch
 }
 
 export type ProductBuildAuthorityHttpResult =
-  | { statusCode: 200; body: ProductBuildAuthorityV1 }
+  | { statusCode: 200; body: ProductBuildAuthority }
   | {
       statusCode: 404 | 409 | 501 | 502 | 503;
       body: {

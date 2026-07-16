@@ -8,6 +8,7 @@ import {
   parseProductBuildAuthorityResponse,
   shouldPollProductBuildAuthority,
   type ProductBuildAuthorityV1,
+  type ProductBuildAuthorityV2,
 } from "../src/lib/product-build-authority.js";
 
 const HASH = "a".repeat(64);
@@ -84,6 +85,65 @@ function fixture(): ProductBuildAuthorityV1 {
   };
 }
 
+function sealedV2Fixture(): ProductBuildAuthorityV2 {
+  return {
+    schema: "setfarm.product-build-authority.v2",
+    runId: "run-ui-1",
+    disposition: "sealed_packet",
+    packetAuthority: fixture(),
+    refusal: null,
+    authorityHash: "f".repeat(64),
+  };
+}
+
+function refusedV2Fixture(): ProductBuildAuthorityV2 {
+  const failureArtifactHash = "1".repeat(64);
+  const failureFingerprint = "2".repeat(64);
+  const candidateSelectionHash = "3".repeat(64);
+  return {
+    schema: "setfarm.product-build-authority.v2",
+    runId: "run-ui-refused",
+    disposition: "refused_before_packet",
+    packetAuthority: null,
+    refusal: {
+      terminationRequestRef: "setfarm://run-termination/RTR_ui_refused",
+      failureIdentity: {
+        schema: "setfarm.operational-failure-identity.v2",
+        requestedBy: "setfarm.product-compiler.design-refusal",
+        evidenceSchema: "setfarm.v3-design-candidate-authority-termination.v1",
+        operationalCause: {
+          schema: "setfarm.operational-failure-cause.v1",
+          workflowStepId: "design",
+          boundary: "product_compiler.design_candidate_authority",
+          failureClass: "generated_artifact_invalid",
+          failureCode: "V3_DESIGN_CANDIDATE_AUTHORITY_UNRESOLVED",
+        },
+        operationalCauseHash: "4".repeat(64),
+        exactFailure: {
+          schema: "setfarm.operational-exact-failure-identity.v2",
+          kind: "stitch_target_candidate_selection",
+          refKey: "STITCH_TARGET_CANDIDATE_SELECTION_FAILURE",
+          artifactType: "setfarm.stitch-target-candidate-selection-failure.v1",
+          failureArtifactHash,
+          failureFingerprint,
+          candidateSelectionHash,
+        },
+      },
+      failureArtifact: {
+        refKey: "STITCH_TARGET_CANDIDATE_SELECTION_FAILURE",
+        artifactHash: failureArtifactHash,
+        envelope: {
+          schema: "setfarm.semantic-artifact-envelope.v1",
+          artifactType: "setfarm.stitch-target-candidate-selection-failure.v1",
+          producer: {},
+          payload: { fingerprint: failureFingerprint, candidateSelectionHash },
+        },
+      },
+    },
+    authorityHash: "5".repeat(64),
+  };
+}
+
 test("renders exact packet, target, action, persistence, and rendered-element authority", () => {
   const html = renderToStaticMarkup(<ProductBuildAuthority state={{ status: "ok", authority: fixture() }} />);
   assert.match(html, /setfarm\.product-build-authority\.v1/);
@@ -94,6 +154,28 @@ test("renders exact packet, target, action, persistence, and rendered-element au
   assert.match(html, /PERSIST_TASK_LOCAL/);
   assert.match(html, /E000002/);
   assert.doesNotMatch(html, /agent said/i);
+});
+
+test("renders versioned sealed and refused authority from canonical operational evidence", () => {
+  const sealed = sealedV2Fixture();
+  const sealedHtml = renderToStaticMarkup(<ProductBuildAuthority state={{ status: "ok", authority: sealed }} />);
+  assert.match(sealedHtml, /setfarm\.product-build-authority\.v2/);
+  assert.match(sealedHtml, /SEALED/);
+  assert.match(sealedHtml, /ACT_SAVE_TASK/);
+
+  const refused = refusedV2Fixture();
+  const refusedHtml = renderToStaticMarkup(<ProductBuildAuthority state={{ status: "ok", authority: refused }} />);
+  assert.match(refusedHtml, /REFUSED/);
+  assert.match(refusedHtml, /V3_DESIGN_CANDIDATE_AUTHORITY_UNRESOLVED/);
+  assert.match(refusedHtml, /product_compiler\.design_candidate_authority/);
+  assert.match(refusedHtml, /RTR_ui_refused/);
+  assert.doesNotMatch(refusedHtml, /agent said/i);
+
+  assert.equal(parseProductBuildAuthorityResponse(200, sealed, sealed.runId).status, "ok");
+  assert.equal(parseProductBuildAuthorityResponse(200, refused, refused.runId).status, "ok");
+  const drifted = structuredClone(refused) as any;
+  drifted.refusal.failureArtifact.artifactHash = "6".repeat(64);
+  assert.equal(parseProductBuildAuthorityResponse(200, drifted, refused.runId).status, "upstream_error");
 });
 
 test("fails closed in the UI and response parser when canonical authority is unavailable", () => {
@@ -108,7 +190,7 @@ test("fails closed in the UI and response parser when canonical authority is una
   assert.match(html, /RUNTIME_PACKET_NOT_SEALED/);
 
   assert.equal(parseProductBuildAuthorityResponse(200, { ...fixture(), runId: "foreign" }, "run-ui-1").status, "upstream_error");
-  assert.equal(parseProductBuildAuthorityResponse(200, { ...fixture(), schema: "setfarm.product-build-authority.v2" }, "run-ui-1").status, "unsupported_schema");
+  assert.equal(parseProductBuildAuthorityResponse(200, { ...fixture(), schema: "setfarm.product-build-authority.v3" }, "run-ui-1").status, "unsupported_schema");
 
   const missingCompiler = structuredClone(fixture()) as any;
   delete missingCompiler.packet.compiler;

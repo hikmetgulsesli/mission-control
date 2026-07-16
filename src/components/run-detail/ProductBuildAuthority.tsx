@@ -33,7 +33,42 @@ export function ProductBuildAuthority({ state }: { state: ProductBuildAuthorityS
     );
   }
 
-  const authority = state.authority;
+  const versionedAuthority = state.authority;
+  if (versionedAuthority.schema === "setfarm.product-build-authority.v2"
+    && versionedAuthority.disposition === "refused_before_packet") {
+    const refusal = versionedAuthority.refusal;
+    const cause = refusal.failureIdentity.operationalCause;
+    const exact = refusal.failureIdentity.exactFailure;
+    return (
+      <section className="oe-panel oe-panel--unavailable" aria-label="Canonical Product Build authority">
+        <div className="oe-header">
+          <div><span>PRODUCT</span><h3>Product Build Authority</h3></div>
+          <strong>{versionedAuthority.schema} · REFUSED</strong>
+        </div>
+        <div className="oe-body">
+          <div className="oe-unavailable">
+            <b>Product compilation was canonically refused before packet sealing.</b>
+            <p>No agent prose, GitHub comment, or inferred project state is used as a substitute.</p>
+          </div>
+          <div className="oe-contract-grid">
+            <div><span>Failure code</span><code>{cause.failureCode}</code></div>
+            <div><span>Boundary</span><code>{cause.workflowStepId} · {cause.boundary}</code></div>
+            <div><span>Failure class</span><code>{cause.failureClass}</code></div>
+            <div><span>Cause hash</span><code title={refusal.failureIdentity.operationalCauseHash}>{shortHash(refusal.failureIdentity.operationalCauseHash)}</code></div>
+            <div><span>Failure fingerprint</span><code title={exact.failureFingerprint}>{shortHash(exact.failureFingerprint)}</code></div>
+            <div><span>Failure artifact</span><code title={exact.failureArtifactHash}>{shortHash(exact.failureArtifactHash)}</code></div>
+            <div><span>Candidate selection</span><code title={exact.candidateSelectionHash}>{shortHash(exact.candidateSelectionHash)}</code></div>
+            <div><span>Termination</span><code title={refusal.terminationRequestRef}>{refusal.terminationRequestRef}</code></div>
+            <div><span>Authority hash</span><code title={versionedAuthority.authorityHash}>{shortHash(versionedAuthority.authorityHash)}</code></div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  const authority = versionedAuthority.schema === "setfarm.product-build-authority.v2"
+    ? versionedAuthority.packetAuthority
+    : versionedAuthority;
   const controls = authority.designGraph.controls;
   const controlsById = new Map(controls.map((control) => [control.id, control]));
   const designBindings = authority.designGraph.bindings;
@@ -47,7 +82,10 @@ export function ProductBuildAuthority({ state }: { state: ProductBuildAuthorityS
     <section className="oe-panel oe-panel--ok" aria-label="Canonical Product Build authority">
       <div className="oe-header">
         <div><span>PRODUCT</span><h3>Product Build Authority</h3></div>
-        <strong>{authority.schema}</strong>
+        <strong>
+          {versionedAuthority.schema}
+          {versionedAuthority.schema === "setfarm.product-build-authority.v2" ? " · SEALED" : ""}
+        </strong>
       </div>
       <div className="oe-body">
         <div className="oe-metrics">
@@ -59,7 +97,10 @@ export function ProductBuildAuthority({ state }: { state: ProductBuildAuthorityS
 
         <div className="oe-contract-grid">
           <div><span>Packet hash</span><code title={authority.packetHash}>{shortHash(authority.packetHash)}</code></div>
-          <div><span>Authority hash</span><code title={authority.authorityHash}>{shortHash(authority.authorityHash)}</code></div>
+          <div><span>Authority hash</span><code title={versionedAuthority.authorityHash}>{shortHash(versionedAuthority.authorityHash)}</code></div>
+          {versionedAuthority.schema === "setfarm.product-build-authority.v2" && (
+            <div><span>Packet authority</span><code title={authority.authorityHash}>{shortHash(authority.authorityHash)}</code></div>
+          )}
           <div><span>Compiler</span><code>{authority.packet.compiler.version} · {shortHash(authority.packet.compiler.codeSha)}</code></div>
           <div><span>Producer</span><code>{authority.producer.pass} · {shortHash(authority.producer.codeSha)}</code></div>
           {Object.entries(authority.refs).sort(([left], [right]) => left.localeCompare(right)).map(([name, hash]) => (
