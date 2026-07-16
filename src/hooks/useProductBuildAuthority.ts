@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { api } from "../lib/api";
-import type { ProductBuildAuthorityState } from "../lib/product-build-authority";
+import {
+  shouldPollProductBuildAuthority,
+  type ProductBuildAuthorityState,
+} from "../lib/product-build-authority";
 
 export function useProductBuildAuthority(
   runId: string | null | undefined,
@@ -10,6 +13,7 @@ export function useProductBuildAuthority(
 
   useEffect(() => {
     let cancelled = false;
+    let timeoutId: number | undefined;
     if (!runId) {
       setState({
         status: "unavailable",
@@ -21,13 +25,16 @@ export function useProductBuildAuthority(
     setState({ status: "loading" });
     const load = async () => {
       const result = await api.runProductBuildAuthority(runId);
-      if (!cancelled) setState(result);
+      if (cancelled) return;
+      setState(result);
+      if (shouldPollProductBuildAuthority(result)) {
+        timeoutId = window.setTimeout(load, intervalMs);
+      }
     };
     void load();
-    const interval = window.setInterval(load, intervalMs);
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
     };
   }, [runId, intervalMs]);
 

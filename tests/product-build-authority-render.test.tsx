@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { ProductBuildAuthority } from "../src/components/run-detail/ProductBuildAuthority.js";
 import {
   parseProductBuildAuthorityResponse,
+  shouldPollProductBuildAuthority,
   type ProductBuildAuthorityV1,
 } from "../src/lib/product-build-authority.js";
 
@@ -108,4 +109,34 @@ test("fails closed in the UI and response parser when canonical authority is una
 
   assert.equal(parseProductBuildAuthorityResponse(200, { ...fixture(), runId: "foreign" }, "run-ui-1").status, "upstream_error");
   assert.equal(parseProductBuildAuthorityResponse(200, { ...fixture(), schema: "setfarm.product-build-authority.v2" }, "run-ui-1").status, "unsupported_schema");
+
+  const missingCompiler = structuredClone(fixture()) as any;
+  delete missingCompiler.packet.compiler;
+  assert.equal(parseProductBuildAuthorityResponse(200, missingCompiler, "run-ui-1").status, "upstream_error");
+
+  const missingElementRefs = structuredClone(fixture()) as any;
+  delete missingElementRefs.designSources.responseBindings.bindings[0].contractElementRefs;
+  assert.equal(parseProductBuildAuthorityResponse(200, missingElementRefs, "run-ui-1").status, "upstream_error");
+
+  const missingStitchSources = structuredClone(fixture()) as any;
+  delete missingStitchSources.designSources;
+  assert.equal(parseProductBuildAuthorityResponse(200, missingStitchSources, "run-ui-1").status, "upstream_error");
+
+  const legacy = structuredClone(fixture()) as any;
+  legacy.packet.schema = "setfarm.product-build-packet.v1";
+  legacy.packet.packetVersion = 1;
+  delete legacy.designSourceClosure;
+  delete legacy.designSources;
+  delete legacy.refs.designSourceClosure;
+  assert.equal(parseProductBuildAuthorityResponse(200, legacy, "run-ui-1").status, "ok");
+});
+
+test("polling ends once immutable Product Build authority is available", () => {
+  assert.equal(shouldPollProductBuildAuthority({ status: "loading" }), true);
+  assert.equal(shouldPollProductBuildAuthority({
+    status: "unavailable",
+    code: "SETFARM_PRODUCT_BUILD_AUTHORITY_NOT_READY",
+    reason: "not_ready",
+  }), true);
+  assert.equal(shouldPollProductBuildAuthority({ status: "ok", authority: fixture() }), false);
 });

@@ -77,21 +77,33 @@ export function toProductBuildAuthorityHttpResult(result: ProductBuildAuthorityF
   switch (result.status) {
     case "ok":
       return { statusCode: 200, body: result.authority };
-    case "unavailable":
+    case "unavailable": {
+      let statusCode: 404 | 409 | 503;
+      let code: string;
+      switch (result.reason) {
+        case "not_found":
+          statusCode = 404;
+          code = "SETFARM_PRODUCT_BUILD_AUTHORITY_NOT_FOUND";
+          break;
+        case "not_ready":
+          statusCode = 409;
+          code = "SETFARM_PRODUCT_BUILD_AUTHORITY_NOT_READY";
+          break;
+        default:
+          statusCode = 503;
+          code = "SETFARM_PRODUCT_BUILD_AUTHORITY_UNAVAILABLE";
+      }
       return {
-        statusCode: result.reason === "not_found" ? 404 : result.reason === "not_ready" ? 409 : 503,
+        statusCode,
         body: {
           status: "unavailable",
-          code: result.reason === "not_found"
-            ? "SETFARM_PRODUCT_BUILD_AUTHORITY_NOT_FOUND"
-            : result.reason === "not_ready"
-              ? "SETFARM_PRODUCT_BUILD_AUTHORITY_NOT_READY"
-              : "SETFARM_PRODUCT_BUILD_AUTHORITY_UNAVAILABLE",
+          code,
           reason: result.reason,
           ...(result.upstreamStatus === undefined ? {} : { upstreamStatus: result.upstreamStatus }),
           ...(result.upstreamCode === undefined ? {} : { upstreamCode: result.upstreamCode }),
         },
       };
+    }
     case "upstream_error":
       return {
         statusCode: 502,
@@ -125,7 +137,8 @@ router.get("/setfarm/runs/:id/operational-snapshot", async (req, res) => {
   try {
     const response = toOperationalSnapshotHttpResult(await setfarmOperationalSnapshotClient.get(req.params.id));
     res.status(response.statusCode).json(response.body);
-  } catch {
+  } catch (error) {
+    console.error("[setfarm-operational-snapshot] unexpected route failure:", error instanceof Error ? error.message : error);
     res.status(503).json({
       status: "unavailable",
       code: "SETFARM_OPERATIONAL_SNAPSHOT_UNAVAILABLE",
@@ -142,7 +155,8 @@ router.get("/setfarm/runs/:id/product-build-authority", async (req, res) => {
   try {
     const response = toProductBuildAuthorityHttpResult(await setfarmProductBuildAuthorityClient.get(req.params.id));
     res.status(response.statusCode).json(response.body);
-  } catch {
+  } catch (error) {
+    console.error("[setfarm-product-build-authority] unexpected route failure:", error instanceof Error ? error.message : error);
     res.status(503).json({
       status: "unavailable",
       code: "SETFARM_PRODUCT_BUILD_AUTHORITY_UNAVAILABLE",
