@@ -135,7 +135,13 @@ function fsyncDirectory(directory: string): void {
 
 function restrictSqliteLockFilePermissions(databasePath: string): void {
   for (const candidate of [databasePath, `${databasePath}-journal`, `${databasePath}-wal`, `${databasePath}-shm`]) {
-    if (existsSync(candidate)) chmodSync(candidate, 0o600);
+    try {
+      chmodSync(candidate, 0o600);
+    } catch (error) {
+      // SQLite may remove transient journal/WAL files between observation and
+      // chmod. A missing candidate is already the desired terminal state.
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
   }
 }
 
