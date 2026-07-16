@@ -9562,6 +9562,12 @@ html, body, #root {
   background: rgba(8, 8, 18, 0.82);
 }
 
+.rd-execution-evidence {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .oe-panel--ok { border-color: rgba(0, 255, 65, 0.28); }
 .oe-panel--partial,
 .oe-panel--loading,

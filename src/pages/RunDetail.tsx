@@ -5,8 +5,10 @@ import { StoryList } from "../components/run-detail/StoryList";
 import { StepTimeline } from "../components/run-detail/StepTimeline";
 import { TelemetryChart } from "../components/run-detail/TelemetryChart";
 import { OperationalEvidence } from "../components/run-detail/OperationalEvidence";
+import { ProductBuildAuthority } from "../components/run-detail/ProductBuildAuthority";
 import { InlinePlanView } from "../components/pipeline/InlinePlanView";
 import { useOperationalSnapshot } from "../hooks/useOperationalSnapshot";
+import { useProductBuildAuthority } from "../hooks/useProductBuildAuthority";
 import { normalizeVisibleVisualStatus } from "../lib/status";
 
 interface ChatMessage {
@@ -170,6 +172,7 @@ export function RunDetail({ runId, onBack, initialTab = "execution" }: { runId: 
   const [refreshing, setRefreshing] = useState(false);
   const [, setTick] = useState(0);
   const operationalSnapshot = useOperationalSnapshot(runId, 3_000);
+  const productBuildAuthority = useProductBuildAuthority(runId, 3_000);
 
   useEffect(() => {
     let cancelled = false;
@@ -270,7 +273,10 @@ export function RunDetail({ runId, onBack, initialTab = "execution" }: { runId: 
 
       <div className="rd-content">
         {tab === "execution" && (
-          <OperationalEvidence state={operationalSnapshot} />
+          <div className="rd-execution-evidence">
+            <OperationalEvidence state={operationalSnapshot} />
+            <ProductBuildAuthority state={productBuildAuthority} />
+          </div>
         )}
         {tab === "overview" && (
           <StepTimeline steps={data.fullSteps} progressLog={data.progressLog} />

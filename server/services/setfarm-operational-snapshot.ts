@@ -753,7 +753,7 @@ function canonicalJsonStringify(value: unknown): string {
   throw new SnapshotValidationError("unsupported canonical JSON value");
 }
 
-function hashCanonicalJson(value: unknown): string {
+export function hashCanonicalJson(value: unknown): string {
   return createHash("sha256").update(canonicalJsonStringify(value), "utf8").digest("hex");
 }
 
