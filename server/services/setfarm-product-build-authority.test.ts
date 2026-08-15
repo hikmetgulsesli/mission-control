@@ -3,7 +3,9 @@ import test from "node:test";
 
 import {
   SetfarmProductBuildAuthorityClient,
+  parseProductBuildAuthority,
   parseProductBuildAuthorityV1,
+  parseProductBuildAuthorityV2,
 } from "./setfarm-product-build-authority.js";
 import { hashCanonicalJson } from "./setfarm-operational-snapshot.js";
 
@@ -158,6 +160,73 @@ function legacyFixture() {
   return { ...identity, authorityHash: hashCanonicalJson(identity) };
 }
 
+function sealedV2Fixture() {
+  const packetAuthority = fixture();
+  const identity = {
+    schema: "setfarm.product-build-authority.v2" as const,
+    runId: packetAuthority.runId,
+    disposition: "sealed_packet" as const,
+    packetAuthority,
+    refusal: null,
+  };
+  return { ...identity, authorityHash: hashCanonicalJson(identity) };
+}
+
+function refusedV2Fixture() {
+  const runId = "run-authority-refused-v2";
+  const operationalCause = {
+    schema: "setfarm.operational-failure-cause.v1",
+    workflowStepId: "design",
+    boundary: "product_compiler.design_candidate_authority",
+    failureClass: "generated_artifact_invalid",
+    failureCode: "V3_DESIGN_CANDIDATE_AUTHORITY_UNRESOLVED",
+  };
+  const payload = {
+    schema: "setfarm.stitch-target-candidate-selection-failure.v1",
+    fingerprint: "c".repeat(64),
+    candidateSelectionHash: "d".repeat(64),
+  };
+  const envelope = {
+    schema: "setfarm.semantic-artifact-envelope.v1",
+    artifactType: "setfarm.stitch-target-candidate-selection-failure.v1",
+    producer: { pass: "candidate-selection", codeSha: "e".repeat(40), toolVersions: { zod: "4.4.3" } },
+    payload,
+  };
+  const artifactHash = hashCanonicalJson(envelope);
+  const exactFailure = {
+    schema: "setfarm.operational-exact-failure-identity.v2",
+    kind: "stitch_target_candidate_selection",
+    refKey: "STITCH_TARGET_CANDIDATE_SELECTION_FAILURE",
+    artifactType: envelope.artifactType,
+    failureArtifactHash: artifactHash,
+    failureFingerprint: payload.fingerprint,
+    candidateSelectionHash: payload.candidateSelectionHash,
+  };
+  const identity = {
+    schema: "setfarm.product-build-authority.v2" as const,
+    runId,
+    disposition: "refused_before_packet" as const,
+    packetAuthority: null,
+    refusal: {
+      terminationRequestRef: "setfarm://run-termination/RTR_refused_v2",
+      failureIdentity: {
+        schema: "setfarm.operational-failure-identity.v2",
+        requestedBy: "setfarm.product-compiler.design-refusal",
+        evidenceSchema: "setfarm.v3-design-candidate-authority-termination.v1",
+        operationalCause,
+        operationalCauseHash: hashCanonicalJson(operationalCause),
+        exactFailure,
+      },
+      failureArtifact: {
+        refKey: exactFailure.refKey,
+        artifactHash,
+        envelope,
+      },
+    },
+  };
+  return { ...identity, authorityHash: hashCanonicalJson(identity) };
+}
+
 test("strictly preserves one hash-bound Product Build authority payload", () => {
   const value = fixture();
   assert.equal(parseProductBuildAuthorityV1(value, value.runId), value);
@@ -192,6 +261,23 @@ test("strictly preserves one hash-bound Product Build authority payload", () => 
   assert.throws(() => parseProductBuildAuthorityV1(missingCompiler, value.runId));
 });
 
+test("deeply validates sealed and refused Product Build Authority v2 without prose fallback", () => {
+  const sealed = sealedV2Fixture();
+  assert.equal(parseProductBuildAuthorityV2(sealed, sealed.runId), sealed);
+  assert.equal(parseProductBuildAuthority(sealed, sealed.runId), sealed);
+  const refused = refusedV2Fixture();
+  assert.equal(parseProductBuildAuthorityV2(refused, refused.runId), refused);
+
+  const drifted = structuredClone(refused);
+  drifted.refusal.failureIdentity.exactFailure.failureFingerprint = "f".repeat(64);
+  const { authorityHash: _hash, ...identity } = drifted;
+  drifted.authorityHash = hashCanonicalJson(identity);
+  assert.throws(() => parseProductBuildAuthorityV2(drifted, refused.runId));
+
+  const prose = { ...refused, agentSummary: "looks fixed" };
+  assert.throws(() => parseProductBuildAuthorityV2(prose, refused.runId));
+});
+
 test("client distinguishes not-ready authority from transport and schema failures", async () => {
   const value = fixture();
   const ok = new SetfarmProductBuildAuthorityClient({
@@ -220,16 +306,26 @@ test("client distinguishes not-ready authority from transport and schema failure
     upstreamCode: "RUNTIME_PACKET_NOT_SEALED",
   });
 
+  const v2 = sealedV2Fixture();
+  const current = new SetfarmProductBuildAuthorityClient({
+    baseUrl: "http://setfarm.invalid",
+    fetchImpl: (async () => new Response(JSON.stringify(v2), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    })) as typeof fetch,
+  });
+  assert.equal((await current.get(v2.runId)).status, "ok");
+
   const unsupported = new SetfarmProductBuildAuthorityClient({
     baseUrl: "http://setfarm.invalid",
-    fetchImpl: (async () => new Response(JSON.stringify({ schema: "setfarm.product-build-authority.v2" }), {
+    fetchImpl: (async () => new Response(JSON.stringify({ schema: "setfarm.product-build-authority.v3" }), {
       status: 200,
       headers: { "content-type": "application/json" },
     })) as typeof fetch,
   });
   assert.deepEqual(await unsupported.get(value.runId), {
     status: "unsupported_schema",
-    schema: "setfarm.product-build-authority.v2",
+    schema: "setfarm.product-build-authority.v3",
   });
 });
 

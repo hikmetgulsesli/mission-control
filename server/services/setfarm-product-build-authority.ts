@@ -25,8 +25,37 @@ export interface ProductBuildAuthorityV1 {
   authorityHash: string;
 }
 
+export interface ProductBuildRefusalV2 {
+  terminationRequestRef: string;
+  failureIdentity: JsonRecord & {
+    operationalCause: JsonRecord;
+    operationalCauseHash: string;
+    exactFailure: JsonRecord & {
+      failureArtifactHash: string;
+      failureFingerprint: string;
+      candidateSelectionHash: string;
+    };
+  };
+  failureArtifact: JsonRecord & {
+    refKey: string;
+    artifactHash: string;
+    envelope: JsonRecord & { payload: JsonRecord };
+  };
+}
+
+export type ProductBuildAuthorityV2 = {
+  schema: "setfarm.product-build-authority.v2";
+  runId: string;
+  authorityHash: string;
+} & (
+  | { disposition: "sealed_packet"; packetAuthority: ProductBuildAuthorityV1; refusal: null }
+  | { disposition: "refused_before_packet"; packetAuthority: null; refusal: ProductBuildRefusalV2 }
+);
+
+export type ProductBuildAuthority = ProductBuildAuthorityV1 | ProductBuildAuthorityV2;
+
 export type ProductBuildAuthorityFetchResult =
-  | { status: "ok"; authority: ProductBuildAuthorityV1 }
+  | { status: "ok"; authority: ProductBuildAuthority }
   | { status: "unavailable"; reason: "not_found" | "not_ready" | "timeout" | "network"; upstreamStatus?: number; upstreamCode?: string }
   | { status: "upstream_error"; reason: "http_error" | "invalid_json" | "invalid_payload"; upstreamStatus?: number; upstreamCode?: string }
   | { status: "unsupported_schema"; schema: string | null };
@@ -337,6 +366,111 @@ export function parseProductBuildAuthorityV1(
   return value as ProductBuildAuthorityV1;
 }
 
+function parseProductBuildRefusalV2(value: unknown): ProductBuildRefusalV2 {
+  const refusal = exactRecordAt(value, "authority.refusal", [
+    "terminationRequestRef", "failureIdentity", "failureArtifact",
+  ]);
+  const terminationRequestRef = stringAt(refusal.terminationRequestRef, "authority.refusal.terminationRequestRef");
+  if (!terminationRequestRef.startsWith("setfarm://run-termination/")) {
+    fail("authority.refusal.terminationRequestRef", "invalid_ref");
+  }
+  const identity = exactRecordAt(refusal.failureIdentity, "authority.refusal.failureIdentity", [
+    "schema", "requestedBy", "evidenceSchema", "operationalCause", "operationalCauseHash", "exactFailure",
+  ]);
+  if (identity.schema !== "setfarm.operational-failure-identity.v2"
+    || identity.requestedBy !== "setfarm.product-compiler.design-refusal"
+    || identity.evidenceSchema !== "setfarm.v3-design-candidate-authority-termination.v1") {
+    fail("authority.refusal.failureIdentity", "unsupported_identity");
+  }
+  const cause = exactRecordAt(identity.operationalCause, "authority.refusal.failureIdentity.operationalCause", [
+    "schema", "workflowStepId", "boundary", "failureClass", "failureCode",
+  ]);
+  if (cause.schema !== "setfarm.operational-failure-cause.v1"
+    || cause.workflowStepId !== "design"
+    || cause.boundary !== "product_compiler.design_candidate_authority") {
+    fail("authority.refusal.failureIdentity.operationalCause", "unsupported_cause");
+  }
+  const causeHash = shaAt(identity.operationalCauseHash, "authority.refusal.failureIdentity.operationalCauseHash");
+  if (hashCanonicalJson(cause) !== causeHash) {
+    fail("authority.refusal.failureIdentity.operationalCauseHash", "canonical_hash_mismatch");
+  }
+  const exact = exactRecordAt(identity.exactFailure, "authority.refusal.failureIdentity.exactFailure", [
+    "schema", "kind", "refKey", "artifactType", "failureArtifactHash", "failureFingerprint", "candidateSelectionHash",
+  ]);
+  if (exact.schema !== "setfarm.operational-exact-failure-identity.v2"
+    || exact.kind !== "stitch_target_candidate_selection"
+    || exact.refKey !== "STITCH_TARGET_CANDIDATE_SELECTION_FAILURE"
+    || exact.artifactType !== "setfarm.stitch-target-candidate-selection-failure.v1") {
+    fail("authority.refusal.failureIdentity.exactFailure", "unsupported_exact_failure");
+  }
+  const artifact = exactRecordAt(refusal.failureArtifact, "authority.refusal.failureArtifact", [
+    "refKey", "artifactHash", "envelope",
+  ]);
+  if (artifact.refKey !== exact.refKey) fail("authority.refusal.failureArtifact.refKey", "identity_mismatch");
+  const artifactHash = shaAt(artifact.artifactHash, "authority.refusal.failureArtifact.artifactHash");
+  const envelope = exactRecordAt(artifact.envelope, "authority.refusal.failureArtifact.envelope", [
+    "schema", "artifactType", "producer", "payload",
+  ]);
+  if (envelope.schema !== "setfarm.semantic-artifact-envelope.v1" || envelope.artifactType !== exact.artifactType) {
+    fail("authority.refusal.failureArtifact.envelope", "unsupported_envelope");
+  }
+  const producer = recordAt(envelope.producer, "authority.refusal.failureArtifact.envelope.producer");
+  stringAt(producer.pass, "authority.refusal.failureArtifact.envelope.producer.pass");
+  if (!CODE_SHA.test(stringAt(producer.codeSha, "authority.refusal.failureArtifact.envelope.producer.codeSha"))) {
+    fail("authority.refusal.failureArtifact.envelope.producer.codeSha", "expected_code_sha");
+  }
+  recordAt(producer.toolVersions, "authority.refusal.failureArtifact.envelope.producer.toolVersions");
+  const payload = recordAt(envelope.payload, "authority.refusal.failureArtifact.envelope.payload");
+  const fingerprint = shaAt(payload.fingerprint, "authority.refusal.failureArtifact.envelope.payload.fingerprint");
+  const candidateSelectionHash = shaAt(
+    payload.candidateSelectionHash,
+    "authority.refusal.failureArtifact.envelope.payload.candidateSelectionHash",
+  );
+  if (
+    hashCanonicalJson(envelope) !== artifactHash
+    || shaAt(exact.failureArtifactHash, "authority.refusal.failureIdentity.exactFailure.failureArtifactHash") !== artifactHash
+    || shaAt(exact.failureFingerprint, "authority.refusal.failureIdentity.exactFailure.failureFingerprint") !== fingerprint
+    || shaAt(exact.candidateSelectionHash, "authority.refusal.failureIdentity.exactFailure.candidateSelectionHash") !== candidateSelectionHash
+  ) fail("authority.refusal.failureArtifact", "exact_failure_mismatch");
+  return refusal as unknown as ProductBuildRefusalV2;
+}
+
+export function parseProductBuildAuthorityV2(
+  value: unknown,
+  expectedRunId?: string,
+): ProductBuildAuthorityV2 {
+  const authority = exactRecordAt(value, "authority", [
+    "schema", "runId", "disposition", "packetAuthority", "refusal", "authorityHash",
+  ]);
+  if (authority.schema !== "setfarm.product-build-authority.v2") fail("authority.schema", "unsupported_schema");
+  const runId = stringAt(authority.runId, "authority.runId");
+  if (expectedRunId !== undefined && runId !== expectedRunId) fail("authority.runId", "run_identity_mismatch");
+  const disposition = stringAt(authority.disposition, "authority.disposition");
+  if (disposition === "sealed_packet") {
+    if (authority.refusal !== null) fail("authority.refusal", "sealed_refusal_must_be_null");
+    parseProductBuildAuthorityV1(authority.packetAuthority, runId);
+  } else if (disposition === "refused_before_packet") {
+    if (authority.packetAuthority !== null) fail("authority.packetAuthority", "refused_packet_must_be_null");
+    parseProductBuildRefusalV2(authority.refusal);
+  } else {
+    fail("authority.disposition", "unsupported_disposition");
+  }
+  const authorityHash = shaAt(authority.authorityHash, "authority.authorityHash");
+  const { authorityHash: _authorityHash, ...identity } = authority;
+  if (hashCanonicalJson(identity) !== authorityHash) fail("authority.authorityHash", "canonical_hash_mismatch");
+  return value as ProductBuildAuthorityV2;
+}
+
+export function parseProductBuildAuthority(
+  value: unknown,
+  expectedRunId?: string,
+): ProductBuildAuthority {
+  const schema = recordAt(value, "authority").schema;
+  if (schema === "setfarm.product-build-authority.v1") return parseProductBuildAuthorityV1(value, expectedRunId);
+  if (schema === "setfarm.product-build-authority.v2") return parseProductBuildAuthorityV2(value, expectedRunId);
+  fail("authority.schema", "unsupported_schema");
+}
+
 export interface SetfarmProductBuildAuthorityClientOptions {
   baseUrl?: string;
   timeoutMs?: number;
@@ -381,11 +515,11 @@ export class SetfarmProductBuildAuthorityClient {
       if (response.status === 404) return { status: "unavailable", reason: "not_found", upstreamStatus: 404, ...(upstreamCode ? { upstreamCode } : {}) };
       if (response.status === 409) return { status: "unavailable", reason: "not_ready", upstreamStatus: 409, ...(upstreamCode ? { upstreamCode } : {}) };
       if (!response.ok) return { status: "upstream_error", reason: "http_error", upstreamStatus: response.status, ...(upstreamCode ? { upstreamCode } : {}) };
-      if (raw.schema !== "setfarm.product-build-authority.v1") {
+      if (!["setfarm.product-build-authority.v1", "setfarm.product-build-authority.v2"].includes(String(raw.schema))) {
         return { status: "unsupported_schema", schema: typeof raw.schema === "string" ? raw.schema : null };
       }
       try {
-        return { status: "ok", authority: parseProductBuildAuthorityV1(payload, runId) };
+        return { status: "ok", authority: parseProductBuildAuthority(payload, runId) };
       } catch {
         return { status: "upstream_error", reason: "invalid_payload", upstreamStatus: response.status };
       }
