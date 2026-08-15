@@ -23,6 +23,14 @@ const ARTIFACTS = [
     vendoredPath: "contracts/vendor/setfarm/run-operational-snapshot.v2.schema.json",
   },
   {
+    producerPath: "contracts/generated/mission-control/run-operational-snapshot.v3.compatibility.json",
+    vendoredPath: "contracts/vendor/setfarm/run-operational-snapshot.v3.compatibility.json",
+  },
+  {
+    producerPath: "contracts/generated/mission-control/run-operational-snapshot.v3.schema.json",
+    vendoredPath: "contracts/vendor/setfarm/run-operational-snapshot.v3.schema.json",
+  },
+  {
     producerPath: "contracts/generated/mission-control/deployment-observation.v1.compatibility.json",
     vendoredPath: "contracts/vendor/setfarm/deployment-observation.v1.compatibility.json",
   },

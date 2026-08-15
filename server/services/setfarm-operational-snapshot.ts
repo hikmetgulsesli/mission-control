@@ -12,6 +12,7 @@ import {
 
 export const RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA = "setfarm.run-operational-snapshot.v1" as const;
 export const RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA = "setfarm.run-operational-snapshot.v2" as const;
+export const RUN_OPERATIONAL_SNAPSHOT_V3_SCHEMA = "setfarm.run-operational-snapshot.v3" as const;
 
 type Nullable<T> = T | null;
 
@@ -30,6 +31,10 @@ export interface OperationalProjectionCapabilitiesV1 {
 
 export interface OperationalProjectionCapabilitiesV2 extends OperationalProjectionCapabilitiesV1 {
   implementationSubmissionEvidence: boolean;
+}
+
+export interface OperationalProjectionCapabilitiesV3 extends OperationalProjectionCapabilitiesV2 {
+  operationalFailureAuthority: boolean;
 }
 
 export const OPERATIONAL_LIFECYCLE_CAPABILITY_KEYS = [
@@ -63,6 +68,10 @@ export interface OperationalProjectionSourceV1 {
 
 export interface OperationalProjectionSourceV2 extends Omit<OperationalProjectionSourceV1, "capabilities"> {
   capabilities: OperationalProjectionCapabilitiesV2;
+}
+
+export interface OperationalProjectionSourceV3 extends Omit<OperationalProjectionSourceV1, "capabilities"> {
+  capabilities: OperationalProjectionCapabilitiesV3;
 }
 
 export interface OperationalRunV1 {
@@ -247,6 +256,7 @@ export type V3DeployAuthorityCode =
   | "V3_DEPLOY_ROLLBACK_FAILED";
 
 export interface OperationalTerminationLifecycleEvidenceV1 {
+  operationalFailureCause?: OperationalFailureCauseV1;
   deferredForCompletionRequestId?: string;
   runtimeSessionCount?: number;
   ownerInstanceId?: string;
@@ -282,12 +292,55 @@ export interface OperationalV3DownstreamTerminationEvidenceV1 extends Operationa
   outcome: "packet_amendment_required" | "bounded_recovery_blocked";
   storyEvidenceRefs: string[];
   requiredArtifact?: "setfarm.product-build-packet.v.next";
+  terminalReasonCodes?: Array<
+    | "specification_incomplete"
+    | "evidence_inconclusive"
+    | "budget_exhausted"
+    | "source_superseded"
+    | "upstream_recompile_required"
+    | "operator_required"
+  >;
+}
+
+export interface OperationalV3StageInputUnresolvedTerminationEvidenceV1
+  extends OperationalTerminationLifecycleEvidenceV1 {
+  schema: "setfarm.v3-stage-input-unresolved.v1";
+  missingVariables: string[];
+  modelRedispatchBudget: 0;
+}
+
+export interface OperationalV3StageRetryDedupeTerminationEvidenceV1
+  extends OperationalTerminationLifecycleEvidenceV1 {
+  schema: "setfarm.v3-stage-retry-dedupe-block.v1";
+  dedupeKey: string;
+  modelRedispatchBudget: 0;
+}
+
+export interface OperationalV3DesignCandidateAuthorityTerminationEvidenceV1
+  extends OperationalTerminationLifecycleEvidenceV1 {
+  schema: "setfarm.v3-design-candidate-authority-termination.v1";
+  terminalFailure: true;
+  owner: "compiler";
+  outcome:
+    | "candidate_authority_unresolved"
+    | "retry_delta_missing"
+    | "regeneration_authority_invalid";
+  failureRefKey: "STITCH_TARGET_CANDIDATE_SELECTION_FAILURE";
+  failureArtifactType: "setfarm.stitch-target-candidate-selection-failure.v1";
+  failureArtifactHash: string;
+  failureFingerprint: string;
+  candidateSelectionHash: string;
+  modelRedispatchBudget: 0;
+  operationalFailureCause: OperationalFailureCauseV1;
 }
 
 export type OperationalTerminationEvidenceV1 =
   | OperationalV3DeployTerminationEvidenceV1
   | OperationalV3PlanClarificationTerminationEvidenceV1
   | OperationalV3DownstreamTerminationEvidenceV1
+  | OperationalV3StageInputUnresolvedTerminationEvidenceV1
+  | OperationalV3StageRetryDedupeTerminationEvidenceV1
+  | OperationalV3DesignCandidateAuthorityTerminationEvidenceV1
   | Record<string, unknown>;
 
 export interface OperationalTerminationRequestV1 {
@@ -304,6 +357,45 @@ export interface OperationalTerminationRequestV1 {
   terminalizedAt: Nullable<string>;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface OperationalFailureCauseV1 {
+  schema: "setfarm.operational-failure-cause.v1";
+  workflowStepId: string;
+  boundary: string;
+  failureClass:
+    | "contract_invalid"
+    | "generated_artifact_invalid"
+    | "retry_delta_missing"
+    | "platform_authority_invalid"
+    | "infrastructure_failure"
+    | "platform_invariant_failed"
+    | "recovery_exhausted";
+  failureCode: string;
+}
+
+export interface OperationalExactFailureIdentityV2 {
+  schema: "setfarm.operational-exact-failure-identity.v2";
+  kind: "stitch_target_candidate_selection";
+  refKey: "STITCH_TARGET_CANDIDATE_SELECTION_FAILURE";
+  artifactType: "setfarm.stitch-target-candidate-selection-failure.v1";
+  failureArtifactHash: string;
+  failureFingerprint: string;
+  candidateSelectionHash: string;
+}
+
+export interface OperationalFailureIdentityV2 {
+  schema: "setfarm.operational-failure-identity.v2";
+  requestedBy: string;
+  evidenceSchema: Nullable<string>;
+  operationalCause: OperationalFailureCauseV1;
+  operationalCauseHash: string;
+  exactFailure: Nullable<OperationalExactFailureIdentityV2>;
+}
+
+export interface CanonicalOperationalFailureV3 {
+  terminationRequestRef: string;
+  failureIdentity: OperationalFailureIdentityV2;
 }
 
 export interface OperationalOutboxItemV1 {
@@ -698,7 +790,17 @@ export interface RunOperationalSnapshotV2 extends Omit<
   completionRequests: OperationalCompletionRequestV2[];
 }
 
-export type RunOperationalSnapshot = RunOperationalSnapshotV1 | RunOperationalSnapshotV2;
+export interface RunOperationalSnapshotV3 extends Omit<
+  RunOperationalSnapshotV2,
+  "schema" | "source" | "terminationRequests"
+> {
+  schema: typeof RUN_OPERATIONAL_SNAPSHOT_V3_SCHEMA;
+  source: OperationalProjectionSourceV3;
+  terminationRequests: OperationalTerminationRequestV1[];
+  operationalFailure: Nullable<CanonicalOperationalFailureV3>;
+}
+
+export type RunOperationalSnapshot = RunOperationalSnapshotV1 | RunOperationalSnapshotV2 | RunOperationalSnapshotV3;
 
 export type OperationalSnapshotFetchResult =
   | { status: "ok"; snapshot: RunOperationalSnapshot }
@@ -712,6 +814,9 @@ const IDENTITY_MAX = 1_000;
 const COLLECTION_MAX = 100_000;
 const CANONICAL_REF = /^setfarm:\/\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]+$/;
 const REASON_CODE = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/;
+const WORKFLOW_STEP_ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+const OPERATIONAL_BOUNDARY = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
+const EVIDENCE_SCHEMA_IDENTITY = /^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)+$/;
 const SHA256 = /^[a-f0-9]{64}$/;
 const GIT_HASH = /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/;
 const POSITIVE_DECIMAL = /^[1-9][0-9]*$/;
@@ -968,6 +1073,38 @@ function projectionCapabilitiesV2At(value: unknown, path: string): OperationalPr
   };
 }
 
+function projectionCapabilitiesV3At(value: unknown, path: string): OperationalProjectionCapabilitiesV3 {
+  const capabilities = objectAt(
+    value,
+    path,
+    [
+      "attempts", "claimBinding", "runtimeOwnership", "managerCompletion", "implementationSubmissionEvidence",
+      "effectLedger", "findingRecovery", "evidenceLedger", "acceptedCandidate", "deploymentReceipt", "projectTransferAck",
+      "operationalFailureAuthority",
+    ],
+  );
+  return {
+    attempts: booleanAt(capabilities.attempts, `${path}.attempts`),
+    claimBinding: booleanAt(capabilities.claimBinding, `${path}.claimBinding`),
+    runtimeOwnership: booleanAt(capabilities.runtimeOwnership, `${path}.runtimeOwnership`),
+    managerCompletion: booleanAt(capabilities.managerCompletion, `${path}.managerCompletion`),
+    implementationSubmissionEvidence: booleanAt(
+      capabilities.implementationSubmissionEvidence,
+      `${path}.implementationSubmissionEvidence`,
+    ),
+    effectLedger: booleanAt(capabilities.effectLedger, `${path}.effectLedger`),
+    findingRecovery: booleanAt(capabilities.findingRecovery, `${path}.findingRecovery`),
+    evidenceLedger: booleanAt(capabilities.evidenceLedger, `${path}.evidenceLedger`),
+    acceptedCandidate: booleanAt(capabilities.acceptedCandidate, `${path}.acceptedCandidate`),
+    deploymentReceipt: booleanAt(capabilities.deploymentReceipt, `${path}.deploymentReceipt`),
+    projectTransferAck: booleanAt(capabilities.projectTransferAck, `${path}.projectTransferAck`),
+    operationalFailureAuthority: booleanAt(
+      capabilities.operationalFailureAuthority,
+      `${path}.operationalFailureAuthority`,
+    ),
+  };
+}
+
 function projectionSourceAt(value: unknown, path: string): OperationalProjectionSourceV1 {
   const source = objectAt(value, path, ["database", "projection", "migrationVersions", "verifiedReleaseSha", "capabilities"]);
   const migrationVersions = arrayAt(source.migrationVersions, `${path}.migrationVersions`, (item, itemPath) => integerAt(item, itemPath, 1), 1_000);
@@ -1014,6 +1151,45 @@ function projectionSourceV2At(value: unknown, path: string): OperationalProjecti
       `${path}.capabilities.implementationSubmissionEvidence`,
       "requires an attested migration 19 shape",
     );
+  }
+  return {
+    database: enumAt(source.database, `${path}.database`, ["postgres"] as const),
+    projection,
+    migrationVersions,
+    verifiedReleaseSha,
+    capabilities,
+  };
+}
+
+function projectionSourceV3At(value: unknown, path: string): OperationalProjectionSourceV3 {
+  const source = objectAt(value, path, ["database", "projection", "migrationVersions", "verifiedReleaseSha", "capabilities"]);
+  const migrationVersions = arrayAt(
+    source.migrationVersions,
+    `${path}.migrationVersions`,
+    (item, itemPath) => integerAt(item, itemPath, 1),
+    1_000,
+  );
+  if (
+    new Set(migrationVersions).size !== migrationVersions.length
+    || migrationVersions.some((item, index) => index > 0 && item <= migrationVersions[index - 1])
+  ) {
+    fail(`${path}.migrationVersions`, "expected unique ascending versions");
+  }
+  const capabilities = projectionCapabilitiesV3At(source.capabilities, `${path}.capabilities`);
+  const projection = enumAt(source.projection, `${path}.projection`, ["complete", "partial", "unavailable"] as const);
+  const verifiedReleaseSha = optionalGitHashAt(source.verifiedReleaseSha, `${path}.verifiedReleaseSha`);
+  if (projection === "complete" && (!hasCompleteOperationalLifecycleCapabilities(capabilities)
+    || !capabilities.operationalFailureAuthority)) {
+    fail(`${path}.projection`, "complete projection requires every v3 lifecycle capability");
+  }
+  if (capabilities.implementationSubmissionEvidence && !capabilities.managerCompletion) {
+    fail(`${path}.capabilities.implementationSubmissionEvidence`, "requires manager completion authority");
+  }
+  if (capabilities.implementationSubmissionEvidence && (!migrationVersions.includes(19) || verifiedReleaseSha === null)) {
+    fail(`${path}.capabilities.implementationSubmissionEvidence`, "requires an attested migration 19 shape");
+  }
+  if (capabilities.operationalFailureAuthority && (!migrationVersions.includes(22) || verifiedReleaseSha === null)) {
+    fail(`${path}.capabilities.operationalFailureAuthority`, "requires an attested migration 22 shape");
   }
   return {
     database: enumAt(source.database, `${path}.database`, ["postgres"] as const),
@@ -1301,6 +1477,7 @@ function completionRequestV2At(value: unknown, path: string): OperationalComplet
 }
 
 const TERMINATION_LIFECYCLE_EVIDENCE_KEYS = [
+  "operationalFailureCause",
   "deferredForCompletionRequestId",
   "runtimeSessionCount",
   "ownerInstanceId",
@@ -1327,6 +1504,9 @@ function arbitraryRecordAt(value: unknown, path: string): JsonRecord {
 }
 
 function validateTerminationLifecycleEvidence(record: JsonRecord, path: string): void {
+  if (record.operationalFailureCause !== undefined) {
+    operationalFailureCauseAt(record.operationalFailureCause, `${path}.operationalFailureCause`);
+  }
   if (record.deferredForCompletionRequestId !== undefined) {
     identityAt(record.deferredForCompletionRequestId, `${path}.deferredForCompletionRequestId`);
   }
@@ -1417,7 +1597,7 @@ function v3DownstreamTerminationEvidenceAt(
 ): OperationalV3DownstreamTerminationEvidenceV1 {
   const evidence = objectWithOptionalAt(value, path, [
     "schema", "routeHash", "packetHash", "sourceRevision", "outcome", "storyEvidenceRefs",
-  ], ["requiredArtifact", ...TERMINATION_LIFECYCLE_EVIDENCE_KEYS]);
+  ], ["requiredArtifact", "terminalReasonCodes", ...TERMINATION_LIFECYCLE_EVIDENCE_KEYS]);
   assertCompilerTerminationAuthority(path, targetStatus, requestedBy, "setfarm-v3-downstream-compiler");
   if (evidence.schema !== "setfarm.v3-downstream-termination-evidence.v1") fail(`${path}.schema`, "unsupported schema");
   sha256At(evidence.routeHash, `${path}.routeHash`);
@@ -1428,8 +1608,152 @@ function v3DownstreamTerminationEvidenceAt(
   if ((outcome === "packet_amendment_required") !== (evidence.requiredArtifact === "setfarm.product-build-packet.v.next")) {
     fail(`${path}.requiredArtifact`, "packet-amendment evidence must bind the next packet artifact exactly");
   }
+  const terminalReasonCodes = evidence.terminalReasonCodes === undefined
+    ? undefined
+    : arrayAt(evidence.terminalReasonCodes, `${path}.terminalReasonCodes`, (item, itemPath) => enumAt(item, itemPath, [
+      "specification_incomplete", "evidence_inconclusive", "budget_exhausted", "source_superseded",
+      "upstream_recompile_required", "operator_required",
+    ] as const), 6);
+  if (terminalReasonCodes !== undefined && terminalReasonCodes.length === 0) {
+    fail(`${path}.terminalReasonCodes`, "expected at least one terminal reason");
+  }
+  if (outcome !== "bounded_recovery_blocked" && terminalReasonCodes !== undefined) {
+    fail(`${path}.terminalReasonCodes`, "only bounded recovery may carry terminal reasons");
+  }
+  if (evidence.operationalFailureCause !== undefined
+    && outcome === "bounded_recovery_blocked"
+    && terminalReasonCodes === undefined) {
+    fail(`${path}.terminalReasonCodes`, "cause-bound bounded recovery requires terminal reasons");
+  }
   validateTerminationLifecycleEvidence(evidence, path);
   return value as OperationalV3DownstreamTerminationEvidenceV1;
+}
+
+function v3StageInputTerminationEvidenceAt(
+  value: unknown,
+  path: string,
+  targetStatus: "cancelled" | "failed",
+  requestedBy: string,
+): OperationalV3StageInputUnresolvedTerminationEvidenceV1 {
+  const evidence = objectWithOptionalAt(value, path, [
+    "schema", "missingVariables", "modelRedispatchBudget",
+  ], TERMINATION_LIFECYCLE_EVIDENCE_KEYS);
+  assertCompilerTerminationAuthority(path, targetStatus, requestedBy, "setfarm.v3-stage-input-authority");
+  if (evidence.schema !== "setfarm.v3-stage-input-unresolved.v1") fail(`${path}.schema`, "unsupported schema");
+  const missingVariables = arrayAt(
+    evidence.missingVariables,
+    `${path}.missingVariables`,
+    (item, itemPath) => stringAt(item, itemPath, { regex: /^[a-z0-9_]+$/, max: 500 }),
+    1_000,
+  );
+  if (missingVariables.length === 0) fail(`${path}.missingVariables`, "expected at least one variable");
+  if (integerAt(evidence.modelRedispatchBudget, `${path}.modelRedispatchBudget`, 0) !== 0) {
+    fail(`${path}.modelRedispatchBudget`, "stage refusal must not redispatch the model");
+  }
+  validateTerminationLifecycleEvidence(evidence, path);
+  return value as OperationalV3StageInputUnresolvedTerminationEvidenceV1;
+}
+
+function v3StageRetryTerminationEvidenceAt(
+  value: unknown,
+  path: string,
+  targetStatus: "cancelled" | "failed",
+  requestedBy: string,
+): OperationalV3StageRetryDedupeTerminationEvidenceV1 {
+  const evidence = objectWithOptionalAt(value, path, [
+    "schema", "dedupeKey", "modelRedispatchBudget",
+  ], TERMINATION_LIFECYCLE_EVIDENCE_KEYS);
+  assertCompilerTerminationAuthority(path, targetStatus, requestedBy, "setfarm.v3-stage-retry-authority");
+  if (evidence.schema !== "setfarm.v3-stage-retry-dedupe-block.v1") fail(`${path}.schema`, "unsupported schema");
+  sha256At(evidence.dedupeKey, `${path}.dedupeKey`);
+  if (integerAt(evidence.modelRedispatchBudget, `${path}.modelRedispatchBudget`, 0) !== 0) {
+    fail(`${path}.modelRedispatchBudget`, "stage refusal must not redispatch the model");
+  }
+  validateTerminationLifecycleEvidence(evidence, path);
+  return value as OperationalV3StageRetryDedupeTerminationEvidenceV1;
+}
+
+const DESIGN_CANDIDATE_CAUSE_BY_OUTCOME = {
+  candidate_authority_unresolved: {
+    failureClass: "generated_artifact_invalid",
+    failureCode: "V3_DESIGN_CANDIDATE_AUTHORITY_UNRESOLVED",
+  },
+  retry_delta_missing: {
+    failureClass: "retry_delta_missing",
+    failureCode: "V3_DESIGN_CANDIDATE_RETRY_DELTA_MISSING",
+  },
+  regeneration_authority_invalid: {
+    failureClass: "platform_authority_invalid",
+    failureCode: "V3_DESIGN_CANDIDATE_REGENERATION_AUTHORITY_INVALID",
+  },
+} as const;
+
+function operationalFailureCauseAt(value: unknown, path: string): OperationalFailureCauseV1 {
+  const cause = objectAt(value, path, [
+    "schema", "workflowStepId", "boundary", "failureClass", "failureCode",
+  ]);
+  if (cause.schema !== "setfarm.operational-failure-cause.v1") fail(`${path}.schema`, "unsupported schema");
+  return {
+    schema: "setfarm.operational-failure-cause.v1",
+    workflowStepId: stringAt(cause.workflowStepId, `${path}.workflowStepId`, { regex: WORKFLOW_STEP_ID, max: 100 }),
+    boundary: stringAt(cause.boundary, `${path}.boundary`, { regex: OPERATIONAL_BOUNDARY, max: 160 }),
+    failureClass: enumAt(cause.failureClass, `${path}.failureClass`, [
+      "contract_invalid",
+      "generated_artifact_invalid",
+      "retry_delta_missing",
+      "platform_authority_invalid",
+      "infrastructure_failure",
+      "platform_invariant_failed",
+      "recovery_exhausted",
+    ] as const),
+    failureCode: stringAt(cause.failureCode, `${path}.failureCode`, { regex: REASON_CODE, max: 160 }),
+  };
+}
+
+function v3DesignCandidateTerminationEvidenceAt(
+  value: unknown,
+  path: string,
+  targetStatus: "cancelled" | "failed",
+  requestedBy: string,
+): OperationalV3DesignCandidateAuthorityTerminationEvidenceV1 {
+  const evidence = objectWithOptionalAt(value, path, [
+    "schema", "terminalFailure", "owner", "outcome", "failureRefKey", "failureArtifactType",
+    "failureArtifactHash", "failureFingerprint", "candidateSelectionHash", "modelRedispatchBudget",
+    "operationalFailureCause",
+  ], TERMINATION_LIFECYCLE_EVIDENCE_KEYS);
+  assertCompilerTerminationAuthority(path, targetStatus, requestedBy, "setfarm.product-compiler.design-refusal");
+  if (evidence.schema !== "setfarm.v3-design-candidate-authority-termination.v1") {
+    fail(`${path}.schema`, "unsupported schema");
+  }
+  if (evidence.terminalFailure !== true) fail(`${path}.terminalFailure`, "expected true");
+  if (evidence.owner !== "compiler") fail(`${path}.owner`, "expected compiler");
+  const outcome = enumAt(evidence.outcome, `${path}.outcome`, [
+    "candidate_authority_unresolved", "retry_delta_missing", "regeneration_authority_invalid",
+  ] as const);
+  if (evidence.failureRefKey !== "STITCH_TARGET_CANDIDATE_SELECTION_FAILURE") {
+    fail(`${path}.failureRefKey`, "unsupported failure ref key");
+  }
+  if (evidence.failureArtifactType !== "setfarm.stitch-target-candidate-selection-failure.v1") {
+    fail(`${path}.failureArtifactType`, "unsupported failure artifact type");
+  }
+  sha256At(evidence.failureArtifactHash, `${path}.failureArtifactHash`);
+  sha256At(evidence.failureFingerprint, `${path}.failureFingerprint`);
+  sha256At(evidence.candidateSelectionHash, `${path}.candidateSelectionHash`);
+  if (integerAt(evidence.modelRedispatchBudget, `${path}.modelRedispatchBudget`, 0) !== 0) {
+    fail(`${path}.modelRedispatchBudget`, "compiler refusal must not redispatch the model");
+  }
+  const cause = operationalFailureCauseAt(evidence.operationalFailureCause, `${path}.operationalFailureCause`);
+  const expected = DESIGN_CANDIDATE_CAUSE_BY_OUTCOME[outcome];
+  if (
+    cause.workflowStepId !== "design"
+    || cause.boundary !== "product_compiler.design_candidate_authority"
+    || cause.failureClass !== expected.failureClass
+    || cause.failureCode !== expected.failureCode
+  ) {
+    fail(`${path}.operationalFailureCause`, "does not bind the exact design candidate outcome");
+  }
+  validateTerminationLifecycleEvidence(evidence, path);
+  return value as OperationalV3DesignCandidateAuthorityTerminationEvidenceV1;
 }
 
 function terminationEvidenceAt(
@@ -1447,6 +1771,9 @@ function terminationEvidenceAt(
     "setfarm.product-compiler.deploy-refusal": "setfarm.v3-deploy-authority-termination.v1",
     "setfarm.product-compiler.plan-refusal": "setfarm.v3-plan-clarification-termination.v1",
     "setfarm-v3-downstream-compiler": "setfarm.v3-downstream-termination-evidence.v1",
+    "setfarm.product-compiler.design-refusal": "setfarm.v3-design-candidate-authority-termination.v1",
+    "setfarm.v3-stage-input-authority": "setfarm.v3-stage-input-unresolved.v1",
+    "setfarm.v3-stage-retry-authority": "setfarm.v3-stage-retry-dedupe-block.v1",
   };
   const expectedSchema = expectedSchemaByRequester[requestedBy];
   if (expectedSchema && schema !== expectedSchema) {
@@ -1461,6 +1788,15 @@ function terminationEvidenceAt(
   if (schema === "setfarm.v3-downstream-termination-evidence.v1") {
     return v3DownstreamTerminationEvidenceAt(value, path, targetStatus, requestedBy);
   }
+  if (schema === "setfarm.v3-design-candidate-authority-termination.v1") {
+    return v3DesignCandidateTerminationEvidenceAt(value, path, targetStatus, requestedBy);
+  }
+  if (schema === "setfarm.v3-stage-input-unresolved.v1") {
+    return v3StageInputTerminationEvidenceAt(value, path, targetStatus, requestedBy);
+  }
+  if (schema === "setfarm.v3-stage-retry-dedupe-block.v1") {
+    return v3StageRetryTerminationEvidenceAt(value, path, targetStatus, requestedBy);
+  }
   if (schema?.startsWith("setfarm.v3-")) fail(`${path}.schema`, "unsupported versioned v3 termination evidence");
   return value as Record<string, unknown>;
 }
@@ -1471,6 +1807,10 @@ function terminationRequestAt(value: unknown, path: string): OperationalTerminat
   ]);
   const targetStatus = enumAt(request.targetStatus, `${path}.targetStatus`, ["cancelled", "failed"] as const);
   const requestedBy = stringAt(request.requestedBy, `${path}.requestedBy`, { max: 500 });
+  const evidence = terminationEvidenceAt(request.evidence, `${path}.evidence`, targetStatus, requestedBy);
+  if (targetStatus === "cancelled" && Object.hasOwn(evidence, "operationalFailureCause")) {
+    fail(`${path}.evidence.operationalFailureCause`, "cancelled termination cannot carry an operational failure cause");
+  }
   return {
     ref: canonicalRefAt(request.ref, `${path}.ref`),
     requestId: identityAt(request.requestId, `${path}.requestId`),
@@ -1479,12 +1819,81 @@ function terminationRequestAt(value: unknown, path: string): OperationalTerminat
     state: enumAt(request.state, `${path}.state`, ["requested", "draining", "drained", "terminalized", "quarantined"] as const),
     requestedBy,
     diagnostic: stringAt(request.diagnostic, `${path}.diagnostic`, { max: 4_000 }),
-    evidence: terminationEvidenceAt(request.evidence, `${path}.evidence`, targetStatus, requestedBy),
+    evidence,
     requestedAt: timestampAt(request.requestedAt, `${path}.requestedAt`),
     drainedAt: optionalTimestampAt(request.drainedAt, `${path}.drainedAt`),
     terminalizedAt: optionalTimestampAt(request.terminalizedAt, `${path}.terminalizedAt`),
     createdAt: timestampAt(request.createdAt, `${path}.createdAt`),
     updatedAt: timestampAt(request.updatedAt, `${path}.updatedAt`),
+  };
+}
+
+function operationalExactFailureAt(value: unknown, path: string): OperationalExactFailureIdentityV2 {
+  const exact = objectAt(value, path, [
+    "schema", "kind", "refKey", "artifactType", "failureArtifactHash", "failureFingerprint", "candidateSelectionHash",
+  ]);
+  if (exact.schema !== "setfarm.operational-exact-failure-identity.v2") fail(`${path}.schema`, "unsupported schema");
+  if (exact.kind !== "stitch_target_candidate_selection") fail(`${path}.kind`, "unsupported exact failure kind");
+  if (exact.refKey !== "STITCH_TARGET_CANDIDATE_SELECTION_FAILURE") fail(`${path}.refKey`, "unsupported failure ref key");
+  if (exact.artifactType !== "setfarm.stitch-target-candidate-selection-failure.v1") {
+    fail(`${path}.artifactType`, "unsupported artifact type");
+  }
+  return {
+    schema: "setfarm.operational-exact-failure-identity.v2",
+    kind: "stitch_target_candidate_selection",
+    refKey: "STITCH_TARGET_CANDIDATE_SELECTION_FAILURE",
+    artifactType: "setfarm.stitch-target-candidate-selection-failure.v1",
+    failureArtifactHash: sha256At(exact.failureArtifactHash, `${path}.failureArtifactHash`),
+    failureFingerprint: sha256At(exact.failureFingerprint, `${path}.failureFingerprint`),
+    candidateSelectionHash: sha256At(exact.candidateSelectionHash, `${path}.candidateSelectionHash`),
+  };
+}
+
+function operationalFailureIdentityAt(value: unknown, path: string): OperationalFailureIdentityV2 {
+  const identity = objectAt(value, path, [
+    "schema", "requestedBy", "evidenceSchema", "operationalCause", "operationalCauseHash", "exactFailure",
+  ]);
+  if (identity.schema !== "setfarm.operational-failure-identity.v2") fail(`${path}.schema`, "unsupported schema");
+  const requestedBy = stringAt(identity.requestedBy, `${path}.requestedBy`, { max: 500 });
+  const evidenceSchema = identity.evidenceSchema === null
+    ? null
+    : stringAt(identity.evidenceSchema, `${path}.evidenceSchema`, { regex: EVIDENCE_SCHEMA_IDENTITY, max: 200 });
+  const operationalCause = operationalFailureCauseAt(identity.operationalCause, `${path}.operationalCause`);
+  const operationalCauseHash = sha256At(identity.operationalCauseHash, `${path}.operationalCauseHash`);
+  if (operationalCauseHash !== hashCanonicalJson(operationalCause)) {
+    fail(`${path}.operationalCauseHash`, "does not bind canonical operational cause");
+  }
+  const exactFailure = identity.exactFailure === null
+    ? null
+    : operationalExactFailureAt(identity.exactFailure, `${path}.exactFailure`);
+  const designRequester = requestedBy === "setfarm.product-compiler.design-refusal";
+  const designEvidence = evidenceSchema === "setfarm.v3-design-candidate-authority-termination.v1";
+  if (designRequester !== designEvidence || (designRequester !== (exactFailure !== null))) {
+    fail(`${path}.exactFailure`, "design requester, evidence schema, and exact failure must activate together");
+  }
+  if (exactFailure) {
+    const canonicalDesignCause = operationalCause.workflowStepId === "design"
+      && operationalCause.boundary === "product_compiler.design_candidate_authority"
+      && Object.values(DESIGN_CANDIDATE_CAUSE_BY_OUTCOME).some((expected) =>
+        expected.failureClass === operationalCause.failureClass
+        && expected.failureCode === operationalCause.failureCode);
+    if (!canonicalDesignCause) fail(`${path}.operationalCause`, "not a canonical design candidate cause");
+  }
+  return {
+    schema: "setfarm.operational-failure-identity.v2",
+    requestedBy,
+    evidenceSchema,
+    operationalCause,
+    operationalCauseHash,
+    exactFailure,
+  };
+}
+
+function canonicalOperationalFailureAt(value: unknown, path: string): CanonicalOperationalFailureV3 {
+  const failure = objectAt(value, path, ["terminationRequestRef", "failureIdentity"]);
+  return {
+    terminationRequestRef: canonicalRefAt(failure.terminationRequestRef, `${path}.terminationRequestRef`),
+    failureIdentity: operationalFailureIdentityAt(failure.failureIdentity, `${path}.failureIdentity`),
   };
 }
 
@@ -2365,6 +2774,94 @@ function validateCoreOperationalBindings(snapshot: RunOperationalSnapshot): void
   });
 }
 
+function evidenceOperationalFailureCause(
+  request: OperationalTerminationRequestV1,
+): OperationalFailureCauseV1 | null {
+  if (!Object.hasOwn(request.evidence, "operationalFailureCause")) return null;
+  try {
+    return operationalFailureCauseAt(
+      (request.evidence as Record<string, unknown>).operationalFailureCause,
+      "snapshot.terminationRequests.evidence.operationalFailureCause",
+    );
+  } catch {
+    return null;
+  }
+}
+
+function isDesignCandidateTerminationRequest(
+  request: OperationalTerminationRequestV1,
+): request is OperationalTerminationRequestV1 & {
+  evidence: OperationalV3DesignCandidateAuthorityTerminationEvidenceV1;
+} {
+  return request.requestedBy === "setfarm.product-compiler.design-refusal"
+    && request.evidence.schema === "setfarm.v3-design-candidate-authority-termination.v1";
+}
+
+function validateOperationalFailureBindingV3(snapshot: RunOperationalSnapshotV3): void {
+  const capability = snapshot.source.capabilities.operationalFailureAuthority;
+  const designTerminations = snapshot.terminationRequests.filter(isDesignCandidateTerminationRequest);
+  if (!capability && designTerminations.length > 0) {
+    fail("snapshot.terminationRequests", "typed design termination requires operational failure authority");
+  }
+  if (!capability && snapshot.operationalFailure !== null) {
+    fail("snapshot.operationalFailure", "unsupported operational failure authority must remain absent");
+  }
+
+  designTerminations.forEach((request, index) => {
+    if (request.targetStatus !== "failed" || request.state !== "terminalized" || request.terminalizedAt === null) {
+      fail(`snapshot.terminationRequests[${index}]`, "design candidate termination must be a terminalized failed request");
+    }
+  });
+
+  const canonicalCauseRequests = snapshot.terminationRequests.filter((request) =>
+    request.targetStatus === "failed"
+    && request.state === "terminalized"
+    && evidenceOperationalFailureCause(request) !== null);
+  if (capability && canonicalCauseRequests.length > 0 && snapshot.operationalFailure === null) {
+    fail("snapshot.operationalFailure", "canonical terminal operational failure must be projected");
+  }
+  if (snapshot.operationalFailure === null) return;
+
+  const matches = canonicalCauseRequests.filter((request) =>
+    request.ref === snapshot.operationalFailure?.terminationRequestRef);
+  if (matches.length !== 1) {
+    fail("snapshot.operationalFailure.terminationRequestRef", "must bind exactly one canonical terminal request");
+  }
+  if (!snapshot.run.terminal || snapshot.run.status.toLowerCase() !== "failed") {
+    fail("snapshot.run.status", "canonical operational failure requires a failed terminal run");
+  }
+
+  const request = matches[0]!;
+  const identity = snapshot.operationalFailure.failureIdentity;
+  const evidenceSchema = typeof request.evidence.schema === "string" ? request.evidence.schema : null;
+  const cause = evidenceOperationalFailureCause(request);
+  if (
+    cause === null
+    || identity.requestedBy !== request.requestedBy
+    || identity.evidenceSchema !== evidenceSchema
+    || identity.operationalCauseHash !== hashCanonicalJson(cause)
+    || hashCanonicalJson(identity.operationalCause) !== hashCanonicalJson(cause)
+  ) {
+    fail("snapshot.operationalFailure.failureIdentity", "does not bind exact trusted termination authority");
+  }
+
+  if (isDesignCandidateTerminationRequest(request)) {
+    const exact = identity.exactFailure;
+    if (
+      exact === null
+      || exact.refKey !== request.evidence.failureRefKey
+      || exact.artifactType !== request.evidence.failureArtifactType
+      || exact.failureArtifactHash !== request.evidence.failureArtifactHash
+      || exact.failureFingerprint !== request.evidence.failureFingerprint
+      || exact.candidateSelectionHash !== request.evidence.candidateSelectionHash
+    ) {
+      fail("snapshot.operationalFailure.failureIdentity.exactFailure", "does not bind exact design failure artifact");
+    }
+  } else if (identity.exactFailure !== null) {
+    fail("snapshot.operationalFailure.failureIdentity.exactFailure", "legacy termination cannot claim exact design failure");
+  }
+}
+
 export function validateRunOperationalSnapshotV1(value: unknown): value is RunOperationalSnapshotV1 {
   try {
     parseRunOperationalSnapshotV1(value);
@@ -2376,22 +2873,32 @@ export function validateRunOperationalSnapshotV1(value: unknown): value is RunOp
 
 function parseRunOperationalSnapshotVersion(
   value: unknown,
-  expectedSchema: typeof RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA | typeof RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA,
+  expectedSchema:
+    | typeof RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA
+    | typeof RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA
+    | typeof RUN_OPERATIONAL_SNAPSHOT_V3_SCHEMA,
 ): RunOperationalSnapshot {
-  const snapshot = objectWithOptionalAt(value, "snapshot", [
+  const requiredKeys = [
     "schema", "generatedAt", "snapshotHash", "source", "run", "summary", "claims", "attempts", "runtimeSessions",
     "completionRequests", "terminationRequests", "outbox", "invariants",
-  ], ["findingSets", "evidenceBundles", "recoveryCases", "recoveryDispatches", "acceptedCandidate", "deploymentReceipt", "projectTransferAck"]);
+    ...(expectedSchema === RUN_OPERATIONAL_SNAPSHOT_V3_SCHEMA ? ["operationalFailure"] : []),
+  ];
+  const snapshot = objectWithOptionalAt(value, "snapshot", requiredKeys, [
+    "findingSets", "evidenceBundles", "recoveryCases", "recoveryDispatches", "acceptedCandidate", "deploymentReceipt", "projectTransferAck",
+  ]);
   if (snapshot.schema !== expectedSchema) fail("snapshot.schema", "unsupported schema");
-  const v2 = expectedSchema === RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA;
+  const v2 = expectedSchema !== RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA;
+  const v3 = expectedSchema === RUN_OPERATIONAL_SNAPSHOT_V3_SCHEMA;
 
   const parsed = {
     schema: expectedSchema,
     generatedAt: timestampAt(snapshot.generatedAt, "snapshot.generatedAt"),
     snapshotHash: sha256At(snapshot.snapshotHash, "snapshot.snapshotHash"),
-    source: v2
-      ? projectionSourceV2At(snapshot.source, "snapshot.source")
-      : projectionSourceAt(snapshot.source, "snapshot.source"),
+    source: v3
+      ? projectionSourceV3At(snapshot.source, "snapshot.source")
+      : v2
+        ? projectionSourceV2At(snapshot.source, "snapshot.source")
+        : projectionSourceAt(snapshot.source, "snapshot.source"),
     run: runAt(snapshot.run, "snapshot.run"),
     summary: summaryAt(snapshot.summary, "snapshot.summary"),
     claims: arrayAt(snapshot.claims, "snapshot.claims", claimAt),
@@ -2430,10 +2937,15 @@ function parseRunOperationalSnapshotVersion(
       : { projectTransferAck: snapshot.projectTransferAck === null
         ? null
         : projectTransferAckAt(snapshot.projectTransferAck, "snapshot.projectTransferAck") }),
+    ...(v3
+      ? { operationalFailure: snapshot.operationalFailure === null
+        ? null
+        : canonicalOperationalFailureAt(snapshot.operationalFailure, "snapshot.operationalFailure") }
+      : {}),
   } as RunOperationalSnapshot;
 
   if (
-    parsed.schema === RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA
+    parsed.schema !== RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA
     && !parsed.source.capabilities.implementationSubmissionEvidence
     && parsed.completionRequests.some((request) => request.implementationSubmissionEvidence !== null)
   ) {
@@ -2616,6 +3128,7 @@ function parseRunOperationalSnapshotVersion(
   }
 
   validateCoreOperationalBindings(parsed);
+  if (parsed.schema === RUN_OPERATIONAL_SNAPSHOT_V3_SCHEMA) validateOperationalFailureBindingV3(parsed);
   if (computeOperationalSnapshotHash(parsed) !== parsed.snapshotHash) {
     fail("snapshot.snapshotHash", "does not bind canonical operational state");
   }
@@ -2642,6 +3155,19 @@ export function parseRunOperationalSnapshotV2(value: unknown): RunOperationalSna
   return parseRunOperationalSnapshotVersion(value, RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA) as RunOperationalSnapshotV2;
 }
 
+export function validateRunOperationalSnapshotV3(value: unknown): value is RunOperationalSnapshotV3 {
+  try {
+    parseRunOperationalSnapshotV3(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function parseRunOperationalSnapshotV3(value: unknown): RunOperationalSnapshotV3 {
+  return parseRunOperationalSnapshotVersion(value, RUN_OPERATIONAL_SNAPSHOT_V3_SCHEMA) as RunOperationalSnapshotV3;
+}
+
 export function parseRunOperationalSnapshot(value: unknown): RunOperationalSnapshot {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     fail("snapshot", "expected object");
@@ -2649,6 +3175,7 @@ export function parseRunOperationalSnapshot(value: unknown): RunOperationalSnaps
   const schema = (value as JsonRecord).schema;
   if (schema === RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA) return parseRunOperationalSnapshotV1(value);
   if (schema === RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA) return parseRunOperationalSnapshotV2(value);
+  if (schema === RUN_OPERATIONAL_SNAPSHOT_V3_SCHEMA) return parseRunOperationalSnapshotV3(value);
   fail("snapshot.schema", "unsupported schema");
 }
 
@@ -2720,7 +3247,11 @@ export class SetfarmOperationalSnapshotClient {
       const schema = typeof payload === "object" && payload !== null && !Array.isArray(payload)
         ? (payload as JsonRecord).schema
         : null;
-      if (schema !== RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA && schema !== RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA) {
+      if (
+        schema !== RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA
+        && schema !== RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA
+        && schema !== RUN_OPERATIONAL_SNAPSHOT_V3_SCHEMA
+      ) {
         return { status: "unsupported_schema", schema: typeof schema === "string" ? schema : null };
       }
 

@@ -8,6 +8,7 @@ import { parseSetfarmV3DeploymentObservation } from "../server/services/setfarm-
 import {
   parseRunOperationalSnapshotV1,
   parseRunOperationalSnapshotV2,
+  parseRunOperationalSnapshotV3,
 } from "../server/services/setfarm-operational-snapshot.js";
 import {
   hashCanonicalJson,
@@ -20,6 +21,7 @@ const ROOT = new URL("../", import.meta.url);
 type ContractName =
   | "setfarm.run-operational-snapshot.v1"
   | "setfarm.run-operational-snapshot.v2"
+  | "setfarm.run-operational-snapshot.v3"
   | "setfarm.v3-deployment-observation.v1"
   | "setfarm.v3-project-transfer-ack.v1";
 
@@ -40,11 +42,11 @@ function sha256(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-test("all eight vendored Setfarm artifacts are byte-bound to one immutable producer commit", () => {
+test("all ten vendored Setfarm artifacts are byte-bound to one immutable producer commit", () => {
   const lock = json("contracts/vendor/setfarm/mission-control-contracts.v1.lock.json") as VendorLock;
   assert.match(lock.producerCommit, /^[a-f0-9]{40}$/);
-  assert.equal(lock.artifacts.length, 8);
-  assert.equal(new Set(lock.artifacts.map((artifact) => artifact.vendoredPath)).size, 8);
+  assert.equal(lock.artifacts.length, 10);
+  assert.equal(new Set(lock.artifacts.map((artifact) => artifact.vendoredPath)).size, 10);
 
   for (const artifact of lock.artifacts) {
     const bytes = readFileSync(new URL(artifact.vendoredPath, ROOT));
@@ -73,6 +75,12 @@ test("vendored compatibility fixtures cross each semantic consumer and fail clos
       stem: "run-operational-snapshot.v2",
       mutate(fixture) { delete fixture.completionRequests[0].implementationSubmissionEvidence.receipt.sourceProposalHash; },
       reject(fixture) { assert.throws(() => parseRunOperationalSnapshotV2(fixture)); },
+    },
+    {
+      contract: "setfarm.run-operational-snapshot.v3",
+      stem: "run-operational-snapshot.v3",
+      mutate(fixture) { fixture.operationalFailure.terminationRequestRef = "setfarm://run-termination/foreign"; },
+      reject(fixture) { assert.throws(() => parseRunOperationalSnapshotV3(fixture)); },
     },
     {
       contract: "setfarm.v3-deployment-observation.v1",
