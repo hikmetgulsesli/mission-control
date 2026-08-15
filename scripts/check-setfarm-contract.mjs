@@ -9,6 +9,7 @@ import { parseSetfarmV3DeploymentObservation } from "../server/services/setfarm-
 import {
   parseRunOperationalSnapshotV1,
   parseRunOperationalSnapshotV2,
+  parseRunOperationalSnapshotV3,
 } from "../server/services/setfarm-operational-snapshot.ts";
 import { hashCanonicalJson, matchExistingV3ProjectTransferAckProjection } from "../server/services/v3-project-transfer-ack.ts";
 
@@ -20,6 +21,10 @@ const CONTRACTS = [
   {
     contract: "setfarm.run-operational-snapshot.v2",
     stem: "run-operational-snapshot.v2",
+  },
+  {
+    contract: "setfarm.run-operational-snapshot.v3",
+    stem: "run-operational-snapshot.v3",
   },
   {
     contract: "setfarm.v3-deployment-observation.v1",
@@ -86,6 +91,7 @@ for (const descriptor of CONTRACTS) {
 
 const snapshot = parseRunOperationalSnapshotV1(fixtures.get("setfarm.run-operational-snapshot.v1"));
 const snapshotV2 = parseRunOperationalSnapshotV2(fixtures.get("setfarm.run-operational-snapshot.v2"));
+const snapshotV3 = parseRunOperationalSnapshotV3(fixtures.get("setfarm.run-operational-snapshot.v3"));
 parseSetfarmV3DeploymentObservation(fixtures.get("setfarm.v3-deployment-observation.v1"));
 
 const acknowledgement = fixtures.get("setfarm.v3-project-transfer-ack.v1");
@@ -94,6 +100,9 @@ if (typeof acknowledgement !== "object" || acknowledgement === null || Array.isA
 }
 const snapshotAcknowledgement = snapshot.projectTransferAck?.acknowledgement;
 const snapshotV2Acknowledgement = snapshotV2.projectTransferAck?.acknowledgement;
+if (snapshotV3.operationalFailure?.failureIdentity.operationalCause.workflowStepId !== "design") {
+  throw new Error("SETFARM_OPERATIONAL_FAILURE_COMPATIBILITY_MISMATCH");
+}
 if (!snapshotAcknowledgement || !snapshotV2Acknowledgement
   || hashCanonicalJson(acknowledgement) !== hashCanonicalJson(snapshotAcknowledgement)
   || hashCanonicalJson(acknowledgement) !== hashCanonicalJson(snapshotV2Acknowledgement)) {

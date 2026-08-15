@@ -3,11 +3,13 @@ import test from "node:test";
 import {
   RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA,
   RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA,
+  RUN_OPERATIONAL_SNAPSHOT_V3_SCHEMA,
   collectOperationalEvidenceRefs,
   evaluateOperationalAction,
   parseOperationalSnapshotResponse,
   type RunOperationalSnapshotV1,
   type RunOperationalSnapshotV2,
+  type RunOperationalSnapshotV3,
 } from "../src/lib/operational-snapshot.ts";
 
 const HASH = "a".repeat(64);
@@ -127,6 +129,23 @@ function makeV2Snapshot(): RunOperationalSnapshotV2 {
   };
 }
 
+function makeV3Snapshot(): RunOperationalSnapshotV3 {
+  const v2 = makeV2Snapshot();
+  return {
+    ...v2,
+    schema: RUN_OPERATIONAL_SNAPSHOT_V3_SCHEMA,
+    source: {
+      ...v2.source,
+      migrationVersions: [...v2.source.migrationVersions, 22],
+      capabilities: {
+        ...v2.source.capabilities,
+        operationalFailureAuthority: true,
+      },
+    },
+    operationalFailure: null,
+  };
+}
+
 test("accepts a fresh complete invariant-free snapshot as stop authority", () => {
   const decision = evaluateOperationalAction({ status: "ok", snapshot: makeSnapshot() }, "stop", NOW);
   assert.deepEqual(decision, { allowed: true, reasonCode: "STOP_ALLOWED", snapshotHash: HASH });
@@ -197,6 +216,9 @@ test("maps HTTP success and error bodies without a prose fallback", () => {
   const v2 = makeV2Snapshot();
   assert.equal(parseOperationalSnapshotResponse(200, v2, "run-1").status, "ok");
   assert.equal(evaluateOperationalAction({ status: "ok", snapshot: v2 }, "stop", NOW).allowed, true);
+  const v3 = makeV3Snapshot();
+  assert.equal(parseOperationalSnapshotResponse(200, v3, "run-1").status, "ok");
+  assert.equal(evaluateOperationalAction({ status: "ok", snapshot: v3 }, "stop", NOW).allowed, true);
   const unicodeBoundary = makeV2Snapshot();
   const requestId = "request-1";
   const sourceProposalHash = "e".repeat(64);
@@ -239,7 +261,7 @@ test("maps HTTP success and error bodies without a prose fallback", () => {
     parseOperationalSnapshotResponse(200, unattestedAuthority, "run-1").status,
     "upstream_error",
   );
-  assert.equal(parseOperationalSnapshotResponse(200, { ...snapshot, schema: "setfarm.run-operational-snapshot.v3" }, "run-1").status, "unsupported_schema");
+  assert.equal(parseOperationalSnapshotResponse(200, { ...snapshot, schema: "setfarm.run-operational-snapshot.v4" }, "run-1").status, "unsupported_schema");
   assert.deepEqual(parseOperationalSnapshotResponse(503, {
     status: "unavailable",
     code: "SETFARM_OPERATIONAL_SNAPSHOT_UNAVAILABLE",

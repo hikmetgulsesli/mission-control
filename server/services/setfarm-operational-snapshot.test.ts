@@ -6,13 +6,17 @@ import { toOperationalSnapshotHttpResult } from "../routes/setfarm-operational.j
 import {
   RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA,
   RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA,
+  RUN_OPERATIONAL_SNAPSHOT_V3_SCHEMA,
   SetfarmOperationalSnapshotClient,
   computeOperationalSnapshotHash,
+  hashCanonicalJson,
   parseRunOperationalSnapshotV1,
   parseRunOperationalSnapshotV2,
+  parseRunOperationalSnapshotV3,
   type RunOperationalSnapshot,
   type RunOperationalSnapshotV1,
   type RunOperationalSnapshotV2,
+  type RunOperationalSnapshotV3,
 } from "./setfarm-operational-snapshot.js";
 
 function snapshotFixture(): RunOperationalSnapshotV1 {
@@ -83,6 +87,14 @@ function snapshotV2Fixture(): RunOperationalSnapshotV2 {
     new URL("../../contracts/vendor/setfarm/run-operational-snapshot.v2.compatibility.json", import.meta.url),
     "utf8",
   )) as { fixture: RunOperationalSnapshotV2 };
+  return structuredClone(envelope.fixture);
+}
+
+function snapshotV3Fixture(): RunOperationalSnapshotV3 {
+  const envelope = JSON.parse(readFileSync(
+    new URL("../../contracts/vendor/setfarm/run-operational-snapshot.v3.compatibility.json", import.meta.url),
+    "utf8",
+  )) as { fixture: RunOperationalSnapshotV3 };
   return structuredClone(envelope.fixture);
 }
 
@@ -727,6 +739,72 @@ test("v2 validator preserves v1 semantics and strictly binds implementation prop
   assert.throws(() => parseRunOperationalSnapshotV2(unattestedAuthority));
 });
 
+test("v3 validator binds one terminal operational cause to its exact termination authority", () => {
+  const snapshot = snapshotV3Fixture();
+  const parsed = parseRunOperationalSnapshotV3(snapshot);
+  assert.equal(parsed, snapshot);
+  assert.equal(parsed.schema, RUN_OPERATIONAL_SNAPSHOT_V3_SCHEMA);
+  assert.equal(parsed.source.capabilities.operationalFailureAuthority, true);
+  assert.ok(parsed.terminationRequests[0]?.evidence);
+  assert.ok("failureArtifactHash" in parsed.terminationRequests[0].evidence);
+  assert.equal(
+    parsed.operationalFailure?.failureIdentity.exactFailure?.failureArtifactHash,
+    parsed.terminationRequests[0].evidence.failureArtifactHash,
+  );
+
+  const wrongRef = structuredClone(snapshot);
+  wrongRef.operationalFailure!.terminationRequestRef = "setfarm://run-termination/foreign";
+  seal(wrongRef);
+  assert.throws(() => parseRunOperationalSnapshotV3(wrongRef));
+
+  const wrongCause = structuredClone(snapshot);
+  wrongCause.operationalFailure!.failureIdentity.operationalCause.failureCode = "V3_DESIGN_CANDIDATE_RETRY_DELTA_MISSING";
+  seal(wrongCause);
+  assert.throws(() => parseRunOperationalSnapshotV3(wrongCause));
+});
+
+test("v3 validator projects a generic step-fail cause without inventing exact design evidence", () => {
+  const snapshot = snapshotV3Fixture();
+  const cause = {
+    schema: "setfarm.operational-failure-cause.v1" as const,
+    workflowStepId: "design",
+    boundary: "product_compiler.design_semantic_closure",
+    failureClass: "generated_artifact_invalid" as const,
+    failureCode: "V3_DESIGN_SEMANTIC_CLOSURE_REJECTED",
+  };
+  const request = snapshot.terminationRequests[0]!;
+  request.requestedBy = "setfarm.step-fail.single";
+  request.evidence = { operationalFailureCause: cause };
+  snapshot.operationalFailure = {
+    terminationRequestRef: request.ref,
+    failureIdentity: {
+      schema: "setfarm.operational-failure-identity.v2",
+      requestedBy: request.requestedBy,
+      evidenceSchema: null,
+      operationalCause: cause,
+      operationalCauseHash: hashCanonicalJson(cause),
+      exactFailure: null,
+    },
+  };
+  seal(snapshot);
+  assert.equal(
+    parseRunOperationalSnapshotV3(snapshot).operationalFailure?.failureIdentity.operationalCauseHash,
+    hashCanonicalJson(cause),
+  );
+
+  const missingProjection = structuredClone(snapshot);
+  missingProjection.operationalFailure = null;
+  seal(missingProjection);
+  assert.throws(() => parseRunOperationalSnapshotV3(missingProjection));
+
+  const unsupportedAuthority = structuredClone(snapshot);
+  unsupportedAuthority.source.projection = "partial";
+  unsupportedAuthority.source.capabilities.operationalFailureAuthority = false;
+  unsupportedAuthority.operationalFailure = null;
+  seal(unsupportedAuthority);
+  assert.throws(() => parseRunOperationalSnapshotV3(unsupportedAuthority));
+});
+
 test("typed termination projection preserves canonical refusal evidence and fails closed on drift", () => {
   const snapshot = deployTerminationProjectionFixture();
   const parsed = parseRunOperationalSnapshotV1(snapshot);
@@ -1123,25 +1201,31 @@ test("client returns a valid partial snapshot byte-structure without enrichment"
   assert.equal(http.body, result.snapshot);
 });
 
-test("client reads strict v2 and unknown schema fails closed without inferred legacy state", async () => {
+test("client reads strict v2/v3 and unknown schema fails closed without inferred legacy state", async () => {
   const v2 = snapshotV2Fixture();
   const v2Client = new SetfarmOperationalSnapshotClient({ fetchImpl: async () => jsonResponse(v2) });
   const v2Result = await v2Client.get(v2.run.id);
   assert.equal(v2Result.status, "ok");
   if (v2Result.status === "ok") assert.deepEqual(v2Result.snapshot, v2);
 
+  const v3 = snapshotV3Fixture();
+  const v3Client = new SetfarmOperationalSnapshotClient({ fetchImpl: async () => jsonResponse(v3) });
+  const v3Result = await v3Client.get(v3.run.id);
+  assert.equal(v3Result.status, "ok");
+  if (v3Result.status === "ok") assert.deepEqual(v3Result.snapshot, v3);
+
   const client = new SetfarmOperationalSnapshotClient({
-    fetchImpl: async () => jsonResponse({ schema: "setfarm.run-operational-snapshot.v3", narrative: "completed" }),
+    fetchImpl: async () => jsonResponse({ schema: "setfarm.run-operational-snapshot.v4", narrative: "completed" }),
   });
 
   const result = await client.get("run-1");
-  assert.deepEqual(result, { status: "unsupported_schema", schema: "setfarm.run-operational-snapshot.v3" });
+  assert.deepEqual(result, { status: "unsupported_schema", schema: "setfarm.run-operational-snapshot.v4" });
   assert.deepEqual(toOperationalSnapshotHttpResult(result), {
     statusCode: 501,
     body: {
       status: "unsupported_schema",
       code: "SETFARM_OPERATIONAL_SNAPSHOT_UNSUPPORTED_SCHEMA",
-      schema: "setfarm.run-operational-snapshot.v3",
+      schema: "setfarm.run-operational-snapshot.v4",
     },
   });
 });

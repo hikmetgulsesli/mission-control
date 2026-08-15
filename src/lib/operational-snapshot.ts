@@ -1,5 +1,6 @@
 export const RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA = "setfarm.run-operational-snapshot.v1" as const;
 export const RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA = "setfarm.run-operational-snapshot.v2" as const;
+export const RUN_OPERATIONAL_SNAPSHOT_V3_SCHEMA = "setfarm.run-operational-snapshot.v3" as const;
 export const OPERATIONAL_SNAPSHOT_MAX_AGE_MS = 15_000;
 
 type Nullable<T> = T | null;
@@ -21,6 +22,10 @@ export interface OperationalProjectionCapabilitiesV2 extends OperationalProjecti
   implementationSubmissionEvidence: boolean;
 }
 
+export interface OperationalProjectionCapabilitiesV3 extends OperationalProjectionCapabilitiesV2 {
+  operationalFailureAuthority: boolean;
+}
+
 export interface OperationalProjectionSourceV1 {
   database: "postgres";
   projection: "complete" | "partial" | "unavailable";
@@ -31,6 +36,10 @@ export interface OperationalProjectionSourceV1 {
 
 export interface OperationalProjectionSourceV2 extends Omit<OperationalProjectionSourceV1, "capabilities"> {
   capabilities: OperationalProjectionCapabilitiesV2;
+}
+
+export interface OperationalProjectionSourceV3 extends Omit<OperationalProjectionSourceV1, "capabilities"> {
+  capabilities: OperationalProjectionCapabilitiesV3;
 }
 
 export interface OperationalRunV1 {
@@ -630,7 +639,29 @@ export interface RunOperationalSnapshotV2 extends Omit<
   completionRequests: OperationalCompletionRequestV2[];
 }
 
-export type RunOperationalSnapshot = RunOperationalSnapshotV1 | RunOperationalSnapshotV2;
+export interface RunOperationalSnapshotV3 extends Omit<RunOperationalSnapshotV2, "schema" | "source"> {
+  schema: typeof RUN_OPERATIONAL_SNAPSHOT_V3_SCHEMA;
+  source: OperationalProjectionSourceV3;
+  operationalFailure: null | {
+    terminationRequestRef: string;
+    failureIdentity: {
+      schema: "setfarm.operational-failure-identity.v2";
+      requestedBy: string;
+      evidenceSchema: string | null;
+      operationalCause: {
+        schema: "setfarm.operational-failure-cause.v1";
+        workflowStepId: string;
+        boundary: string;
+        failureClass: string;
+        failureCode: string;
+      };
+      operationalCauseHash: string;
+      exactFailure: Record<string, unknown> | null;
+    };
+  };
+}
+
+export type RunOperationalSnapshot = RunOperationalSnapshotV1 | RunOperationalSnapshotV2 | RunOperationalSnapshotV3;
 
 export type OperationalSnapshotFetchResult =
   | { status: "ok"; snapshot: RunOperationalSnapshot }
@@ -679,15 +710,25 @@ const OPERATIONAL_CAPABILITY_V2_KEYS = [
   "implementationSubmissionEvidence",
 ] as const;
 
+const OPERATIONAL_CAPABILITY_V3_KEYS = [
+  ...OPERATIONAL_CAPABILITY_V2_KEYS,
+  "operationalFailureAuthority",
+] as const;
+
 function hasExactOperationalCapabilities(
   value: unknown,
-  schema: typeof RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA | typeof RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA,
-): value is OperationalProjectionCapabilitiesV1 | OperationalProjectionCapabilitiesV2 {
+  schema:
+    | typeof RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA
+    | typeof RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA
+    | typeof RUN_OPERATIONAL_SNAPSHOT_V3_SCHEMA,
+): value is OperationalProjectionCapabilitiesV1 | OperationalProjectionCapabilitiesV2 | OperationalProjectionCapabilitiesV3 {
   if (!isRecord(value)) return false;
   const keys = Object.keys(value).sort();
-  const expectedKeys = schema === RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA
-    ? OPERATIONAL_CAPABILITY_V2_KEYS
-    : OPERATIONAL_CAPABILITY_V1_KEYS;
+  const expectedKeys = schema === RUN_OPERATIONAL_SNAPSHOT_V3_SCHEMA
+    ? OPERATIONAL_CAPABILITY_V3_KEYS
+    : schema === RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA
+      ? OPERATIONAL_CAPABILITY_V2_KEYS
+      : OPERATIONAL_CAPABILITY_V1_KEYS;
   const expected = [...expectedKeys].sort();
   return keys.length === expected.length
     && keys.every((key, index) => key === expected[index])
@@ -764,7 +805,11 @@ export function parseOperationalSnapshotResponse(
     if (!isRecord(body)) {
       return { status: "upstream_error", code: "SETFARM_OPERATIONAL_SNAPSHOT_INVALID_PAYLOAD", reason: "invalid_payload" };
     }
-    if (body.schema !== RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA && body.schema !== RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA) {
+    if (
+      body.schema !== RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA
+      && body.schema !== RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA
+      && body.schema !== RUN_OPERATIONAL_SNAPSHOT_V3_SCHEMA
+    ) {
       return {
         status: "unsupported_schema",
         code: "SETFARM_OPERATIONAL_SNAPSHOT_UNSUPPORTED_SCHEMA",
@@ -777,8 +822,8 @@ export function parseOperationalSnapshotResponse(
     if (!isRecord(body.source) || !hasExactOperationalCapabilities(body.source.capabilities, body.schema)) {
       return { status: "upstream_error", code: "SETFARM_OPERATIONAL_SNAPSHOT_INVALID_PAYLOAD", reason: "invalid_payload" };
     }
-    if (body.schema === RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA) {
-      const capabilities = body.source.capabilities as OperationalProjectionCapabilitiesV2;
+    if (body.schema !== RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA) {
+      const capabilities = body.source.capabilities as OperationalProjectionCapabilitiesV2 | OperationalProjectionCapabilitiesV3;
       if (capabilities.implementationSubmissionEvidence && !capabilities.managerCompletion) {
         return { status: "upstream_error", code: "SETFARM_OPERATIONAL_SNAPSHOT_INVALID_PAYLOAD", reason: "invalid_payload" };
       }
@@ -804,6 +849,19 @@ export function parseOperationalSnapshotResponse(
             request.outputHash,
           )
           || (!capabilities.implementationSubmissionEvidence && request.implementationSubmissionEvidence !== null)) {
+          return { status: "upstream_error", code: "SETFARM_OPERATIONAL_SNAPSHOT_INVALID_PAYLOAD", reason: "invalid_payload" };
+        }
+      }
+      if (body.schema === RUN_OPERATIONAL_SNAPSHOT_V3_SCHEMA) {
+        const v3Capabilities = capabilities as OperationalProjectionCapabilitiesV3;
+        if (!Object.hasOwn(body, "operationalFailure")
+          || (v3Capabilities.operationalFailureAuthority
+            && (
+              !Array.isArray(body.source.migrationVersions)
+              || !body.source.migrationVersions.includes(22)
+              || typeof body.source.verifiedReleaseSha !== "string"
+              || !GIT_OBJECT_HASH.test(body.source.verifiedReleaseSha)
+            ))) {
           return { status: "upstream_error", code: "SETFARM_OPERATIONAL_SNAPSHOT_INVALID_PAYLOAD", reason: "invalid_payload" };
         }
       }
