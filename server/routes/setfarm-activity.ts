@@ -36,6 +36,7 @@ import { getAgentActivity } from '../services/agent-activity.js';
 import { sql } from '../utils/pg.js';
 import { setfarmOperationalSnapshotClient } from '../services/setfarm-operational-snapshot.js';
 import { setfarmProjectTransferAckClient } from '../services/setfarm-project-transfer-ack.js';
+import { deriveSetfarmPipelineFailureProjection } from '../services/setfarm-pipeline-projection.js';
 import { isV3RunProtocol } from '../services/v3-project-transfer.js';
 import { coordinateV3ProjectTransfer } from '../services/v3-project-transfer-coordinator.js';
 import {
@@ -571,15 +572,19 @@ router.get('/setfarm/pipeline', async (_req, res) => {
         // of the "100%" lie (first was failed-counted-as-completed in setfarm-db.ts).
         // Now the real bucket counts flow through unchanged.
             const storyProgress = (batchProgress as any)[r.id] || { completed: 0, total: 0, verified: 0, skipped: 0, running: 0, pending: 0, done: 0, failed: 0 };
-        const hasFailures = (storyProgress.failed || 0) > 0;
         const operational = operationalByRunId.get(String(r.id));
+        const failureProjection = deriveSetfarmPipelineFailureProjection({
+          run: r,
+          storyProgress,
+          operational,
+        });
         return {
           id: r.id,
           runNumber: r.run_number,
           workflow: r.workflow_id,
           task: r.task,
           status: r.status,
-          hasFailures,
+          hasFailures: failureProjection.hasFailures,
           updatedAt: r.updated_at,
           createdAt: r.created_at,
           currentStoryId: r.currentStoryId || r.current_story_id || null,
@@ -590,8 +595,8 @@ router.get('/setfarm/pipeline', async (_req, res) => {
           nextStoryId: r.nextStoryId || r.next_story_id || null,
           nextStoryTitle: r.nextStoryTitle || r.next_story_title || null,
           nextStoryStatus: r.nextStoryStatus || r.next_story_status || null,
-          blockerStepId: r.blockerStepId || r.blocker_step_id || null,
-          blockerSummary: r.blockerSummary || r.blocker_summary || null,
+          blockerStepId: failureProjection.blockerStepId,
+          blockerSummary: failureProjection.blockerSummary,
           steps: (r.steps || []).map((s: any) => ({
             stepId: s.step_id,
             agent: s.agent_id,
