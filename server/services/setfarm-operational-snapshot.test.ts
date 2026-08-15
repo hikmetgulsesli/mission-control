@@ -796,6 +796,13 @@ test("v3 validator projects a generic step-fail cause without inventing exact de
   missingProjection.operationalFailure = null;
   seal(missingProjection);
   assert.throws(() => parseRunOperationalSnapshotV3(missingProjection));
+
+  const unsupportedAuthority = structuredClone(snapshot);
+  unsupportedAuthority.source.projection = "partial";
+  unsupportedAuthority.source.capabilities.operationalFailureAuthority = false;
+  unsupportedAuthority.operationalFailure = null;
+  seal(unsupportedAuthority);
+  assert.throws(() => parseRunOperationalSnapshotV3(unsupportedAuthority));
 });
 
 test("typed termination projection preserves canonical refusal evidence and fails closed on drift", () => {

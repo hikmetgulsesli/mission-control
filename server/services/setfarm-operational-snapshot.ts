@@ -2817,6 +2817,9 @@ function validateOperationalFailureBindingV3(snapshot: RunOperationalSnapshotV3)
     request.targetStatus === "failed"
     && request.state === "terminalized"
     && evidenceOperationalFailureCause(request) !== null);
+  if (!capability && canonicalCauseRequests.length > 0) {
+    fail("snapshot.terminationRequests", "operational failure cause requires explicit authority");
+  }
   if (capability && canonicalCauseRequests.length > 0 && snapshot.operationalFailure === null) {
     fail("snapshot.operationalFailure", "canonical terminal operational failure must be projected");
   }
