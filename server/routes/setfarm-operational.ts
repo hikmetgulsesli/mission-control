@@ -9,6 +9,10 @@ import {
   type ProductBuildAuthority,
   type ProductBuildAuthorityFetchResult,
 } from "../services/setfarm-product-build-authority.js";
+import {
+  ProductBuildAuthorityV2DeliveryEvidenceError,
+  currentProductBuildAuthorityV2DeliveryEvidenceResponseV1,
+} from "../services/product-build-authority-v2-delivery-evidence-v1.js";
 
 export type OperationalSnapshotHttpResult =
   | { statusCode: 200; body: RunOperationalSnapshot }
@@ -162,6 +166,30 @@ router.get("/setfarm/runs/:id/product-build-authority", async (req, res) => {
       code: "SETFARM_PRODUCT_BUILD_AUTHORITY_UNAVAILABLE",
       reason: "network",
     });
+  }
+});
+
+router.get("/internal-production/product-build-authority-v2-delivery-evidence", async (req, res) => {
+  res.set("Cache-Control", "no-store, max-age=0, must-revalidate");
+  res.set("Pragma", "no-cache");
+  res.set("Expires", "0");
+  if (Object.keys(req.query).length !== 0
+    || req.headers["content-length"] !== undefined
+    || req.headers["transfer-encoding"] !== undefined
+    || req.body !== undefined) {
+    res.status(400).json({
+      status: "unavailable",
+      code: "PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_REQUEST_INVALID",
+    });
+    return;
+  }
+  try {
+    res.status(200).json(await currentProductBuildAuthorityV2DeliveryEvidenceResponseV1());
+  } catch (error) {
+    const code = error instanceof ProductBuildAuthorityV2DeliveryEvidenceError
+      ? error.code
+      : "PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_UNAVAILABLE";
+    res.status(503).json({ status: "unavailable", code });
   }
 });
 
