@@ -93,24 +93,52 @@ export async function runProjectedMutation(
 }
 
 export interface ProjectProjectionReadGate {
-  read<T>(load: () => Promise<T>): Promise<
+  read<T>(
+    load: () => Promise<T>,
+    priority?: "background" | "strict",
+  ): Promise<
     { status: "current"; value: T } | { status: "superseded" }
   >;
 }
 
 export function createProjectProjectionReadGate(): ProjectProjectionReadGate {
   let latestGeneration = 0;
+  let strictPending = 0;
+  let strictTail = Promise.resolve();
+
+  const run = async <T,>(load: () => Promise<T>): Promise<
+    { status: "current"; value: T } | { status: "superseded" }
+  > => {
+    const generation = ++latestGeneration;
+    try {
+      const value = await load();
+      return generation === latestGeneration
+        ? { status: "current", value }
+        : { status: "superseded" };
+    } catch (error) {
+      if (generation !== latestGeneration) return { status: "superseded" };
+      throw error;
+    }
+  };
+
   return {
-    async read<T>(load: () => Promise<T>) {
-      const generation = ++latestGeneration;
+    async read<T>(load: () => Promise<T>, priority = "background") {
+      if (priority === "background") {
+        while (strictPending > 0) await strictTail;
+        return run(load);
+      }
+
+      strictPending += 1;
+      const precedingStrict = strictTail;
+      let releaseStrict!: () => void;
+      const thisStrict = new Promise<void>((resolve) => { releaseStrict = resolve; });
+      strictTail = precedingStrict.then(() => thisStrict);
+      await precedingStrict;
       try {
-        const value = await load();
-        return generation === latestGeneration
-          ? { status: "current" as const, value }
-          : { status: "superseded" as const };
-      } catch (error) {
-        if (generation !== latestGeneration) return { status: "superseded" as const };
-        throw error;
+        return await run(load);
+      } finally {
+        strictPending -= 1;
+        releaseStrict();
       }
     },
   };
@@ -139,10 +167,13 @@ export function Projects() {
   const [projectionReadGate] = useState(createProjectProjectionReadGate);
   const [, setHealthClock] = useState(0);
 
-  const fetchProjects = async (): Promise<void> => {
+  const fetchProjects = async (priority: "background" | "strict" = "background"): Promise<void> => {
     try {
-      const result = await projectionReadGate.read(() => api.projects());
-      if (result.status === "superseded") return;
+      const result = await projectionReadGate.read(() => api.projects(), priority);
+      if (result.status === "superseded") {
+        if (priority === "strict") throw new Error("PROJECT_PROJECTION_STRICT_READ_SUPERSEDED");
+        return;
+      }
       setProjects(result.value as any);
       setLoadError(null);
       setProjectionsCurrent(true);
@@ -157,7 +188,7 @@ export function Projects() {
 
   const refreshAfterMutation = async (): Promise<void> => {
     setProjectionsCurrent(false);
-    await fetchProjects();
+    await fetchProjects("strict");
   };
 
   useEffect(() => {

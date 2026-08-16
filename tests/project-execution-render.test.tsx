@@ -13,11 +13,24 @@ const projectsModule = await import("../src/pages/Projects.js") as {
     refresh: () => Promise<void>,
   ) => Promise<void>;
   createProjectProjectionReadGate?: () => {
-    read: <T>(load: () => Promise<T>) => Promise<
+    read: <T>(
+      load: () => Promise<T>,
+      priority?: "background" | "strict",
+    ) => Promise<
       { status: "current"; value: T } | { status: "superseded" }
     >;
   };
 };
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
 
 function fixture(overrides: Record<string, unknown> = {}) {
   return {
@@ -216,9 +229,58 @@ test("an older poll cannot re-enable stale projections after strict refresh fail
   }));
   const strict = gate.read(async () => {
     throw new Error("PROJECT_PROJECTION_REFRESH_FAILED");
-  });
+  }, "strict");
 
   await assert.rejects(strict, /PROJECT_PROJECTION_REFRESH_FAILED/);
   resolveOlder(["stale-project"]);
   assert.deepEqual(await older, { status: "superseded" });
+});
+
+test("strict refresh success owns current before a newer background error", async () => {
+  const gate = projectsModule.createProjectProjectionReadGate!();
+  const strictSource = deferred<readonly string[]>();
+  const backgroundSource = deferred<readonly string[]>();
+  let backgroundStarted = false;
+  const strict = gate.read(() => strictSource.promise, "strict");
+  const background = gate.read(() => {
+    backgroundStarted = true;
+    return backgroundSource.promise;
+  }, "background");
+
+  assert.equal(backgroundStarted, false);
+  strictSource.resolve(["strict-current"]);
+  assert.deepEqual(await strict, { status: "current", value: ["strict-current"] });
+  backgroundSource.reject(new Error("BACKGROUND_FAILED"));
+  await assert.rejects(background, /BACKGROUND_FAILED/);
+});
+
+test("strict refresh error rejects before a newer background success", async () => {
+  const gate = projectsModule.createProjectProjectionReadGate!();
+  const strictSource = deferred<readonly string[]>();
+  const backgroundSource = deferred<readonly string[]>();
+  let backgroundStarted = false;
+  const strict = gate.read(() => strictSource.promise, "strict");
+  const background = gate.read(() => {
+    backgroundStarted = true;
+    return backgroundSource.promise;
+  }, "background");
+
+  assert.equal(backgroundStarted, false);
+  strictSource.reject(new Error("STRICT_FAILED"));
+  await assert.rejects(strict, /STRICT_FAILED/);
+  backgroundSource.resolve(["background-current"]);
+  assert.deepEqual(await background, { status: "current", value: ["background-current"] });
+});
+
+test("older background error is superseded by strict refresh success", async () => {
+  const gate = projectsModule.createProjectProjectionReadGate!();
+  const backgroundSource = deferred<readonly string[]>();
+  const strictSource = deferred<readonly string[]>();
+  const background = gate.read(() => backgroundSource.promise, "background");
+  const strict = gate.read(() => strictSource.promise, "strict");
+
+  strictSource.resolve(["strict-current"]);
+  assert.deepEqual(await strict, { status: "current", value: ["strict-current"] });
+  backgroundSource.reject(new Error("OLDER_BACKGROUND_FAILED"));
+  assert.deepEqual(await background, { status: "superseded" });
 });
