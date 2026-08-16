@@ -29,6 +29,15 @@ import {
   CanonicalV3DeploymentObservationBatcher,
   setfarmDeploymentObservationClient,
 } from "../services/setfarm-deployment-observation.js";
+import {
+  bindProjectRun,
+  deriveProjectExecutionState,
+  getProjectRunRows,
+  projectRunBindingHints,
+  type ProjectExecutionState,
+  type ProjectRunBindingHints,
+} from "../services/project-execution-state.js";
+import { isSetfarmOperationalActiveRunStatusV1 } from "../shared/setfarm-operational-active-run-status-v1.js";
 
 const router = Router();
 const PROJECTS_FILE = (config as any).projectsJson || join(import.meta.dirname, "../../projects.json");
@@ -97,6 +106,121 @@ const V3_TRANSIENT_VIEW_FIELDS = [
 function isCanonicalV3Project(project: any): boolean {
   return project?.productCompilerProtocol === "v3"
     && project?.createdBy === "setfarm-v3-terminal-projector";
+}
+
+export interface ProjectApiProjection {
+  status: "registered" | "building" | "completed" | "failed" | "cancelled";
+  execution: ProjectExecutionState;
+  runtime: {
+    state: "active" | "inactive" | "unknown";
+    checkedAt: string | null;
+    reasonCode: string;
+  };
+  receipt: null | {
+    status: string;
+    serviceStatus: string;
+    projectionHash: string;
+    projectRecordHash: string;
+  };
+}
+
+const LOWERCASE_SHA256 = /^[a-f0-9]{64}$/;
+
+function executionTerminalPublicStatus(value: unknown): ProjectApiProjection["status"] | null {
+  if (value === "completed" || value === "done") return "completed";
+  if (value === "failed") return "failed";
+  if (value === "cancelled" || value === "canceled") return "cancelled";
+  return null;
+}
+
+function catalogTerminalPublicStatus(value: unknown): ProjectApiProjection["status"] | null {
+  if (value === "error") return "failed";
+  return executionTerminalPublicStatus(value);
+}
+
+export function toProjectApiProjection(
+  persisted: Record<string, unknown>,
+  execution: ProjectExecutionState,
+): Record<string, unknown> & ProjectApiProjection {
+  const expectedActive = execution.runStatus !== null
+    && isSetfarmOperationalActiveRunStatusV1(execution.runStatus);
+  if (execution.active !== expectedActive
+    || (execution.active && execution.state !== execution.runStatus)) {
+    throw new Error("PROJECT_EXECUTION_ACTIVE_RELATION_INVALID");
+  }
+
+  let status: ProjectApiProjection["status"];
+  if (execution.active) {
+    status = "building";
+  } else if (execution.state === "terminal") {
+    const terminalStatus = executionTerminalPublicStatus(execution.runStatus);
+    if (terminalStatus === null) {
+      throw new Error("PROJECT_EXECUTION_TERMINAL_STATUS_INVALID");
+    }
+    status = terminalStatus;
+  } else {
+    status = catalogTerminalPublicStatus(persisted.status) ?? "registered";
+  }
+
+  const canonicalV3 = isCanonicalV3Project(persisted);
+  let runtime: ProjectApiProjection["runtime"];
+  let receipt: ProjectApiProjection["receipt"] = null;
+  if (canonicalV3) {
+    const observedServiceStatus = typeof persisted.observedServiceStatus === "string"
+      ? persisted.observedServiceStatus.trim().toLowerCase()
+      : "";
+    const checkedAt = typeof persisted.observedServiceCheckedAt === "string"
+      && persisted.observedServiceCheckedAt.trim()
+      ? persisted.observedServiceCheckedAt
+      : null;
+    const reasonCode = typeof persisted.observedServiceReasonCode === "string"
+      && persisted.observedServiceReasonCode.trim()
+      ? persisted.observedServiceReasonCode
+      : "V3_DEPLOYMENT_OBSERVATION_UNAVAILABLE";
+    runtime = {
+      state: observedServiceStatus === "active" || observedServiceStatus === "inactive"
+        ? observedServiceStatus
+        : "unknown",
+      checkedAt,
+      reasonCode,
+    };
+
+    if (persisted.status !== "active"
+      || persisted.serviceStatus !== "active"
+      || typeof persisted.canonicalProjectionHash !== "string"
+      || !LOWERCASE_SHA256.test(persisted.canonicalProjectionHash)
+      || typeof persisted.canonicalProjectRecordHash !== "string"
+      || !LOWERCASE_SHA256.test(persisted.canonicalProjectRecordHash)) {
+      throw new Error("PROJECT_API_CANONICAL_RECEIPT_INVALID");
+    }
+    receipt = {
+      status: persisted.status,
+      serviceStatus: persisted.serviceStatus,
+      projectionHash: persisted.canonicalProjectionHash,
+      projectRecordHash: persisted.canonicalProjectRecordHash,
+    };
+  } else {
+    const state = persisted.serviceStatus === "active" || persisted.serviceStatus === "inactive"
+      ? persisted.serviceStatus
+      : "unknown";
+    runtime = {
+      state,
+      checkedAt: null,
+      reasonCode: state === "active"
+        ? "PROJECT_RUNTIME_LEGACY_SERVICE_STATUS_ACTIVE"
+        : state === "inactive"
+          ? "PROJECT_RUNTIME_LEGACY_SERVICE_STATUS_INACTIVE"
+          : "PROJECT_RUNTIME_LEGACY_SERVICE_STATUS_UNKNOWN",
+    };
+  }
+
+  return {
+    ...persisted,
+    status,
+    execution: { ...execution },
+    runtime,
+    receipt,
+  };
 }
 
 function mutatesCanonicalV3Projection(updates: Record<string, unknown>): boolean {
@@ -446,12 +570,9 @@ function normalizedProjectIdentity(value: any): string {
 }
 
 function isHiddenTerminalProject(project: any): boolean {
-  const statuses = [
-    project?.status,
-    project?.latestRunStatus,
-    project?.serviceStatus,
-  ].map((value) => String(value || "").trim().toLowerCase());
-  return statuses.some((status) => ["failed", "error", "cancelled", "canceled"].includes(status));
+  return project?.execution?.state === "terminal"
+    || project?.status === "failed"
+    || project?.status === "cancelled";
 }
 
 function toIsoString(value: any): string {
@@ -733,14 +854,63 @@ function dedupeProjects(projects: any[]): any[] {
   return [...byId.values()];
 }
 
+interface ProjectReadSnapshot {
+  catalogStatus: unknown;
+  bindingHints: ProjectRunBindingHints;
+  canonicalReceipt: null | {
+    status: unknown;
+    serviceStatus: unknown;
+    canonicalProjectionHash: unknown;
+    canonicalProjectRecordHash: unknown;
+  };
+}
+
+function snapshotProjectForRead(project: Record<string, unknown>): ProjectReadSnapshot {
+  return {
+    catalogStatus: project.status,
+    bindingHints: projectRunBindingHints(project),
+    canonicalReceipt: isCanonicalV3Project(project) ? {
+      status: project.status,
+      serviceStatus: project.serviceStatus,
+      canonicalProjectionHash: project.canonicalProjectionHash,
+      canonicalProjectRecordHash: project.canonicalProjectRecordHash,
+    } : null,
+  };
+}
+
+async function projectApiReadCollection(projects: any[]): Promise<Array<Record<string, unknown> & ProjectApiProjection>> {
+  const snapshots = projects.map((project) => snapshotProjectForRead(project));
+  const runRows = await getProjectRunRows(snapshots.map((snapshot) => snapshot.bindingHints));
+  const executions = snapshots.map((snapshot) => deriveProjectExecutionState(
+    bindProjectRun(snapshot.bindingHints, runRows),
+  ));
+  const enriched = await enrichWithStatus(projects);
+
+  return enriched.map((project, index) => {
+    const snapshot = snapshots[index]!;
+    const persistedForProjection: Record<string, unknown> = {
+      ...project,
+      status: snapshot.catalogStatus,
+    };
+    if (snapshot.canonicalReceipt !== null) {
+      Object.assign(persistedForProjection, snapshot.canonicalReceipt);
+    }
+    return toProjectApiProjection(persistedForProjection, executions[index]!);
+  });
+}
+
+export async function readProjectApiProjections(): Promise<Array<Record<string, unknown> & ProjectApiProjection>> {
+  const registeredProjects = loadProjects();
+  return projectApiReadCollection(dedupeProjects([
+    ...registeredProjects,
+    ...(await synthesizeSetfarmProjects(registeredProjects)),
+  ]));
+}
+
 router.get("/projects", async (req, res) => {
   try {
-    const registeredProjects = loadProjects();
     const hideTerminal = String(req.query.hideTerminal || "") === "1";
-    let projects = dedupeProjects(await enrichWithStatus([
-      ...registeredProjects,
-      ...(await synthesizeSetfarmProjects(registeredProjects)),
-    ]));
+    let projects = await readProjectApiProjections();
     if (hideTerminal) {
       projects = projects.filter((project: any) => !isHiddenTerminalProject(project));
     }
@@ -795,7 +965,7 @@ router.get("/projects/next-port", async (_req, res) => {
 
 router.get("/projects/:id", async (req, res) => {
   try {
-    const projects = await enrichWithStatus(loadProjects());
+    const projects = await projectApiReadCollection(dedupeProjects(loadProjects()));
     const project = findProjectByIdOrRepo(projects, req.params.id);
     if (!project) { res.status(404).json({ error: "Project not found" }); return; }
     res.json(project);
