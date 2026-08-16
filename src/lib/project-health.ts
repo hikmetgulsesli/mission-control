@@ -55,12 +55,52 @@ export function projectRuntimeObservation(
   };
 }
 
+export interface ProjectRuntimePresentation extends ProjectRuntimeObservation {
+  action: "start" | "stop" | null;
+  connectivityTone: "online" | "offline" | "unknown";
+  switchTone: "on" | "off" | "unknown";
+  switchLabel: "ON" | "OFF" | "UNKNOWN";
+  availabilityLabel: "Online" | "Offline" | "Unknown";
+}
+
+export function projectRuntimePresentation(
+  project: ProjectRuntimeObservationInput,
+  now = Date.now(),
+): ProjectRuntimePresentation {
+  const observation = projectRuntimeObservation(project, now);
+  if (observation.status === "active") {
+    return {
+      ...observation,
+      action: "stop",
+      connectivityTone: "online",
+      switchTone: "on",
+      switchLabel: "ON",
+      availabilityLabel: "Online",
+    };
+  }
+  if (observation.status === "inactive") {
+    return {
+      ...observation,
+      action: "start",
+      connectivityTone: "offline",
+      switchTone: "off",
+      switchLabel: "OFF",
+      availabilityLabel: "Offline",
+    };
+  }
+  return {
+    ...observation,
+    action: null,
+    connectivityTone: "unknown",
+    switchTone: "unknown",
+    switchLabel: "UNKNOWN",
+    availabilityLabel: "Unknown",
+  };
+}
+
 export function projectRuntimeAction(
   project: ProjectRuntimeObservationInput,
   now = Date.now(),
 ): "start" | "stop" | null {
-  const observation = projectRuntimeObservation(project, now);
-  if (observation.status === "active") return "stop";
-  if (observation.status === "inactive") return "start";
-  return null;
+  return projectRuntimePresentation(project, now).action;
 }

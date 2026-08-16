@@ -10,7 +10,7 @@ import {
   PROJECT_OBSERVATION_DISPLAY_TICK_MS,
   PROJECT_OBSERVATION_POLL_INTERVAL_MS,
   projectRuntimeAction,
-  projectRuntimeObservation,
+  projectRuntimePresentation,
 } from "../lib/project-health";
 import type { ProjectData } from "../lib/types";
 
@@ -92,6 +92,30 @@ export async function runProjectedMutation(
   await refresh();
 }
 
+export interface ProjectProjectionReadGate {
+  read<T>(load: () => Promise<T>): Promise<
+    { status: "current"; value: T } | { status: "superseded" }
+  >;
+}
+
+export function createProjectProjectionReadGate(): ProjectProjectionReadGate {
+  let latestGeneration = 0;
+  return {
+    async read<T>(load: () => Promise<T>) {
+      const generation = ++latestGeneration;
+      try {
+        const value = await load();
+        return generation === latestGeneration
+          ? { status: "current" as const, value }
+          : { status: "superseded" as const };
+      } catch (error) {
+        if (generation !== latestGeneration) return { status: "superseded" as const };
+        throw error;
+      }
+    },
+  };
+}
+
 export function Projects() {
   const { toast } = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
@@ -112,12 +136,14 @@ export function Projects() {
   const [bulkAction, setBulkAction] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [projectionsCurrent, setProjectionsCurrent] = useState(false);
+  const [projectionReadGate] = useState(createProjectProjectionReadGate);
   const [, setHealthClock] = useState(0);
 
   const fetchProjects = async (): Promise<void> => {
     try {
-      const d = await api.projects();
-      setProjects(d as any);
+      const result = await projectionReadGate.read(() => api.projects());
+      if (result.status === "superseded") return;
+      setProjects(result.value as any);
       setLoadError(null);
       setProjectionsCurrent(true);
     } catch (err: any) {
@@ -384,15 +410,15 @@ export function Projects() {
           <span className="tools-bar__label">TOOLS</span>
           <div className="tools-bar__links">
             {extProjects.map((p) => {
-              const observation = projectRuntimeObservation(p);
+              const presentation = projectRuntimePresentation(p);
               return (
                 <a
                   key={p.id}
-                  className={`tools-bar__item tools-bar__item--${observation.status === "active" ? "online" : "offline"}`}
+                  className={`tools-bar__item tools-bar__item--${presentation.connectivityTone}`}
                   href={`https://${p.domain}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  title={`${p.name} - ${p.domain}${observation.status === "active" ? " (Online)" : " (Offline)"}`}
+                  title={`${p.name} - ${p.domain} (${presentation.availabilityLabel})`}
                 >
                   {TOOL_LOGOS[p.id] ? (
                     <img className="tools-bar__logo" src={TOOL_LOGOS[p.id]} alt={p.name} />
@@ -400,7 +426,7 @@ export function Projects() {
                     <span className="tools-bar__emoji">{p.emoji}</span>
                   )}
                   <span className="tools-bar__name">{p.name}</span>
-                  <span className={`tools-bar__dot tools-bar__dot--${observation.status}`} />
+                  <span className={`tools-bar__dot tools-bar__dot--${presentation.status}`} />
                 </a>
               );
             })}

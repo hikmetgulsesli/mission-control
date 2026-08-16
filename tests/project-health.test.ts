@@ -7,6 +7,7 @@ import {
   PROJECT_OBSERVATION_POLL_INTERVAL_MS,
   projectRuntimeAction,
   projectRuntimeObservation,
+  projectRuntimePresentation,
 } from "../src/lib/project-health.js";
 
 const NOW = Date.parse("2026-07-14T10:00:30.000Z");
@@ -84,4 +85,32 @@ test("runtime mutations are unavailable for stale, future, malformed, and unknow
   assert.equal(projectRuntimeAction({
     runtime: { state: "inactive", checkedAt: null, reasonCode: "PROJECT_RUNTIME_LEGACY_SERVICE_STATUS_INACTIVE" },
   }, NOW), "start");
+});
+
+test("unknown runtime presentation never collapses to online, offline, on, or off", () => {
+  const unknown = projectRuntimePresentation({
+    runtime: {
+      state: "active",
+      checkedAt: new Date(NOW - PROJECT_OBSERVATION_MAX_AGE_MS - 1).toISOString(),
+      reasonCode: "V3_DEPLOYMENT_OBSERVED_ACTIVE",
+    },
+  }, NOW);
+  assert.deepEqual(unknown, {
+    status: "unknown",
+    label: "UNKNOWN",
+    checkedAt: new Date(NOW - PROJECT_OBSERVATION_MAX_AGE_MS - 1).toISOString(),
+    reason: "stale",
+    action: null,
+    connectivityTone: "unknown",
+    switchTone: "unknown",
+    switchLabel: "UNKNOWN",
+    availabilityLabel: "Unknown",
+  });
+
+  assert.equal(projectRuntimePresentation({
+    runtime: { state: "active", checkedAt: null, reasonCode: "PROJECT_RUNTIME_LEGACY_SERVICE_STATUS_ACTIVE" },
+  }, NOW).connectivityTone, "online");
+  assert.equal(projectRuntimePresentation({
+    runtime: { state: "inactive", checkedAt: null, reasonCode: "PROJECT_RUNTIME_LEGACY_SERVICE_STATUS_INACTIVE" },
+  }, NOW).connectivityTone, "offline");
 });

@@ -12,6 +12,11 @@ const projectsModule = await import("../src/pages/Projects.js") as {
     mutation: () => Promise<unknown>,
     refresh: () => Promise<void>,
   ) => Promise<void>;
+  createProjectProjectionReadGate?: () => {
+    read: <T>(load: () => Promise<T>) => Promise<
+      { status: "current"; value: T } | { status: "superseded" }
+    >;
+  };
 };
 
 function fixture(overrides: Record<string, unknown> = {}) {
@@ -165,11 +170,15 @@ test("stale, future, and malformed runtime projections render unknown and disabl
     { state: "active", checkedAt: "not-a-date", reasonCode: "V3_DEPLOYMENT_OBSERVED_ACTIVE" },
   ];
   for (const runtime of runtimeCases) {
-    const project = fixture({ runtime });
+    const project = fixture({ createdBy: "dashboard", repo: "", service: "project.service", runtime });
     const card = renderCard(project);
     assert.match(card, /RUNTIME UNKNOWN/);
     assert.doesNotMatch(card, /RUNTIME ACTIVE/);
     assert.match(card, /project-card__toggle[^>]*disabled=""/);
+    assert.match(card, /project-card__toggle--unknown/);
+    assert.match(card, /project-card--unknown/);
+    assert.match(card, />UNKNOWN</);
+    assert.doesNotMatch(card, /project-card--(?:online|offline)|project-card__toggle--(?:on|off)|>ON<|>OFF</);
     assert.match(renderDetail(project), /RUNTIME UNKNOWN/);
   }
 });
@@ -196,4 +205,20 @@ test("an unavailable canonical projection disables otherwise actionable runtime 
   }), true);
   assert.match(card, /RUNTIME ACTIVE/);
   assert.match(card, /project-card__toggle[^>]*disabled=""/);
+});
+
+test("an older poll cannot re-enable stale projections after strict refresh failure", async () => {
+  assert.equal(typeof projectsModule.createProjectProjectionReadGate, "function");
+  const gate = projectsModule.createProjectProjectionReadGate!();
+  let resolveOlder!: (value: readonly string[]) => void;
+  const older = gate.read(() => new Promise<readonly string[]>((resolve) => {
+    resolveOlder = resolve;
+  }));
+  const strict = gate.read(async () => {
+    throw new Error("PROJECT_PROJECTION_REFRESH_FAILED");
+  });
+
+  await assert.rejects(strict, /PROJECT_PROJECTION_REFRESH_FAILED/);
+  resolveOlder(["stale-project"]);
+  assert.deepEqual(await older, { status: "superseded" });
 });

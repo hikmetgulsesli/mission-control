@@ -1,7 +1,7 @@
 import React from "react";
 import { normalizeVisibleVisualStatus } from "../../lib/status";
 import type { ProjectData } from "../../lib/types";
-import { projectRuntimeAction, projectRuntimeObservation } from "../../lib/project-health";
+import { projectRuntimePresentation } from "../../lib/project-health";
 
 interface Project extends Pick<ProjectData, "status" | "execution" | "runtime" | "receipt"> {
   id: string;
@@ -73,9 +73,7 @@ export const ProjectCard = React.memo(function ProjectCard({
   const isServiceProject = !isSetfarmRun && p.type !== "mobile" && Boolean(p.service || p.ports?.frontend || p.ports?.backend);
   const isLocalSetfarmProject = isSetfarmRun && p.type !== "mobile" && Boolean(p.repo);
   const runStatus = String(p.execution.runStatus || p.execution.state).toLowerCase();
-  const observedAt = Date.now();
-  const observedHealth = projectRuntimeObservation(p, observedAt);
-  const runtimeAction = projectRuntimeAction(p, observedAt);
+  const runtimePresentation = projectRuntimePresentation(p);
   const storyDone = p.stories?.verified ?? p.stories?.completed ?? p.stories?.done ?? 0;
   const supervisor = p.supervisor;
   const supervisorStatus = supervisor?.available ? supervisor.status : "missing";
@@ -101,7 +99,7 @@ export const ProjectCard = React.memo(function ProjectCard({
 
   return (
     <div
-      className={`project-card ${selected ? "project-card--selected" : ""} ${p.execution.active ? "project-card--building" : p.status === "failed" ? "project-card--failed" : ""} ${p.type === "mobile" ? "project-card--mobile" : isSetfarmRun ? `project-card--run-${p.execution.state}` : `project-card--${observedHealth.status === "active" ? "online" : "offline"}`}`}
+      className={`project-card ${selected ? "project-card--selected" : ""} ${p.execution.active ? "project-card--building" : p.status === "failed" ? "project-card--failed" : ""} ${p.type === "mobile" ? "project-card--mobile" : isSetfarmRun ? `project-card--run-${p.execution.state}` : `project-card--${runtimePresentation.connectivityTone}`}`}
       onClick={onSelect}
     >
       <div className="project-card__header">
@@ -112,35 +110,35 @@ export const ProjectCard = React.memo(function ProjectCard({
         <span className="project-card__name">{p.name}</span>
         <span className={`project-card__status project-card__status--${p.status}`}>PROJECT {p.status.toUpperCase()}</span>
         <span className={`project-card__status project-card__status--${p.execution.state}`}>EXECUTION {p.execution.state.toUpperCase()}</span>
-        <span className={`project-card__live-health project-card__live-health--${observedHealth.status}`}>
-          RUNTIME {observedHealth.label}
+        <span className={`project-card__live-health project-card__live-health--${runtimePresentation.status}`}>
+          RUNTIME {runtimePresentation.label}
         </span>
         <span className="project-card__status" title={p.receipt ? "Immutable deployment receipt status" : undefined}>
           RECEIPT {p.receipt ? p.receipt.serviceStatus.toUpperCase() : "NONE"}
         </span>
         {isServiceProject && (
           <button
-            className={"project-card__toggle " + (runtimeAction === "stop" ? "project-card__toggle--on" : "project-card__toggle--off")}
+            className={`project-card__toggle project-card__toggle--${runtimePresentation.switchTone}`}
             onClick={onToggle}
-            disabled={actionsDisabled || runtimeAction === null || toggling || p.id === "mission-control"}
-            title={runtimeAction === "stop" ? "Stop" : runtimeAction === "start" ? "Start" : "Runtime observation unavailable"}
+            disabled={actionsDisabled || runtimePresentation.action === null || toggling || p.id === "mission-control"}
+            title={runtimePresentation.action === "stop" ? "Stop" : runtimePresentation.action === "start" ? "Start" : "Runtime observation unavailable"}
           >
             <span className="project-card__toggle-knob" />
             <span className="project-card__toggle-label">
-              {toggling ? "..." : runtimeAction === "stop" ? "ON" : "OFF"}
+              {toggling ? "..." : runtimePresentation.switchLabel}
             </span>
           </button>
         )}
         {isLocalSetfarmProject && (
           <button
-            className={"project-card__toggle " + (runtimeAction === "stop" ? "project-card__toggle--on" : "project-card__toggle--off")}
+            className={`project-card__toggle project-card__toggle--${runtimePresentation.switchTone}`}
             onClick={onToggle}
-            disabled={actionsDisabled || runtimeAction === null || toggling}
-            title={runtimeAction === "stop" ? "Stop local app" : runtimeAction === "start" ? "Start local app" : "Runtime observation unavailable"}
+            disabled={actionsDisabled || runtimePresentation.action === null || toggling}
+            title={runtimePresentation.action === "stop" ? "Stop local app" : runtimePresentation.action === "start" ? "Start local app" : "Runtime observation unavailable"}
           >
             <span className="project-card__toggle-knob" />
             <span className="project-card__toggle-label">
-              {toggling ? "..." : runtimeAction === "stop" ? "ON" : "OFF"}
+              {toggling ? "..." : runtimePresentation.switchLabel}
             </span>
           </button>
         )}
