@@ -236,40 +236,84 @@ test("an older poll cannot re-enable stale projections after strict refresh fail
   assert.deepEqual(await older, { status: "superseded" });
 });
 
-test("strict refresh success owns current before a newer background error", async () => {
+test("strict refresh success owns current while a newer background read is discarded", async () => {
   const gate = projectsModule.createProjectProjectionReadGate!();
   const strictSource = deferred<readonly string[]>();
-  const backgroundSource = deferred<readonly string[]>();
   let backgroundStarted = false;
   const strict = gate.read(() => strictSource.promise, "strict");
-  const background = gate.read(() => {
+  const background = gate.read(async () => {
     backgroundStarted = true;
-    return backgroundSource.promise;
+    throw new Error("BACKGROUND_MUST_NOT_START");
   }, "background");
 
   assert.equal(backgroundStarted, false);
+  assert.deepEqual(await background, { status: "superseded" });
   strictSource.resolve(["strict-current"]);
   assert.deepEqual(await strict, { status: "current", value: ["strict-current"] });
-  backgroundSource.reject(new Error("BACKGROUND_FAILED"));
-  await assert.rejects(background, /BACKGROUND_FAILED/);
+  assert.equal(backgroundStarted, false);
 });
 
-test("strict refresh error rejects before a newer background success", async () => {
+test("strict refresh error remains authoritative while a newer background read is discarded", async () => {
   const gate = projectsModule.createProjectProjectionReadGate!();
   const strictSource = deferred<readonly string[]>();
-  const backgroundSource = deferred<readonly string[]>();
   let backgroundStarted = false;
   const strict = gate.read(() => strictSource.promise, "strict");
-  const background = gate.read(() => {
+  const background = gate.read(async () => {
     backgroundStarted = true;
-    return backgroundSource.promise;
+    return ["background-must-not-start"];
   }, "background");
 
   assert.equal(backgroundStarted, false);
+  assert.deepEqual(await background, { status: "superseded" });
   strictSource.reject(new Error("STRICT_FAILED"));
   await assert.rejects(strict, /STRICT_FAILED/);
-  backgroundSource.resolve(["background-current"]);
-  assert.deepEqual(await background, { status: "current", value: ["background-current"] });
+  assert.equal(backgroundStarted, false);
+});
+
+test("background ticks are discarded while strict refresh is unresolved and never fetch after unmount", async () => {
+  const gate = projectsModule.createProjectProjectionReadGate!();
+  const strictSource = deferred<readonly string[]>();
+  const strict = gate.read(() => strictSource.promise, "strict");
+  let backgroundStarted = 0;
+  let backgroundSettled = 0;
+  let unmounted = false;
+  let startedAfterUnmount = 0;
+
+  const backgroundTicks = Array.from({ length: 8 }, (_, index) => gate.read(async () => {
+    backgroundStarted += 1;
+    if (unmounted) startedAfterUnmount += 1;
+    return [`background-${index}`];
+  }, "background").then((result) => {
+    backgroundSettled += 1;
+    return result;
+  }));
+
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(backgroundStarted, 0);
+  assert.equal(backgroundSettled, backgroundTicks.length);
+
+  unmounted = true;
+  strictSource.resolve(["strict-current"]);
+  assert.deepEqual(await strict, { status: "current", value: ["strict-current"] });
+  assert.deepEqual(
+    await Promise.all(backgroundTicks),
+    backgroundTicks.map(() => ({ status: "superseded" as const })),
+  );
+  assert.equal(backgroundStarted, 0);
+  assert.equal(startedAfterUnmount, 0);
+});
+
+test("a future background tick runs after strict refresh settles", async () => {
+  const gate = projectsModule.createProjectProjectionReadGate!();
+  assert.deepEqual(
+    await gate.read(async () => ["strict-current"], "strict"),
+    { status: "current", value: ["strict-current"] },
+  );
+  assert.deepEqual(
+    await gate.read(async () => ["background-current"], "background"),
+    { status: "current", value: ["background-current"] },
+  );
 });
 
 test("older background error is superseded by strict refresh success", async () => {

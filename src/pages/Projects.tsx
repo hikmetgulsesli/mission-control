@@ -124,7 +124,7 @@ export function createProjectProjectionReadGate(): ProjectProjectionReadGate {
   return {
     async read<T>(load: () => Promise<T>, priority = "background") {
       if (priority === "background") {
-        while (strictPending > 0) await strictTail;
+        if (strictPending > 0) return { status: "superseded" };
         return run(load);
       }
 
