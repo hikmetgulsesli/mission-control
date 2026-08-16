@@ -10,6 +10,7 @@ import {
   PROJECT_OBSERVATION_DISPLAY_TICK_MS,
   PROJECT_OBSERVATION_POLL_INTERVAL_MS,
 } from "../lib/project-health";
+import type { ProjectData } from "../lib/types";
 
 
 function formatDuration(createdAt?: string, completedAt?: string, buildStartedAt?: string, buildCompletedAt?: string): string | null {
@@ -32,7 +33,7 @@ function formatDuration(createdAt?: string, completedAt?: string, buildStartedAt
   return `${minutes}m`;
 }
 
-interface Project {
+interface Project extends Pick<ProjectData, "status" | "execution" | "runtime" | "receipt"> {
   id: string;
   name: string;
   emoji: string;
@@ -44,18 +45,12 @@ interface Project {
   repo: string;
   stack: string[];
   service: string;
-  serviceStatus?: string;
-  observedServiceStatus?: string;
-  observedServiceCheckedAt?: string;
-  observedServiceReasonCode?: string;
   createdBy: string;
   productCompilerProtocol?: string;
-  workflowRunId?: string;
   runNumber?: number;
   latestRunNumber?: number;
   createdAt: string;
   completedAt?: string;
-  status?: string;
   stories?: { total: number; done: number };
   pr?: string;
   features: string[];
@@ -76,10 +71,10 @@ const TOOL_LOGOS: Record<string, string> = {
   "n8n": "https://cdn.simpleicons.org/n8n/ea4b71",
 };
 
-const FAILED_PROJECT_STATUSES = new Set(["failed", "error", "cancelled"]);
+const FAILED_PROJECT_STATUSES = new Set(["failed", "cancelled"]);
 
 function isFailedProject(project: Project): boolean {
-  return FAILED_PROJECT_STATUSES.has(String(project.status || "").toLowerCase());
+  return FAILED_PROJECT_STATUSES.has(project.status);
 }
 
 function isCanonicalV3Project(project: Project): boolean {
@@ -178,8 +173,8 @@ export function Projects() {
     if (!createForm.name.trim()) return;
     setCreateLoading(true);
     try {
-      const project = await api.createProject(createForm);
-      setProjects(prev => [...prev, project]);
+      await api.createProject(createForm);
+      await fetchProjects();
       setShowCreate(false);
       setCreateForm({ name: "", description: "", emoji: "", category: "own", type: "web" as string });
     } catch (err: any) {
@@ -210,8 +205,8 @@ export function Projects() {
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      const project = await api.importProject(data);
-      setProjects(prev => [...prev, project]);
+      await api.importProject(data);
+      await fetchProjects();
     } catch (err: any) {
       toast("Import failed: " + err.message, 'error');
     }
@@ -225,18 +220,11 @@ export function Projects() {
   const handleToggle = async (e: React.MouseEvent, p: Project) => {
     e.stopPropagation();
     if (p.id === "mission-control" || p.type === "mobile" || isCanonicalV3Project(p)) return;
-    const action = p.serviceStatus === "active" ? "stop" : "start";
+    const action = p.runtime.state === "active" ? "stop" : "start";
     setToggling(p.id);
     try {
-      const result = await api.toggleProject(p.id, action);
-      setProjects(prev => prev.map(pr =>
-        pr.id === p.id ? {
-          ...pr,
-          ports: result.port ? { ...(pr.ports || {}), frontend: result.port } : pr.ports,
-          serviceStatus: result.serviceStatus ?? (action === "start" ? "active" : "inactive"),
-          manuallyDisabled: action === "stop",
-        } : pr
-      ));
+      await api.toggleProject(p.id, action);
+      await fetchProjects();
       toast(p.name + " " + (action === "start" ? "started" : "stopped"), "success");
     } catch (err: any) {
       toast("Toggle failed: " + err.message, "error");
@@ -248,7 +236,7 @@ export function Projects() {
   const handleBulkToggle = async (action: "start" | "stop") => {
     const targets = ownProjects.filter(p =>
       p.id !== "mission-control" && p.type !== "mobile" && !isCanonicalV3Project(p) && p.service &&
-      (action === "start" ? p.serviceStatus !== "active" : p.serviceStatus === "active")
+      (action === "start" ? p.runtime.state !== "active" : p.runtime.state === "active")
     );
     if (targets.length === 0) { toast("No service needs this action", "error"); return; }
     setBulkAction(action);
@@ -256,12 +244,10 @@ export function Projects() {
     for (const p of targets) {
       try {
         await api.toggleProject(p.id, action);
-        setProjects(prev => prev.map(pr =>
-          pr.id === p.id ? { ...pr, serviceStatus: action === "start" ? "active" : "inactive" } : pr
-        ));
         ok++;
       } catch { fail++; }
     }
+    if (ok > 0) await fetchProjects();
     toast(ok + " service(s) " + (action === "start" ? "started" : "stopped") + (fail ? ", " + fail + " failed" : ""), ok > 0 ? "success" : "error");
     setBulkAction(null);
   };
@@ -297,7 +283,7 @@ export function Projects() {
       }
       case 'status': {
         const order: Record<string, number> = { building: 0, active: 1, completed: 2 };
-        return (order[a.status || 'active'] ?? 1) - (order[b.status || 'active'] ?? 1);
+        return (order[a.status] ?? 1) - (order[b.status] ?? 1);
       }
       default: return 0;
     }
@@ -317,7 +303,7 @@ export function Projects() {
       }
       case 'status': {
         const order: Record<string, number> = { building: 0, active: 1, completed: 2 };
-        return (order[a.status || 'active'] ?? 1) - (order[b.status || 'active'] ?? 1);
+        return (order[a.status] ?? 1) - (order[b.status] ?? 1);
       }
       default: return 0;
     }
@@ -358,11 +344,11 @@ export function Projects() {
             {extProjects.map((p) => (
               <a
                 key={p.id}
-                className={`tools-bar__item tools-bar__item--${p.serviceStatus === "active" ? "online" : "offline"}`}
+                className={`tools-bar__item tools-bar__item--${p.runtime.state === "active" ? "online" : "offline"}`}
                 href={`https://${p.domain}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                title={`${p.name} - ${p.domain}${p.serviceStatus === "active" ? " (Online)" : " (Offline)"}`}
+                title={`${p.name} - ${p.domain}${p.runtime.state === "active" ? " (Online)" : " (Offline)"}`}
               >
                 {TOOL_LOGOS[p.id] ? (
                   <img className="tools-bar__logo" src={TOOL_LOGOS[p.id]} alt={p.name} />
@@ -370,7 +356,7 @@ export function Projects() {
                   <span className="tools-bar__emoji">{p.emoji}</span>
                 )}
                 <span className="tools-bar__name">{p.name}</span>
-                <span className={`tools-bar__dot tools-bar__dot--${p.serviceStatus}`} />
+                <span className={`tools-bar__dot tools-bar__dot--${p.runtime.state}`} />
               </a>
             ))}
           </div>

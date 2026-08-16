@@ -1,8 +1,8 @@
 import React from "react";
-import { projectRuntimeObservation } from "../../lib/project-health";
 import { normalizeVisibleVisualStatus } from "../../lib/status";
+import type { ProjectData } from "../../lib/types";
 
-interface Project {
+interface Project extends Pick<ProjectData, "status" | "execution" | "runtime" | "receipt"> {
   id: string;
   name: string;
   emoji: string;
@@ -14,19 +14,12 @@ interface Project {
   repo: string;
   stack: string[];
   service: string;
-  serviceStatus?: string;
-  observedServiceStatus?: string;
-  observedServiceCheckedAt?: string;
-  observedServiceReasonCode?: string;
   createdBy: string;
   productCompilerProtocol?: string;
-  workflowRunId?: string;
   runNumber?: number;
   latestRunNumber?: number;
-  setfarmRunIds?: string[];
   createdAt: string;
   completedAt?: string;
-  status?: string;
   stories?: { total: number; done?: number; completed?: number; verified?: number; failed?: number; skipped?: number };
   pr?: string;
   features: string[];
@@ -73,13 +66,10 @@ export const ProjectCard = React.memo(function ProjectCard({
   onExport,
   onDelete,
 }: ProjectCardProps) {
-  const isCanonicalV3 = p.productCompilerProtocol === "v3"
-    && p.createdBy === "setfarm-v3-terminal-projector";
-  const isSetfarmRun = p.category === "setfarm" || p.createdBy === "setfarm-run" || p.createdBy === "setfarm-workflow" || Boolean(p.latestRunNumber || p.workflowRunId);
+  const isSetfarmRun = p.category === "setfarm" || p.createdBy === "setfarm-run" || p.createdBy === "setfarm-workflow" || p.execution.runId !== null;
   const isServiceProject = !isSetfarmRun && p.type !== "mobile" && Boolean(p.service || p.ports?.frontend || p.ports?.backend);
   const isLocalSetfarmProject = isSetfarmRun && p.type !== "mobile" && Boolean(p.repo);
-  const runStatus = (p.status || p.serviceStatus || "unknown").toLowerCase();
-  const observedHealth = projectRuntimeObservation(p);
+  const runStatus = String(p.execution.runStatus || p.execution.state).toLowerCase();
   const storyDone = p.stories?.verified ?? p.stories?.completed ?? p.stories?.done ?? 0;
   const supervisor = p.supervisor;
   const supervisorStatus = supervisor?.available ? supervisor.status : "missing";
@@ -92,20 +82,20 @@ export const ProjectCard = React.memo(function ProjectCard({
         ? "fixing"
         : "muted";
   const displayEmoji = isSetfarmRun
-    ? runStatus === "completed"
+    ? p.execution.active
+      ? "🏗️"
+      : runStatus === "completed" || runStatus === "done"
       ? "✅"
       : runStatus === "failed"
         ? "❌"
         : runStatus === "cancelled" || runStatus === "canceled"
           ? "⏹"
-          : runStatus === "building" || runStatus === "running" || runStatus === "pending"
-            ? "🏗️"
-            : p.emoji
+          : p.emoji
     : p.emoji;
 
   return (
     <div
-      className={`project-card ${selected ? "project-card--selected" : ""} ${p.status === "building" ? "project-card--building" : p.status === "failed" ? "project-card--failed" : ""} ${p.type === "mobile" ? "project-card--mobile" : isSetfarmRun ? `project-card--run-${runStatus}` : `project-card--${p.serviceStatus === "active" ? "online" : "offline"}`}`}
+      className={`project-card ${selected ? "project-card--selected" : ""} ${p.execution.active ? "project-card--building" : p.status === "failed" ? "project-card--failed" : ""} ${p.type === "mobile" ? "project-card--mobile" : isSetfarmRun ? `project-card--run-${p.execution.state}` : `project-card--${p.runtime.state === "active" ? "online" : "offline"}`}`}
       onClick={onSelect}
     >
       <div className="project-card__header">
@@ -114,52 +104,37 @@ export const ProjectCard = React.memo(function ProjectCard({
           <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--neon-cyan, #0ff)", background: "rgba(0,255,255,0.12)", border: "1px solid rgba(0,255,255,0.3)", padding: "1px 7px", borderRadius: "3px", marginRight: "8px", fontFamily: "var(--font)", letterSpacing: "0.5px" }}>#{p.latestRunNumber || p.runNumber}</span>
         ) : null}
         <span className="project-card__name">{p.name}</span>
-        {isSetfarmRun ? (
-          <span
-            className={`project-card__status project-card__status--${runStatus}`}
-            title={isCanonicalV3 ? "Immutable deployment receipt status" : undefined}
-          >
-            {isCanonicalV3 ? `RECEIPT ${runStatus.toUpperCase()}` : runStatus.toUpperCase()}
-          </span>
-        ) : p.type === "mobile" ? (
-          <span className="project-card__status project-card__status--mobile">MOBILE</span>
-        ) : p.status === "building" ? (
-          <span className="project-card__status project-card__status--building">BUILDING</span>
-        ) : isServiceProject ? (
+        <span className={`project-card__status project-card__status--${p.status}`}>PROJECT {p.status.toUpperCase()}</span>
+        <span className={`project-card__status project-card__status--${p.execution.state}`}>EXECUTION {p.execution.state.toUpperCase()}</span>
+        <span className={`project-card__live-health project-card__live-health--${p.runtime.state}`}>
+          RUNTIME {p.runtime.state.toUpperCase()}
+        </span>
+        <span className="project-card__status" title={p.receipt ? "Immutable deployment receipt status" : undefined}>
+          RECEIPT {p.receipt ? p.receipt.serviceStatus.toUpperCase() : "NONE"}
+        </span>
+        {isServiceProject && (
           <button
-            className={"project-card__toggle " + (p.serviceStatus === "active" ? "project-card__toggle--on" : "project-card__toggle--off")}
+            className={"project-card__toggle " + (p.runtime.state === "active" ? "project-card__toggle--on" : "project-card__toggle--off")}
             onClick={onToggle}
             disabled={toggling || p.id === "mission-control"}
-            title={p.serviceStatus === "active" ? "Stop" : "Start"}
+            title={p.runtime.state === "active" ? "Stop" : "Start"}
           >
             <span className="project-card__toggle-knob" />
             <span className="project-card__toggle-label">
-              {toggling ? "..." : p.serviceStatus === "active" ? "ON" : "OFF"}
+              {toggling ? "..." : p.runtime.state === "active" ? "ON" : "OFF"}
             </span>
           </button>
-        ) : (
-          <span className="project-card__status project-card__status--unknown">LOCAL</span>
-        )}
-        {isCanonicalV3 && (
-          <span
-            className={`project-card__live-health project-card__live-health--${observedHealth.status}`}
-            title={observedHealth.checkedAt
-              ? `Observed ${observedHealth.checkedAt} · ${p.observedServiceReasonCode || observedHealth.reason}`
-              : "No current runtime observation"}
-          >
-            LIVE {observedHealth.label}
-          </span>
         )}
         {isLocalSetfarmProject && (
           <button
-            className={"project-card__toggle " + (p.serviceStatus === "active" ? "project-card__toggle--on" : "project-card__toggle--off")}
+            className={"project-card__toggle " + (p.runtime.state === "active" ? "project-card__toggle--on" : "project-card__toggle--off")}
             onClick={onToggle}
             disabled={toggling}
-            title={p.serviceStatus === "active" ? "Stop local app" : "Start local app"}
+            title={p.runtime.state === "active" ? "Stop local app" : "Start local app"}
           >
             <span className="project-card__toggle-knob" />
             <span className="project-card__toggle-label">
-              {toggling ? "..." : p.serviceStatus === "active" ? "ON" : "OFF"}
+              {toggling ? "..." : p.runtime.state === "active" ? "ON" : "OFF"}
             </span>
           </button>
         )}

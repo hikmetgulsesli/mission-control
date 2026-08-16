@@ -3,8 +3,11 @@ export const PROJECT_OBSERVATION_POLL_INTERVAL_MS = 10_000;
 export const PROJECT_OBSERVATION_DISPLAY_TICK_MS = 1_000;
 
 export interface ProjectRuntimeObservationInput {
-  observedServiceStatus?: string | null;
-  observedServiceCheckedAt?: string | null;
+  runtime: {
+    state: "active" | "inactive" | "unknown";
+    checkedAt: string | null;
+    reasonCode: string;
+  };
 }
 
 export interface ProjectRuntimeObservation {
@@ -14,17 +17,25 @@ export interface ProjectRuntimeObservation {
   reason: "observed" | "missing" | "invalid_timestamp" | "stale" | "clock_skew";
 }
 
-/** No timestamp means no current observation; receipt status is never a fallback. */
+/** Projected runtime is authoritative; a supplied observation timestamp may still age out locally. */
 export function projectRuntimeObservation(
   project: ProjectRuntimeObservationInput,
   now = Date.now(),
 ): ProjectRuntimeObservation {
-  const rawStatus = String(project.observedServiceStatus || "").trim().toLowerCase();
-  const checkedAt = typeof project.observedServiceCheckedAt === "string"
-    ? project.observedServiceCheckedAt
+  const rawStatus = project.runtime.state;
+  const checkedAt = typeof project.runtime.checkedAt === "string"
+    ? project.runtime.checkedAt
     : null;
-  if (!checkedAt || (rawStatus !== "active" && rawStatus !== "inactive")) {
+  if (rawStatus !== "active" && rawStatus !== "inactive") {
     return { status: "unknown", label: "UNKNOWN", checkedAt, reason: "missing" };
+  }
+  if (!checkedAt) {
+    return {
+      status: rawStatus,
+      label: rawStatus === "active" ? "ACTIVE" : "INACTIVE",
+      checkedAt: null,
+      reason: "observed",
+    };
   }
   const checkedAtMs = Date.parse(checkedAt);
   if (!Number.isFinite(checkedAtMs)) {

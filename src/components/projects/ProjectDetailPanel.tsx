@@ -1,10 +1,10 @@
 import React from "react";
 import { ProjectChecklist } from "../ProjectChecklist";
 import { OperationalEvidenceLoader } from "../run-detail/OperationalEvidence";
-import { projectRuntimeObservation } from "../../lib/project-health";
 import { normalizeVisibleVisualStatus } from "../../lib/status";
+import type { ProjectData } from "../../lib/types";
 
-interface Project {
+interface Project extends Pick<ProjectData, "status" | "execution" | "runtime" | "receipt"> {
   id: string;
   name: string;
   emoji: string;
@@ -16,17 +16,11 @@ interface Project {
   repo: string;
   stack: string[];
   service: string;
-  serviceStatus?: string;
-  observedServiceStatus?: string;
-  observedServiceCheckedAt?: string;
-  observedServiceReasonCode?: string;
   createdBy: string;
   productCompilerProtocol?: string;
-  workflowRunId?: string;
   runNumber?: number;
   createdAt: string;
   completedAt?: string;
-  status?: string;
   stories?: { total: number; done: number };
   pr?: string;
   features: string[];
@@ -83,9 +77,6 @@ export const ProjectDetailPanel = React.memo(function ProjectDetailPanel({
 }: ProjectDetailPanelProps) {
   const supervisor = sel.supervisor;
   const visualStatus = normalizeVisibleVisualStatus(supervisor?.visual.status);
-  const isCanonicalV3 = sel.productCompilerProtocol === "v3"
-    && sel.createdBy === "setfarm-v3-terminal-projector";
-  const observedHealth = projectRuntimeObservation(sel);
 
   return (
     <div className="project-detail">
@@ -100,21 +91,16 @@ export const ProjectDetailPanel = React.memo(function ProjectDetailPanel({
           <h4>General Info</h4>
           <table className="project-detail__table">
             <tbody>
-              {isCanonicalV3 ? (
-                <>
-                  <tr><td>Receipt status</td><td>{String(sel.serviceStatus || sel.status || "unknown").toUpperCase()} (immutable)</td></tr>
-                  <tr>
-                    <td>Observed live health</td>
-                    <td>
-                      {observedHealth.label}
-                      {observedHealth.checkedAt ? ` · ${new Date(observedHealth.checkedAt).toLocaleString("en-US")}` : " · no observation"}
-                      {sel.observedServiceReasonCode ? ` · ${sel.observedServiceReasonCode}` : ""}
-                    </td>
-                  </tr>
-                </>
-              ) : (
-                <tr><td>Status</td><td>{sel.serviceStatus === "active" ? "Running" : "Stopped"}</td></tr>
-              )}
+              <tr><td>PROJECT {sel.status.toUpperCase()}</td></tr>
+              <tr><td>EXECUTION {sel.execution.state.toUpperCase()}</td></tr>
+              <tr>
+                <td>
+                  RUNTIME {sel.runtime.state.toUpperCase()}
+                  {sel.runtime.checkedAt ? ` · ${new Date(sel.runtime.checkedAt).toLocaleString("en-US")}` : ""}
+                  {sel.runtime.reasonCode ? ` · ${sel.runtime.reasonCode}` : ""}
+                </td>
+              </tr>
+              <tr><td>RECEIPT {sel.receipt ? sel.receipt.serviceStatus.toUpperCase() : "NONE"}{sel.receipt ? " (immutable)" : ""}</td></tr>
               <tr><td>Service</td><td><code>{sel.service}</code></td></tr>
               {sel.type !== "mobile" && <tr><td>Port</td><td>{sel.ports.frontend}{sel.ports.backend ? ` (frontend) / ${sel.ports.backend} (backend)` : ""}</td></tr>}
               {sel.type !== "mobile" && sel.domain && <tr><td>Domain</td><td><a href={`https://${sel.domain}`} target="_blank" rel="noopener noreferrer">{sel.domain}</a></td></tr>}
@@ -125,7 +111,7 @@ export const ProjectDetailPanel = React.memo(function ProjectDetailPanel({
               <tr><td>Created By</td><td>{sel.createdBy}</td></tr>
               <tr><td>Date</td><td>{sel.createdAt}{sel.completedAt ? ` -> ${sel.completedAt.slice(0, 10)}` : ""}</td></tr>
               <tr><td>Duration</td><td>{formatDuration(sel.createdAt, sel.completedAt, sel.buildStartedAt, sel.buildCompletedAt) ?? "-"}{!sel.completedAt && !sel.buildCompletedAt ? " (in progress)" : ""}</td></tr>
-              {sel.workflowRunId && <tr><td>Workflow Run</td><td><code>{sel.workflowRunId}</code></td></tr>}
+              {sel.execution.runId && <tr><td>Workflow Run</td><td><code>{sel.execution.runId}</code></td></tr>}
               {sel.pr && <tr><td>Pull Request</td><td><a href={sel.pr} target="_blank" rel="noopener noreferrer">PR #1</a></td></tr>}
             </tbody>
           </table>
@@ -149,9 +135,9 @@ export const ProjectDetailPanel = React.memo(function ProjectDetailPanel({
           </div>
         )}
 
-        {sel.workflowRunId && (
+        {sel.execution.runId && (
           <div className="project-detail__section project-detail__section--wide project-detail__section--operational">
-            <OperationalEvidenceLoader runId={sel.workflowRunId} />
+            <OperationalEvidenceLoader runId={sel.execution.runId} />
           </div>
         )}
 
