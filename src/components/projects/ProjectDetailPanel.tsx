@@ -3,6 +3,7 @@ import { ProjectChecklist } from "../ProjectChecklist";
 import { OperationalEvidenceLoader } from "../run-detail/OperationalEvidence";
 import { normalizeVisibleVisualStatus } from "../../lib/status";
 import type { ProjectData } from "../../lib/types";
+import { projectRuntimeObservation } from "../../lib/project-health";
 
 interface Project extends Pick<ProjectData, "status" | "execution" | "runtime" | "receipt"> {
   id: string;
@@ -77,6 +78,7 @@ export const ProjectDetailPanel = React.memo(function ProjectDetailPanel({
 }: ProjectDetailPanelProps) {
   const supervisor = sel.supervisor;
   const visualStatus = normalizeVisibleVisualStatus(supervisor?.visual.status);
+  const observedHealth = projectRuntimeObservation(sel);
 
   return (
     <div className="project-detail">
@@ -95,8 +97,8 @@ export const ProjectDetailPanel = React.memo(function ProjectDetailPanel({
               <tr><td>EXECUTION {sel.execution.state.toUpperCase()}</td></tr>
               <tr>
                 <td>
-                  RUNTIME {sel.runtime.state.toUpperCase()}
-                  {sel.runtime.checkedAt ? ` · ${new Date(sel.runtime.checkedAt).toLocaleString("en-US")}` : ""}
+                  RUNTIME {observedHealth.label}
+                  {observedHealth.checkedAt ? ` · ${new Date(observedHealth.checkedAt).toLocaleString("en-US")}` : ""}
                   {sel.runtime.reasonCode ? ` · ${sel.runtime.reasonCode}` : ""}
                 </td>
               </tr>

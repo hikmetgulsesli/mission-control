@@ -54,3 +54,13 @@ export function projectRuntimeObservation(
     reason: "observed",
   };
 }
+
+export function projectRuntimeAction(
+  project: ProjectRuntimeObservationInput,
+  now = Date.now(),
+): "start" | "stop" | null {
+  const observation = projectRuntimeObservation(project, now);
+  if (observation.status === "active") return "stop";
+  if (observation.status === "inactive") return "start";
+  return null;
+}

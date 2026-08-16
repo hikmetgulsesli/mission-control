@@ -7,6 +7,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 const { ProjectCard } = await import("../src/components/projects/ProjectCard.js");
 const { ProjectDetailPanel } = await import("../src/components/projects/ProjectDetailPanel.js");
+const projectsModule = await import("../src/pages/Projects.js") as {
+  runProjectedMutation?: (
+    mutation: () => Promise<unknown>,
+    refresh: () => Promise<void>,
+  ) => Promise<void>;
+};
 
 function fixture(overrides: Record<string, unknown> = {}) {
   return {
@@ -44,11 +50,12 @@ function fixture(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function renderCard(project: ReturnType<typeof fixture>): string {
+function renderCard(project: ReturnType<typeof fixture>, actionsDisabled = false): string {
   return renderToStaticMarkup(<ProjectCard
     project={project}
     selected={false}
     toggling={false}
+    actionsDisabled={actionsDisabled}
     onSelect={() => undefined}
     onToggle={() => undefined}
     onExport={() => undefined}
@@ -135,7 +142,7 @@ test("canonical completed receipt-active project keeps runtime and execution ina
     },
     runtime: {
       state: "inactive",
-      checkedAt: "2026-08-17T08:01:00.000Z",
+      checkedAt: new Date().toISOString(),
       reasonCode: "V3_DEPLOYMENT_OBSERVED_INACTIVE",
     },
     receipt: {
@@ -149,4 +156,44 @@ test("canonical completed receipt-active project keeps runtime and execution ina
     assertFourLabels(html, ["PROJECT COMPLETED", "EXECUTION TERMINAL", "RUNTIME INACTIVE", "RECEIPT ACTIVE"]);
     assert.doesNotMatch(html, /EXECUTION ACTIVE/);
   }
+});
+
+test("stale, future, and malformed runtime projections render unknown and disable runtime actions", () => {
+  const runtimeCases = [
+    { state: "active", checkedAt: "2026-01-01T00:00:00.000Z", reasonCode: "V3_DEPLOYMENT_OBSERVED_ACTIVE" },
+    { state: "active", checkedAt: new Date(Date.now() + 60_000).toISOString(), reasonCode: "V3_DEPLOYMENT_OBSERVED_ACTIVE" },
+    { state: "active", checkedAt: "not-a-date", reasonCode: "V3_DEPLOYMENT_OBSERVED_ACTIVE" },
+  ];
+  for (const runtime of runtimeCases) {
+    const project = fixture({ runtime });
+    const card = renderCard(project);
+    assert.match(card, /RUNTIME UNKNOWN/);
+    assert.doesNotMatch(card, /RUNTIME ACTIVE/);
+    assert.match(card, /project-card__toggle[^>]*disabled=""/);
+    assert.match(renderDetail(project), /RUNTIME UNKNOWN/);
+  }
+});
+
+test("projection refresh failure keeps mutation orchestration from completing successfully", async () => {
+  assert.equal(typeof projectsModule.runProjectedMutation, "function");
+  const events: string[] = [];
+  for (const mutation of ["create", "import", "toggle"]) {
+    events.length = 0;
+    await assert.rejects(projectsModule.runProjectedMutation!(
+      async () => { events.push(`${mutation}:mutated`); },
+      async () => {
+        events.push(`${mutation}:refresh`);
+        throw new Error("PROJECT_PROJECTION_REFRESH_FAILED");
+      },
+    ), /PROJECT_PROJECTION_REFRESH_FAILED/);
+    assert.deepEqual(events, [`${mutation}:mutated`, `${mutation}:refresh`]);
+  }
+});
+
+test("an unavailable canonical projection disables otherwise actionable runtime controls", () => {
+  const card = renderCard(fixture({
+    runtime: { state: "active", checkedAt: null, reasonCode: "PROJECT_RUNTIME_LEGACY_SERVICE_STATUS_ACTIVE" },
+  }), true);
+  assert.match(card, /RUNTIME ACTIVE/);
+  assert.match(card, /project-card__toggle[^>]*disabled=""/);
 });

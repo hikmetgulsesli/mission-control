@@ -5,6 +5,7 @@ import {
   PROJECT_OBSERVATION_MAX_AGE_MS,
   PROJECT_OBSERVATION_DISPLAY_TICK_MS,
   PROJECT_OBSERVATION_POLL_INTERVAL_MS,
+  projectRuntimeAction,
   projectRuntimeObservation,
 } from "../src/lib/project-health.js";
 
@@ -56,4 +57,31 @@ test("missing, malformed, future, or stale observations fail closed to unknown",
       reasonCode: "V3_DEPLOYMENT_OBSERVED_ACTIVE",
     },
   }, NOW).status, "active");
+});
+
+test("runtime mutations are unavailable for stale, future, malformed, and unknown projections", () => {
+  const refused = [
+    { state: "unknown", checkedAt: null, reasonCode: "PROJECT_RUNTIME_UNAVAILABLE" },
+    { state: "active", checkedAt: "not-a-date", reasonCode: "V3_DEPLOYMENT_OBSERVED_ACTIVE" },
+    { state: "active", checkedAt: "2026-07-14T10:00:40.000Z", reasonCode: "V3_DEPLOYMENT_OBSERVED_ACTIVE" },
+    {
+      state: "active",
+      checkedAt: new Date(NOW - PROJECT_OBSERVATION_MAX_AGE_MS - 1).toISOString(),
+      reasonCode: "V3_DEPLOYMENT_OBSERVED_ACTIVE",
+    },
+  ] as const;
+  for (const runtime of refused) {
+    assert.equal(projectRuntimeAction({ runtime }, NOW), null);
+  }
+
+  assert.equal(projectRuntimeAction({
+    runtime: {
+      state: "active",
+      checkedAt: new Date(NOW - PROJECT_OBSERVATION_MAX_AGE_MS).toISOString(),
+      reasonCode: "V3_DEPLOYMENT_OBSERVED_ACTIVE",
+    },
+  }, NOW), "stop");
+  assert.equal(projectRuntimeAction({
+    runtime: { state: "inactive", checkedAt: null, reasonCode: "PROJECT_RUNTIME_LEGACY_SERVICE_STATUS_INACTIVE" },
+  }, NOW), "start");
 });

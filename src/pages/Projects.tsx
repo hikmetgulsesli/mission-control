@@ -9,6 +9,8 @@ import { DeleteProjectModal } from "../components/projects/DeleteProjectModal";
 import {
   PROJECT_OBSERVATION_DISPLAY_TICK_MS,
   PROJECT_OBSERVATION_POLL_INTERVAL_MS,
+  projectRuntimeAction,
+  projectRuntimeObservation,
 } from "../lib/project-health";
 import type { ProjectData } from "../lib/types";
 
@@ -82,6 +84,14 @@ function isCanonicalV3Project(project: Project): boolean {
     && project.createdBy === "setfarm-v3-terminal-projector";
 }
 
+export async function runProjectedMutation(
+  mutation: () => Promise<unknown>,
+  refresh: () => Promise<void>,
+): Promise<void> {
+  await mutation();
+  await refresh();
+}
+
 export function Projects() {
   const { toast } = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
@@ -101,22 +111,35 @@ export function Projects() {
   const [toggling, setToggling] = useState<string | null>(null);
   const [bulkAction, setBulkAction] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [projectionsCurrent, setProjectionsCurrent] = useState(false);
   const [, setHealthClock] = useState(0);
 
-  const fetchProjects = () => api.projects()
-    .then((d) => {
+  const fetchProjects = async (): Promise<void> => {
+    try {
+      const d = await api.projects();
       setProjects(d as any);
       setLoadError(null);
-      setLoading(false);
-    })
-    .catch((err: any) => {
+      setProjectionsCurrent(true);
+    } catch (err: any) {
       setLoadError(err?.message || "Projects API failed");
+      setProjectionsCurrent(false);
+      throw err;
+    } finally {
       setLoading(false);
-    });
+    }
+  };
+
+  const refreshAfterMutation = async (): Promise<void> => {
+    setProjectionsCurrent(false);
+    await fetchProjects();
+  };
 
   useEffect(() => {
-    fetchProjects();
-    const interval = setInterval(fetchProjects, PROJECT_OBSERVATION_POLL_INTERVAL_MS);
+    void fetchProjects().catch(() => undefined);
+    const interval = setInterval(
+      () => { void fetchProjects().catch(() => undefined); },
+      PROJECT_OBSERVATION_POLL_INTERVAL_MS,
+    );
     const displayClock = setInterval(
       () => setHealthClock((value) => value + 1),
       PROJECT_OBSERVATION_DISPLAY_TICK_MS,
@@ -170,11 +193,13 @@ export function Projects() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!createForm.name.trim()) return;
+    if (!projectionsCurrent || !createForm.name.trim()) return;
     setCreateLoading(true);
     try {
-      await api.createProject(createForm);
-      await fetchProjects();
+      await runProjectedMutation(
+        () => api.createProject(createForm),
+        refreshAfterMutation,
+      );
       setShowCreate(false);
       setCreateForm({ name: "", description: "", emoji: "", category: "own", type: "web" as string });
     } catch (err: any) {
@@ -201,12 +226,17 @@ export function Projects() {
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !projectionsCurrent) {
+      if (importRef.current) importRef.current.value = "";
+      return;
+    }
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      await api.importProject(data);
-      await fetchProjects();
+      await runProjectedMutation(
+        () => api.importProject(data),
+        refreshAfterMutation,
+      );
     } catch (err: any) {
       toast("Import failed: " + err.message, 'error');
     }
@@ -219,12 +249,15 @@ export function Projects() {
 
   const handleToggle = async (e: React.MouseEvent, p: Project) => {
     e.stopPropagation();
-    if (p.id === "mission-control" || p.type === "mobile" || isCanonicalV3Project(p)) return;
-    const action = p.runtime.state === "active" ? "stop" : "start";
+    if (!projectionsCurrent || p.id === "mission-control" || p.type === "mobile" || isCanonicalV3Project(p)) return;
+    const action = projectRuntimeAction(p);
+    if (action === null) return;
     setToggling(p.id);
     try {
-      await api.toggleProject(p.id, action);
-      await fetchProjects();
+      await runProjectedMutation(
+        () => api.toggleProject(p.id, action),
+        refreshAfterMutation,
+      );
       toast(p.name + " " + (action === "start" ? "started" : "stopped"), "success");
     } catch (err: any) {
       toast("Toggle failed: " + err.message, "error");
@@ -234,9 +267,10 @@ export function Projects() {
   };
 
   const handleBulkToggle = async (action: "start" | "stop") => {
+    if (!projectionsCurrent) return;
     const targets = ownProjects.filter(p =>
       p.id !== "mission-control" && p.type !== "mobile" && !isCanonicalV3Project(p) && p.service &&
-      (action === "start" ? p.runtime.state !== "active" : p.runtime.state === "active")
+      projectRuntimeAction(p) === action
     );
     if (targets.length === 0) { toast("No service needs this action", "error"); return; }
     setBulkAction(action);
@@ -247,7 +281,15 @@ export function Projects() {
         ok++;
       } catch { fail++; }
     }
-    if (ok > 0) await fetchProjects();
+    if (ok > 0) {
+      try {
+        await refreshAfterMutation();
+      } catch (err: any) {
+        toast("Projection refresh failed: " + (err?.message || "Projects API failed"), "error");
+        setBulkAction(null);
+        return;
+      }
+    }
     toast(ok + " service(s) " + (action === "start" ? "started" : "stopped") + (fail ? ", " + fail + " failed" : ""), ok > 0 ? "success" : "error");
     setBulkAction(null);
   };
@@ -317,13 +359,13 @@ export function Projects() {
       <div className="projects-page__header">
         <GlitchText text="PROJECTS" tag="h2" />
         <div className="projects-page__actions">
-          <button className="btn btn--small btn--primary" onClick={() => setShowCreate(true)}>+ NEW PROJECT</button>
-          <button className="btn btn--small" onClick={() => importRef.current?.click()}>IMPORT</button>
+          <button className="btn btn--small btn--primary" onClick={() => setShowCreate(true)} disabled={!projectionsCurrent}>+ NEW PROJECT</button>
+          <button className="btn btn--small" onClick={() => importRef.current?.click()} disabled={!projectionsCurrent}>IMPORT</button>
           <input ref={importRef} type="file" accept=".json" style={{ display: "none" }} onChange={handleImport} />
-          <button className="btn btn--small btn--success" onClick={() => handleBulkToggle("start")} disabled={!!bulkAction}>
+          <button className="btn btn--small btn--success" onClick={() => handleBulkToggle("start")} disabled={!!bulkAction || !projectionsCurrent}>
             {bulkAction === "start" ? "STARTING..." : "START ALL"}
           </button>
-          <button className="btn btn--small btn--danger" onClick={() => handleBulkToggle("stop")} disabled={!!bulkAction}>
+          <button className="btn btn--small btn--danger" onClick={() => handleBulkToggle("stop")} disabled={!!bulkAction || !projectionsCurrent}>
             {bulkAction === "stop" ? "STOPPING..." : "STOP ALL"}
           </button>
         </div>
@@ -341,24 +383,27 @@ export function Projects() {
         <div className="tools-bar">
           <span className="tools-bar__label">TOOLS</span>
           <div className="tools-bar__links">
-            {extProjects.map((p) => (
-              <a
-                key={p.id}
-                className={`tools-bar__item tools-bar__item--${p.runtime.state === "active" ? "online" : "offline"}`}
-                href={`https://${p.domain}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                title={`${p.name} - ${p.domain}${p.runtime.state === "active" ? " (Online)" : " (Offline)"}`}
-              >
-                {TOOL_LOGOS[p.id] ? (
-                  <img className="tools-bar__logo" src={TOOL_LOGOS[p.id]} alt={p.name} />
-                ) : (
-                  <span className="tools-bar__emoji">{p.emoji}</span>
-                )}
-                <span className="tools-bar__name">{p.name}</span>
-                <span className={`tools-bar__dot tools-bar__dot--${p.runtime.state}`} />
-              </a>
-            ))}
+            {extProjects.map((p) => {
+              const observation = projectRuntimeObservation(p);
+              return (
+                <a
+                  key={p.id}
+                  className={`tools-bar__item tools-bar__item--${observation.status === "active" ? "online" : "offline"}`}
+                  href={`https://${p.domain}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={`${p.name} - ${p.domain}${observation.status === "active" ? " (Online)" : " (Offline)"}`}
+                >
+                  {TOOL_LOGOS[p.id] ? (
+                    <img className="tools-bar__logo" src={TOOL_LOGOS[p.id]} alt={p.name} />
+                  ) : (
+                    <span className="tools-bar__emoji">{p.emoji}</span>
+                  )}
+                  <span className="tools-bar__name">{p.name}</span>
+                  <span className={`tools-bar__dot tools-bar__dot--${observation.status}`} />
+                </a>
+              );
+            })}
           </div>
         </div>
       )}
@@ -391,6 +436,7 @@ export function Projects() {
             project={p}
             selected={selected === p.id}
             toggling={toggling === p.id}
+            actionsDisabled={!projectionsCurrent}
             onSelect={() => setSelected(selected === p.id ? null : p.id)}
             onToggle={(e) => handleToggle(e, p)}
             onExport={() => handleExport(p.id)}
