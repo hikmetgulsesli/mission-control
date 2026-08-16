@@ -640,7 +640,6 @@ async function synthesizeSetfarmProjects(existingProjects: any[]) {
       const repo = String(context.repo || "").replace(/\/+$/, "");
       const id = deriveRunProjectSlug(run, context);
 
-      if (run.status === "cancelled" || run.status === "canceled") continue;
       if (knownRunIds.has(run.id)) continue;
       if (repo && knownRepos.has(repo)) continue;
       if (knownProjectIds.has(id)) continue;
@@ -857,6 +856,14 @@ function dedupeProjects(projects: any[]): any[] {
 interface ProjectReadSnapshot {
   catalogStatus: unknown;
   bindingHints: ProjectRunBindingHints;
+  bindingIdentity: {
+    id: unknown;
+    latestRunId: unknown;
+    workflowRunId: unknown;
+    setfarmRunIds: unknown;
+    latestRunNumber: unknown;
+    runNumber: unknown;
+  };
   canonicalReceipt: null | {
     status: unknown;
     serviceStatus: unknown;
@@ -869,6 +876,16 @@ function snapshotProjectForRead(project: Record<string, unknown>): ProjectReadSn
   return {
     catalogStatus: project.status,
     bindingHints: projectRunBindingHints(project),
+    bindingIdentity: {
+      id: project.id,
+      latestRunId: project.latestRunId,
+      workflowRunId: project.workflowRunId,
+      setfarmRunIds: Array.isArray(project.setfarmRunIds)
+        ? [...project.setfarmRunIds]
+        : project.setfarmRunIds,
+      latestRunNumber: project.latestRunNumber,
+      runNumber: project.runNumber,
+    },
     canonicalReceipt: isCanonicalV3Project(project) ? {
       status: project.status,
       serviceStatus: project.serviceStatus,
@@ -891,6 +908,7 @@ async function projectApiReadCollection(projects: any[]): Promise<Array<Record<s
     const persistedForProjection: Record<string, unknown> = {
       ...project,
       status: snapshot.catalogStatus,
+      ...snapshot.bindingIdentity,
     };
     if (snapshot.canonicalReceipt !== null) {
       Object.assign(persistedForProjection, snapshot.canonicalReceipt);

@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import {
@@ -24,6 +27,134 @@ test("publishes one zero-input projected collection reader used by the list rout
   assert.equal(readProjectApiProjections.length, 0);
   const source = readFileSync(new URL("./projects.ts", import.meta.url), "utf8");
   assert.match(source, /router\.get\("\/projects"[\s\S]*?await readProjectApiProjections\(\)/);
+});
+
+test("list projection preserves bound identities and only explicitly hides synthesized cancelled history", async (t) => {
+  const temporaryRoot = mkdtempSync(join(tmpdir(), "mc-project-projection-"));
+  t.after(() => rmSync(temporaryRoot, { recursive: true, force: true }));
+  const projectsPath = join(temporaryRoot, "projects.json");
+  writeFileSync(projectsPath, JSON.stringify([{
+    id: "shared-project",
+    name: "Shared Project",
+    status: "active",
+    serviceStatus: "unknown",
+    createdBy: "setfarm-workflow",
+    category: "setfarm",
+    repo: "/repos/shared-project",
+    latestRunId: "run-snapshot",
+    workflowRunId: "run-snapshot",
+    setfarmRunIds: ["run-snapshot"],
+    latestRunNumber: 7,
+    runNumber: 7,
+  }]) + "\n");
+
+  const fixture = String.raw`
+import assert from "node:assert/strict";
+import { createServer } from "node:http";
+import test from "node:test";
+import express from "express";
+
+const runs = [
+  {
+    id: "run-snapshot", run_number: 7, protocol: "legacy", status: "running",
+    task: "Build Shared Project", context: JSON.stringify({ project_slug: "shared-project", repo: "/repos/shared-project" }),
+    created_at: "2026-08-17T07:00:00.000Z", updated_at: "2026-08-17T07:01:00.000Z",
+  },
+  {
+    id: "run-unrelated", run_number: 12, protocol: "legacy", status: "failed",
+    task: "Repair Shared Project", context: JSON.stringify({ project_slug: "shared-project", repo: "/repos/shared-project" }),
+    created_at: "2026-08-17T12:00:00.000Z", updated_at: "2026-08-17T12:01:00.000Z",
+  },
+  {
+    id: "run-cancelled", run_number: 9, protocol: "legacy", status: "cancelled",
+    task: "Build Cancelled History", context: JSON.stringify({ project_slug: "cancelled-history", repo: "/repos/cancelled-history" }),
+    created_at: "2026-08-17T09:00:00.000Z", updated_at: "2026-08-17T09:01:00.000Z",
+  },
+];
+
+async function sql(strings) {
+  const query = strings.join("?");
+  if (/SELECT id, run_number, protocol, status, updated_at/.test(query)) {
+    return runs.map((run) => ({
+      id: run.id, run_number: run.run_number, protocol: run.protocol,
+      status: run.status, updated_at: run.updated_at,
+    }));
+  }
+  if (/SELECT \* FROM runs/.test(query)) return runs.map((run) => ({ ...run }));
+  if (/FROM steps|FROM stories/.test(query)) return [];
+  throw new Error("unexpected SQL: " + query);
+}
+
+test("route projection", async (context) => {
+  context.mock.module(process.env.MC_PG_URL, { exports: { sql } });
+  context.mock.module(process.env.MC_SUPERVISOR_URL, {
+    exports: { getSupervisorSummaryForRun: async () => ({ state: "observed" }) },
+  });
+  const { default: projectsRouter } = await import(process.env.MC_PROJECTS_URL + "?authority-regression");
+  const app = express();
+  app.use(express.json());
+  app.use("/api", projectsRouter);
+  const server = createServer(app);
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  context.after(() => new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve())));
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const base = "http://127.0.0.1:" + address.port + "/api/projects";
+
+  const defaultResponse = await fetch(base);
+  assert.equal(defaultResponse.status, 200);
+  const projects = await defaultResponse.json();
+  const bound = projects.find((project) => project.id === "shared-project");
+  assert.ok(bound);
+  assert.ok(
+    projects.some((project) => project.id === "cancelled-history" && project.status === "cancelled"),
+    "cancelled history missing from default projection",
+  );
+  assert.equal(bound.execution.runId, "run-snapshot");
+  assert.equal(bound.latestRunId, "run-snapshot");
+  assert.equal(bound.workflowRunId, "run-snapshot");
+  assert.deepEqual(bound.setfarmRunIds, ["run-snapshot"]);
+  assert.equal(bound.latestRunNumber, 7);
+  assert.equal(bound.runNumber, 7);
+
+  const hiddenResponse = await fetch(base + "?hideTerminal=1");
+  assert.equal(hiddenResponse.status, 200);
+  const visible = await hiddenResponse.json();
+  assert.ok(visible.some((project) => project.id === "shared-project"), "active project unexpectedly hidden");
+  assert.ok(!visible.some((project) => project.id === "cancelled-history"), "cancelled project not hidden explicitly");
+});
+`;
+
+  const childEnvironment = { ...process.env };
+  delete childEnvironment.NODE_TEST_CONTEXT;
+  const result = await new Promise<{ exitCode: number; stdout: string; stderr: string }>((resolve, reject) => {
+    const child = spawn(process.execPath, [
+      "--experimental-test-module-mocks",
+      "--import",
+      "tsx",
+      "--input-type=module",
+      "--eval",
+      fixture,
+    ], {
+      env: {
+        ...childEnvironment,
+        PROJECTS_JSON: projectsPath,
+        MC_PROJECTS_URL: new URL("./projects.ts", import.meta.url).href,
+        MC_PG_URL: new URL("../utils/pg.ts", import.meta.url).href,
+        MC_SUPERVISOR_URL: new URL("../utils/supervisor.ts", import.meta.url).href,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.once("error", reject);
+    child.once("close", (exitCode) => resolve({ exitCode: exitCode ?? -1, stdout, stderr }));
+  });
+  assert.equal(result.exitCode, 0, `${result.stdout}${result.stderr}`);
 });
 
 function boundExecution(
