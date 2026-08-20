@@ -1,4 +1,5 @@
 import express from 'express';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'fs';
 import helmet from 'helmet';
 import { createServer } from 'http';
@@ -46,6 +47,69 @@ import rateLimit from 'express-rate-limit';
 // projects.json writes require Node's kernel-backed SQLite transaction mutex.
 // There is deliberately no unsafe PID-file fallback on unsupported runtimes.
 assertProjectsJsonLockCapability();
+
+const PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_FULL_PATH =
+  "/api/internal-production/product-build-authority-v2-loaded-build" as const;
+const PRODUCT_BUILD_AUTHORITY_V2_OPERATIONAL_TOKEN_HEADER =
+  "x-setfarm-operational-token" as const;
+const productBuildAuthorityV2OperationalAuthMarker = Symbol(
+  "productBuildAuthorityV2OperationalAuth",
+);
+type ProductBuildAuthorityV2OperationalRequest = express.Request & {
+  [productBuildAuthorityV2OperationalAuthMarker]?: true;
+};
+
+function sha256(value: string): Buffer {
+  return createHash("sha256").update(value, "utf8").digest();
+}
+
+const productBuildAuthorityV2OperationalTokenDigest = (() => {
+  const token = config.setfarmOperationalWriteToken;
+  return typeof token === "string" && token.length >= 32 ? sha256(token) : null;
+})();
+
+function rawRequestPathname(originalUrl: string): string {
+  const queryOffset = originalUrl.indexOf("?");
+  return queryOffset === -1 ? originalUrl : originalUrl.slice(0, queryOffset);
+}
+
+const productBuildAuthorityV2OperationalAuth: express.RequestHandler = (req, res, next) => {
+  if (rawRequestPathname(req.originalUrl) !== PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_FULL_PATH) {
+    next();
+    return;
+  }
+  if (productBuildAuthorityV2OperationalTokenDigest === null) {
+    res.status(503).json({
+      status: "unavailable",
+      code: "PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_AUTH_UNAVAILABLE",
+    });
+    return;
+  }
+  const token = req.headers[PRODUCT_BUILD_AUTHORITY_V2_OPERATIONAL_TOKEN_HEADER];
+  const tokenDigest = sha256(typeof token === "string" ? token : "");
+  if (!timingSafeEqual(tokenDigest, productBuildAuthorityV2OperationalTokenDigest)) {
+    res.status(401).json({
+      status: "unavailable",
+      code: "PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_UNAUTHORIZED",
+    });
+    return;
+  }
+  Object.defineProperty(req, productBuildAuthorityV2OperationalAuthMarker, {
+    value: true,
+    enumerable: false,
+    configurable: false,
+    writable: false,
+  });
+  next();
+};
+
+const productBuildAuthorityV2GeneralAuth: express.RequestHandler = (req, res, next) => {
+  if ((req as ProductBuildAuthorityV2OperationalRequest)[productBuildAuthorityV2OperationalAuthMarker] === true) {
+    next();
+    return;
+  }
+  authMiddleware(req, res, next);
+};
 
 const app = express();
 const parseJsonBody = express.json({ limit: "2mb" });
@@ -122,7 +186,8 @@ app.get('/api/health', async (_req, res) => {
 app.use('/', changelogPageRouter);
 
 // Auth middleware
-app.use('/api', authMiddleware);
+app.use(productBuildAuthorityV2OperationalAuth);
+app.use('/api', productBuildAuthorityV2GeneralAuth);
 app.use('/stitch-cache', authMiddleware);
 app.use('/projects-stitch', authMiddleware);
 app.use(jsonBodyParser);

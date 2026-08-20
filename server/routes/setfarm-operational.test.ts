@@ -307,24 +307,29 @@ test("loaded route", async (context) => {
   assert.equal(result.exitCode, 0, `${result.stdout}${result.stderr}`);
 });
 
-test("production startup authenticates malformed loaded-build requests before parsing", async () => {
+async function runProductionAuthFixture(
+  mode: "available" | "missing" | "short",
+): Promise<Readonly<{ exitCode: number; stdout: string; stderr: string }>> {
   const fixture = String.raw`
 import assert from "node:assert/strict";
 import * as actualHttp from "node:http";
 import test from "node:test";
 
+const canonicalPath = "/api/internal-production/product-build-authority-v2-loaded-build";
+const operationalToken = "operational-test-token-1234567890abcdef";
 let authCalls = 0;
 let bootListenCalls = 0;
+let loadedStateReads = 0;
 let capturedServer;
 let listenForTest;
 
-function rawRequest(port, headers, body) {
+function rawRequest(port, method, path, headers = {}, body = "") {
   return new Promise((resolve, reject) => {
     const request = actualHttp.request({
       host: "127.0.0.1",
       port,
-      method: "GET",
-      path: "/api/internal-production/product-build-authority-v2-loaded-build",
+      method,
+      path,
       headers,
     }, (incoming) => {
       let text = "";
@@ -357,6 +362,17 @@ test("production middleware order", async (context) => {
   context.mock.module(process.env.MC_LIVE_FEED_URL, { exports: {
     default: (_req, _res, next) => next(),
   } });
+  context.mock.module(process.env.MC_SERVICE_URL, { exports: {
+    ProductBuildAuthorityV2DeliveryEvidenceError: class extends Error {},
+    currentProductBuildAuthorityV2DeliveryEvidenceResponseV1: async () => { throw new Error("not used"); },
+    productBuildAuthorityV2LoadedBuildStartupStateV1: () => {
+      loadedStateReads += 1;
+      return Object.freeze({
+        status: "unavailable",
+        code: "PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_STARTUP_CAPTURE_INVALID",
+      });
+    },
+  } });
   context.mock.module("http", { exports: { ...actualHttp,
     createServer: (...args) => {
       const server = actualHttp.createServer(...args);
@@ -377,33 +393,119 @@ test("production middleware order", async (context) => {
   try {
     const address = capturedServer.address();
     if (address === null || typeof address === "string") throw new TypeError("expected TCP listener");
-    const unauthenticated = await rawRequest(
-      address.port,
-      { "content-type": "application/json", "content-length": "1" },
-      "{",
-    );
-    assert.equal(unauthenticated.statusCode, 401);
-    assert.deepEqual(unauthenticated.body, { error: "Unauthorized" });
-    assert.equal(authCalls, 1);
+    if (process.env.MC_AUTH_MODE !== "available") {
+      const unavailable = await rawRequest(address.port, "GET", canonicalPath, {
+        "x-setfarm-operational-token": operationalToken,
+      });
+      assert.equal(unavailable.statusCode, 503);
+      assert.deepEqual(unavailable.body, {
+        status: "unavailable",
+        code: "PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_AUTH_UNAVAILABLE",
+      });
+      assert.equal(authCalls, 0);
+      assert.equal(loadedStateReads, 0);
+      return;
+    }
 
-    const authenticated = await rawRequest(
-      address.port,
-      { "x-mc-token": "private-test-token", "content-type": "application/json", "content-length": "1" },
-      "{",
-    );
-    assert.equal(authenticated.statusCode, 400);
-    assert.deepEqual(authenticated.body, {
+    for (const candidate of [
+      { headers: {}, body: "" },
+      { headers: { "x-mc-token": "private-test-token" }, body: "" },
+      { headers: { "x-mc-token": "private-test-token", "x-setfarm-operational-token": "wrong-operational-token" }, body: "" },
+      { path: canonicalPath + "?x-setfarm-operational-token=" + operationalToken, headers: {}, body: "" },
+      {
+        headers: { "content-type": "application/json", "content-length": String(JSON.stringify({ token: operationalToken }).length) },
+        body: JSON.stringify({ token: operationalToken }),
+      },
+    ]) {
+      const denied = await rawRequest(
+        address.port,
+        "GET",
+        candidate.path ?? canonicalPath,
+        candidate.headers,
+        candidate.body,
+      );
+      assert.equal(denied.statusCode, 401);
+      assert.deepEqual(denied.body, {
+        status: "unavailable",
+        code: "PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_UNAUTHORIZED",
+      });
+    }
+    assert.equal(authCalls, 0);
+    assert.equal(loadedStateReads, 0);
+
+    const malformed = await rawRequest(address.port, "GET", canonicalPath, {
+      "x-setfarm-operational-token": operationalToken,
+      "content-type": "application/json",
+      "content-length": "1",
+    }, "{");
+    assert.equal(malformed.statusCode, 400);
+    assert.deepEqual(malformed.body, {
       status: "unavailable",
       code: "PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_REQUEST_INVALID",
     });
-    assert.equal(authCalls, 2);
+    assert.equal(authCalls, 0);
+    assert.equal(loadedStateReads, 0);
+
+    const unavailable = await rawRequest(address.port, "GET", canonicalPath, {
+      "x-setfarm-operational-token": operationalToken,
+    });
+    assert.equal(unavailable.statusCode, 503);
+    assert.deepEqual(unavailable.body, {
+      status: "unavailable",
+      code: "PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_STARTUP_CAPTURE_INVALID",
+    });
+    assert.equal(authCalls, 0);
+    assert.equal(loadedStateReads, 1);
+
+    const head = await rawRequest(address.port, "HEAD", canonicalPath, {
+      "x-setfarm-operational-token": operationalToken,
+    });
+    assert.equal(head.statusCode, 404);
+    assert.equal(authCalls, 0);
+    assert.equal(loadedStateReads, 1);
+
+    for (const alias of [
+      "/api/internal-production/Product-Build-Authority-V2-Loaded-Build",
+      canonicalPath + "/",
+      "/API/internal-production/product-build-authority-v2-loaded-build",
+    ]) {
+      const response = await rawRequest(address.port, "GET", alias, {
+        "x-mc-token": "private-test-token",
+        "x-setfarm-operational-token": operationalToken,
+      });
+      assert.equal(response.statusCode, 404);
+    }
+    assert.equal(authCalls, 3);
+    assert.equal(loadedStateReads, 1);
+
+    const otherApiDenied = await rawRequest(address.port, "GET", "/api/not-a-real-route");
+    assert.equal(otherApiDenied.statusCode, 401);
+    assert.deepEqual(otherApiDenied.body, { error: "Unauthorized" });
+    const otherApiAuthenticated = await rawRequest(address.port, "GET", "/api/not-a-real-route", {
+      "x-mc-token": "private-test-token",
+    });
+    assert.equal(otherApiAuthenticated.statusCode, 404);
+    assert.equal(authCalls, 5);
+    assert.equal(loadedStateReads, 1);
   } finally {
     capturedServer.closeAllConnections();
     await new Promise((resolve) => capturedServer.close(resolve));
   }
 });
 `;
-  const result = await new Promise<Readonly<{ exitCode: number; stdout: string; stderr: string }>>((resolveResult, reject) => {
+  const childEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    MC_AUTH_MODE: mode,
+    MC_AUTH_URL: new URL("../middleware/auth.ts", import.meta.url).href,
+    MC_INDEX_URL: new URL("../index.ts", import.meta.url).href,
+    MC_LIVE_FEED_URL: new URL("./live-feed.ts", import.meta.url).href,
+    MC_SERVICE_URL: new URL("../services/product-build-authority-v2-delivery-evidence-v1.ts", import.meta.url).href,
+  };
+  if (mode === "missing") delete childEnv.SETFARM_OPERATIONAL_WRITE_TOKEN;
+  else if (mode === "short") childEnv.SETFARM_OPERATIONAL_WRITE_TOKEN = "x".repeat(31);
+  else childEnv.SETFARM_OPERATIONAL_WRITE_TOKEN = "operational-test-token-1234567890abcdef";
+
+  return new Promise<Readonly<{ exitCode: number; stdout: string; stderr: string }>>((resolveResult, reject) => {
     const child = spawn(process.execPath, [
       "--experimental-test-module-mocks",
       "--import",
@@ -412,12 +514,7 @@ test("production middleware order", async (context) => {
       "--eval",
       fixture,
     ], {
-      env: {
-        ...process.env,
-        MC_AUTH_URL: new URL("../middleware/auth.ts", import.meta.url).href,
-        MC_INDEX_URL: new URL("../index.ts", import.meta.url).href,
-        MC_LIVE_FEED_URL: new URL("./live-feed.ts", import.meta.url).href,
-      },
+      env: childEnv,
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
@@ -429,17 +526,30 @@ test("production middleware order", async (context) => {
     child.once("error", reject);
     child.once("close", (exitCode) => resolveResult({ exitCode: exitCode ?? -1, stdout, stderr }));
   });
-  assert.equal(result.exitCode, 0, `${result.stdout}${result.stderr}`);
+}
+
+test("production startup uses exact endpoint operational auth before general auth and parsing", async () => {
+  for (const mode of ["available", "missing", "short"] as const) {
+    const result = await runProductionAuthFixture(mode);
+    assert.equal(result.exitCode, 0, `${mode}: ${result.stdout}${result.stderr}`);
+    assert.doesNotMatch(
+      `${result.stdout}${result.stderr}`,
+      /operational-test-token-1234567890abcdef|wrong-operational-token|private-test-token/,
+    );
+  }
 });
 
 test("loaded-build route is mounted after authentication and JSON parsing", async () => {
   const indexSource = await import("node:fs/promises").then(({ readFile }) => readFile(new URL("../index.ts", import.meta.url), "utf8"));
-  const authMount = indexSource.indexOf("app.use('/api', authMiddleware);");
+  const operationalAuthMount = indexSource.indexOf("app.use(productBuildAuthorityV2OperationalAuth);");
+  const authMount = indexSource.indexOf("app.use('/api', productBuildAuthorityV2GeneralAuth);");
   const parserMount = indexSource.indexOf("app.use(jsonBodyParser);");
   const routerMount = indexSource.indexOf('app.use("/api", setfarmOperationalRouter);');
+  assert.notEqual(operationalAuthMount, -1);
   assert.notEqual(authMount, -1);
   assert.notEqual(parserMount, -1);
   assert.notEqual(routerMount, -1);
+  assert(operationalAuthMount < authMount);
   assert(authMount < parserMount);
   assert(parserMount < routerMount);
 });
