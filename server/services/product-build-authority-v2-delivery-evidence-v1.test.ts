@@ -575,3 +575,188 @@ test("focused child", async (context) => {
   });
   assert.equal(result.exitCode, 0, `${result.stdout}${result.stderr}`);
 });
+
+test("module evaluation freezes the exact loaded build while disk and current-source CLI advance", async () => {
+  const ownerModuleUrl = new URL("./product-build-authority-v2-delivery-evidence-v1.ts", import.meta.url).href;
+  const fixture = String.raw`
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import * as actualFs from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
+import test from "node:test";
+
+const RESPONSE_SCHEMA = "mission-control.product-build-authority-v2-loaded-build-response.v1";
+const STARTUP_SCHEMA = "mission-control.product-build-authority-v2-startup-instance.v1";
+const LOADED_SCHEMA = "mission-control.product-build-authority-v2-loaded-build.v1";
+const IDENTITY_SCHEMA = "mission-control.internal-production-build-identity.v1";
+const ENTRY_PATH = "dist-server/services/product-build-authority-v2-delivery-evidence-v1.js";
+const REF_PREFIX = "mission-control://internal-production/product-build-authority-v2-loaded-build/sha256/";
+const UNAVAILABLE_CODE = "PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_STARTUP_CAPTURE_INVALID";
+
+function canonical(value) {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return "[" + value.map(canonical).join(",") + "]";
+  return "{" + Object.keys(value).sort().map((key) => JSON.stringify(key) + ":" + canonical(value[key])).join(",") + "}";
+}
+
+function hashBytes(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function hashCanonical(value) {
+  return hashBytes(Buffer.from(canonical(value), "utf8"));
+}
+
+function contentHash(files) {
+  const hash = createHash("sha256");
+  hash.update("mission-control.internal-production-build-content.v1\0", "utf8");
+  for (const path of [...files.keys()].sort()) {
+    const bytes = files.get(path);
+    hash.update(path, "utf8");
+    hash.update("\0", "utf8");
+    hash.update(String(bytes.byteLength), "utf8");
+    hash.update("\0", "utf8");
+    hash.update(bytes);
+    hash.update("\0", "utf8");
+  }
+  return hash.digest("hex");
+}
+
+test("startup capture", async (context) => {
+  const root = await actualFs.mkdtemp(join(tmpdir(), "mc-loaded-build-"));
+  const entryModule = join(root, ENTRY_PATH);
+  let fsObservations = 0;
+  let cliCalls = 0;
+  let cliGeneration = "A";
+  const execFile = () => undefined;
+  execFile[promisify.custom] = async () => {
+    cliCalls += 1;
+    return { stdout: cliGeneration, stderr: "" };
+  };
+
+  async function writeGeneration(name, sourceDigit, treeDigit) {
+    await actualFs.rm(join(root, "dist"), { recursive: true, force: true });
+    await actualFs.rm(join(root, "dist-server"), { recursive: true, force: true });
+    await actualFs.mkdir(join(root, "dist"), { recursive: true });
+    await actualFs.mkdir(join(root, "dist-server/services"), { recursive: true });
+    const files = new Map([
+      ["dist/assets/app.js", Buffer.from("browser-" + name)],
+      [ENTRY_PATH, Buffer.from("compiled-owner-" + name)],
+      ["dist-server/routes/other.js", Buffer.from("compiled-route-" + name)],
+    ]);
+    await actualFs.mkdir(join(root, "dist/assets"), { recursive: true });
+    await actualFs.mkdir(join(root, "dist-server/routes"), { recursive: true });
+    for (const [path, bytes] of files) await actualFs.writeFile(join(root, path), bytes);
+    const buildIdentity = {
+      schema: IDENTITY_SCHEMA,
+      sourceSha: sourceDigit.repeat(40),
+      treeHash: treeDigit.repeat(40),
+      buildHash: contentHash(files),
+    };
+    const identityBytes = Buffer.from(JSON.stringify(buildIdentity) + "\n", "utf8");
+    await actualFs.writeFile(join(root, "dist-server/internal-production-build-identity.v1.json"), identityBytes);
+    return { files, buildIdentity, identityBytes };
+  }
+
+  try {
+    await actualFs.writeFile(join(root, "package.json"), JSON.stringify({ name: "mission-control" }));
+    const generationA = await writeGeneration("A", "a", "b");
+    context.mock.module("node:child_process", { exports: { execFile } });
+    context.mock.module("node:url", { exports: { fileURLToPath: () => entryModule } });
+    context.mock.module("node:fs/promises", { exports: {
+      readFile: async (...args) => { fsObservations += 1; return actualFs.readFile(...args); },
+      readdir: async (...args) => { fsObservations += 1; return actualFs.readdir(...args); },
+      realpath: async (...args) => { fsObservations += 1; return actualFs.realpath(...args); },
+      stat: async (...args) => { fsObservations += 1; return actualFs.stat(...args); },
+    } });
+
+    const ownerA = await import(process.env.PBA_OWNER_URL + "?loaded-a");
+    const firstState = ownerA.productBuildAuthorityV2LoadedBuildStartupStateV1();
+    assert.equal(firstState.status, "available");
+    const first = firstState.response;
+    const expectedLoadedA = {
+      schema: LOADED_SCHEMA,
+      entryModulePath: ENTRY_PATH,
+      entryModuleHash: hashBytes(generationA.files.get(ENTRY_PATH)),
+      buildIdentity: generationA.buildIdentity,
+      buildIdentityHash: hashBytes(generationA.identityBytes),
+    };
+    const expectedHashA = hashCanonical(expectedLoadedA);
+    assert.deepEqual(first, {
+      schema: RESPONSE_SCHEMA,
+      loadedBuildRef: REF_PREFIX + expectedHashA,
+      loadedBuildHash: expectedHashA,
+      startupInstance: {
+        schema: STARTUP_SCHEMA,
+        pid: process.pid,
+        instanceId: first.startupInstance.instanceId,
+      },
+      loadedBuild: expectedLoadedA,
+    });
+    assert.match(first.startupInstance.instanceId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    assert(Object.isFrozen(first));
+    assert(Object.isFrozen(first.startupInstance));
+    assert(Object.isFrozen(first.loadedBuild));
+    assert(Object.isFrozen(first.loadedBuild.buildIdentity));
+
+    const observationsAfterA = fsObservations;
+    cliGeneration = "B";
+    const generationB = await writeGeneration("B", "c", "d");
+    assert.strictEqual(ownerA.productBuildAuthorityV2LoadedBuildStartupStateV1(), firstState);
+    assert.equal(fsObservations, observationsAfterA);
+    assert.equal(cliCalls, 0);
+
+    const ownerB = await import(process.env.PBA_OWNER_URL + "?loaded-b");
+    const secondState = ownerB.productBuildAuthorityV2LoadedBuildStartupStateV1();
+    assert.equal(secondState.status, "available");
+    assert.notDeepEqual(secondState.response.loadedBuild, first.loadedBuild);
+    assert.notEqual(secondState.response.loadedBuildHash, first.loadedBuildHash);
+    assert.notEqual(secondState.response.loadedBuildRef, first.loadedBuildRef);
+    assert.notEqual(secondState.response.startupInstance.instanceId, first.startupInstance.instanceId);
+    assert.equal(secondState.response.loadedBuild.entryModuleHash, hashBytes(generationB.files.get(ENTRY_PATH)));
+    assert.equal(secondState.response.loadedBuild.buildIdentityHash, hashBytes(generationB.identityBytes));
+    assert.equal(secondState.response.loadedBuildHash, hashCanonical(secondState.response.loadedBuild));
+    assert.equal(secondState.response.loadedBuildRef, REF_PREFIX + secondState.response.loadedBuildHash);
+    assert.equal(cliCalls, 0);
+
+    await actualFs.writeFile(
+      join(root, "dist-server/internal-production-build-identity.v1.json"),
+      JSON.stringify({ ...generationB.buildIdentity, unexpected: true }),
+    );
+    const unavailableOwner = await import(process.env.PBA_OWNER_URL + "?loaded-unavailable");
+    assert.deepEqual(unavailableOwner.productBuildAuthorityV2LoadedBuildStartupStateV1(), {
+      status: "unavailable",
+      code: UNAVAILABLE_CODE,
+    });
+    assert(Object.isFrozen(unavailableOwner.productBuildAuthorityV2LoadedBuildStartupStateV1()));
+    assert.equal(cliCalls, 0);
+  } finally {
+    await actualFs.rm(root, { recursive: true, force: true });
+  }
+});
+`;
+  const result = await new Promise<Readonly<{ exitCode: number; stdout: string; stderr: string }>>((resolveResult, reject) => {
+    const child = spawn(process.execPath, [
+      "--experimental-test-module-mocks",
+      "--import",
+      "tsx",
+      "--input-type=module",
+      "--eval",
+      fixture,
+    ], {
+      env: { ...process.env, PBA_OWNER_URL: ownerModuleUrl },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.once("error", reject);
+    child.once("close", (exitCode) => resolveResult({ exitCode: exitCode ?? -1, stdout, stderr }));
+  });
+  assert.equal(result.exitCode, 0, `${result.stdout}${result.stderr}`);
+});

@@ -1,5 +1,5 @@
 import { execFile as execFileCallback } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFile, readdir, realpath, stat } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -16,6 +16,14 @@ export const PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_SCHEMA_V1 =
   "mission-control.product-build-authority-v2-delivery-evidence.v1" as const;
 export const PRODUCT_BUILD_AUTHORITY_V2_BUILD_IDENTITY_SCHEMA_V1 =
   "mission-control.internal-production-build-identity.v1" as const;
+export const PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_RESPONSE_SCHEMA_V1 =
+  "mission-control.product-build-authority-v2-loaded-build-response.v1" as const;
+export const PRODUCT_BUILD_AUTHORITY_V2_STARTUP_INSTANCE_SCHEMA_V1 =
+  "mission-control.product-build-authority-v2-startup-instance.v1" as const;
+export const PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_SCHEMA_V1 =
+  "mission-control.product-build-authority-v2-loaded-build.v1" as const;
+export const PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_STARTUP_CAPTURE_INVALID_CODE =
+  "PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_STARTUP_CAPTURE_INVALID" as const;
 
 const DELIVERY_PR_NUMBER = 19 as const;
 const DELIVERY_MERGE_SHA = "240e779d78804843a1202cbf0440fe423b806b1a" as const;
@@ -28,6 +36,10 @@ const VENDOR_LOCK_SCHEMA = "mission-control.product-build-authority-v2-vendor-lo
 const VENDOR_COMPATIBILITY_SET_SCHEMA = "mission-control.setfarm-contract-compatibility-set.v1" as const;
 const FOCUSED_TEST_RECEIPT_SCHEMA = "mission-control.product-build-authority-v2-focused-test-receipt.v1" as const;
 const BUILD_IDENTITY_RELATIVE_PATH = "dist-server/internal-production-build-identity.v1.json" as const;
+const LOADED_BUILD_ENTRY_MODULE_PATH =
+  "dist-server/services/product-build-authority-v2-delivery-evidence-v1.js" as const;
+const LOADED_BUILD_REF_PREFIX =
+  "mission-control://internal-production/product-build-authority-v2-loaded-build/sha256/" as const;
 const TRUSTED_GIT_EXECUTABLE = "/usr/bin/git" as const;
 const TRUSTED_FOCUSED_TEST_ENVIRONMENT = Object.freeze({
   PATH: "/opt/homebrew/bin:/usr/bin:/bin",
@@ -36,6 +48,7 @@ const TRUSTED_FOCUSED_TEST_ENVIRONMENT = Object.freeze({
 });
 const GIT_OBJECT_HASH = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
 const SHA256 = /^[0-9a-f]{64}$/;
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 const DELIVERED_PATHS = [
   "server/routes/setfarm-operational.test.ts",
@@ -169,6 +182,36 @@ export type ProductBuildAuthorityV2DeliveryEvidenceResponseV1 = Readonly<{
   deliveryEvidenceHash: string;
   evidence: ProductBuildAuthorityV2DeliveryEvidenceV1;
 }>;
+
+export type ProductBuildAuthorityV2LoadedBuildResponseV1 = Readonly<{
+  schema: typeof PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_RESPONSE_SCHEMA_V1;
+  loadedBuildRef: `mission-control://internal-production/product-build-authority-v2-loaded-build/sha256/${string}`;
+  loadedBuildHash: string;
+  startupInstance: Readonly<{
+    schema: typeof PRODUCT_BUILD_AUTHORITY_V2_STARTUP_INSTANCE_SCHEMA_V1;
+    pid: number;
+    instanceId: string;
+  }>;
+  loadedBuild: Readonly<{
+    schema: typeof PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_SCHEMA_V1;
+    entryModulePath: typeof LOADED_BUILD_ENTRY_MODULE_PATH;
+    entryModuleHash: string;
+    buildIdentity: Readonly<{
+      schema: typeof PRODUCT_BUILD_AUTHORITY_V2_BUILD_IDENTITY_SCHEMA_V1;
+      sourceSha: string;
+      treeHash: string;
+      buildHash: string;
+    }>;
+    buildIdentityHash: string;
+  }>;
+}>;
+
+export type ProductBuildAuthorityV2LoadedBuildStartupStateV1 =
+  | Readonly<{ status: "available"; response: ProductBuildAuthorityV2LoadedBuildResponseV1 }>
+  | Readonly<{
+      status: "unavailable";
+      code: typeof PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_STARTUP_CAPTURE_INVALID_CODE;
+    }>;
 
 export class ProductBuildAuthorityV2DeliveryEvidenceError extends Error {
   constructor(readonly code: string) {
@@ -351,6 +394,102 @@ async function currentBuildHash(root: string): Promise<string> {
     contentHash.update("\0", "utf8");
   }
   return contentHash.digest("hex");
+}
+
+async function captureProductBuildAuthorityV2LoadedBuildV1(): Promise<ProductBuildAuthorityV2LoadedBuildResponseV1> {
+  const modulePath = await realpath(fileURLToPath(import.meta.url));
+  const servicesDirectory = dirname(modulePath);
+  const buildDirectory = dirname(servicesDirectory);
+  if (basename(modulePath) !== basename(LOADED_BUILD_ENTRY_MODULE_PATH)
+    || basename(servicesDirectory) !== "services"
+    || basename(buildDirectory) !== "dist-server") {
+    fail(PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_STARTUP_CAPTURE_INVALID_CODE);
+  }
+  const root = dirname(buildDirectory);
+  if (relative(root, modulePath).split("\\").join("/") !== LOADED_BUILD_ENTRY_MODULE_PATH) {
+    fail(PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_STARTUP_CAPTURE_INVALID_CODE);
+  }
+  const packagePath = resolve(root, "package.json");
+  let identityBytes: Buffer;
+  let entryModuleBytes: Buffer;
+  let identityValue: unknown;
+  try {
+    if (await realpath(packagePath) !== packagePath) {
+      fail(PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_STARTUP_CAPTURE_INVALID_CODE);
+    }
+    const packageValue = strictRecord(
+      JSON.parse(await readFile(packagePath, "utf8")),
+      PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_STARTUP_CAPTURE_INVALID_CODE,
+    );
+    if (packageValue.name !== "mission-control") {
+      fail(PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_STARTUP_CAPTURE_INVALID_CODE);
+    }
+    identityBytes = await readFile(resolve(root, BUILD_IDENTITY_RELATIVE_PATH));
+    entryModuleBytes = await readFile(modulePath);
+    identityValue = JSON.parse(identityBytes.toString("utf8"));
+  } catch {
+    fail(PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_STARTUP_CAPTURE_INVALID_CODE);
+  }
+  const identity = strictRecord(
+    identityValue,
+    PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_STARTUP_CAPTURE_INVALID_CODE,
+  );
+  exactKeys(
+    identity,
+    ["schema", "sourceSha", "treeHash", "buildHash"],
+    PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_STARTUP_CAPTURE_INVALID_CODE,
+  );
+  if (identity.schema !== PRODUCT_BUILD_AUTHORITY_V2_BUILD_IDENTITY_SCHEMA_V1) {
+    fail(PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_STARTUP_CAPTURE_INVALID_CODE);
+  }
+  const buildIdentity = deepFreeze({
+    schema: PRODUCT_BUILD_AUTHORITY_V2_BUILD_IDENTITY_SCHEMA_V1,
+    sourceSha: gitHashValue(
+      identity.sourceSha,
+      PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_STARTUP_CAPTURE_INVALID_CODE,
+    ),
+    treeHash: gitHashValue(
+      identity.treeHash,
+      PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_STARTUP_CAPTURE_INVALID_CODE,
+    ),
+    buildHash: sha256Value(
+      identity.buildHash,
+      PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_STARTUP_CAPTURE_INVALID_CODE,
+    ),
+  });
+  if (buildIdentity.buildHash !== await currentBuildHash(root)) {
+    fail(PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_STARTUP_CAPTURE_INVALID_CODE);
+  }
+  const [terminalIdentityBytes, terminalEntryModuleBytes] = await Promise.all([
+    readFile(resolve(root, BUILD_IDENTITY_RELATIVE_PATH)),
+    readFile(modulePath),
+  ]);
+  if (!identityBytes.equals(terminalIdentityBytes) || !entryModuleBytes.equals(terminalEntryModuleBytes)) {
+    fail(PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_STARTUP_CAPTURE_INVALID_CODE);
+  }
+  const loadedBuild = deepFreeze({
+    schema: PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_SCHEMA_V1,
+    entryModulePath: LOADED_BUILD_ENTRY_MODULE_PATH,
+    entryModuleHash: sha256Bytes(entryModuleBytes),
+    buildIdentity,
+    buildIdentityHash: sha256Bytes(identityBytes),
+  });
+  const loadedBuildHash = hashCanonicalJson(loadedBuild);
+  const instanceId = randomUUID();
+  if (!UUID_V4.test(instanceId) || !Number.isSafeInteger(process.pid) || process.pid <= 0) {
+    fail(PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_STARTUP_CAPTURE_INVALID_CODE);
+  }
+  return deepFreeze({
+    schema: PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_RESPONSE_SCHEMA_V1,
+    loadedBuildRef: `${LOADED_BUILD_REF_PREFIX}${loadedBuildHash}`,
+    loadedBuildHash,
+    startupInstance: deepFreeze({
+      schema: PRODUCT_BUILD_AUTHORITY_V2_STARTUP_INSTANCE_SCHEMA_V1,
+      pid: process.pid,
+      instanceId,
+    }),
+    loadedBuild,
+  });
 }
 
 async function assertAuthenticatedCurrentBuild(root: string): Promise<AuthenticatedCurrentBuildV1> {
@@ -585,6 +724,17 @@ export async function currentProductBuildAuthorityV2DeliveryEvidenceResponseV1()
     deliveryEvidenceHash: evidence.deliveryEvidenceHash,
     evidence,
   });
+}
+
+const productBuildAuthorityV2LoadedBuildStartupState = await captureProductBuildAuthorityV2LoadedBuildV1()
+  .then((response): ProductBuildAuthorityV2LoadedBuildStartupStateV1 => deepFreeze({ status: "available", response }))
+  .catch((): ProductBuildAuthorityV2LoadedBuildStartupStateV1 => deepFreeze({
+    status: "unavailable",
+    code: PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_STARTUP_CAPTURE_INVALID_CODE,
+  }));
+
+export function productBuildAuthorityV2LoadedBuildStartupStateV1(): ProductBuildAuthorityV2LoadedBuildStartupStateV1 {
+  return productBuildAuthorityV2LoadedBuildStartupState;
 }
 
 async function runCli(): Promise<void> {

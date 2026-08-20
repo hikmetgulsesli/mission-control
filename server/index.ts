@@ -48,7 +48,14 @@ import rateLimit from 'express-rate-limit';
 assertProjectsJsonLockCapability();
 
 const app = express();
-app.use(express.json({ limit: "2mb" }));
+const parseJsonBody = express.json({ limit: "2mb" });
+const jsonBodyParser: express.RequestHandler = (req, res, next) => {
+  if (req.path === "/api/internal-production/product-build-authority-v2-loaded-build") {
+    next();
+    return;
+  }
+  parseJsonBody(req, res, next);
+};
 // Stitch static files — moved after auth middleware (see below)
 
 app.use(helmet({
@@ -118,6 +125,7 @@ app.use('/', changelogPageRouter);
 app.use('/api', authMiddleware);
 app.use('/stitch-cache', authMiddleware);
 app.use('/projects-stitch', authMiddleware);
+app.use(jsonBodyParser);
 
 // Stitch static files (behind auth)
 const stitchCacheDir = join(PATHS.setfarmDir, "stitch-cache");
