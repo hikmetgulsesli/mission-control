@@ -50,6 +50,8 @@ assertProjectsJsonLockCapability();
 
 const PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_FULL_PATH =
   "/api/internal-production/product-build-authority-v2-loaded-build" as const;
+const PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_FULL_PATH =
+  "/api/internal-production/product-build-authority-v2-delivery-evidence" as const;
 const PRODUCT_BUILD_AUTHORITY_V2_OPERATIONAL_TOKEN_HEADER =
   "x-setfarm-operational-token" as const;
 const productBuildAuthorityV2OperationalAuthMarker = Symbol(
@@ -73,15 +75,35 @@ function rawRequestPathname(originalUrl: string): string {
   return queryOffset === -1 ? originalUrl : originalUrl.slice(0, queryOffset);
 }
 
+function productBuildAuthorityV2OperationalAuthCodes(rawPathname: string): Readonly<{
+  unavailable: string;
+  unauthorized: string;
+}> | null {
+  if (rawPathname === PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_FULL_PATH) {
+    return {
+      unavailable: "PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_AUTH_UNAVAILABLE",
+      unauthorized: "PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_UNAUTHORIZED",
+    };
+  }
+  if (rawPathname === PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_FULL_PATH) {
+    return {
+      unavailable: "PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_AUTH_UNAVAILABLE",
+      unauthorized: "PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_UNAUTHORIZED",
+    };
+  }
+  return null;
+}
+
 const productBuildAuthorityV2OperationalAuth: express.RequestHandler = (req, res, next) => {
-  if (rawRequestPathname(req.originalUrl) !== PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_FULL_PATH) {
+  const codes = productBuildAuthorityV2OperationalAuthCodes(rawRequestPathname(req.originalUrl));
+  if (codes === null) {
     next();
     return;
   }
   if (productBuildAuthorityV2OperationalTokenDigest === null) {
     res.status(503).json({
       status: "unavailable",
-      code: "PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_AUTH_UNAVAILABLE",
+      code: codes.unavailable,
     });
     return;
   }
@@ -90,7 +112,7 @@ const productBuildAuthorityV2OperationalAuth: express.RequestHandler = (req, res
   if (!timingSafeEqual(tokenDigest, productBuildAuthorityV2OperationalTokenDigest)) {
     res.status(401).json({
       status: "unavailable",
-      code: "PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_UNAUTHORIZED",
+      code: codes.unauthorized,
     });
     return;
   }
@@ -111,10 +133,35 @@ const productBuildAuthorityV2GeneralAuth: express.RequestHandler = (req, res, ne
   authMiddleware(req, res, next);
 };
 
+const productBuildAuthorityV2DeliveryEvidenceRateLimit = rateLimit({
+  windowMs: 60_000,
+  max: 6,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    res.set("Retry-After", "60");
+    res.status(429).json({
+      status: "unavailable",
+      code: "PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_RATE_LIMITED",
+    });
+  },
+});
+
+const productBuildAuthorityV2DeliveryEvidenceRateLimitExact: express.RequestHandler = (req, res, next) => {
+  if (req.method !== "GET"
+    || req.originalUrl !== PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_FULL_PATH) {
+    next();
+    return;
+  }
+  productBuildAuthorityV2DeliveryEvidenceRateLimit(req, res, next);
+};
+
 const app = express();
 const parseJsonBody = express.json({ limit: "2mb" });
 const jsonBodyParser: express.RequestHandler = (req, res, next) => {
-  if (req.path === "/api/internal-production/product-build-authority-v2-loaded-build") {
+  const rawPathname = rawRequestPathname(req.originalUrl);
+  if (rawPathname === PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_FULL_PATH
+    || rawPathname === PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_FULL_PATH) {
     next();
     return;
   }
@@ -188,6 +235,7 @@ app.use('/', changelogPageRouter);
 // Auth middleware
 app.use(productBuildAuthorityV2OperationalAuth);
 app.use('/api', productBuildAuthorityV2GeneralAuth);
+app.use(productBuildAuthorityV2DeliveryEvidenceRateLimitExact);
 app.use('/stitch-cache', authMiddleware);
 app.use('/projects-stitch', authMiddleware);
 app.use(jsonBodyParser);

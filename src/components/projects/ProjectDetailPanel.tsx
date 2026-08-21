@@ -66,14 +66,16 @@ interface Project extends Pick<ProjectData, "status" | "execution" | "runtime" |
 export interface ProjectDetailPanelProps {
   project: Project;
   onClose: () => void;
-  onChecklistUpdate: (projectId: string, checklist: any[]) => void;
+  actionsDisabled: boolean;
+  onChecklistToggle: (projectId: string, itemId: string, currentState: boolean) => Promise<void>;
   formatDuration: (createdAt?: string, completedAt?: string, buildStartedAt?: string, buildCompletedAt?: string) => string | null;
 }
 
 export const ProjectDetailPanel = React.memo(function ProjectDetailPanel({
   project: sel,
   onClose,
-  onChecklistUpdate,
+  actionsDisabled,
+  onChecklistToggle,
   formatDuration,
 }: ProjectDetailPanelProps) {
   const supervisor = sel.supervisor;
@@ -123,9 +125,9 @@ export const ProjectDetailPanel = React.memo(function ProjectDetailPanel({
         {sel.checklist && (
           <div className="project-detail__section">
             <ProjectChecklist
-              projectId={sel.id}
               checklist={sel.checklist}
-              onUpdate={(updated) => onChecklistUpdate(sel.id, updated)}
+              disabled={actionsDisabled}
+              onToggle={(itemId, currentState) => onChecklistToggle(sel.id, itemId, currentState)}
             />
           </div>
         )}

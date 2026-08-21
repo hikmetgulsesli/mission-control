@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -7,6 +8,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 const { ProjectCard } = await import("../src/components/projects/ProjectCard.js");
 const { ProjectDetailPanel } = await import("../src/components/projects/ProjectDetailPanel.js");
+const { DeleteProjectModal } = await import("../src/components/projects/DeleteProjectModal.js");
 const projectsModule = await import("../src/pages/Projects.js") as {
   runProjectedMutation?: (
     mutation: () => Promise<unknown>,
@@ -81,12 +83,29 @@ function renderCard(project: ReturnType<typeof fixture>, actionsDisabled = false
   />);
 }
 
-function renderDetail(project: ReturnType<typeof fixture>): string {
+function renderDetail(project: ReturnType<typeof fixture>, actionsDisabled = false): string {
   return renderToStaticMarkup(<ProjectDetailPanel
     project={project}
     onClose={() => undefined}
-    onChecklistUpdate={() => undefined}
+    actionsDisabled={actionsDisabled}
+    onChecklistToggle={async () => undefined}
     formatDuration={() => null}
+  />);
+}
+
+function renderDeleteModal(actionsDisabled: boolean): string {
+  return renderToStaticMarkup(<DeleteProjectModal
+    target={{
+      id: "project-1", name: "Project One", emoji: "P", service: "", domain: "", repo: "/repos/project-1",
+    }}
+    confirmText="Project One"
+    loading={false}
+    actionsDisabled={actionsDisabled}
+    result={null}
+    steps={[]}
+    onConfirmTextChange={() => undefined}
+    onDelete={() => undefined}
+    onClose={() => undefined}
   />);
 }
 
@@ -199,7 +218,7 @@ test("stale, future, and malformed runtime projections render unknown and disabl
 test("projection refresh failure keeps mutation orchestration from completing successfully", async () => {
   assert.equal(typeof projectsModule.runProjectedMutation, "function");
   const events: string[] = [];
-  for (const mutation of ["create", "import", "toggle"]) {
+  for (const mutation of ["create", "import", "toggle", "delete", "checklist"]) {
     events.length = 0;
     await assert.rejects(projectsModule.runProjectedMutation!(
       async () => { events.push(`${mutation}:mutated`); },
@@ -210,6 +229,30 @@ test("projection refresh failure keeps mutation orchestration from completing su
     ), /PROJECT_PROJECTION_REFRESH_FAILED/);
     assert.deepEqual(events, [`${mutation}:mutated`, `${mutation}:refresh`]);
   }
+});
+
+test("an unavailable projection disables delete confirmation and checklist PATCH controls", () => {
+  const project = fixture({
+    checklist: [{ id: "task-received", label: "Task received", completed: false }],
+  });
+  const card = renderCard(project, true);
+  assert.match(card, /btn--danger[^>]*disabled=""[^>]*>DELETE</);
+
+  const detail = renderDetail(project, true);
+  assert.match(detail, /project-checklist__toggle[^>]*disabled=""/);
+
+  const modal = renderDeleteModal(true);
+  assert.match(modal, /btn--danger[^>]*disabled=""[^>]*>Delete Permanently</);
+});
+
+test("delete and checklist handlers guard currentness and require strict projected refresh", () => {
+  const source = readFileSync(new URL("../src/pages/Projects.tsx", import.meta.url), "utf8");
+  assert.match(source, /const projectedMutationPendingRef = useRef\(false\)/);
+  assert.match(source, /const handleDelete = async \(\) => \{\s*if \(!projectionsCurrent \|\| projectedMutationPendingRef\.current \|\| !deleteTarget/);
+  assert.match(source, /handleDelete[\s\S]*?runProjectedMutation\([\s\S]*?api\.deleteProject\([\s\S]*?refreshAfterMutation/);
+  assert.match(source, /const handleChecklistToggle = async \([\s\S]*?if \(!projectionsCurrent \|\| projectedMutationPendingRef\.current\) return;/);
+  assert.match(source, /handleChecklistToggle[\s\S]*?runProjectedMutation\([\s\S]*?api\.updateProject\([\s\S]*?refreshAfterMutation/);
+  assert.match(source, /actionsDisabled=\{!projectionsCurrent \|\| projectedMutationPending\}/);
 });
 
 test("an unavailable canonical projection disables otherwise actionable runtime controls", () => {

@@ -122,6 +122,31 @@ export function bindProjectRun(input: ProjectRunBindingHints, rows: readonly Pro
   return { status: "unbound", reasonCode: "PROJECT_RUN_IDENTITY_ABSENT" };
 }
 
+export function bindProjectRuns(
+  inputs: readonly ProjectRunBindingHints[],
+  rows: readonly ProjectRunRow[],
+): ProjectRunBinding[] {
+  const bindings = inputs.map((input) => bindProjectRun(input, rows));
+  const bindingIndexesByRunId = new Map<string, number[]>();
+  for (let index = 0; index < bindings.length; index += 1) {
+    const binding = bindings[index];
+    if (binding?.status !== "bound") continue;
+    const indexes = bindingIndexesByRunId.get(binding.row.id) ?? [];
+    indexes.push(index);
+    bindingIndexesByRunId.set(binding.row.id, indexes);
+  }
+  for (const indexes of bindingIndexesByRunId.values()) {
+    if (indexes.length < 2) continue;
+    for (const index of indexes) {
+      bindings[index] = {
+        status: "conflict",
+        reasonCode: "PROJECT_RUN_IDENTITY_CONFLICT",
+      };
+    }
+  }
+  return bindings;
+}
+
 function stateForBinding(binding: ProjectRunBinding): ProjectExecutionState {
   if (binding.status !== "bound") {
     return {

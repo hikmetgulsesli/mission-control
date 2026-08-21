@@ -15,6 +15,7 @@ import {
   matchExistingV3ProjectTransferAckProjection,
   type V3ProjectTransferAckV1,
 } from "../server/services/v3-project-transfer-ack.js";
+import { isSetfarmOperationalActiveRunStatusV1 } from "../server/shared/setfarm-operational-active-run-status-v1.js";
 
 const ROOT = new URL("../", import.meta.url);
 
@@ -23,7 +24,8 @@ type ContractName =
   | "setfarm.run-operational-snapshot.v2"
   | "setfarm.run-operational-snapshot.v3"
   | "setfarm.v3-deployment-observation.v1"
-  | "setfarm.v3-project-transfer-ack.v1";
+  | "setfarm.v3-project-transfer-ack.v1"
+  | "setfarm.operational-active-run-status.v1";
 
 interface VendorLock {
   producerCommit: string;
@@ -42,11 +44,11 @@ function sha256(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-test("all ten vendored Setfarm artifacts are byte-bound to one immutable producer commit", () => {
+test("all twelve vendored Setfarm artifacts are byte-bound to the exact active-status producer commit", () => {
   const lock = json("contracts/vendor/setfarm/mission-control-contracts.v1.lock.json") as VendorLock;
-  assert.match(lock.producerCommit, /^[a-f0-9]{40}$/);
-  assert.equal(lock.artifacts.length, 10);
-  assert.equal(new Set(lock.artifacts.map((artifact) => artifact.vendoredPath)).size, 10);
+  assert.equal(lock.producerCommit, "ff761a3680b0e899d8245e8d5fb1a0b2ca806424");
+  assert.equal(lock.artifacts.length, 12);
+  assert.equal(new Set(lock.artifacts.map((artifact) => artifact.vendoredPath)).size, 12);
 
   for (const artifact of lock.artifacts) {
     const bytes = readFileSync(new URL(artifact.vendoredPath, ROOT));
@@ -61,7 +63,7 @@ test("vendored compatibility fixtures cross each semantic consumer and fail clos
   const descriptors: Array<{
     contract: ContractName;
     stem: string;
-    mutate(fixture: any): void;
+    mutate(fixture: any): unknown;
     reject(fixture: any): void;
   }> = [
     {
@@ -99,6 +101,12 @@ test("vendored compatibility fixtures cross each semantic consumer and fail clos
         }).status, "mismatch");
       },
     },
+    {
+      contract: "setfarm.operational-active-run-status.v1",
+      stem: "operational-active-run-status.v1",
+      mutate() { return "pending"; },
+      reject(fixture) { assert.equal(isSetfarmOperationalActiveRunStatusV1(fixture), false); },
+    },
   ];
 
   for (const descriptor of descriptors) {
@@ -110,7 +118,8 @@ test("vendored compatibility fixtures cross each semantic consumer and fail clos
       expectedContract: descriptor.contract,
     });
     const drifted = structuredClone(compatibility);
-    descriptor.mutate(drifted.fixture);
+    const replacement = descriptor.mutate(drifted.fixture);
+    if (replacement !== undefined) drifted.fixture = replacement;
     drifted.fixtureHash = hashCanonicalJson(drifted.fixture);
     assert.doesNotThrow(() => parseSetfarmMissionControlCompatibilityEnvelopeV1({
       compatibility: drifted,

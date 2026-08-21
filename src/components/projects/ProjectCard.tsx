@@ -261,7 +261,7 @@ export const ProjectCard = React.memo(function ProjectCard({
       <div className="project-card__actions" onClick={(e) => e.stopPropagation()}>
         <button className="btn btn--tiny" onClick={() => onExport()} title="Export JSON">EXPORT</button>
         {p.id !== "mission-control" && (
-          <button className="btn btn--tiny btn--danger" onClick={onDelete} title="Delete project">DELETE</button>
+          <button className="btn btn--tiny btn--danger" onClick={onDelete} title="Delete project" disabled={actionsDisabled}>DELETE</button>
         )}
       </div>
     </div>

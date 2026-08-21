@@ -30,7 +30,7 @@ import {
   setfarmDeploymentObservationClient,
 } from "../services/setfarm-deployment-observation.js";
 import {
-  bindProjectRun,
+  bindProjectRuns,
   deriveProjectExecutionState,
   getProjectRunRows,
   projectRunBindingHints,
@@ -898,9 +898,8 @@ function snapshotProjectForRead(project: Record<string, unknown>): ProjectReadSn
 async function projectApiReadCollection(projects: any[]): Promise<Array<Record<string, unknown> & ProjectApiProjection>> {
   const snapshots = projects.map((project) => snapshotProjectForRead(project));
   const runRows = await getProjectRunRows(snapshots.map((snapshot) => snapshot.bindingHints));
-  const executions = snapshots.map((snapshot) => deriveProjectExecutionState(
-    bindProjectRun(snapshot.bindingHints, runRows),
-  ));
+  const bindings = bindProjectRuns(snapshots.map((snapshot) => snapshot.bindingHints), runRows);
+  const executions = bindings.map((binding) => deriveProjectExecutionState(binding));
   const enriched = await enrichWithStatus(projects);
 
   return enriched.map((project, index) => {

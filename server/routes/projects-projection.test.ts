@@ -27,6 +27,8 @@ test("publishes one zero-input projected collection reader used by the list rout
   assert.equal(readProjectApiProjections.length, 0);
   const source = readFileSync(new URL("./projects.ts", import.meta.url), "utf8");
   assert.match(source, /router\.get\("\/projects"[\s\S]*?await readProjectApiProjections\(\)/);
+  assert.match(source, /const bindings = bindProjectRuns\(snapshots\.map\(\(snapshot\) => snapshot\.bindingHints\), runRows\)/);
+  assert.doesNotMatch(source, /snapshots\.map\(\(snapshot\) => deriveProjectExecutionState\(\s*bindProjectRun/);
 });
 
 test("list projection preserves bound identities and only explicitly hides synthesized cancelled history", async (t) => {
@@ -46,7 +48,20 @@ test("list projection preserves bound identities and only explicitly hides synth
     setfarmRunIds: ["run-snapshot"],
     latestRunNumber: 7,
     runNumber: 7,
-  }]) + "\n");
+  }, ...["duplicate-a", "duplicate-b"].map((id) => ({
+    id,
+    name: id,
+    status: "active",
+    serviceStatus: "unknown",
+    createdBy: "setfarm-workflow",
+    category: "setfarm",
+    repo: "/repos/" + id,
+    latestRunId: "run-conflict",
+    workflowRunId: "run-conflict",
+    setfarmRunIds: ["run-conflict"],
+    latestRunNumber: 8,
+    runNumber: 8,
+  }))]) + "\n");
 
   const fixture = String.raw`
 import assert from "node:assert/strict";
@@ -55,6 +70,11 @@ import test from "node:test";
 import express from "express";
 
 const runs = [
+  {
+    id: "run-conflict", run_number: 8, protocol: "v3", status: "running",
+    task: "Build Duplicate A", context: JSON.stringify({ project_slug: "duplicate-a", repo: "/repos/duplicate-a" }),
+    created_at: "2026-08-17T08:00:00.000Z", updated_at: "2026-08-17T08:01:00.000Z",
+  },
   {
     id: "run-snapshot", run_number: 7, protocol: "legacy", status: "running",
     task: "Build Shared Project", context: JSON.stringify({ project_slug: "shared-project", repo: "/repos/shared-project" }),
@@ -116,6 +136,21 @@ test("route projection", async (context) => {
   assert.deepEqual(bound.setfarmRunIds, ["run-snapshot"]);
   assert.equal(bound.latestRunNumber, 7);
   assert.equal(bound.runNumber, 7);
+  for (const id of ["duplicate-a", "duplicate-b"]) {
+    const conflicted = projects.find((project) => project.id === id);
+    assert.ok(conflicted, id);
+    assert.deepEqual(conflicted.execution, {
+      schema: "mission-control.project-execution.v1",
+      state: "unavailable",
+      active: false,
+      runId: null,
+      runStatus: null,
+      protocol: null,
+      source: "none",
+      reasonCode: "PROJECT_RUN_IDENTITY_CONFLICT",
+    });
+    assert.equal(conflicted.status, "registered");
+  }
 
   const hiddenResponse = await fetch(base + "?hideTerminal=1");
   assert.equal(hiddenResponse.status, 200);

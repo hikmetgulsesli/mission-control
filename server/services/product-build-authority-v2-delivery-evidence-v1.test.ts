@@ -362,8 +362,12 @@ test("clean build removes stale output and recreates deterministic build identit
   }
 });
 
-test("private mocked attestation rejects a final-source change after focused tests", async () => {
+test("private endpoint producer enforces attestation, real lock bytes, and bounded single-flight cooldowns", async () => {
   const ownerModuleUrl = new URL("./product-build-authority-v2-delivery-evidence-v1.ts", import.meta.url).href;
+  const realLockBase64 = (await readFile(new URL(
+    "../../contracts/vendor/setfarm/mission-control-contracts.v1.lock.json",
+    import.meta.url,
+  ))).toString("base64");
   const fixture = `
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -381,6 +385,8 @@ const firstSha = "a".repeat(40);
 const secondSha = "b".repeat(40);
 const firstTree = "c".repeat(40);
 const secondTree = "d".repeat(40);
+let now = 1_000_000;
+Date.now = () => now;
 const artifactPaths = ${JSON.stringify([
     ["contracts/generated/mission-control/run-operational-snapshot.v1.compatibility.json", "contracts/vendor/setfarm/run-operational-snapshot.v1.compatibility.json"],
     ["contracts/generated/mission-control/run-operational-snapshot.v1.schema.json", "contracts/vendor/setfarm/run-operational-snapshot.v1.schema.json"],
@@ -414,12 +420,28 @@ const buildHash = (() => {
   }
   return hash.digest("hex");
 })();
-const lock = { schema: "mission-control.setfarm-contract-vendor-lock.v1", producerRepository: "https://github.com/hikmetgulsesli/setfarm.git", producerCommit: "e".repeat(40), artifacts: artifactPaths.map(([producerPath, vendoredPath], index) => ({ producerPath, vendoredPath, sha256: index.toString(16).padStart(64, "0") })) };
+const fixtureLock = { schema: "mission-control.setfarm-contract-vendor-lock.v1", producerRepository: "https://github.com/hikmetgulsesli/setfarm.git", producerCommit: "e".repeat(40), artifacts: artifactPaths.map(([producerPath, vendoredPath], index) => ({ producerPath, vendoredPath, sha256: index.toString(16).padStart(64, "0") })) };
+const realLock = JSON.parse(Buffer.from(${JSON.stringify(realLockBase64)}, "base64").toString("utf8"));
+const lock = mode === "real-lock-success" || mode === "real-lock-tamper"
+  ? (mode === "real-lock-tamper"
+    ? { ...realLock, artifacts: [{ ...realLock.artifacts[0], vendoredPath: "contracts/vendor/setfarm/tampered.json" }, ...realLock.artifacts.slice(1)] }
+    : realLock)
+  : fixtureLock;
 bytes.set(root + "/contracts/vendor/setfarm/mission-control-contracts.v1.lock.json", Buffer.from(JSON.stringify(lock)));
 let focusedRuns = 0;
+let focusedAttempts = 0;
 const callback = () => undefined;
 callback[promisify.custom] = async (command, args, options) => {
-  if (command === process.execPath) { assert.deepEqual(options.env, focusedEnvironment); if (mode === "focused-failure") throw new Error("focused failure"); focusedRuns += 1; return { stdout: "", stderr: "" }; }
+  if (command === process.execPath) {
+    assert.deepEqual(options.env, focusedEnvironment);
+    assert.equal(options.timeout, 120_000);
+    assert.equal(options.killSignal, "SIGKILL");
+    if (mode === "focused-failure") throw new Error("focused failure");
+    focusedAttempts += 1;
+    if (mode === "cache-failure") throw new Error("focused failure");
+    focusedRuns += 1;
+    return { stdout: "", stderr: "" };
+  }
   assert.equal(command, "/usr/bin/git");
   assert.deepEqual(options.env, trustedGitEnvironment);
   assert.deepEqual(args.slice(0, 2), ["-C", root]);
@@ -460,6 +482,55 @@ test("final attestation", async (context) => {
     },
   } });
   const owner = await import(process.env.PBA_OWNER_URL + "?private-attestation");
+  if (mode === "cache-success") {
+    const first = owner.currentProductBuildAuthorityV2DeliveryEvidenceResponseV1();
+    const concurrent = owner.currentProductBuildAuthorityV2DeliveryEvidenceResponseV1();
+    assert.strictEqual(concurrent, first);
+    const [firstResponse, concurrentResponse] = await Promise.all([first, concurrent]);
+    assert.strictEqual(concurrentResponse, firstResponse);
+    assert.equal(focusedAttempts, 1);
+    now += 29_999;
+    assert.strictEqual(owner.currentProductBuildAuthorityV2DeliveryEvidenceResponseV1(), first);
+    assert.equal(focusedAttempts, 1);
+    now += 1;
+    const afterCooldown = owner.currentProductBuildAuthorityV2DeliveryEvidenceResponseV1();
+    assert.notStrictEqual(afterCooldown, first);
+    await afterCooldown;
+    assert.equal(focusedAttempts, 2);
+    return;
+  }
+  if (mode === "cache-failure") {
+    const first = owner.currentProductBuildAuthorityV2DeliveryEvidenceResponseV1();
+    const concurrent = owner.currentProductBuildAuthorityV2DeliveryEvidenceResponseV1();
+    assert.strictEqual(concurrent, first);
+    await assert.rejects(first, /PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_FOCUSED_TESTS_FAILED/);
+    await assert.rejects(concurrent, /PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_FOCUSED_TESTS_FAILED/);
+    assert.equal(focusedAttempts, 1);
+    now += 4_999;
+    const duringCooldown = owner.currentProductBuildAuthorityV2DeliveryEvidenceResponseV1();
+    assert.strictEqual(duringCooldown, first);
+    await assert.rejects(duringCooldown, /PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_FOCUSED_TESTS_FAILED/);
+    assert.equal(focusedAttempts, 1);
+    now += 1;
+    const afterCooldown = owner.currentProductBuildAuthorityV2DeliveryEvidenceResponseV1();
+    assert.notStrictEqual(afterCooldown, first);
+    await assert.rejects(afterCooldown, /PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_FOCUSED_TESTS_FAILED/);
+    assert.equal(focusedAttempts, 2);
+    return;
+  }
+  if (mode === "real-lock-success") {
+    const response = await owner.currentProductBuildAuthorityV2DeliveryEvidenceResponseV1();
+    assert.equal(response.evidence.vendorLock.artifacts.length, 12);
+    assert.equal(response.evidence.vendorLock.producerCommit, "ff761a3680b0e899d8245e8d5fb1a0b2ca806424");
+    return;
+  }
+  if (mode === "real-lock-tamper") {
+    await assert.rejects(
+      owner.currentProductBuildAuthorityV2DeliveryEvidenceResponseV1(),
+      /PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_VENDOR_LOCK_INVALID/,
+    );
+    return;
+  }
   const expected = mode === "source" ? "SOURCE_CHANGED_DURING_OBSERVATION" : mode === "build-tamper" || mode === "missing-identity" ? "BUILD_IDENTITY_INVALID" : mode === "lock-tamper" ? "VENDOR_LOCK_INVALID" : mode === "focused-failure" ? "FOCUSED_TESTS_FAILED" : "NOT_CURRENT";
   await assert.rejects(owner.observeCurrentProductBuildAuthorityV2DeliveryEvidenceV1(), new RegExp("PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_" + expected));
   assert.equal(focusedRuns, mode.startsWith("path-") || mode === "missing-identity" || mode === "focused-failure" || mode === "wrong-toplevel" ? 0 : 1);
@@ -475,7 +546,15 @@ test("final attestation", async (context) => {
       "--eval",
       fixture,
     ], {
-      env: { ...process.env, PBA_OWNER_URL: ownerModuleUrl, PBA_FIXTURE_MODE: mode },
+      env: (() => {
+        const environment: NodeJS.ProcessEnv = {
+          ...process.env,
+          PBA_OWNER_URL: ownerModuleUrl,
+          PBA_FIXTURE_MODE: mode,
+        };
+        delete environment.NODE_TEST_CONTEXT;
+        return environment;
+      })(),
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
@@ -488,7 +567,7 @@ test("final attestation", async (context) => {
     child.once("close", (exitCode) => resolveResult({ exitCode: exitCode ?? -1, stdout, stderr }));
     });
   }
-  for (const mode of ["source", "dirty", "build-tamper", "missing-identity", "lock-tamper", "focused-failure", "wrong-toplevel", ...Array.from({ length: 8 }, (_, index) => `path-${index}`)]) {
+  for (const mode of ["cache-success", "cache-failure", "real-lock-success", "real-lock-tamper", "source", "dirty", "build-tamper", "missing-identity", "lock-tamper", "focused-failure", "wrong-toplevel", ...Array.from({ length: 8 }, (_, index) => `path-${index}`)]) {
     const result = await runPrivateHarness(mode);
     assert.equal(result.exitCode, 0, `${mode}: ${result.stdout}${result.stderr}`);
   }
@@ -561,7 +640,15 @@ test("focused child", async (context) => {
       "--eval",
       fixture,
     ], {
-      env: { ...process.env, PBA_OWNER_URL: ownerModuleUrl, PBA_REAL_ROOT: root },
+      env: (() => {
+        const environment: NodeJS.ProcessEnv = {
+          ...process.env,
+          PBA_OWNER_URL: ownerModuleUrl,
+          PBA_REAL_ROOT: root,
+        };
+        delete environment.NODE_TEST_CONTEXT;
+        return environment;
+      })(),
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";

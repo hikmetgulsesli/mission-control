@@ -133,6 +133,10 @@ export function toProductBuildAuthorityHttpResult(result: ProductBuildAuthorityF
 }
 
 const router = Router();
+const PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_PATH =
+  "/internal-production/product-build-authority-v2-delivery-evidence" as const;
+const PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_FULL_PATH =
+  `/api${PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_PATH}` as const;
 const PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_PATH =
   "/internal-production/product-build-authority-v2-loaded-build" as const;
 const PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_FULL_PATH =
@@ -174,11 +178,18 @@ router.get("/setfarm/runs/:id/product-build-authority", async (req, res) => {
   }
 });
 
-router.get("/internal-production/product-build-authority-v2-delivery-evidence", async (req, res) => {
+router.get(PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_PATH, async (req, res, next) => {
+  const queryOffset = req.originalUrl.indexOf("?");
+  const rawPathname = queryOffset === -1 ? req.originalUrl : req.originalUrl.slice(0, queryOffset);
+  if (req.method !== "GET" || rawPathname !== PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_FULL_PATH) {
+    next();
+    return;
+  }
   res.set("Cache-Control", "no-store, max-age=0, must-revalidate");
   res.set("Pragma", "no-cache");
   res.set("Expires", "0");
-  if (Object.keys(req.query).length !== 0
+  if (req.originalUrl !== PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_FULL_PATH
+    || Object.keys(req.query).length !== 0
     || req.headers["content-length"] !== undefined
     || req.headers["transfer-encoding"] !== undefined
     || req.body !== undefined) {

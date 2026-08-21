@@ -164,6 +164,8 @@ export function Projects() {
   const [bulkAction, setBulkAction] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [projectionsCurrent, setProjectionsCurrent] = useState(false);
+  const [projectedMutationPending, setProjectedMutationPending] = useState(false);
+  const projectedMutationPendingRef = useRef(false);
   const [projectionReadGate] = useState(createProjectProjectionReadGate);
   const [, setHealthClock] = useState(0);
 
@@ -208,7 +210,10 @@ export function Projects() {
   }, []);
 
   const handleDelete = async () => {
-    if (!deleteTarget || deleteConfirm.trim() !== deleteTarget.name.trim()) return;
+    if (!projectionsCurrent || projectedMutationPendingRef.current || !deleteTarget || deleteConfirm.trim() !== deleteTarget.name.trim()) return;
+    projectedMutationPendingRef.current = true;
+    setProjectedMutationPending(true);
+    setProjectionsCurrent(false);
     setDeleteLoading(true);
     setDeleteResult(null);
     const steps = [
@@ -221,7 +226,11 @@ export function Projects() {
     ];
     setDeleteSteps(steps);
     try {
-      const result = await api.deleteProject(deleteTarget.id, deleteConfirm);
+      let result: Awaited<ReturnType<typeof api.deleteProject>> | undefined;
+      await runProjectedMutation(async () => {
+        result = await api.deleteProject(deleteTarget.id, deleteConfirm);
+      }, refreshAfterMutation);
+      if (result === undefined) throw new Error("PROJECT_DELETE_RESULT_UNAVAILABLE");
       const log = result.log || [];
       const logStr = log.join(' ');
       const updated = steps.map(s => {
@@ -238,12 +247,13 @@ export function Projects() {
         setDeleteSteps(prev => prev.map((s, idx) => idx <= i ? updated[idx] : s));
       }
       setDeleteResult({ success: true, log });
-      setProjects((prev) => prev.filter((p) => p.id !== deleteTarget.id));
       if (selected === deleteTarget.id) setSelected(null);
     } catch (err: any) {
       setDeleteResult({ success: false, error: err.message });
       setDeleteSteps(prev => prev.map(s => s.status === 'waiting' ? { ...s, status: 'fail' as const } : s));
     } finally {
+      projectedMutationPendingRef.current = false;
+      setProjectedMutationPending(false);
       setDeleteLoading(false);
     }
   };
@@ -300,8 +310,24 @@ export function Projects() {
     if (importRef.current) importRef.current.value = "";
   };
 
-  const handleChecklistUpdate = (projectId: string, checklist: any[]) => {
-    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, checklist } : p));
+  const handleChecklistToggle = async (projectId: string, itemId: string, currentState: boolean) => {
+    if (!projectionsCurrent || projectedMutationPendingRef.current) return;
+    projectedMutationPendingRef.current = true;
+    setProjectedMutationPending(true);
+    setProjectionsCurrent(false);
+    try {
+      await runProjectedMutation(
+        () => api.updateProject(projectId, {
+          checklistToggle: { itemId, completed: !currentState },
+        }),
+        refreshAfterMutation,
+      );
+    } catch (err: any) {
+      toast("Checklist update failed: " + (err?.message || "Projects API failed"), "error");
+    } finally {
+      projectedMutationPendingRef.current = false;
+      setProjectedMutationPending(false);
+    }
   };
 
   const handleToggle = async (e: React.MouseEvent, p: Project) => {
@@ -353,6 +379,7 @@ export function Projects() {
 
   const openDeleteModal = (e: React.MouseEvent, project: Project) => {
     e.stopPropagation();
+    if (!projectionsCurrent || projectedMutationPendingRef.current) return;
     setDeleteTarget(project);
     setDeleteConfirm("");
     setDeleteResult(null);
@@ -493,7 +520,7 @@ export function Projects() {
             project={p}
             selected={selected === p.id}
             toggling={toggling === p.id}
-            actionsDisabled={!projectionsCurrent}
+            actionsDisabled={!projectionsCurrent || projectedMutationPending}
             onSelect={() => setSelected(selected === p.id ? null : p.id)}
             onToggle={(e) => handleToggle(e, p)}
             onExport={() => handleExport(p.id)}
@@ -510,7 +537,8 @@ export function Projects() {
         <ProjectDetailPanel
           project={sel}
           onClose={() => setSelected(null)}
-          onChecklistUpdate={handleChecklistUpdate}
+          actionsDisabled={!projectionsCurrent || projectedMutationPending}
+          onChecklistToggle={handleChecklistToggle}
           formatDuration={formatDuration}
         />
       )}
@@ -530,6 +558,7 @@ export function Projects() {
         target={deleteTarget}
         confirmText={deleteConfirm}
         loading={deleteLoading}
+        actionsDisabled={!projectionsCurrent || projectedMutationPending}
         result={deleteResult}
         steps={deleteSteps}
         onConfirmTextChange={setDeleteConfirm}

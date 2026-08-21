@@ -5,6 +5,7 @@ import test from "node:test";
 
 import {
   bindProjectRun,
+  bindProjectRuns,
   deriveProjectExecutionState,
   projectRunBindingHints,
   type ProjectRunRow,
@@ -32,6 +33,35 @@ test("fails closed when singular run identities conflict", () => {
     projectId: "ledger", latestRunId: "run-new", workflowRunId: "run-old",
     setfarmRunIds: ["run-old", "run-new"], latestRunNumber: 42, runNumber: 41,
   }, rows), { status: "conflict", reasonCode: "PROJECT_RUN_IDENTITY_CONFLICT" });
+});
+
+test("marks every cross-project owner of one run conflicted independent of collection order", () => {
+  const ledger = {
+    projectId: "ledger", latestRunId: "run-new", workflowRunId: "run-new",
+    setfarmRunIds: [], latestRunNumber: null, runNumber: null,
+  };
+  const storefront = {
+    projectId: "storefront", latestRunId: "run-new", workflowRunId: "run-new",
+    setfarmRunIds: [], latestRunNumber: null, runNumber: null,
+  };
+  const conflict = { status: "conflict", reasonCode: "PROJECT_RUN_IDENTITY_CONFLICT" } as const;
+
+  assert.deepEqual(bindProjectRuns([ledger, storefront], rows), [conflict, conflict]);
+  assert.deepEqual(bindProjectRuns([storefront, ledger], [...rows].reverse()), [conflict, conflict]);
+});
+
+test("collection binding leaves unique and pre-existing failed bindings unchanged", () => {
+  const bindings = bindProjectRuns([{
+    projectId: "ledger", latestRunId: "run-new", workflowRunId: "run-new",
+    setfarmRunIds: [], latestRunNumber: null, runNumber: null,
+  }, {
+    projectId: "history", latestRunId: "run-old", workflowRunId: "run-missing",
+    setfarmRunIds: [], latestRunNumber: null, runNumber: null,
+  }], rows);
+  assert.equal(bindings[0]?.status, "bound");
+  assert.deepEqual(bindings[1], {
+    status: "conflict", reasonCode: "PROJECT_RUN_IDENTITY_CONFLICT",
+  });
 });
 
 test("never upgrades an unbound historical record to active", () => {

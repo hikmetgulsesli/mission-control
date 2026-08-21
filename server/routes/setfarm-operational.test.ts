@@ -504,6 +504,7 @@ test("production middleware order", async (context) => {
   if (mode === "missing") delete childEnv.SETFARM_OPERATIONAL_WRITE_TOKEN;
   else if (mode === "short") childEnv.SETFARM_OPERATIONAL_WRITE_TOKEN = "x".repeat(31);
   else childEnv.SETFARM_OPERATIONAL_WRITE_TOKEN = "operational-test-token-1234567890abcdef";
+  delete childEnv.NODE_TEST_CONTEXT;
 
   return new Promise<Readonly<{ exitCode: number; stdout: string; stderr: string }>>((resolveResult, reject) => {
     const child = spawn(process.execPath, [
@@ -539,17 +540,277 @@ test("production startup uses exact endpoint operational auth before general aut
   }
 });
 
-test("loaded-build route is mounted after authentication and JSON parsing", async () => {
+test("internal-production routes preserve auth, delivery-rate, parser, and router order", async () => {
   const indexSource = await import("node:fs/promises").then(({ readFile }) => readFile(new URL("../index.ts", import.meta.url), "utf8"));
   const operationalAuthMount = indexSource.indexOf("app.use(productBuildAuthorityV2OperationalAuth);");
   const authMount = indexSource.indexOf("app.use('/api', productBuildAuthorityV2GeneralAuth);");
+  const deliveryRateMount = indexSource.indexOf("app.use(productBuildAuthorityV2DeliveryEvidenceRateLimitExact);");
   const parserMount = indexSource.indexOf("app.use(jsonBodyParser);");
   const routerMount = indexSource.indexOf('app.use("/api", setfarmOperationalRouter);');
   assert.notEqual(operationalAuthMount, -1);
   assert.notEqual(authMount, -1);
+  assert.notEqual(deliveryRateMount, -1);
   assert.notEqual(parserMount, -1);
   assert.notEqual(routerMount, -1);
   assert(operationalAuthMount < authMount);
-  assert(authMount < parserMount);
+  assert(authMount < deliveryRateMount);
+  assert(deliveryRateMount < parserMount);
   assert(parserMount < routerMount);
+});
+
+async function runProductionDeliveryEndpointFixture(
+  mode: "available" | "rate" | "missing" | "short",
+): Promise<Readonly<{ exitCode: number; stdout: string; stderr: string }>> {
+  const fixture = String.raw`
+import assert from "node:assert/strict";
+import * as actualHttp from "node:http";
+import test from "node:test";
+
+const canonicalPath = "/api/internal-production/product-build-authority-v2-delivery-evidence";
+const operationalToken = "operational-test-token-1234567890abcdef";
+let authCalls = 0;
+let bootListenCalls = 0;
+let evidenceReads = 0;
+let loadedStateReads = 0;
+let capturedServer;
+let listenForTest;
+
+function rawRequest(port, method, path, headers = {}, body = "") {
+  return new Promise((resolve, reject) => {
+    const request = actualHttp.request({ host: "127.0.0.1", port, method, path, headers }, (incoming) => {
+      let text = "";
+      incoming.setEncoding("utf8");
+      incoming.on("data", (chunk) => { text += chunk; });
+      incoming.once("error", reject);
+      incoming.once("end", () => {
+        let responseBody;
+        try { responseBody = text === "" ? undefined : JSON.parse(text); }
+        catch { responseBody = text; }
+        resolve({ statusCode: incoming.statusCode ?? 0, headers: incoming.headers, body: responseBody });
+      });
+    });
+    request.once("error", reject);
+    request.end(body);
+  });
+}
+
+test("delivery endpoint production boundary", async (context) => {
+  context.mock.module(process.env.MC_AUTH_URL, { exports: {
+    authMiddleware: (req, res, next) => {
+      authCalls += 1;
+      if (req.headers["x-mc-token"] !== "private-test-token") {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+      next();
+    },
+  } });
+  context.mock.module(process.env.MC_LIVE_FEED_URL, { exports: {
+    default: (_req, _res, next) => next(),
+  } });
+  context.mock.module(process.env.MC_SERVICE_URL, { exports: {
+    ProductBuildAuthorityV2DeliveryEvidenceError: class extends Error {},
+    currentProductBuildAuthorityV2DeliveryEvidenceResponseV1: () => {
+      evidenceReads += 1;
+      return Promise.resolve({ schema: "fixture", evidenceReads });
+    },
+    productBuildAuthorityV2LoadedBuildStartupStateV1: () => {
+      loadedStateReads += 1;
+      return Object.freeze({
+        status: "unavailable",
+        code: "PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_STARTUP_CAPTURE_INVALID",
+      });
+    },
+  } });
+  context.mock.module("http", { exports: { ...actualHttp,
+    createServer: (...args) => {
+      const server = actualHttp.createServer(...args);
+      capturedServer = server;
+      listenForTest = server.listen.bind(server);
+      server.listen = () => { bootListenCalls += 1; return server; };
+      return server;
+    },
+  } });
+
+  await import(process.env.MC_INDEX_URL + "?delivery-auth-rate-" + process.env.MC_AUTH_MODE);
+  assert.equal(bootListenCalls, 1);
+  assert(capturedServer);
+  await new Promise((resolve, reject) => {
+    capturedServer.once("error", reject);
+    listenForTest(0, "127.0.0.1", resolve);
+  });
+  try {
+    const address = capturedServer.address();
+    if (address === null || typeof address === "string") throw new TypeError("expected TCP listener");
+    const operationalHeaders = { "x-setfarm-operational-token": operationalToken };
+    if (process.env.MC_AUTH_MODE === "missing" || process.env.MC_AUTH_MODE === "short") {
+      const unavailable = await rawRequest(address.port, "GET", canonicalPath, operationalHeaders);
+      assert.equal(unavailable.statusCode, 503);
+      assert.deepEqual(unavailable.body, {
+        status: "unavailable",
+        code: "PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_AUTH_UNAVAILABLE",
+      });
+      assert.equal(authCalls, 0);
+      assert.equal(evidenceReads, 0);
+      assert.equal(loadedStateReads, 0);
+      return;
+    }
+
+    if (process.env.MC_AUTH_MODE === "rate") {
+      const refusedQuery = await rawRequest(address.port, "GET", canonicalPath + "?ref=main", operationalHeaders);
+      assert.equal(refusedQuery.statusCode, 400);
+      assert.deepEqual(refusedQuery.body, {
+        status: "unavailable",
+        code: "PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_REQUEST_INVALID",
+      });
+      assert.equal(evidenceReads, 0);
+      for (let index = 0; index < 6; index += 1) {
+        const accepted = await rawRequest(address.port, "GET", canonicalPath, operationalHeaders);
+        assert.equal(accepted.statusCode, 200, "accepted " + index);
+      }
+      const limited = await rawRequest(address.port, "GET", canonicalPath, operationalHeaders);
+      assert.equal(limited.statusCode, 429);
+      assert.deepEqual(limited.body, {
+        status: "unavailable",
+        code: "PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_RATE_LIMITED",
+      });
+      assert.match(String(limited.headers["retry-after"]), /^[1-9][0-9]*$/);
+      assert.equal(evidenceReads, 6);
+      assert.equal(authCalls, 0);
+      assert.equal(loadedStateReads, 0);
+      return;
+    }
+
+    for (const candidate of [
+      { headers: {}, body: "" },
+      { headers: { "x-mc-token": "private-test-token" }, body: "" },
+      { headers: { "x-mc-token": "private-test-token", "x-setfarm-operational-token": "wrong-operational-token" }, body: "" },
+      { path: canonicalPath + "?x-setfarm-operational-token=" + operationalToken, headers: {}, body: "" },
+      {
+        headers: { "content-type": "application/json", "content-length": String(JSON.stringify({ token: operationalToken }).length) },
+        body: JSON.stringify({ token: operationalToken }),
+      },
+    ]) {
+      const denied = await rawRequest(address.port, "GET", candidate.path ?? canonicalPath, candidate.headers, candidate.body);
+      assert.equal(denied.statusCode, 401);
+      assert.deepEqual(denied.body, {
+        status: "unavailable",
+        code: "PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_UNAUTHORIZED",
+      });
+    }
+    assert.equal(authCalls, 0);
+    assert.equal(evidenceReads, 0);
+
+    const malformed = await rawRequest(address.port, "GET", canonicalPath, {
+      ...operationalHeaders,
+      "content-type": "application/json",
+      "content-length": "1",
+    }, "{");
+    assert.equal(malformed.statusCode, 400);
+    assert.deepEqual(malformed.body, {
+      status: "unavailable",
+      code: "PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_REQUEST_INVALID",
+    });
+    assert.equal(evidenceReads, 0);
+
+    const query = await rawRequest(address.port, "GET", canonicalPath + "?ref=main", operationalHeaders);
+    assert.equal(query.statusCode, 400);
+    assert.deepEqual(query.body, {
+      status: "unavailable",
+      code: "PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_REQUEST_INVALID",
+    });
+    assert.equal(evidenceReads, 0);
+
+    const emptyQuery = await rawRequest(address.port, "GET", canonicalPath + "?", operationalHeaders);
+    assert.equal(emptyQuery.statusCode, 400);
+    assert.deepEqual(emptyQuery.body, {
+      status: "unavailable",
+      code: "PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_REQUEST_INVALID",
+    });
+    assert.equal(evidenceReads, 0);
+
+    const emptyFraming = await rawRequest(address.port, "GET", canonicalPath, {
+      ...operationalHeaders,
+      "content-length": "0",
+    });
+    assert.equal(emptyFraming.statusCode, 400);
+    assert.deepEqual(emptyFraming.body, {
+      status: "unavailable",
+      code: "PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_REQUEST_INVALID",
+    });
+    assert.equal(evidenceReads, 0);
+
+    const head = await rawRequest(address.port, "HEAD", canonicalPath, operationalHeaders);
+    assert.equal(head.statusCode, 404);
+    assert.equal(evidenceReads, 0);
+
+    const post = await rawRequest(address.port, "POST", canonicalPath, operationalHeaders);
+    assert.equal(post.statusCode, 404);
+    assert.equal(evidenceReads, 0);
+
+    for (const alias of [
+      "/api/internal-production/Product-Build-Authority-V2-Delivery-Evidence",
+      canonicalPath + "/",
+      "/API/internal-production/product-build-authority-v2-delivery-evidence",
+      "/api/internal-production//product-build-authority-v2-delivery-evidence",
+      "/api/internal-production/%70roduct-build-authority-v2-delivery-evidence",
+    ]) {
+      const response = await rawRequest(address.port, "GET", alias, {
+        "x-mc-token": "private-test-token",
+        ...operationalHeaders,
+      });
+      assert.equal(response.statusCode, 404, alias);
+    }
+    assert.equal(authCalls, 5);
+    assert.equal(evidenceReads, 0);
+
+    const accepted = await rawRequest(address.port, "GET", canonicalPath, operationalHeaders);
+    assert.equal(accepted.statusCode, 200);
+    assert.deepEqual(accepted.body, { schema: "fixture", evidenceReads: 1 });
+    assert.equal(authCalls, 5);
+    assert.equal(evidenceReads, 1);
+    assert.equal(loadedStateReads, 0);
+  } finally {
+    capturedServer.closeAllConnections();
+    await new Promise((resolve) => capturedServer.close(resolve));
+  }
+});
+`;
+  const childEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    MC_AUTH_MODE: mode,
+    MC_AUTH_URL: new URL("../middleware/auth.ts", import.meta.url).href,
+    MC_INDEX_URL: new URL("../index.ts", import.meta.url).href,
+    MC_LIVE_FEED_URL: new URL("./live-feed.ts", import.meta.url).href,
+    MC_SERVICE_URL: new URL("../services/product-build-authority-v2-delivery-evidence-v1.ts", import.meta.url).href,
+  };
+  if (mode === "missing") delete childEnv.SETFARM_OPERATIONAL_WRITE_TOKEN;
+  else if (mode === "short") childEnv.SETFARM_OPERATIONAL_WRITE_TOKEN = "x".repeat(31);
+  else childEnv.SETFARM_OPERATIONAL_WRITE_TOKEN = "operational-test-token-1234567890abcdef";
+  delete childEnv.NODE_TEST_CONTEXT;
+
+  return new Promise((resolveResult, reject) => {
+    const child = spawn(process.execPath, [
+      "--experimental-test-module-mocks", "--import", "tsx", "--input-type=module", "--eval", fixture,
+    ], { env: childEnv, stdio: ["ignore", "pipe", "pipe"] });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.once("error", reject);
+    child.once("close", (exitCode) => resolveResult({ exitCode: exitCode ?? -1, stdout, stderr }));
+  });
+}
+
+test("delivery-evidence uses exact operational auth, zero-read refusal, and a finite GET rate", async () => {
+  for (const mode of ["available", "rate", "missing", "short"] as const) {
+    const result = await runProductionDeliveryEndpointFixture(mode);
+    assert.equal(result.exitCode, 0, `${mode}: ${result.stdout}${result.stderr}`);
+    assert.doesNotMatch(
+      `${result.stdout}${result.stderr}`,
+      /operational-test-token-1234567890abcdef|wrong-operational-token|private-test-token/,
+    );
+  }
 });

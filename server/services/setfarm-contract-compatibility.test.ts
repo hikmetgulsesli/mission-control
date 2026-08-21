@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { parseSetfarmMissionControlCompatibilityEnvelopeV1 } from "./setfarm-contract-compatibility.js";
@@ -61,4 +62,45 @@ test("compatibility envelope rejects version drift and either hash drift", () =>
     ...wrongContract,
     expectedContract: "setfarm.v3-project-transfer-ack.v1",
   }), /unsupported_contract_version/);
+});
+
+test("active-status compatibility accepts only its exact generated producer-export extension", () => {
+  const compatibility = JSON.parse(readFileSync(new URL(
+    "../../contracts/vendor/setfarm/operational-active-run-status.v1.compatibility.json",
+    import.meta.url,
+  ), "utf8"));
+  const jsonSchema = JSON.parse(readFileSync(new URL(
+    "../../contracts/vendor/setfarm/operational-active-run-status.v1.schema.json",
+    import.meta.url,
+  ), "utf8"));
+  const parsed = parseSetfarmMissionControlCompatibilityEnvelopeV1({
+    compatibility,
+    jsonSchema,
+    expectedContract: "setfarm.operational-active-run-status.v1",
+  });
+  assert.equal(parsed.fixture, "running");
+  assert.deepEqual(parsed.producerExports, {
+    predicateExport: "isSetfarmOperationalActiveRunStatusV1",
+    schemaExport: "SetfarmOperationalActiveRunStatusV1Schema",
+    statusesExport: "SETFARM_OPERATIONAL_ACTIVE_RUN_STATUSES_V1",
+  });
+
+  for (const drift of [
+    { ...compatibility, producerExports: { ...compatibility.producerExports, predicateExport: "isActive" } },
+    { ...compatibility, producerExports: { ...compatibility.producerExports, extra: "forbidden" } },
+    { ...compatibility, producerExports: undefined },
+  ]) {
+    assert.throws(() => parseSetfarmMissionControlCompatibilityEnvelopeV1({
+      compatibility: drift,
+      jsonSchema,
+      expectedContract: "setfarm.operational-active-run-status.v1",
+    }));
+  }
+
+  const older = fixture();
+  assert.throws(() => parseSetfarmMissionControlCompatibilityEnvelopeV1({
+    ...older,
+    compatibility: { ...older.compatibility, producerExports: compatibility.producerExports },
+    expectedContract: "setfarm.run-operational-snapshot.v1",
+  }), /unexpected_or_missing_field/);
 });

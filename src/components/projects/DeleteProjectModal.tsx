@@ -19,6 +19,7 @@ export interface DeleteProjectModalProps {
   } | null;
   confirmText: string;
   loading: boolean;
+  actionsDisabled: boolean;
   result: { success: boolean; log?: string[]; error?: string } | null;
   steps: DeleteStep[];
   onConfirmTextChange: (value: string) => void;
@@ -30,6 +31,7 @@ export const DeleteProjectModal = React.memo(function DeleteProjectModal({
   target,
   confirmText,
   loading,
+  actionsDisabled,
   result,
   steps,
   onConfirmTextChange,
@@ -89,7 +91,7 @@ export const DeleteProjectModal = React.memo(function DeleteProjectModal({
           {!result && (
             <div className="delete-modal__confirm">
               <label>Type the project name to confirm: <strong style={{ color: "#f85149" }}>{target.name}</strong></label>
-              <input type="text" value={confirmText} onChange={(e) => onConfirmTextChange(e.target.value)} placeholder={target.name} disabled={loading} autoFocus />
+              <input type="text" value={confirmText} onChange={(e) => onConfirmTextChange(e.target.value)} placeholder={target.name} disabled={loading || actionsDisabled} autoFocus />
             </div>
           )}
           {result && !result.success && (
@@ -104,7 +106,7 @@ export const DeleteProjectModal = React.memo(function DeleteProjectModal({
           ) : (
             <>
               <button className="btn" onClick={onClose} disabled={loading}>Cancel</button>
-              <button className="btn btn--danger" onClick={onDelete} disabled={confirmText.trim() !== target.name.trim() || loading}>
+              <button className="btn btn--danger" onClick={onDelete} disabled={confirmText.trim() !== target.name.trim() || loading || actionsDisabled}>
                 {loading ? "Deleting..." : "Delete Permanently"}
               </button>
             </>
