@@ -330,6 +330,23 @@ test("render smoke removes each operation-created empty screenshot ancestor", as
   }
 });
 
+test("render smoke rolls back earlier screenshot ancestors when later creation fails", async () => {
+  const ancestor = await mkdtemp(join(tmpdir(), "mc-render-create-failure-"));
+  const sentinel = join(ancestor, "keep.txt");
+  const oversizedComponent = "x".repeat(256);
+  const parent = join(ancestor, "operation-owned", oversizedComponent, "render-smoke");
+  await writeFile(sentinel, "keep\n", "utf8");
+  try {
+    await assert.rejects(createRenderScreenshotWorkspace(parent), (error: NodeJS.ErrnoException) => {
+      assert.equal(error.code, "ENAMETOOLONG");
+      return true;
+    });
+    assert.deepEqual(await readdir(ancestor), ["keep.txt"]);
+  } finally {
+    await rm(ancestor, { recursive: true, force: true });
+  }
+});
+
 test("listener and readiness checks reject missing, exited, crossed, and timed-out children", async () => {
   const live = { pid: 4242, exitCode: null, signalCode: null };
   const exactObservation = async () => ({ stdout: "p4242\0cnode\0f20\0n127.0.0.1:13081\0", stderr: "" });

@@ -61,15 +61,23 @@ export async function createRenderScreenshotWorkspace(parentDirectory) {
     if (dirname(current) === current) break;
   }
   const createdDirectories = [];
-  for (const directory of [...missingDirectories].reverse()) {
-    try {
-      await mkdir(directory);
-      createdDirectories.push(directory);
-    } catch (error) {
-      if (error?.code !== "EEXIST" || !(await lstat(directory)).isDirectory()) throw error;
+  let directory;
+  try {
+    for (const missingDirectory of [...missingDirectories].reverse()) {
+      try {
+        await mkdir(missingDirectory);
+        createdDirectories.push(missingDirectory);
+      } catch (error) {
+        if (error?.code !== "EEXIST" || !(await lstat(missingDirectory)).isDirectory()) throw error;
+      }
     }
+    directory = await mkdtemp(resolve(parentDirectory, ".render-smoke-"));
+  } catch (error) {
+    for (const createdDirectory of [...createdDirectories].reverse()) {
+      await rmdir(createdDirectory).catch(() => {});
+    }
+    throw error;
   }
-  const directory = await mkdtemp(resolve(parentDirectory, ".render-smoke-"));
   let closed = false;
   return Object.freeze({
     directory,
