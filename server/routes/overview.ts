@@ -6,10 +6,62 @@ import { cached } from '../utils/cache.js';
 import { runCliJson, runCli } from '../utils/cli.js';
 import { getSystemMetrics } from '../utils/prometheus.js';
 import { getRuns } from '../utils/setfarm.js';
+import {
+  readProjectApiProjections,
+  type ProjectApiProjection,
+} from './projects.js';
+import { isSetfarmOperationalActiveRunStatusV1 } from '../shared/setfarm-operational-active-run-status-v1.js';
 
 const router = Router();
 
 const REAL_AGENTS = REAL_AGENT_IDS as unknown as string[];
+type ProjectProjectionRecord = Record<string, unknown> & ProjectApiProjection;
+
+export function selectOperationalActiveProjects<T extends ProjectProjectionRecord>(
+  projects: readonly T[],
+): T[] {
+  const seenRunIds = new Set<string>();
+  return projects.filter((project) => {
+    const { execution } = project;
+    if (execution.active !== true
+      || execution.runId === null
+      || execution.runStatus === null
+      || !isSetfarmOperationalActiveRunStatusV1(execution.runStatus)
+      || execution.state !== execution.runStatus
+      || seenRunIds.has(execution.runId)) {
+      return false;
+    }
+    seenRunIds.add(execution.runId);
+    return true;
+  });
+}
+
+function declaredRuntimePort(project: ProjectProjectionRecord): number | null {
+  if (typeof project.ports !== 'object' || project.ports === null || Array.isArray(project.ports)) return null;
+  const ports = project.ports as Record<string, unknown>;
+  for (const candidate of [ports.frontend, ports.main]) {
+    if (typeof candidate === 'number'
+      && Number.isSafeInteger(candidate)
+      && candidate > 0
+      && candidate <= 65535) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+export function selectRecentRuntimeProjects<T extends ProjectProjectionRecord>(
+  projects: readonly T[],
+): T[] {
+  return projects
+    .filter((project) => declaredRuntimePort(project) !== null)
+    .sort((a, b) => {
+      const aTime = typeof a.createdAt === 'string' ? Date.parse(a.createdAt) : 0;
+      const bTime = typeof b.createdAt === 'string' ? Date.parse(b.createdAt) : 0;
+      return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+    })
+    .slice(0, 6);
+}
 
 async function isLocalPortOnline(port: number): Promise<boolean> {
   try {
@@ -37,22 +89,14 @@ async function fetchOpenPRs(): Promise<any[]> {
 }
 
 // Load recent projects with port check
-async function fetchRecentDeploys(): Promise<any[]> {
+async function fetchRecentDeploys(projects: readonly ProjectProjectionRecord[]): Promise<any[]> {
   try {
-    const raw = readFileSync(config.projectsJson, 'utf-8');
-    const projects = JSON.parse(raw);
-    const sorted = projects
-      .filter((p: any) => p.ports?.frontend && p.status === 'active')
-      .sort((a: any, b: any) => {
-        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return bTime - aTime;
-      })
-      .slice(0, 6);
+    const sorted = selectRecentRuntimeProjects(projects);
 
     const results = await Promise.allSettled(
       sorted.map(async (p: any) => {
-        const port = p.ports?.frontend || p.ports?.main;
+        const port = declaredRuntimePort(p);
+        if (port === null) throw new Error('PROJECT_RUNTIME_PORT_INVALID');
         const online = await isLocalPortOnline(port);
         const subdomain = p.domain ? p.domain.replace('.setrox.com.tr', '') : '';
         return { id: p.id, name: p.name, port, subdomain, online, emoji: p.emoji || '' };
@@ -120,7 +164,7 @@ async function fetchAgentSummary(dataFile: any): Promise<any[]> {
 
 router.get('/overview', async (_req, res) => {
   try {
-    const [agents, system, runs, dataFile, openPRs, recentDeploys] = await Promise.allSettled([
+    const [agents, system, runs, dataFile, openPRs, projectProjections] = await Promise.allSettled([
       cached('agents', 30000, () => runCliJson<any[]>('openclaw', ['agents', 'list', '--json'])),
       cached('system', 15000, getSystemMetrics),
       cached('runs', 15000, getRuns),
@@ -129,7 +173,7 @@ router.get('/overview', async (_req, res) => {
         return JSON.parse(raw);
       }),
       cached('open-prs', 300000, fetchOpenPRs),
-      cached('recent-deploys', 60000, fetchRecentDeploys),
+      readProjectApiProjections(),
     ]);
 
     const agentList = agents.status === 'fulfilled'
@@ -137,7 +181,29 @@ router.get('/overview', async (_req, res) => {
       : [];
 
     const runList = runs.status === 'fulfilled' ? runs.value as any[] : [];
-    const activeRuns = runList.filter((r: any) => r.status === 'running' || r.status === 'pending');
+    const projectedProjects = projectProjections.status === 'fulfilled'
+      ? projectProjections.value
+      : [];
+    const activeRunStatusById = new Map(
+      selectOperationalActiveProjects(projectedProjects).map((project) => [
+        project.execution.runId as string,
+        project.execution.runStatus as string,
+      ]),
+    );
+    const returnedRunIds = new Set<string>();
+    const activeRuns = runList.filter((run: any) => {
+      const runId = typeof run.id === 'string' ? run.id : '';
+      const expectedStatus = activeRunStatusById.get(runId);
+      if (expectedStatus === undefined
+        || !isSetfarmOperationalActiveRunStatusV1(run.status)
+        || run.status !== expectedStatus
+        || returnedRunIds.has(runId)) {
+        return false;
+      }
+      returnedRunIds.add(runId);
+      return true;
+    });
+    const recentDeploys = await cached('recent-deploys', 60000, () => fetchRecentDeploys(projectedProjects));
 
     const data = dataFile.status === 'fulfilled' ? dataFile.value : {} as any;
 
@@ -180,7 +246,7 @@ router.get('/overview', async (_req, res) => {
       alerts: recentAlerts,
       // Command Center data
       openPRs: openPRs.status === 'fulfilled' ? openPRs.value : [],
-      recentDeploys: recentDeploys.status === 'fulfilled' ? recentDeploys.value : [],
+      recentDeploys,
       agentSummary,
     });
   } catch (err: any) {

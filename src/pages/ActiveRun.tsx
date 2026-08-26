@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { RunDetail } from "./RunDetail";
+import { isSetfarmOperationalActiveRunStatusV1 } from "../../server/shared/setfarm-operational-active-run-status-v1.js";
 
-interface PipelineRunSummary {
+export interface PipelineRunSummary {
   id: string;
   runNumber?: number;
   workflow: string;
@@ -19,14 +20,9 @@ function newestFirst(a: PipelineRunSummary, b: PipelineRunSummary): number {
   return new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime();
 }
 
-function pickActiveRun(runs: PipelineRunSummary[]): PipelineRunSummary | null {
+export function pickActiveRun(runs: readonly PipelineRunSummary[]): PipelineRunSummary | null {
   const ordered = [...runs].sort(newestFirst);
-  return (
-    ordered.find((run) => run.status === "running") ||
-    ordered.find((run) => run.status === "pending") ||
-    ordered[0] ||
-    null
-  );
+  return ordered.find((run) => isSetfarmOperationalActiveRunStatusV1(run.status)) ?? null;
 }
 
 export function ActiveRun() {
@@ -76,7 +72,7 @@ export function ActiveRun() {
     return (
       <div className="active-run-empty">
         <h2>ACTIVE RUN</h2>
-        <p>No Setfarm runs found.</p>
+        <p>No active Setfarm run.</p>
         <button className="btn btn--primary" onClick={() => navigate("/setfarm")}>Back to Pipeline</button>
       </div>
     );

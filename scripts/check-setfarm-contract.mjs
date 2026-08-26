@@ -12,6 +12,7 @@ import {
   parseRunOperationalSnapshotV3,
 } from "../server/services/setfarm-operational-snapshot.ts";
 import { hashCanonicalJson, matchExistingV3ProjectTransferAckProjection } from "../server/services/v3-project-transfer-ack.ts";
+import { isSetfarmOperationalActiveRunStatusV1 } from "../server/shared/setfarm-operational-active-run-status-v1.ts";
 
 const CONTRACTS = [
   {
@@ -33,6 +34,10 @@ const CONTRACTS = [
   {
     contract: "setfarm.v3-project-transfer-ack.v1",
     stem: "project-transfer-ack.v1",
+  },
+  {
+    contract: "setfarm.operational-active-run-status.v1",
+    stem: "operational-active-run-status.v1",
   },
 ];
 
@@ -116,6 +121,9 @@ if (typeof projection !== "object" || projection === null || Array.isArray(proje
     projection,
   }).status !== "matched") {
   throw new Error("SETFARM_PROJECT_TRANSFER_ACK_COMPATIBILITY_INVALID");
+}
+if (!isSetfarmOperationalActiveRunStatusV1(fixtures.get("setfarm.operational-active-run-status.v1"))) {
+  throw new Error("SETFARM_OPERATIONAL_ACTIVE_RUN_STATUS_COMPATIBILITY_INVALID");
 }
 
 console.log(`Setfarm contract pin OK: ${lock.producerCommit} (${lock.artifacts.length} artifacts)`);

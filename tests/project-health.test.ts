@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
   PROJECT_OBSERVATION_MAX_AGE_MS,
   PROJECT_OBSERVATION_DISPLAY_TICK_MS,
   PROJECT_OBSERVATION_POLL_INTERVAL_MS,
+  projectRuntimeAction,
   projectRuntimeObservation,
+  projectRuntimePresentation,
 } from "../src/lib/project-health.js";
 
 const NOW = Date.parse("2026-07-14T10:00:30.000Z");
@@ -20,8 +21,11 @@ test("Projects refreshes before canonical deployment proof authority expires", (
 
 test("current observed health is separate from immutable receipt status", () => {
   assert.deepEqual(projectRuntimeObservation({
-    observedServiceStatus: "inactive",
-    observedServiceCheckedAt: "2026-07-14T10:00:20.000Z",
+    runtime: {
+      state: "inactive",
+      checkedAt: "2026-07-14T10:00:20.000Z",
+      reasonCode: "V3_DEPLOYMENT_OBSERVED_INACTIVE",
+    },
   }, NOW), {
     status: "inactive",
     label: "INACTIVE",
@@ -31,33 +35,82 @@ test("current observed health is separate from immutable receipt status", () => 
 });
 
 test("missing, malformed, future, or stale observations fail closed to unknown", () => {
-  assert.equal(projectRuntimeObservation({}, NOW).status, "unknown");
   assert.equal(projectRuntimeObservation({
-    observedServiceStatus: "active",
-    observedServiceCheckedAt: "not-a-date",
+    runtime: { state: "unknown", checkedAt: null, reasonCode: "PROJECT_RUNTIME_UNAVAILABLE" },
+  }, NOW).status, "unknown");
+  assert.equal(projectRuntimeObservation({
+    runtime: { state: "active", checkedAt: "not-a-date", reasonCode: "V3_DEPLOYMENT_OBSERVED_ACTIVE" },
   }, NOW).reason, "invalid_timestamp");
   assert.equal(projectRuntimeObservation({
-    observedServiceStatus: "active",
-    observedServiceCheckedAt: "2026-07-14T10:00:40.000Z",
+    runtime: { state: "active", checkedAt: "2026-07-14T10:00:40.000Z", reasonCode: "V3_DEPLOYMENT_OBSERVED_ACTIVE" },
   }, NOW).reason, "clock_skew");
   assert.equal(projectRuntimeObservation({
-    observedServiceStatus: "active",
-    observedServiceCheckedAt: new Date(NOW - PROJECT_OBSERVATION_MAX_AGE_MS - 1).toISOString(),
+    runtime: {
+      state: "active",
+      checkedAt: new Date(NOW - PROJECT_OBSERVATION_MAX_AGE_MS - 1).toISOString(),
+      reasonCode: "V3_DEPLOYMENT_OBSERVED_ACTIVE",
+    },
   }, NOW).reason, "stale");
   assert.equal(projectRuntimeObservation({
-    observedServiceStatus: "active",
-    observedServiceCheckedAt: new Date(NOW - PROJECT_OBSERVATION_MAX_AGE_MS).toISOString(),
+    runtime: {
+      state: "active",
+      checkedAt: new Date(NOW - PROJECT_OBSERVATION_MAX_AGE_MS).toISOString(),
+      reasonCode: "V3_DEPLOYMENT_OBSERVED_ACTIVE",
+    },
   }, NOW).status, "active");
 });
 
-test("Project surfaces label receipt status and live health independently", () => {
-  const card = readFileSync(new URL("../src/components/projects/ProjectCard.tsx", import.meta.url), "utf8");
-  const detail = readFileSync(new URL("../src/components/projects/ProjectDetailPanel.tsx", import.meta.url), "utf8");
-  const projectsPage = readFileSync(new URL("../src/pages/Projects.tsx", import.meta.url), "utf8");
-  assert.match(card, /RECEIPT.*runStatus\.toUpperCase/);
-  assert.match(card, /LIVE \{observedHealth\.label\}/);
-  assert.match(card, /observedHealth\.checkedAt/);
-  assert.match(detail, /Receipt status/);
-  assert.match(detail, /Observed live health/);
-  assert.match(projectsPage, /!isCanonicalV3Project\(p\).*p\.service/);
+test("runtime mutations are unavailable for stale, future, malformed, and unknown projections", () => {
+  const refused = [
+    { state: "unknown", checkedAt: null, reasonCode: "PROJECT_RUNTIME_UNAVAILABLE" },
+    { state: "active", checkedAt: "not-a-date", reasonCode: "V3_DEPLOYMENT_OBSERVED_ACTIVE" },
+    { state: "active", checkedAt: "2026-07-14T10:00:40.000Z", reasonCode: "V3_DEPLOYMENT_OBSERVED_ACTIVE" },
+    {
+      state: "active",
+      checkedAt: new Date(NOW - PROJECT_OBSERVATION_MAX_AGE_MS - 1).toISOString(),
+      reasonCode: "V3_DEPLOYMENT_OBSERVED_ACTIVE",
+    },
+  ] as const;
+  for (const runtime of refused) {
+    assert.equal(projectRuntimeAction({ runtime }, NOW), null);
+  }
+
+  assert.equal(projectRuntimeAction({
+    runtime: {
+      state: "active",
+      checkedAt: new Date(NOW - PROJECT_OBSERVATION_MAX_AGE_MS).toISOString(),
+      reasonCode: "V3_DEPLOYMENT_OBSERVED_ACTIVE",
+    },
+  }, NOW), "stop");
+  assert.equal(projectRuntimeAction({
+    runtime: { state: "inactive", checkedAt: null, reasonCode: "PROJECT_RUNTIME_LEGACY_SERVICE_STATUS_INACTIVE" },
+  }, NOW), "start");
+});
+
+test("unknown runtime presentation never collapses to online, offline, on, or off", () => {
+  const unknown = projectRuntimePresentation({
+    runtime: {
+      state: "active",
+      checkedAt: new Date(NOW - PROJECT_OBSERVATION_MAX_AGE_MS - 1).toISOString(),
+      reasonCode: "V3_DEPLOYMENT_OBSERVED_ACTIVE",
+    },
+  }, NOW);
+  assert.deepEqual(unknown, {
+    status: "unknown",
+    label: "UNKNOWN",
+    checkedAt: new Date(NOW - PROJECT_OBSERVATION_MAX_AGE_MS - 1).toISOString(),
+    reason: "stale",
+    action: null,
+    connectivityTone: "unknown",
+    switchTone: "unknown",
+    switchLabel: "UNKNOWN",
+    availabilityLabel: "Unknown",
+  });
+
+  assert.equal(projectRuntimePresentation({
+    runtime: { state: "active", checkedAt: null, reasonCode: "PROJECT_RUNTIME_LEGACY_SERVICE_STATUS_ACTIVE" },
+  }, NOW).connectivityTone, "online");
+  assert.equal(projectRuntimePresentation({
+    runtime: { state: "inactive", checkedAt: null, reasonCode: "PROJECT_RUNTIME_LEGACY_SERVICE_STATUS_INACTIVE" },
+  }, NOW).connectivityTone, "offline");
 });

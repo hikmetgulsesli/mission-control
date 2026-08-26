@@ -46,6 +46,14 @@ const ARTIFACTS = [
     producerPath: "contracts/generated/mission-control/project-transfer-ack.v1.schema.json",
     vendoredPath: "contracts/vendor/setfarm/project-transfer-ack.v1.schema.json",
   },
+  {
+    producerPath: "contracts/generated/mission-control/operational-active-run-status.v1.compatibility.json",
+    vendoredPath: "contracts/vendor/setfarm/operational-active-run-status.v1.compatibility.json",
+  },
+  {
+    producerPath: "contracts/generated/mission-control/operational-active-run-status.v1.schema.json",
+    vendoredPath: "contracts/vendor/setfarm/operational-active-run-status.v1.schema.json",
+  },
 ];
 const LOCK_PATH = "contracts/vendor/setfarm/mission-control-contracts.v1.lock.json";
 const DEFAULT_REPOSITORY = "https://github.com/hikmetgulsesli/setfarm.git";

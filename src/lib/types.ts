@@ -1,3 +1,5 @@
+import type { SetfarmOperationalActiveRunStatusV1 } from "../../server/shared/setfarm-operational-active-run-status-v1.js";
+
 export interface Agent {
   id: string;
   name: string;
@@ -184,11 +186,28 @@ export interface ProjectData {
   description?: string;
   repo?: string;
   stack?: string[];
-  status?: string;
-  serviceStatus?: string;
-  observedServiceStatus?: string;
-  observedServiceCheckedAt?: string;
-  observedServiceReasonCode?: string;
+  status: "registered" | "building" | "completed" | "failed" | "cancelled";
+  execution: {
+    schema: "mission-control.project-execution.v1";
+    state: SetfarmOperationalActiveRunStatusV1 | "terminal" | "unbound" | "unavailable";
+    active: boolean;
+    runId: string | null;
+    runStatus: string | null;
+    protocol: "legacy" | "shadow" | "v3" | null;
+    source: "setfarm_postgres_run" | "none";
+    reasonCode: string;
+  };
+  runtime: {
+    state: "active" | "inactive" | "unknown";
+    checkedAt: string | null;
+    reasonCode: string;
+  };
+  receipt: null | {
+    status: string;
+    serviceStatus: string;
+    projectionHash: string;
+    projectRecordHash: string;
+  };
   productCompilerProtocol?: string;
   supervisor?: unknown;
 }

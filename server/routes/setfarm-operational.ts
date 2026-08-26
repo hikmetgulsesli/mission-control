@@ -9,6 +9,11 @@ import {
   type ProductBuildAuthority,
   type ProductBuildAuthorityFetchResult,
 } from "../services/setfarm-product-build-authority.js";
+import {
+  ProductBuildAuthorityV2DeliveryEvidenceError,
+  currentProductBuildAuthorityV2DeliveryEvidenceResponseV1,
+  productBuildAuthorityV2LoadedBuildStartupStateV1,
+} from "../services/product-build-authority-v2-delivery-evidence-v1.js";
 
 export type OperationalSnapshotHttpResult =
   | { statusCode: 200; body: RunOperationalSnapshot }
@@ -128,6 +133,14 @@ export function toProductBuildAuthorityHttpResult(result: ProductBuildAuthorityF
 }
 
 const router = Router();
+const PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_PATH =
+  "/internal-production/product-build-authority-v2-delivery-evidence" as const;
+const PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_FULL_PATH =
+  `/api${PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_PATH}` as const;
+const PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_PATH =
+  "/internal-production/product-build-authority-v2-loaded-build" as const;
+const PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_FULL_PATH =
+  `/api${PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_PATH}` as const;
 
 router.get("/setfarm/runs/:id/operational-snapshot", async (req, res) => {
   res.set("Cache-Control", "no-store, max-age=0, must-revalidate");
@@ -163,6 +176,65 @@ router.get("/setfarm/runs/:id/product-build-authority", async (req, res) => {
       reason: "network",
     });
   }
+});
+
+router.get(PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_PATH, async (req, res, next) => {
+  const queryOffset = req.originalUrl.indexOf("?");
+  const rawPathname = queryOffset === -1 ? req.originalUrl : req.originalUrl.slice(0, queryOffset);
+  if (req.method !== "GET" || rawPathname !== PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_FULL_PATH) {
+    next();
+    return;
+  }
+  res.set("Cache-Control", "no-store, max-age=0, must-revalidate");
+  res.set("Pragma", "no-cache");
+  res.set("Expires", "0");
+  if (req.originalUrl !== PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_FULL_PATH
+    || Object.keys(req.query).length !== 0
+    || req.headers["content-length"] !== undefined
+    || req.headers["transfer-encoding"] !== undefined
+    || req.body !== undefined) {
+    res.status(400).json({
+      status: "unavailable",
+      code: "PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_REQUEST_INVALID",
+    });
+    return;
+  }
+  try {
+    res.status(200).json(await currentProductBuildAuthorityV2DeliveryEvidenceResponseV1());
+  } catch (error) {
+    const code = error instanceof ProductBuildAuthorityV2DeliveryEvidenceError
+      ? error.code
+      : "PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_UNAVAILABLE";
+    res.status(503).json({ status: "unavailable", code });
+  }
+});
+
+router.get(PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_PATH, (req, res, next) => {
+  const queryOffset = req.originalUrl.indexOf("?");
+  const rawPathname = queryOffset === -1 ? req.originalUrl : req.originalUrl.slice(0, queryOffset);
+  if (req.method !== "GET" || rawPathname !== PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_FULL_PATH) {
+    next();
+    return;
+  }
+  res.set("Cache-Control", "no-store, max-age=0, must-revalidate");
+  res.set("Pragma", "no-cache");
+  res.set("Expires", "0");
+  if (Object.keys(req.query).length !== 0
+    || req.headers["content-length"] !== undefined
+    || req.headers["transfer-encoding"] !== undefined
+    || req.body !== undefined) {
+    res.status(400).json({
+      status: "unavailable",
+      code: "PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_REQUEST_INVALID",
+    });
+    return;
+  }
+  const startupState = productBuildAuthorityV2LoadedBuildStartupStateV1();
+  if (startupState.status === "unavailable") {
+    res.status(503).json({ status: "unavailable", code: startupState.code });
+    return;
+  }
+  res.status(200).json(startupState.response);
 });
 
 export default router;

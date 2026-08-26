@@ -5,6 +5,7 @@ import { execFile as execFileCb } from 'child_process';
 import { promisify } from 'util';
 import { readdir, readFile, stat } from 'fs/promises';
 import { sql } from './pg.js';
+import type { ProjectRunBindingHints, ProjectRunRow } from '../services/project-execution-state.js';
 
 const execFileAsync = promisify(execFileCb);
 
@@ -13,6 +14,66 @@ const STUCK_THRESHOLD_MS = 15 * 60 * 1000;  // 15min - auto-unstick
 const MAX_AUTO_UNSTICK = 3;
 
 export { STUCK_DETECTION_MS, STUCK_THRESHOLD_MS, MAX_AUTO_UNSTICK };
+
+function requestedRunId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized || null;
+}
+
+function requestedRunNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
+function requestedProjectRunIdentities(hints: readonly ProjectRunBindingHints[]): {
+  ids: string[];
+  runNumbers: number[];
+} {
+  const ids: string[] = [];
+  const runNumbers: number[] = [];
+  const seenIds = new Set<string>();
+  const seenRunNumbers = new Set<number>();
+  const addId = (value: unknown) => {
+    const id = requestedRunId(value);
+    if (id && !seenIds.has(id) && ids.length + runNumbers.length < 2_000) {
+      seenIds.add(id);
+      ids.push(id);
+    }
+  };
+  const addRunNumber = (value: unknown) => {
+    const runNumber = requestedRunNumber(value);
+    if (runNumber && !seenRunNumbers.has(runNumber) && ids.length + runNumbers.length < 2_000) {
+      seenRunNumbers.add(runNumber);
+      runNumbers.push(runNumber);
+    }
+  };
+  for (const hint of hints) {
+    addId(hint.latestRunId);
+    addId(hint.workflowRunId);
+    for (const runId of hint.setfarmRunIds) addId(runId);
+    addRunNumber(hint.latestRunNumber);
+    addRunNumber(hint.runNumber);
+  }
+  return { ids, runNumbers };
+}
+
+export async function getProjectRunRows(hints: readonly ProjectRunBindingHints[]): Promise<ProjectRunRow[]> {
+  const { ids, runNumbers } = requestedProjectRunIdentities(hints);
+  if (ids.length === 0 && runNumbers.length === 0) return [];
+  const rows = await sql`
+    SELECT id, run_number, protocol, status, updated_at
+    FROM runs
+    WHERE id = ANY(${ids}) OR run_number = ANY(${runNumbers})
+    ORDER BY run_number DESC, id ASC
+  `;
+  return rows.map((row: any) => ({
+    id: String(row.id),
+    runNumber: Number(row.run_number),
+    protocol: row.protocol === "legacy" || row.protocol === "shadow" || row.protocol === "v3" ? row.protocol : null,
+    status: String(row.status),
+    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : typeof row.updated_at === "string" ? row.updated_at : null,
+  }));
+}
 
 // Whitelist validation: IDs must be alphanumeric/dash/underscore (setfarm uses UUIDs and slugs)
 const SAFE_ID_RE = /^[a-zA-Z0-9_-]+$/;

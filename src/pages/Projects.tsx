@@ -9,7 +9,10 @@ import { DeleteProjectModal } from "../components/projects/DeleteProjectModal";
 import {
   PROJECT_OBSERVATION_DISPLAY_TICK_MS,
   PROJECT_OBSERVATION_POLL_INTERVAL_MS,
+  projectRuntimeAction,
+  projectRuntimePresentation,
 } from "../lib/project-health";
+import type { ProjectData } from "../lib/types";
 
 
 function formatDuration(createdAt?: string, completedAt?: string, buildStartedAt?: string, buildCompletedAt?: string): string | null {
@@ -32,7 +35,7 @@ function formatDuration(createdAt?: string, completedAt?: string, buildStartedAt
   return `${minutes}m`;
 }
 
-interface Project {
+interface Project extends Pick<ProjectData, "status" | "execution" | "runtime" | "receipt"> {
   id: string;
   name: string;
   emoji: string;
@@ -44,18 +47,12 @@ interface Project {
   repo: string;
   stack: string[];
   service: string;
-  serviceStatus?: string;
-  observedServiceStatus?: string;
-  observedServiceCheckedAt?: string;
-  observedServiceReasonCode?: string;
   createdBy: string;
   productCompilerProtocol?: string;
-  workflowRunId?: string;
   runNumber?: number;
   latestRunNumber?: number;
   createdAt: string;
   completedAt?: string;
-  status?: string;
   stories?: { total: number; done: number };
   pr?: string;
   features: string[];
@@ -76,15 +73,75 @@ const TOOL_LOGOS: Record<string, string> = {
   "n8n": "https://cdn.simpleicons.org/n8n/ea4b71",
 };
 
-const FAILED_PROJECT_STATUSES = new Set(["failed", "error", "cancelled"]);
+const FAILED_PROJECT_STATUSES = new Set(["failed", "cancelled"]);
 
 function isFailedProject(project: Project): boolean {
-  return FAILED_PROJECT_STATUSES.has(String(project.status || "").toLowerCase());
+  return FAILED_PROJECT_STATUSES.has(project.status);
 }
 
 function isCanonicalV3Project(project: Project): boolean {
   return project.productCompilerProtocol === "v3"
     && project.createdBy === "setfarm-v3-terminal-projector";
+}
+
+export async function runProjectedMutation(
+  mutation: () => Promise<unknown>,
+  refresh: () => Promise<void>,
+): Promise<void> {
+  await mutation();
+  await refresh();
+}
+
+export interface ProjectProjectionReadGate {
+  read<T>(
+    load: () => Promise<T>,
+    priority?: "background" | "strict",
+  ): Promise<
+    { status: "current"; value: T } | { status: "superseded" }
+  >;
+}
+
+export function createProjectProjectionReadGate(): ProjectProjectionReadGate {
+  let latestGeneration = 0;
+  let strictPending = 0;
+  let strictTail = Promise.resolve();
+
+  const run = async <T,>(load: () => Promise<T>): Promise<
+    { status: "current"; value: T } | { status: "superseded" }
+  > => {
+    const generation = ++latestGeneration;
+    try {
+      const value = await load();
+      return generation === latestGeneration
+        ? { status: "current", value }
+        : { status: "superseded" };
+    } catch (error) {
+      if (generation !== latestGeneration) return { status: "superseded" };
+      throw error;
+    }
+  };
+
+  return {
+    async read<T>(load: () => Promise<T>, priority = "background") {
+      if (priority === "background") {
+        if (strictPending > 0) return { status: "superseded" };
+        return run(load);
+      }
+
+      strictPending += 1;
+      const precedingStrict = strictTail;
+      let releaseStrict!: () => void;
+      const thisStrict = new Promise<void>((resolve) => { releaseStrict = resolve; });
+      strictTail = precedingStrict.then(() => thisStrict);
+      await precedingStrict;
+      try {
+        return await run(load);
+      } finally {
+        strictPending -= 1;
+        releaseStrict();
+      }
+    },
+  };
 }
 
 export function Projects() {
@@ -106,22 +163,42 @@ export function Projects() {
   const [toggling, setToggling] = useState<string | null>(null);
   const [bulkAction, setBulkAction] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [projectionsCurrent, setProjectionsCurrent] = useState(false);
+  const [projectedMutationPending, setProjectedMutationPending] = useState(false);
+  const projectedMutationPendingRef = useRef(false);
+  const [projectionReadGate] = useState(createProjectProjectionReadGate);
   const [, setHealthClock] = useState(0);
 
-  const fetchProjects = () => api.projects()
-    .then((d) => {
-      setProjects(d as any);
+  const fetchProjects = async (priority: "background" | "strict" = "background"): Promise<void> => {
+    try {
+      const result = await projectionReadGate.read(() => api.projects(), priority);
+      if (result.status === "superseded") {
+        if (priority === "strict") throw new Error("PROJECT_PROJECTION_STRICT_READ_SUPERSEDED");
+        return;
+      }
+      setProjects(result.value as any);
       setLoadError(null);
-      setLoading(false);
-    })
-    .catch((err: any) => {
+      setProjectionsCurrent(true);
+    } catch (err: any) {
       setLoadError(err?.message || "Projects API failed");
+      setProjectionsCurrent(false);
+      throw err;
+    } finally {
       setLoading(false);
-    });
+    }
+  };
+
+  const refreshAfterMutation = async (): Promise<void> => {
+    setProjectionsCurrent(false);
+    await fetchProjects("strict");
+  };
 
   useEffect(() => {
-    fetchProjects();
-    const interval = setInterval(fetchProjects, PROJECT_OBSERVATION_POLL_INTERVAL_MS);
+    void fetchProjects().catch(() => undefined);
+    const interval = setInterval(
+      () => { void fetchProjects().catch(() => undefined); },
+      PROJECT_OBSERVATION_POLL_INTERVAL_MS,
+    );
     const displayClock = setInterval(
       () => setHealthClock((value) => value + 1),
       PROJECT_OBSERVATION_DISPLAY_TICK_MS,
@@ -133,7 +210,10 @@ export function Projects() {
   }, []);
 
   const handleDelete = async () => {
-    if (!deleteTarget || deleteConfirm.trim() !== deleteTarget.name.trim()) return;
+    if (!projectionsCurrent || projectedMutationPendingRef.current || !deleteTarget || deleteConfirm.trim() !== deleteTarget.name.trim()) return;
+    projectedMutationPendingRef.current = true;
+    setProjectedMutationPending(true);
+    setProjectionsCurrent(false);
     setDeleteLoading(true);
     setDeleteResult(null);
     const steps = [
@@ -146,7 +226,11 @@ export function Projects() {
     ];
     setDeleteSteps(steps);
     try {
-      const result = await api.deleteProject(deleteTarget.id, deleteConfirm);
+      let result: Awaited<ReturnType<typeof api.deleteProject>> | undefined;
+      await runProjectedMutation(async () => {
+        result = await api.deleteProject(deleteTarget.id, deleteConfirm);
+      }, refreshAfterMutation);
+      if (result === undefined) throw new Error("PROJECT_DELETE_RESULT_UNAVAILABLE");
       const log = result.log || [];
       const logStr = log.join(' ');
       const updated = steps.map(s => {
@@ -163,23 +247,26 @@ export function Projects() {
         setDeleteSteps(prev => prev.map((s, idx) => idx <= i ? updated[idx] : s));
       }
       setDeleteResult({ success: true, log });
-      setProjects((prev) => prev.filter((p) => p.id !== deleteTarget.id));
       if (selected === deleteTarget.id) setSelected(null);
     } catch (err: any) {
       setDeleteResult({ success: false, error: err.message });
       setDeleteSteps(prev => prev.map(s => s.status === 'waiting' ? { ...s, status: 'fail' as const } : s));
     } finally {
+      projectedMutationPendingRef.current = false;
+      setProjectedMutationPending(false);
       setDeleteLoading(false);
     }
   };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!createForm.name.trim()) return;
+    if (!projectionsCurrent || !createForm.name.trim()) return;
     setCreateLoading(true);
     try {
-      const project = await api.createProject(createForm);
-      setProjects(prev => [...prev, project]);
+      await runProjectedMutation(
+        () => api.createProject(createForm),
+        refreshAfterMutation,
+      );
       setShowCreate(false);
       setCreateForm({ name: "", description: "", emoji: "", category: "own", type: "web" as string });
     } catch (err: any) {
@@ -206,37 +293,54 @@ export function Projects() {
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !projectionsCurrent) {
+      if (importRef.current) importRef.current.value = "";
+      return;
+    }
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      const project = await api.importProject(data);
-      setProjects(prev => [...prev, project]);
+      await runProjectedMutation(
+        () => api.importProject(data),
+        refreshAfterMutation,
+      );
     } catch (err: any) {
       toast("Import failed: " + err.message, 'error');
     }
     if (importRef.current) importRef.current.value = "";
   };
 
-  const handleChecklistUpdate = (projectId: string, checklist: any[]) => {
-    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, checklist } : p));
+  const handleChecklistToggle = async (projectId: string, itemId: string, currentState: boolean) => {
+    if (!projectionsCurrent || projectedMutationPendingRef.current) return;
+    projectedMutationPendingRef.current = true;
+    setProjectedMutationPending(true);
+    setProjectionsCurrent(false);
+    try {
+      await runProjectedMutation(
+        () => api.updateProject(projectId, {
+          checklistToggle: { itemId, completed: !currentState },
+        }),
+        refreshAfterMutation,
+      );
+    } catch (err: any) {
+      toast("Checklist update failed: " + (err?.message || "Projects API failed"), "error");
+    } finally {
+      projectedMutationPendingRef.current = false;
+      setProjectedMutationPending(false);
+    }
   };
 
   const handleToggle = async (e: React.MouseEvent, p: Project) => {
     e.stopPropagation();
-    if (p.id === "mission-control" || p.type === "mobile" || isCanonicalV3Project(p)) return;
-    const action = p.serviceStatus === "active" ? "stop" : "start";
+    if (!projectionsCurrent || p.id === "mission-control" || p.type === "mobile" || isCanonicalV3Project(p)) return;
+    const action = projectRuntimeAction(p);
+    if (action === null) return;
     setToggling(p.id);
     try {
-      const result = await api.toggleProject(p.id, action);
-      setProjects(prev => prev.map(pr =>
-        pr.id === p.id ? {
-          ...pr,
-          ports: result.port ? { ...(pr.ports || {}), frontend: result.port } : pr.ports,
-          serviceStatus: result.serviceStatus ?? (action === "start" ? "active" : "inactive"),
-          manuallyDisabled: action === "stop",
-        } : pr
-      ));
+      await runProjectedMutation(
+        () => api.toggleProject(p.id, action),
+        refreshAfterMutation,
+      );
       toast(p.name + " " + (action === "start" ? "started" : "stopped"), "success");
     } catch (err: any) {
       toast("Toggle failed: " + err.message, "error");
@@ -246,9 +350,10 @@ export function Projects() {
   };
 
   const handleBulkToggle = async (action: "start" | "stop") => {
+    if (!projectionsCurrent) return;
     const targets = ownProjects.filter(p =>
       p.id !== "mission-control" && p.type !== "mobile" && !isCanonicalV3Project(p) && p.service &&
-      (action === "start" ? p.serviceStatus !== "active" : p.serviceStatus === "active")
+      projectRuntimeAction(p) === action
     );
     if (targets.length === 0) { toast("No service needs this action", "error"); return; }
     setBulkAction(action);
@@ -256,11 +361,17 @@ export function Projects() {
     for (const p of targets) {
       try {
         await api.toggleProject(p.id, action);
-        setProjects(prev => prev.map(pr =>
-          pr.id === p.id ? { ...pr, serviceStatus: action === "start" ? "active" : "inactive" } : pr
-        ));
         ok++;
       } catch { fail++; }
+    }
+    if (ok > 0) {
+      try {
+        await refreshAfterMutation();
+      } catch (err: any) {
+        toast("Projection refresh failed: " + (err?.message || "Projects API failed"), "error");
+        setBulkAction(null);
+        return;
+      }
     }
     toast(ok + " service(s) " + (action === "start" ? "started" : "stopped") + (fail ? ", " + fail + " failed" : ""), ok > 0 ? "success" : "error");
     setBulkAction(null);
@@ -268,6 +379,7 @@ export function Projects() {
 
   const openDeleteModal = (e: React.MouseEvent, project: Project) => {
     e.stopPropagation();
+    if (!projectionsCurrent || projectedMutationPendingRef.current) return;
     setDeleteTarget(project);
     setDeleteConfirm("");
     setDeleteResult(null);
@@ -297,7 +409,7 @@ export function Projects() {
       }
       case 'status': {
         const order: Record<string, number> = { building: 0, active: 1, completed: 2 };
-        return (order[a.status || 'active'] ?? 1) - (order[b.status || 'active'] ?? 1);
+        return (order[a.status] ?? 1) - (order[b.status] ?? 1);
       }
       default: return 0;
     }
@@ -317,7 +429,7 @@ export function Projects() {
       }
       case 'status': {
         const order: Record<string, number> = { building: 0, active: 1, completed: 2 };
-        return (order[a.status || 'active'] ?? 1) - (order[b.status || 'active'] ?? 1);
+        return (order[a.status] ?? 1) - (order[b.status] ?? 1);
       }
       default: return 0;
     }
@@ -331,13 +443,13 @@ export function Projects() {
       <div className="projects-page__header">
         <GlitchText text="PROJECTS" tag="h2" />
         <div className="projects-page__actions">
-          <button className="btn btn--small btn--primary" onClick={() => setShowCreate(true)}>+ NEW PROJECT</button>
-          <button className="btn btn--small" onClick={() => importRef.current?.click()}>IMPORT</button>
+          <button className="btn btn--small btn--primary" onClick={() => setShowCreate(true)} disabled={!projectionsCurrent}>+ NEW PROJECT</button>
+          <button className="btn btn--small" onClick={() => importRef.current?.click()} disabled={!projectionsCurrent}>IMPORT</button>
           <input ref={importRef} type="file" accept=".json" style={{ display: "none" }} onChange={handleImport} />
-          <button className="btn btn--small btn--success" onClick={() => handleBulkToggle("start")} disabled={!!bulkAction}>
+          <button className="btn btn--small btn--success" onClick={() => handleBulkToggle("start")} disabled={!!bulkAction || !projectionsCurrent}>
             {bulkAction === "start" ? "STARTING..." : "START ALL"}
           </button>
-          <button className="btn btn--small btn--danger" onClick={() => handleBulkToggle("stop")} disabled={!!bulkAction}>
+          <button className="btn btn--small btn--danger" onClick={() => handleBulkToggle("stop")} disabled={!!bulkAction || !projectionsCurrent}>
             {bulkAction === "stop" ? "STOPPING..." : "STOP ALL"}
           </button>
         </div>
@@ -355,24 +467,27 @@ export function Projects() {
         <div className="tools-bar">
           <span className="tools-bar__label">TOOLS</span>
           <div className="tools-bar__links">
-            {extProjects.map((p) => (
-              <a
-                key={p.id}
-                className={`tools-bar__item tools-bar__item--${p.serviceStatus === "active" ? "online" : "offline"}`}
-                href={`https://${p.domain}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                title={`${p.name} - ${p.domain}${p.serviceStatus === "active" ? " (Online)" : " (Offline)"}`}
-              >
-                {TOOL_LOGOS[p.id] ? (
-                  <img className="tools-bar__logo" src={TOOL_LOGOS[p.id]} alt={p.name} />
-                ) : (
-                  <span className="tools-bar__emoji">{p.emoji}</span>
-                )}
-                <span className="tools-bar__name">{p.name}</span>
-                <span className={`tools-bar__dot tools-bar__dot--${p.serviceStatus}`} />
-              </a>
-            ))}
+            {extProjects.map((p) => {
+              const presentation = projectRuntimePresentation(p);
+              return (
+                <a
+                  key={p.id}
+                  className={`tools-bar__item tools-bar__item--${presentation.connectivityTone}`}
+                  href={`https://${p.domain}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title={`${p.name} - ${p.domain} (${presentation.availabilityLabel})`}
+                >
+                  {TOOL_LOGOS[p.id] ? (
+                    <img className="tools-bar__logo" src={TOOL_LOGOS[p.id]} alt={p.name} />
+                  ) : (
+                    <span className="tools-bar__emoji">{p.emoji}</span>
+                  )}
+                  <span className="tools-bar__name">{p.name}</span>
+                  <span className={`tools-bar__dot tools-bar__dot--${presentation.status}`} />
+                </a>
+              );
+            })}
           </div>
         </div>
       )}
@@ -405,6 +520,7 @@ export function Projects() {
             project={p}
             selected={selected === p.id}
             toggling={toggling === p.id}
+            actionsDisabled={!projectionsCurrent || projectedMutationPending}
             onSelect={() => setSelected(selected === p.id ? null : p.id)}
             onToggle={(e) => handleToggle(e, p)}
             onExport={() => handleExport(p.id)}
@@ -421,7 +537,8 @@ export function Projects() {
         <ProjectDetailPanel
           project={sel}
           onClose={() => setSelected(null)}
-          onChecklistUpdate={handleChecklistUpdate}
+          actionsDisabled={!projectionsCurrent || projectedMutationPending}
+          onChecklistToggle={handleChecklistToggle}
           formatDuration={formatDuration}
         />
       )}
@@ -441,6 +558,7 @@ export function Projects() {
         target={deleteTarget}
         confirmText={deleteConfirm}
         loading={deleteLoading}
+        actionsDisabled={!projectionsCurrent || projectedMutationPending}
         result={deleteResult}
         steps={deleteSteps}
         onConfirmTextChange={setDeleteConfirm}
