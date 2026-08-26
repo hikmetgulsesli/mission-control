@@ -10,11 +10,15 @@ import { promisify } from "node:util";
 
 import {
   assertExactRenderRoutes,
+  assertExactChildListener,
   createIsolatedChildEnvironment,
   createRenderCleanupOwner,
   createRenderScreenshotWorkspace,
   createRequiredV3ProductBuildAuthorityTracker,
+  installCleanupSignalHandlers,
   isExpectedTypedRenderResponse,
+  terminateIsolatedServer,
+  waitForIsolatedServer,
 } from "../scripts/render-smoke.mjs";
 import { parseProductBuildAuthorityV2 } from "../server/services/setfarm-product-build-authority.js";
 import { hashCanonicalJson } from "../server/services/setfarm-operational-snapshot.js";
@@ -309,6 +313,85 @@ test("render smoke removes only its operation-owned screenshot workspace", async
     assert.deepEqual(await readdir(parent), ["keep.txt"]);
   } finally {
     await rm(parent, { recursive: true, force: true });
+  }
+});
+
+test("render smoke removes each operation-created empty screenshot ancestor", async () => {
+  const ancestor = await mkdtemp(join(tmpdir(), "mc-render-ancestor-"));
+  const parent = join(ancestor, "artifacts", "render-smoke");
+  try {
+    const workspace = await createRenderScreenshotWorkspace(parent);
+    await writeFile(join(workspace.directory, "page.png"), "fake", "utf8");
+    await workspace.close();
+    assert.deepEqual(await readdir(ancestor), []);
+  } finally {
+    await rm(ancestor, { recursive: true, force: true });
+  }
+});
+
+test("listener and readiness checks reject missing, exited, crossed, and timed-out children", async () => {
+  const live = { pid: 4242, exitCode: null, signalCode: null };
+  const exactObservation = async () => ({ stdout: "p4242\0cnode\0f20\0n127.0.0.1:13081\0", stderr: "" });
+  await assert.doesNotReject(assertExactChildListener(live, exactObservation));
+  await assert.rejects(assertExactChildListener(null, exactObservation), /child is not live/);
+  await assert.rejects(assertExactChildListener({ ...live, exitCode: 1 }, exactObservation), /child is not live/);
+  await assert.rejects(
+    assertExactChildListener(live, async () => ({ stdout: "p9999\0n127.0.0.1:13081\0", stderr: "" })),
+    /listener identity mismatch/,
+  );
+  await assert.rejects(
+    assertExactChildListener(live, async () => ({ stdout: "p4242\0n127.0.0.1:13081\0", stderr: "diagnostic" })),
+    /emitted diagnostics/,
+  );
+
+  let clock = 0;
+  const unavailable = Object.assign(new Error("not listening"), { code: 1 });
+  await assert.rejects(
+    waitForIsolatedServer(live, { current: null }, 400, {
+      now: () => clock,
+      sleep: async (milliseconds: number) => { clock += milliseconds; },
+      observeListener: async () => { throw unavailable; },
+      isReachable: async () => false,
+    }),
+    /did not become ready/,
+  );
+  await assert.rejects(
+    waitForIsolatedServer({ ...live, signalCode: "SIGTERM" }, { current: null }, 1),
+    /exited with SIGTERM/,
+  );
+  await assert.rejects(
+    waitForIsolatedServer(live, { current: new Error("spawn failed") }, 1),
+    /spawn failed/,
+  );
+});
+
+test("forced child teardown escalates, waits, verifies the port, and handles every termination signal", async () => {
+  const events: string[] = [];
+  const stubborn = Object.assign(new EventEmitter(), {
+    pid: 434343,
+    exitCode: null as number | null,
+    signalCode: null as NodeJS.Signals | null,
+    kill(signal: NodeJS.Signals) {
+      events.push(signal);
+      if (signal === "SIGKILL") {
+        this.signalCode = signal;
+        this.emit("exit", null, signal);
+      }
+      return true;
+    },
+  });
+  await terminateIsolatedServer(stubborn, async () => { events.push("port"); }, 10);
+  assert.deepEqual(events, ["SIGTERM", "SIGKILL", "port"]);
+
+  for (const [signal, expectedCode] of [["SIGHUP", 129], ["SIGINT", 130], ["SIGTERM", 143]] as const) {
+    const processTarget = new EventEmitter();
+    const observed: Array<string | number> = [];
+    const owner = { close: async () => { observed.push("close"); } };
+    const removeHandlers = installCleanupSignalHandlers(owner, processTarget, (code: number) => observed.push(code));
+    processTarget.emit(signal);
+    await new Promise((resolveTurn) => setImmediate(resolveTurn));
+    removeHandlers();
+    assert.deepEqual(observed, ["close", expectedCode]);
   }
 });
 

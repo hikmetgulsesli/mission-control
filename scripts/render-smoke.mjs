@@ -55,7 +55,11 @@ function isPlainObject(value) {
 }
 
 export async function createRenderScreenshotWorkspace(parentDirectory) {
-  const parentExisted = existsSync(parentDirectory);
+  const createdDirectories = [];
+  for (let current = parentDirectory; !existsSync(current); current = dirname(current)) {
+    createdDirectories.push(current);
+    if (dirname(current) === current) break;
+  }
   await mkdir(parentDirectory, { recursive: true });
   const directory = await mkdtemp(resolve(parentDirectory, ".render-smoke-"));
   let closed = false;
@@ -65,8 +69,8 @@ export async function createRenderScreenshotWorkspace(parentDirectory) {
       if (closed) return;
       closed = true;
       await rm(directory, { recursive: true, force: true });
-      if (!parentExisted) {
-        await rmdir(parentDirectory).catch((error) => {
+      for (const createdDirectory of createdDirectories) {
+        await rmdir(createdDirectory).catch((error) => {
           if (error?.code !== "ENOENT" && error?.code !== "ENOTEMPTY") throw error;
         });
       }
@@ -118,15 +122,19 @@ async function assertPortAvailable() {
 
 const execFileAsync = promisify(execFile);
 
-async function assertExactChildListener(child) {
-  if (!child || !Number.isSafeInteger(child.pid) || child.pid <= 0 || child.exitCode !== null || child.signalCode !== null) {
-    throw new Error("isolated Mission Control child is not live");
-  }
-  const { stdout, stderr } = await execFileAsync(
+async function observeExactChildListener(child) {
+  return await execFileAsync(
     "/usr/sbin/lsof",
     ["-nP", "-a", "-p", String(child.pid), `-iTCP:${REQUIRED_PORT}`, "-sTCP:LISTEN", "-F0pcfn"],
     { encoding: "utf8", timeout: 2_000, maxBuffer: 64 * 1024 },
   );
+}
+
+export async function assertExactChildListener(child, observeListener = observeExactChildListener) {
+  if (!child || !Number.isSafeInteger(child.pid) || child.pid <= 0 || child.exitCode !== null || child.signalCode !== null) {
+    throw new Error("isolated Mission Control child is not live");
+  }
+  const { stdout, stderr } = await observeListener(child);
   if (stderr !== "") throw new Error("isolated Mission Control listener observation emitted diagnostics");
   const fields = stdout.split("\0").filter(Boolean);
   if (!fields.includes(`p${child.pid}`) || !fields.includes(`n${REQUIRED_HOST}:${REQUIRED_PORT}`)) {
@@ -134,20 +142,24 @@ async function assertExactChildListener(child) {
   }
 }
 
-async function waitForIsolatedServer(child, spawnFailure, timeoutMs = 15_000) {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
+export async function waitForIsolatedServer(child, spawnFailure, timeoutMs = 15_000, hooks = {}) {
+  const now = hooks.now || Date.now;
+  const observeListener = hooks.observeListener || observeExactChildListener;
+  const reachable = hooks.isReachable || isReachable;
+  const wait = hooks.sleep || sleep;
+  const startedAt = now();
+  while (now() - startedAt < timeoutMs) {
     if (spawnFailure.current) throw spawnFailure.current;
     if (child.exitCode !== null || child.signalCode !== null) {
       throw new Error(`isolated Mission Control child exited with ${child.exitCode ?? child.signalCode}`);
     }
     try {
-      await assertExactChildListener(child);
-      if (await isReachable(baseUrl)) return;
+      await assertExactChildListener(child, observeListener);
+      if (await reachable(baseUrl)) return;
     } catch (error) {
       if (error?.code !== 1 && !/listener identity mismatch/.test(String(error?.message || error))) throw error;
     }
-    await sleep(200);
+    await wait(200);
   }
   throw new Error(`isolated Mission Control did not become ready at ${baseUrl}`);
 }
@@ -190,13 +202,13 @@ async function waitForChildExit(child, timeoutMs) {
   });
 }
 
-async function terminateIsolatedServer(child, verifyPortReleased = assertPortAvailable) {
+export async function terminateIsolatedServer(child, verifyPortReleased = assertPortAvailable, timeoutMs = 5_000) {
   if (!child) return;
   if (child && child.exitCode === null && child.signalCode === null) {
     child.kill("SIGTERM");
-    if (!(await waitForChildExit(child, 5_000))) {
+    if (!(await waitForChildExit(child, timeoutMs))) {
       child.kill("SIGKILL");
-      if (!(await waitForChildExit(child, 5_000))) {
+      if (!(await waitForChildExit(child, timeoutMs))) {
         throw new Error("isolated Mission Control child did not terminate");
       }
     }
@@ -233,7 +245,7 @@ export function createRenderCleanupOwner({ workspace, timeoutMs = 5_000, verifyP
       closePromise = (async () => {
         const errors = [];
         try {
-          await terminateIsolatedServer(child, verifyPortReleased);
+          await terminateIsolatedServer(child, verifyPortReleased, timeoutMs);
         } catch (error) {
           errors.push(error);
         }
@@ -274,20 +286,20 @@ export function createRenderCleanupOwner({ workspace, timeoutMs = 5_000, verifyP
   });
 }
 
-function installCleanupSignalHandlers(owner) {
+export function installCleanupSignalHandlers(owner, processTarget = process, exit = (code) => process.exit(code)) {
   let handling = false;
   const handlers = new Map();
-  for (const [signal, exitCode] of [["SIGINT", 130], ["SIGTERM", 143]]) {
+  for (const [signal, exitCode] of [["SIGHUP", 129], ["SIGINT", 130], ["SIGTERM", 143]]) {
     const handler = () => {
       if (handling) return;
       handling = true;
-      owner.close().finally(() => process.exit(exitCode));
+      owner.close().finally(() => exit(exitCode));
     };
     handlers.set(signal, handler);
-    process.once(signal, handler);
+    processTarget.once(signal, handler);
   }
   return () => {
-    for (const [signal, handler] of handlers) process.off(signal, handler);
+    for (const [signal, handler] of handlers) processTarget.off(signal, handler);
   };
 }
 
@@ -463,12 +475,7 @@ async function main() {
     await assertExactChildListener(child);
     const parseProductBuildAuthorityV2 = await loadStrictProductBuildAuthorityV2Parser();
     await preflightRequiredV3ProductBuildAuthority(parseProductBuildAuthorityV2);
-    const browserServer = await chromium.launchServer({
-      headless: true,
-      handleSIGINT: false,
-      handleSIGTERM: false,
-      handleSIGHUP: false,
-    });
+    const browserServer = await chromium.launchServer({ headless: true });
     cleanupOwner.setBrowserServer(browserServer);
     const browser = await chromium.connect(browserServer.wsEndpoint());
     for (const route of routes) {
