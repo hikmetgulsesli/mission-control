@@ -16,12 +16,17 @@ const REQUIRED_PORT = 13081;
 const LEGACY_RUN_ID = "ac8cea43-7686-4d27-8092-1e3dd9207ca4";
 const V3_RUN_ID = "ad47fe65-4ec4-4fb5-89da-fff71eb4e79a";
 const V3_PRODUCT_BUILD_AUTHORITY_PATH = `/api/setfarm/runs/${V3_RUN_ID}/product-build-authority`;
-const baseUrl = process.env.MC_RENDER_BASE_URL || REQUIRED_BASE_URL;
+const EXACT_ROUTES = Object.freeze([
+  "/",
+  "/setfarm",
+  "/setfarm/active",
+  "/projects",
+  `/setfarm/runs/${LEGACY_RUN_ID}`,
+  `/setfarm/runs/${V3_RUN_ID}`,
+]);
+const baseUrl = process.env.MC_RENDER_BASE_URL ?? REQUIRED_BASE_URL;
 const screenshotParent = resolve(rootDir, process.env.MC_RENDER_SCREENSHOT_DIR || "artifacts/render-smoke");
-const routes = (process.env.MC_RENDER_ROUTES || "/,/setfarm,/setfarm/active,/rules")
-  .split(",")
-  .map((route) => route.trim())
-  .filter(Boolean);
+const routes = (process.env.MC_RENDER_ROUTES ?? EXACT_ROUTES.join(",")).split(",");
 const expectText = (process.env.MC_RENDER_EXPECT_TEXT || "")
   .split(",")
   .map((item) => item.trim())
@@ -34,6 +39,14 @@ function sleep(ms) {
 function assertExactBaseUrl(value) {
   if (value !== REQUIRED_BASE_URL) {
     throw new Error(`MC_RENDER_BASE_URL must equal ${REQUIRED_BASE_URL}`);
+  }
+}
+
+export function assertExactRenderRoutes(candidate) {
+  if (!Array.isArray(candidate)
+    || candidate.length !== EXACT_ROUTES.length
+    || candidate.some((route, index) => route !== EXACT_ROUTES[index])) {
+    throw new Error("MC_RENDER_ROUTES must equal the exact ordered six-route inventory");
   }
 }
 
@@ -59,6 +72,18 @@ export async function createRenderScreenshotWorkspace(parentDirectory) {
       }
     },
   });
+}
+
+export function createIsolatedChildEnvironment(sourceEnvironment) {
+  const environment = { ...sourceEnvironment };
+  for (const key of Object.keys(environment)) {
+    if (key === "NODE_OPTIONS" || key === "NODE_PATH" || key === "LD_PRELOAD" || key.startsWith("DYLD_")) {
+      delete environment[key];
+    }
+  }
+  environment.MC_HOST = REQUIRED_HOST;
+  environment.MC_PORT = String(REQUIRED_PORT);
+  return environment;
 }
 
 async function isReachable(url) {
@@ -94,7 +119,7 @@ async function assertPortAvailable() {
 const execFileAsync = promisify(execFile);
 
 async function assertExactChildListener(child) {
-  if (!child || !Number.isSafeInteger(child.pid) || child.pid <= 0 || child.exitCode !== null) {
+  if (!child || !Number.isSafeInteger(child.pid) || child.pid <= 0 || child.exitCode !== null || child.signalCode !== null) {
     throw new Error("isolated Mission Control child is not live");
   }
   const { stdout, stderr } = await execFileAsync(
@@ -113,7 +138,9 @@ async function waitForIsolatedServer(child, spawnFailure, timeoutMs = 15_000) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
     if (spawnFailure.current) throw spawnFailure.current;
-    if (child.exitCode !== null) throw new Error(`isolated Mission Control child exited with ${child.exitCode}`);
+    if (child.exitCode !== null || child.signalCode !== null) {
+      throw new Error(`isolated Mission Control child exited with ${child.exitCode ?? child.signalCode}`);
+    }
     try {
       await assertExactChildListener(child);
       if (await isReachable(baseUrl)) return;
@@ -125,7 +152,7 @@ async function waitForIsolatedServer(child, spawnFailure, timeoutMs = 15_000) {
   throw new Error(`isolated Mission Control did not become ready at ${baseUrl}`);
 }
 
-async function startIsolatedServer() {
+async function startIsolatedServer(registerChild) {
   assertExactBaseUrl(baseUrl);
   await assertPortAvailable();
   const entry = resolve(rootDir, "dist-server/index.js");
@@ -134,22 +161,18 @@ async function startIsolatedServer() {
   }
   const child = spawn(process.execPath, [entry], {
     cwd: rootDir,
-    env: { ...process.env, MC_PORT: String(REQUIRED_PORT), MC_HOST: REQUIRED_HOST },
+    env: createIsolatedChildEnvironment(process.env),
     stdio: ["ignore", "pipe", "pipe"],
     shell: false,
   });
+  registerChild(child);
   const spawnFailure = { current: null };
   child.once("error", (error) => { spawnFailure.current = error; });
   child.stdout.on("data", (chunk) => process.stdout.write(`[mc] ${chunk}`));
   child.stderr.on("data", (chunk) => process.stderr.write(`[mc] ${chunk}`));
-  try {
-    await waitForIsolatedServer(child, spawnFailure);
-    await assertExactChildListener(child);
-    return child;
-  } catch (error) {
-    await terminateIsolatedServer(child).catch(() => {});
-    throw error;
-  }
+  await waitForIsolatedServer(child, spawnFailure);
+  await assertExactChildListener(child);
+  return child;
 }
 
 async function waitForChildExit(child, timeoutMs) {
@@ -167,7 +190,7 @@ async function waitForChildExit(child, timeoutMs) {
   });
 }
 
-async function terminateIsolatedServer(child) {
+async function terminateIsolatedServer(child, verifyPortReleased = assertPortAvailable) {
   if (!child) return;
   if (child && child.exitCode === null && child.signalCode === null) {
     child.kill("SIGTERM");
@@ -178,7 +201,94 @@ async function terminateIsolatedServer(child) {
       }
     }
   }
-  await assertPortAvailable();
+  await verifyPortReleased();
+}
+
+async function settleWithin(action, timeoutMs) {
+  let timeout;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(action).then(() => true),
+      new Promise((resolveTimeout) => {
+        timeout = setTimeout(() => resolveTimeout(false), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export function createRenderCleanupOwner({ workspace, timeoutMs = 5_000, verifyPortReleased = assertPortAvailable }) {
+  let child = null;
+  let browserServer = null;
+  const pages = new Set();
+  let closePromise = null;
+  return Object.freeze({
+    setChild(value) { child = value; },
+    setBrowserServer(value) { browserServer = value; },
+    addPage(value) { pages.add(value); },
+    removePage(value) { pages.delete(value); },
+    close() {
+      if (closePromise) return closePromise;
+      closePromise = (async () => {
+        const errors = [];
+        try {
+          await terminateIsolatedServer(child, verifyPortReleased);
+        } catch (error) {
+          errors.push(error);
+        }
+        for (const page of pages) {
+          try {
+            if (!(await settleWithin(() => page.close(), timeoutMs))) errors.push(new Error("page close timed out"));
+          } catch (error) {
+            errors.push(error);
+          }
+        }
+        if (browserServer) {
+          let closed = false;
+          try {
+            closed = await settleWithin(() => browserServer.close(), timeoutMs);
+          } catch (error) {
+            errors.push(error);
+          }
+          if (!closed) {
+            try {
+              if (!(await settleWithin(() => browserServer.kill(), timeoutMs))) {
+                browserServer.process?.().kill("SIGKILL");
+              }
+            } catch (error) {
+              errors.push(error);
+              browserServer.process?.().kill("SIGKILL");
+            }
+          }
+        }
+        try {
+          await workspace.close();
+        } catch (error) {
+          errors.push(error);
+        }
+        if (errors.length > 0) throw new AggregateError(errors, "render smoke cleanup failed");
+      })();
+      return closePromise;
+    },
+  });
+}
+
+function installCleanupSignalHandlers(owner) {
+  let handling = false;
+  const handlers = new Map();
+  for (const [signal, exitCode] of [["SIGINT", 130], ["SIGTERM", 143]]) {
+    const handler = () => {
+      if (handling) return;
+      handling = true;
+      owner.close().finally(() => process.exit(exitCode));
+    };
+    handlers.set(signal, handler);
+    process.once(signal, handler);
+  }
+  return () => {
+    for (const [signal, handler] of handlers) process.off(signal, handler);
+  };
 }
 
 function safeName(route) {
@@ -236,29 +346,31 @@ export async function isExpectedTypedRenderResponse(response, expectedBaseUrl, r
   }
 }
 
-async function isExactV3ProductBuildAuthorityResponse(response, expectedBaseUrl) {
+async function isExactV3ProductBuildAuthorityResponse(response, expectedBaseUrl, parseProductBuildAuthorityV2) {
   if (response.request().method() !== "GET" || response.status() !== 200) return false;
   if (response.url() !== `${expectedBaseUrl}${V3_PRODUCT_BUILD_AUTHORITY_PATH}`) return false;
   try {
     const body = await response.json();
-    return isPlainObject(body)
-      && body.schema === "setfarm.product-build-authority.v2"
-      && body.runId === V3_RUN_ID
-      && body.disposition === "sealed_packet"
-      && isPlainObject(body.packetAuthority)
-      && body.refusal === null
-      && typeof body.authorityHash === "string"
-      && /^[a-f0-9]{64}$/.test(body.authorityHash);
+    if (!isPlainObject(body)
+      || Object.keys(body).join("\0") !== "schema\0runId\0disposition\0packetAuthority\0refusal\0authorityHash") return false;
+    const parsed = parseProductBuildAuthorityV2(body, V3_RUN_ID);
+    return parsed === body
+      && parsed.disposition === "sealed_packet"
+      && isPlainObject(parsed.packetAuthority)
+      && parsed.refusal === null;
   } catch {
     return false;
   }
 }
 
-export function createRequiredV3ProductBuildAuthorityTracker(expectedBaseUrl) {
+export function createRequiredV3ProductBuildAuthorityTracker(expectedBaseUrl, parseProductBuildAuthorityV2) {
+  if (typeof parseProductBuildAuthorityV2 !== "function") {
+    throw new Error("strict Product Build Authority V2 parser is required");
+  }
   let observed = false;
   return Object.freeze({
     async observe(response) {
-      if (!(await isExactV3ProductBuildAuthorityResponse(response, expectedBaseUrl))) return false;
+      if (!(await isExactV3ProductBuildAuthorityResponse(response, expectedBaseUrl, parseProductBuildAuthorityV2))) return false;
       observed = true;
       return true;
     },
@@ -268,10 +380,10 @@ export function createRequiredV3ProductBuildAuthorityTracker(expectedBaseUrl) {
   });
 }
 
-async function preflightRequiredV3ProductBuildAuthority() {
+async function preflightRequiredV3ProductBuildAuthority(parseProductBuildAuthorityV2) {
   const response = await fetch(`${baseUrl}${V3_PRODUCT_BUILD_AUTHORITY_PATH}`, { signal: AbortSignal.timeout(5_000) });
   const body = await response.json().catch(() => null);
-  const tracker = createRequiredV3ProductBuildAuthorityTracker(baseUrl);
+  const tracker = createRequiredV3ProductBuildAuthorityTracker(baseUrl, parseProductBuildAuthorityV2);
   const accepted = await tracker.observe({
     status: () => response.status,
     url: () => response.url,
@@ -280,6 +392,16 @@ async function preflightRequiredV3ProductBuildAuthority() {
   });
   if (!accepted) throw new Error("required V3 Product Build Authority preflight failed");
   tracker.requireObserved();
+}
+
+async function loadStrictProductBuildAuthorityV2Parser() {
+  const modulePath = resolve(rootDir, "dist-server/services/setfarm-product-build-authority.js");
+  if (!existsSync(modulePath)) throw new Error("compiled strict Product Build Authority parser is missing");
+  const module = await import(pathToFileURL(modulePath).href);
+  if (typeof module.parseProductBuildAuthorityV2 !== "function") {
+    throw new Error("compiled strict Product Build Authority V2 parser is unavailable");
+  }
+  return module.parseProductBuildAuthorityV2;
 }
 
 function assertNoFailedRequests(route, failures) {
@@ -330,26 +452,34 @@ async function assertRendered(page, route) {
 
 async function main() {
   assertExactBaseUrl(baseUrl);
+  assertExactRenderRoutes(routes);
   const screenshotWorkspace = await createRenderScreenshotWorkspace(screenshotParent);
   const screenshotDir = screenshotWorkspace.directory;
-  let child = null;
-  let browser = null;
-  const pages = new Set();
+  const cleanupOwner = createRenderCleanupOwner({ workspace: screenshotWorkspace });
+  const removeSignalHandlers = installCleanupSignalHandlers(cleanupOwner);
   const results = [];
   try {
-    child = await startIsolatedServer();
+    const child = await startIsolatedServer((value) => cleanupOwner.setChild(value));
     await assertExactChildListener(child);
-    await preflightRequiredV3ProductBuildAuthority();
-    browser = await chromium.launch({ headless: true });
+    const parseProductBuildAuthorityV2 = await loadStrictProductBuildAuthorityV2Parser();
+    await preflightRequiredV3ProductBuildAuthority(parseProductBuildAuthorityV2);
+    const browserServer = await chromium.launchServer({
+      headless: true,
+      handleSIGINT: false,
+      handleSIGTERM: false,
+      handleSIGHUP: false,
+    });
+    cleanupOwner.setBrowserServer(browserServer);
+    const browser = await chromium.connect(browserServer.wsEndpoint());
     for (const route of routes) {
       await assertExactChildListener(child);
       const page = await browser.newPage({ viewport: { width: 1440, height: 950 }, deviceScaleFactor: 1 });
-      pages.add(page);
+      cleanupOwner.addPage(page);
       const messages = [];
       const failures = [];
       const responseChecks = [];
       const v3Tracker = route === `/setfarm/runs/${V3_RUN_ID}`
-        ? createRequiredV3ProductBuildAuthorityTracker(baseUrl)
+        ? createRequiredV3ProductBuildAuthorityTracker(baseUrl, parseProductBuildAuthorityV2)
         : null;
       page.on("console", (msg) => messages.push({ type: msg.type(), text: msg.text() }));
       page.on("pageerror", (err) => messages.push({ type: "error", text: err.message }));
@@ -390,16 +520,14 @@ async function main() {
         visibleElements: state.visibleElements,
         screenshot: screenshotPath,
       });
-      await page.close();
-      pages.delete(page);
+      if (!(await settleWithin(() => page.close(), 5_000))) throw new Error(`${route} page close timed out`);
+      cleanupOwner.removePage(page);
     }
   } finally {
-    for (const page of pages) await page.close().catch(() => {});
-    if (browser) await browser.close().catch(() => {});
     try {
-      await terminateIsolatedServer(child);
+      await cleanupOwner.close();
     } finally {
-      await screenshotWorkspace.close();
+      removeSignalHandlers();
     }
   }
   console.log(JSON.stringify({ ok: true, baseUrl, routes: results }, null, 2));
