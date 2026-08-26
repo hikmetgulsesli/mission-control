@@ -36,8 +36,6 @@ const VENDOR_LOCK_SCHEMA = "mission-control.product-build-authority-v2-vendor-lo
 const VENDOR_COMPATIBILITY_SET_SCHEMA = "mission-control.setfarm-contract-compatibility-set.v1" as const;
 const FOCUSED_TEST_RECEIPT_SCHEMA = "mission-control.product-build-authority-v2-focused-test-receipt.v1" as const;
 const FOCUSED_TEST_TIMEOUT_MS = 120_000 as const;
-const CURRENT_RESPONSE_SUCCESS_COOLDOWN_MS = 30_000 as const;
-const CURRENT_RESPONSE_FAILURE_COOLDOWN_MS = 5_000 as const;
 const BUILD_IDENTITY_RELATIVE_PATH = "dist-server/internal-production-build-identity.v1.json" as const;
 const LOADED_BUILD_ENTRY_MODULE_PATH =
   "dist-server/services/product-build-authority-v2-delivery-evidence-v1.js" as const;
@@ -731,45 +729,28 @@ async function createCurrentProductBuildAuthorityV2DeliveryEvidenceResponseV1():
   });
 }
 
-type CurrentProductBuildAuthorityV2DeliveryEvidenceAttemptV1 = {
-  promise: Promise<ProductBuildAuthorityV2DeliveryEvidenceResponseV1>;
-  completedAt: number | null;
-  cooldownMs: number;
-};
-
 let currentProductBuildAuthorityV2DeliveryEvidenceAttemptV1:
-  CurrentProductBuildAuthorityV2DeliveryEvidenceAttemptV1 | null = null;
-
-function currentAttemptReusable(
-  attempt: CurrentProductBuildAuthorityV2DeliveryEvidenceAttemptV1,
-  now: number,
-): boolean {
-  if (attempt.completedAt === null) return true;
-  const elapsed = now - attempt.completedAt;
-  return elapsed >= 0 && elapsed < attempt.cooldownMs;
-}
+  Promise<ProductBuildAuthorityV2DeliveryEvidenceResponseV1> | null = null;
 
 export function currentProductBuildAuthorityV2DeliveryEvidenceResponseV1(): Promise<ProductBuildAuthorityV2DeliveryEvidenceResponseV1> {
-  const now = Date.now();
   const existing = currentProductBuildAuthorityV2DeliveryEvidenceAttemptV1;
-  if (existing !== null && currentAttemptReusable(existing, now)) return existing.promise;
+  if (existing !== null) return existing;
 
-  let attempt!: CurrentProductBuildAuthorityV2DeliveryEvidenceAttemptV1;
-  const promise = createCurrentProductBuildAuthorityV2DeliveryEvidenceResponseV1().then(
-    (response) => {
-      attempt.completedAt = Date.now();
-      attempt.cooldownMs = CURRENT_RESPONSE_SUCCESS_COOLDOWN_MS;
-      return response;
+  const attempt = createCurrentProductBuildAuthorityV2DeliveryEvidenceResponseV1();
+  currentProductBuildAuthorityV2DeliveryEvidenceAttemptV1 = attempt;
+  void attempt.then(
+    () => {
+      if (currentProductBuildAuthorityV2DeliveryEvidenceAttemptV1 === attempt) {
+        currentProductBuildAuthorityV2DeliveryEvidenceAttemptV1 = null;
+      }
     },
-    (error: unknown) => {
-      attempt.completedAt = Date.now();
-      attempt.cooldownMs = CURRENT_RESPONSE_FAILURE_COOLDOWN_MS;
-      throw error;
+    () => {
+      if (currentProductBuildAuthorityV2DeliveryEvidenceAttemptV1 === attempt) {
+        currentProductBuildAuthorityV2DeliveryEvidenceAttemptV1 = null;
+      }
     },
   );
-  attempt = { promise, completedAt: null, cooldownMs: 0 };
-  currentProductBuildAuthorityV2DeliveryEvidenceAttemptV1 = attempt;
-  return promise;
+  return attempt;
 }
 
 const productBuildAuthorityV2LoadedBuildStartupState = await captureProductBuildAuthorityV2LoadedBuildV1()

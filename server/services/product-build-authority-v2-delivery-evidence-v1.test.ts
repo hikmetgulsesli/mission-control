@@ -362,7 +362,7 @@ test("clean build removes stale output and recreates deterministic build identit
   }
 });
 
-test("private endpoint producer enforces attestation, real lock bytes, and bounded single-flight cooldowns", async () => {
+test("private endpoint producer enforces attestation, real lock bytes, and in-flight-only coalescing", async () => {
   const ownerModuleUrl = new URL("./product-build-authority-v2-delivery-evidence-v1.ts", import.meta.url).href;
   const realLockBase64 = (await readFile(new URL(
     "../../contracts/vendor/setfarm/mission-control-contracts.v1.lock.json",
@@ -430,6 +430,8 @@ const lock = mode === "real-lock-success" || mode === "real-lock-tamper"
 bytes.set(root + "/contracts/vendor/setfarm/mission-control-contracts.v1.lock.json", Buffer.from(JSON.stringify(lock)));
 let focusedRuns = 0;
 let focusedAttempts = 0;
+let runtimeDirty = false;
+let focusedFailure = mode === "cache-failure";
 const callback = () => undefined;
 callback[promisify.custom] = async (command, args, options) => {
   if (command === process.execPath) {
@@ -438,7 +440,7 @@ callback[promisify.custom] = async (command, args, options) => {
     assert.equal(options.killSignal, "SIGKILL");
     if (mode === "focused-failure") throw new Error("focused failure");
     focusedAttempts += 1;
-    if (mode === "cache-failure") throw new Error("focused failure");
+    if (focusedFailure) throw new Error("focused failure");
     focusedRuns += 1;
     return { stdout: "", stderr: "" };
   }
@@ -447,7 +449,7 @@ callback[promisify.custom] = async (command, args, options) => {
   assert.deepEqual(args.slice(0, 2), ["-C", root]);
   const commandArgs = args.slice(2);
   if (commandArgs[0] === "branch") return { stdout: "main\\n", stderr: "" };
-  if (commandArgs[0] === "status") return { stdout: mode === "dirty" && focusedRuns > 0 ? " M server/routes/setfarm-operational.ts\\n" : "", stderr: "" };
+  if (commandArgs[0] === "status") return { stdout: (mode === "dirty" && focusedRuns > 0) || runtimeDirty ? " M server/routes/setfarm-operational.ts\\n" : "", stderr: "" };
   if (commandArgs[0] === "merge-base") return { stdout: "", stderr: "" };
   if (commandArgs[0] === "show") {
     const path = commandArgs[1].slice(commandArgs[1].indexOf(":") + 1);
@@ -489,14 +491,11 @@ test("final attestation", async (context) => {
     const [firstResponse, concurrentResponse] = await Promise.all([first, concurrent]);
     assert.strictEqual(concurrentResponse, firstResponse);
     assert.equal(focusedAttempts, 1);
-    now += 29_999;
-    assert.strictEqual(owner.currentProductBuildAuthorityV2DeliveryEvidenceResponseV1(), first);
+    runtimeDirty = true;
+    const fresh = owner.currentProductBuildAuthorityV2DeliveryEvidenceResponseV1();
+    assert.notStrictEqual(fresh, first);
+    await assert.rejects(fresh, /PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_NOT_CURRENT/);
     assert.equal(focusedAttempts, 1);
-    now += 1;
-    const afterCooldown = owner.currentProductBuildAuthorityV2DeliveryEvidenceResponseV1();
-    assert.notStrictEqual(afterCooldown, first);
-    await afterCooldown;
-    assert.equal(focusedAttempts, 2);
     return;
   }
   if (mode === "cache-failure") {
@@ -506,15 +505,10 @@ test("final attestation", async (context) => {
     await assert.rejects(first, /PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_FOCUSED_TESTS_FAILED/);
     await assert.rejects(concurrent, /PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_FOCUSED_TESTS_FAILED/);
     assert.equal(focusedAttempts, 1);
-    now += 4_999;
-    const duringCooldown = owner.currentProductBuildAuthorityV2DeliveryEvidenceResponseV1();
-    assert.strictEqual(duringCooldown, first);
-    await assert.rejects(duringCooldown, /PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_FOCUSED_TESTS_FAILED/);
-    assert.equal(focusedAttempts, 1);
-    now += 1;
-    const afterCooldown = owner.currentProductBuildAuthorityV2DeliveryEvidenceResponseV1();
-    assert.notStrictEqual(afterCooldown, first);
-    await assert.rejects(afterCooldown, /PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_FOCUSED_TESTS_FAILED/);
+    focusedFailure = false;
+    const fresh = owner.currentProductBuildAuthorityV2DeliveryEvidenceResponseV1();
+    assert.notStrictEqual(fresh, first);
+    await fresh;
     assert.equal(focusedAttempts, 2);
     return;
   }

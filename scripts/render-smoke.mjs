@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, resolve } from "node:path";
 import { chromium } from "playwright";
 
@@ -75,13 +75,34 @@ function assertNoFatalConsole(route, messages) {
   }
 }
 
-async function isExpectedTypedNotFound(response) {
-  if (response.status() !== 404) return false;
+export async function isExpectedTypedRenderResponse(response, expectedBaseUrl, renderedRoute) {
   const url = new URL(response.url());
+  const expectedOrigin = new URL(expectedBaseUrl).origin;
+  if (url.origin !== expectedOrigin || url.search !== "" || url.hash !== "") return false;
+  if (response.status() === 409) {
+    const match = url.pathname.match(/^\/api\/setfarm\/runs\/([^/]+)\/product-build-authority$/);
+    if (!match) return false;
+    try {
+      if (renderedRoute !== `/setfarm/runs/${decodeURIComponent(match[1])}`) return false;
+      const body = await response.json();
+      return Object.getPrototypeOf(body) === Object.prototype
+        && Object.keys(body).join("\0") === "status\0code\0reason\0upstreamStatus\0upstreamCode"
+        && body.status === "unavailable"
+        && body.code === "SETFARM_PRODUCT_BUILD_AUTHORITY_NOT_READY"
+        && body.reason === "not_ready"
+        && body.upstreamStatus === 409
+        && body.upstreamCode === "RUNTIME_PACKET_RUN_NOT_V3";
+    } catch {
+      return false;
+    }
+  }
+  if (response.status() !== 404) return false;
   if (!/^\/api\/setfarm\/runs\/[^/]+\/operational-snapshot$/.test(url.pathname)) return false;
   try {
     const body = await response.json();
-    return body?.status === "unavailable"
+    return Object.getPrototypeOf(body) === Object.prototype
+      && Object.keys(body).join("\0") === "status\0code\0reason"
+      && body.status === "unavailable"
       && body?.code === "SETFARM_OPERATIONAL_SNAPSHOT_NOT_FOUND"
       && body?.reason === "not_found";
   } catch {
@@ -158,7 +179,7 @@ async function main() {
         const url = response.url();
         if (status >= 400 && !/favicon/i.test(url)) {
           responseChecks.push((async () => {
-            if (await isExpectedTypedNotFound(response)) return;
+            if (await isExpectedTypedRenderResponse(response, baseUrl, route)) return;
             failures.push({ status, url });
           })());
         }
@@ -187,10 +208,12 @@ async function main() {
   console.log(JSON.stringify({ ok: true, baseUrl, routes: results }, null, 2));
 }
 
-main().catch((err) => {
-  console.error(`[render-smoke] ${err?.message || err}`);
-  if (/Executable doesn't exist|browserType.launch/i.test(String(err?.message || err))) {
-    console.error("[render-smoke] Install Chromium once with: npx playwright install chromium");
-  }
-  process.exit(1);
-});
+if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+  main().catch((err) => {
+    console.error(`[render-smoke] ${err?.message || err}`);
+    if (/Executable doesn't exist|browserType.launch/i.test(String(err?.message || err))) {
+      console.error("[render-smoke] Install Chromium once with: npx playwright install chromium");
+    }
+    process.exit(1);
+  });
+}
