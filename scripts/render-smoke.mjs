@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { execFile, spawn } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, rm, rmdir } from "node:fs/promises";
 import { createServer } from "node:net";
 import { promisify } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -16,7 +17,7 @@ const LEGACY_RUN_ID = "ac8cea43-7686-4d27-8092-1e3dd9207ca4";
 const V3_RUN_ID = "ad47fe65-4ec4-4fb5-89da-fff71eb4e79a";
 const V3_PRODUCT_BUILD_AUTHORITY_PATH = `/api/setfarm/runs/${V3_RUN_ID}/product-build-authority`;
 const baseUrl = process.env.MC_RENDER_BASE_URL || REQUIRED_BASE_URL;
-const screenshotDir = resolve(rootDir, process.env.MC_RENDER_SCREENSHOT_DIR || "artifacts/render-smoke");
+const screenshotParent = resolve(rootDir, process.env.MC_RENDER_SCREENSHOT_DIR || "artifacts/render-smoke");
 const routes = (process.env.MC_RENDER_ROUTES || "/,/setfarm,/setfarm/active,/rules")
   .split(",")
   .map((route) => route.trim())
@@ -38,6 +39,26 @@ function assertExactBaseUrl(value) {
 
 function isPlainObject(value) {
   return value !== null && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype;
+}
+
+export async function createRenderScreenshotWorkspace(parentDirectory) {
+  const parentExisted = existsSync(parentDirectory);
+  await mkdir(parentDirectory, { recursive: true });
+  const directory = await mkdtemp(resolve(parentDirectory, ".render-smoke-"));
+  let closed = false;
+  return Object.freeze({
+    directory,
+    async close() {
+      if (closed) return;
+      closed = true;
+      await rm(directory, { recursive: true, force: true });
+      if (!parentExisted) {
+        await rmdir(parentDirectory).catch((error) => {
+          if (error?.code !== "ENOENT" && error?.code !== "ENOTEMPTY") throw error;
+        });
+      }
+    },
+  });
 }
 
 async function isReachable(url) {
@@ -309,7 +330,8 @@ async function assertRendered(page, route) {
 
 async function main() {
   assertExactBaseUrl(baseUrl);
-  mkdirSync(screenshotDir, { recursive: true });
+  const screenshotWorkspace = await createRenderScreenshotWorkspace(screenshotParent);
+  const screenshotDir = screenshotWorkspace.directory;
   let child = null;
   let browser = null;
   const pages = new Set();
@@ -374,7 +396,11 @@ async function main() {
   } finally {
     for (const page of pages) await page.close().catch(() => {});
     if (browser) await browser.close().catch(() => {});
-    await terminateIsolatedServer(child);
+    try {
+      await terminateIsolatedServer(child);
+    } finally {
+      await screenshotWorkspace.close();
+    }
   }
   console.log(JSON.stringify({ ok: true, baseUrl, routes: results }, null, 2));
 }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -8,6 +8,7 @@ import test from "node:test";
 import { promisify } from "node:util";
 
 import {
+  createRenderScreenshotWorkspace,
   createRequiredV3ProductBuildAuthorityTracker,
   isExpectedTypedRenderResponse,
 } from "../scripts/render-smoke.mjs";
@@ -170,5 +171,21 @@ test("render smoke refuses a preoccupied isolated port without reusing its liste
   } finally {
     await new Promise<void>((resolveClose, rejectClose) => server.close((error) => error ? rejectClose(error) : resolveClose()));
     await rm(temporary, { recursive: true, force: true });
+  }
+});
+
+test("render smoke removes only its operation-owned screenshot workspace", async () => {
+  const parent = await mkdtemp(join(tmpdir(), "mc-render-screenshots-"));
+  const sentinel = join(parent, "keep.txt");
+  await writeFile(sentinel, "keep\n", "utf8");
+  try {
+    const workspace = await createRenderScreenshotWorkspace(parent);
+    assert.equal(workspace.directory.startsWith(`${parent}/.render-smoke-`), true);
+    await writeFile(join(workspace.directory, "page.png"), "fake", "utf8");
+    await workspace.close();
+    await workspace.close();
+    assert.deepEqual(await readdir(parent), ["keep.txt"]);
+  } finally {
+    await rm(parent, { recursive: true, force: true });
   }
 });
