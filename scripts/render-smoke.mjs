@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, rmdir } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, rm, rmdir } from "node:fs/promises";
 import { createServer } from "node:net";
 import { promisify } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -55,12 +55,20 @@ function isPlainObject(value) {
 }
 
 export async function createRenderScreenshotWorkspace(parentDirectory) {
-  const createdDirectories = [];
+  const missingDirectories = [];
   for (let current = parentDirectory; !existsSync(current); current = dirname(current)) {
-    createdDirectories.push(current);
+    missingDirectories.push(current);
     if (dirname(current) === current) break;
   }
-  await mkdir(parentDirectory, { recursive: true });
+  const createdDirectories = [];
+  for (const directory of [...missingDirectories].reverse()) {
+    try {
+      await mkdir(directory);
+      createdDirectories.push(directory);
+    } catch (error) {
+      if (error?.code !== "EEXIST" || !(await lstat(directory)).isDirectory()) throw error;
+    }
+  }
   const directory = await mkdtemp(resolve(parentDirectory, ".render-smoke-"));
   let closed = false;
   return Object.freeze({
@@ -69,7 +77,7 @@ export async function createRenderScreenshotWorkspace(parentDirectory) {
       if (closed) return;
       closed = true;
       await rm(directory, { recursive: true, force: true });
-      for (const createdDirectory of createdDirectories) {
+      for (const createdDirectory of [...createdDirectories].reverse()) {
         await rmdir(createdDirectory).catch((error) => {
           if (error?.code !== "ENOENT" && error?.code !== "ENOTEMPTY") throw error;
         });
@@ -230,14 +238,36 @@ async function settleWithin(action, timeoutMs) {
   }
 }
 
+async function settleValueWithin(promise, timeoutMs) {
+  let timeout;
+  try {
+    return await Promise.race([
+      promise.then(
+        (value) => ({ status: "fulfilled", value }),
+        (error) => ({ status: "rejected", error }),
+      ),
+      new Promise((resolveTimeout) => {
+        timeout = setTimeout(() => resolveTimeout({ status: "timeout" }), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export function createRenderCleanupOwner({ workspace, timeoutMs = 5_000, verifyPortReleased = assertPortAvailable }) {
   let child = null;
   let browserServer = null;
+  let browserLaunch = null;
   const pages = new Set();
   let closePromise = null;
   return Object.freeze({
     setChild(value) { child = value; },
     setBrowserServer(value) { browserServer = value; },
+    setBrowserLaunch(value) {
+      browserLaunch = Promise.resolve(value);
+      browserLaunch.then((server) => { browserServer = server; }, () => {});
+    },
     addPage(value) { pages.add(value); },
     removePage(value) { pages.delete(value); },
     close() {
@@ -255,6 +285,11 @@ export function createRenderCleanupOwner({ workspace, timeoutMs = 5_000, verifyP
           } catch (error) {
             errors.push(error);
           }
+        }
+        if (!browserServer && browserLaunch) {
+          const launchResult = await settleValueWithin(browserLaunch, timeoutMs);
+          if (launchResult.status === "fulfilled") browserServer = launchResult.value;
+          if (launchResult.status === "timeout") errors.push(new Error("browser launch cleanup timed out"));
         }
         if (browserServer) {
           let closed = false;
@@ -284,6 +319,18 @@ export function createRenderCleanupOwner({ workspace, timeoutMs = 5_000, verifyP
       return closePromise;
     },
   });
+}
+
+export async function runOwnedRenderLifecycle(owner, action, removeSignalHandlers) {
+  try {
+    return await action();
+  } finally {
+    try {
+      await owner.close();
+    } finally {
+      removeSignalHandlers();
+    }
+  }
 }
 
 export function installCleanupSignalHandlers(owner, processTarget = process, exit = (code) => process.exit(code)) {
@@ -469,13 +516,21 @@ async function main() {
   const screenshotDir = screenshotWorkspace.directory;
   const cleanupOwner = createRenderCleanupOwner({ workspace: screenshotWorkspace });
   const removeSignalHandlers = installCleanupSignalHandlers(cleanupOwner);
-  const results = [];
-  try {
+  const results = await runOwnedRenderLifecycle(cleanupOwner, async () => {
+    const renderedResults = [];
     const child = await startIsolatedServer((value) => cleanupOwner.setChild(value));
     await assertExactChildListener(child);
     const parseProductBuildAuthorityV2 = await loadStrictProductBuildAuthorityV2Parser();
     await preflightRequiredV3ProductBuildAuthority(parseProductBuildAuthorityV2);
-    const browserServer = await chromium.launchServer({ headless: true });
+    const browserLaunch = chromium.launchServer({
+      headless: true,
+      handleSIGINT: false,
+      handleSIGTERM: false,
+      handleSIGHUP: false,
+      timeout: 4_000,
+    });
+    cleanupOwner.setBrowserLaunch(browserLaunch);
+    const browserServer = await browserLaunch;
     cleanupOwner.setBrowserServer(browserServer);
     const browser = await chromium.connect(browserServer.wsEndpoint());
     for (const route of routes) {
@@ -520,7 +575,7 @@ async function main() {
       assertNoFatalConsole(route, messages);
       const screenshotPath = resolve(screenshotDir, `${safeName(route)}.png`);
       await page.screenshot({ path: screenshotPath, fullPage: true });
-      results.push({
+      renderedResults.push({
         route,
         title: state.title,
         textLength: state.textLength,
@@ -530,13 +585,8 @@ async function main() {
       if (!(await settleWithin(() => page.close(), 5_000))) throw new Error(`${route} page close timed out`);
       cleanupOwner.removePage(page);
     }
-  } finally {
-    try {
-      await cleanupOwner.close();
-    } finally {
-      removeSignalHandlers();
-    }
-  }
+    return renderedResults;
+  }, removeSignalHandlers);
   console.log(JSON.stringify({ ok: true, baseUrl, routes: results }, null, 2));
 }
 

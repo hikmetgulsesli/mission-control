@@ -17,6 +17,7 @@ import {
   createRequiredV3ProductBuildAuthorityTracker,
   installCleanupSignalHandlers,
   isExpectedTypedRenderResponse,
+  runOwnedRenderLifecycle,
   terminateIsolatedServer,
   waitForIsolatedServer,
 } from "../scripts/render-smoke.mjs";
@@ -415,10 +416,25 @@ test("cleanup frees the server before bounded browser cleanup and preserves the 
   };
   const owner = createRenderCleanupOwner({ workspace, timeoutMs: 20, verifyPortReleased: async () => events.push("port") });
   owner.setChild(child);
-  owner.setBrowserServer(browserServer);
+  owner.setBrowserLaunch(new Promise((resolveLaunch) => setImmediate(() => resolveLaunch(browserServer))));
   await owner.close();
   assert.deepEqual(events.slice(0, 2), ["child:SIGTERM", "port"]);
   assert.equal(events.includes("browser:kill"), true);
   assert.equal(events.at(-1), "workspace");
   await owner.close();
+});
+
+test("preflight and response failures always pass through the same cleanup owner", async () => {
+  for (const message of ["preflight failed", "response failed"]) {
+    const events: string[] = [];
+    const owner = { close: async () => { events.push("close"); } };
+    await assert.rejects(
+      runOwnedRenderLifecycle(owner, async () => {
+        events.push("action");
+        throw new Error(message);
+      }, () => events.push("signals-removed")),
+      new RegExp(message),
+    );
+    assert.deepEqual(events, ["action", "close", "signals-removed"]);
+  }
 });
