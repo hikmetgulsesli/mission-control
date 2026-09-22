@@ -29,6 +29,7 @@ function afterCursor<T extends V3PendingTransferRun>(rows: readonly T[], cursor:
 }
 
 class MemoryState implements V3ProjectTransferSchedulerStateStore {
+  saves = 0;
   state: V3TransferSchedulerStateV1 = {
     schema: "mission-control.v3-project-transfer-scheduler-state.v1",
     pendingCursor: null,
@@ -37,8 +38,161 @@ class MemoryState implements V3ProjectTransferSchedulerStateStore {
   };
 
   load() { return structuredClone(this.state); }
-  save(state: V3TransferSchedulerStateV1) { this.state = structuredClone(state); }
+  save(state: V3TransferSchedulerStateV1) {
+    this.saves += 1;
+    this.state = structuredClone(state);
+  }
 }
+
+test("empty null-cursor ticks keep polling without rewriting scheduler state", async () => {
+  const state = new MemoryState();
+  let pendingQueries = 0;
+  let auditQueries = 0;
+  let processed = 0;
+  const source: V3ProjectTransferCandidateSource = {
+    async listPending() { pendingQueries += 1; return []; },
+    async listAcknowledgedForAudit() { auditQueries += 1; return []; },
+    async findByRunId() { return null; },
+  };
+  const input = {
+    source,
+    stateStore: state,
+    projects: [],
+    processRun: async () => { processed += 1; },
+  };
+
+  await runIncrementalV3ProjectTransfers(input);
+  await runIncrementalV3ProjectTransfers(input);
+
+  assert.equal(pendingQueries, 2);
+  assert.equal(auditQueries, 2);
+  assert.equal(processed, 0);
+  assert.equal(state.saves, 0);
+  assert.deepEqual(state.load(), {
+    schema: "mission-control.v3-project-transfer-scheduler-state.v1",
+    pendingCursor: null,
+    acknowledgedAuditCursor: null,
+    updatedAt: "2026-07-14T00:00:00.000Z",
+  });
+});
+
+test("a later pending run persists its cursor before processing", async () => {
+  const state = new MemoryState();
+  const candidate = run(1);
+  let queries = 0;
+  const order: string[] = [];
+  const source: V3ProjectTransferCandidateSource = {
+    async listPending() { queries += 1; return queries === 1 ? [] : [candidate]; },
+    async listAcknowledgedForAudit() { return []; },
+    async findByRunId() { return null; },
+  };
+  const stateStore: V3ProjectTransferSchedulerStateStore = {
+    load: () => state.load(),
+    save: (next) => { order.push("save"); state.save(next); },
+  };
+  const input = {
+    source,
+    stateStore,
+    projects: [],
+    processRun: async () => { order.push("process"); },
+  };
+
+  await runIncrementalV3ProjectTransfers(input);
+  await runIncrementalV3ProjectTransfers(input);
+
+  assert.equal(queries, 2);
+  assert.deepEqual(order, ["save", "process"]);
+  assert.equal(state.saves, 1);
+  assert.deepEqual(state.load().pendingCursor, {
+    timestamp: candidate.cursorTimestamp,
+    runId: candidate.id,
+  });
+});
+
+test("an exhausted non-null cursor persists its reset to null", async () => {
+  const state = new MemoryState();
+  state.state.pendingCursor = { timestamp: "2026-07-14T00:00:01.000Z", runId: "old-run" };
+  const afters: (V3TransferCursor | null)[] = [];
+  const source: V3ProjectTransferCandidateSource = {
+    async listPending({ after }) { afters.push(after); return []; },
+    async listAcknowledgedForAudit() { return []; },
+    async findByRunId() { return null; },
+  };
+
+  await runIncrementalV3ProjectTransfers({
+    source,
+    stateStore: state,
+    projects: [],
+    processRun: async () => { throw new Error("NO_RUN_SELECTED"); },
+  });
+
+  assert.deepEqual(afters, [
+    { timestamp: "2026-07-14T00:00:01.000Z", runId: "old-run" },
+    null,
+  ]);
+  assert.equal(state.saves, 1);
+  assert.equal(state.load().pendingCursor, null);
+});
+
+test("an exact ACK audit page persists its cursor without replay effects", async () => {
+  const state = new MemoryState();
+  const acknowledged: V3AcknowledgedTransferAuditRow = {
+    ...run(2),
+    projectId: "project-2",
+    projectionHash: "a".repeat(64),
+    projectRecordHash: "b".repeat(64),
+    persistedAt: "2026-07-14T00:00:02.000Z",
+  };
+  const source: V3ProjectTransferCandidateSource = {
+    async listPending() { return []; },
+    async listAcknowledgedForAudit() { return [acknowledged]; },
+    async findByRunId() { return null; },
+  };
+  const result = await runIncrementalV3ProjectTransfers({
+    source,
+    stateStore: state,
+    projects: [{
+      id: acknowledged.projectId,
+      productCompilerProtocol: "v3",
+      workflowRunId: acknowledged.id,
+      canonicalProjectionHash: acknowledged.projectionHash,
+      canonicalProjectRecordHash: acknowledged.projectRecordHash,
+      canonicalProjectionPersistedAt: acknowledged.persistedAt,
+    }],
+    processRun: async () => { throw new Error("EXACT_ACK_MUST_NOT_REPLAY"); },
+  });
+
+  assert.equal(result.selected, 0);
+  assert.equal(result.acknowledgedAudited, 1);
+  assert.equal(state.saves, 1);
+  assert.deepEqual(state.load().acknowledgedAuditCursor, {
+    timestamp: acknowledged.cursorTimestamp,
+    runId: acknowledged.id,
+  });
+});
+
+test("a failed state save prevents pending transfer effects", async () => {
+  const candidate = run(3);
+  let processed = 0;
+  const source: V3ProjectTransferCandidateSource = {
+    async listPending() { return [candidate]; },
+    async listAcknowledgedForAudit() { return []; },
+    async findByRunId() { return null; },
+  };
+  const state = new MemoryState();
+  const stateStore: V3ProjectTransferSchedulerStateStore = {
+    load: () => state.load(),
+    save: () => { throw new Error("DURABLE_SAVE_FAILED"); },
+  };
+
+  await assert.rejects(runIncrementalV3ProjectTransfers({
+    source,
+    stateStore,
+    projects: [],
+    processRun: async () => { processed += 1; },
+  }), /DURABLE_SAVE_FAILED/);
+  assert.equal(processed, 0);
+});
 
 test("hundreds of ACKed runs plus one unacked run produce one bounded upstream transfer", async () => {
   const acknowledged: V3AcknowledgedTransferAuditRow[] = Array.from({ length: 500 }, (_, index) => ({

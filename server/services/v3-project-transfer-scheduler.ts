@@ -327,12 +327,18 @@ export async function runIncrementalV3ProjectTransfers(input: Readonly<{
   // Persist cursor advancement before upstream effects. A crashing worker can
   // be revisited after bounded wrap; a permanently bad run cannot pin page 1
   // and starve newer terminal runs.
-  input.stateStore.save({
-    schema: "mission-control.v3-project-transfer-scheduler-state.v1",
-    pendingCursor: pendingPage.cursor,
-    acknowledgedAuditCursor: auditPage.cursor,
-    updatedAt: (input.now ?? (() => new Date()))().toISOString(),
-  });
+  const emptyNullCursorTick = state.pendingCursor === null
+    && state.acknowledgedAuditCursor === null
+    && pendingPage.rows.length === 0
+    && auditPage.rows.length === 0;
+  if (!emptyNullCursorTick) {
+    input.stateStore.save({
+      schema: "mission-control.v3-project-transfer-scheduler-state.v1",
+      pendingCursor: pendingPage.cursor,
+      acknowledgedAuditCursor: auditPage.cursor,
+      updatedAt: (input.now ?? (() => new Date()))().toISOString(),
+    });
+  }
   await mapBounded(selected, input.concurrency ?? 2, input.processRun);
   return {
     selected: selected.length,
