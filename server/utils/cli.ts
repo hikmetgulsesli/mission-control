@@ -2,6 +2,7 @@ import { execFile as execFileCb } from 'child_process';
 import { promisify } from 'util';
 import { dirname } from 'path';
 import { config } from '../config.js';
+import { task6aSelectedCliNoSpawn, TASK6A_SELECTED_CLI_NO_SPAWN } from './task6a-selected-cli-fence.js';
 
 const execFileAsync = promisify(execFileCb);
 const nodeBinDir = dirname(process.execPath);
@@ -48,6 +49,7 @@ function release(): void {
 }
 
 export async function runCli(cmd: string, args: string[]): Promise<string> {
+  if (task6aSelectedCliNoSpawn) throw new Error(TASK6A_SELECTED_CLI_NO_SPAWN);
   const key = `${cmd} ${args.join(' ')}`;
   const existing = inflight.get(key);
   if (existing) return existing;
