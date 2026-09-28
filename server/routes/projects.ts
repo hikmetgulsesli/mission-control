@@ -40,6 +40,10 @@ import {
 import { isSetfarmOperationalActiveRunStatusV1 } from "../shared/setfarm-operational-active-run-status-v1.js";
 
 const router = Router();
+// Private Task6A rehearsal only. Any present value refuses project starts;
+// ordinary startup remains unchanged when the flag is absent.
+const task6aProjectStartNoSpawn = Object.hasOwn(process.env, "MC_TASK6A_PROJECT_START_NO_SPAWN_V1");
+const TASK6A_PROJECT_START_NO_SPAWN = "MC_TASK6A_PROJECT_START_NO_SPAWN";
 const PROJECTS_FILE = (config as any).projectsJson || join(import.meta.dirname, "../../projects.json");
 const BUNDLED_PROJECTS_FILE = join(import.meta.dirname || __dirname, "../../projects.json");
 const DISABLED_DIR = join(PATHS.setfarmDir, "..", "disabled-services");
@@ -1151,6 +1155,10 @@ function systemctlAction(action: string, service: string) {
 }
 
 router.post("/projects/:id/toggle", async (req, res) => {
+  if (task6aProjectStartNoSpawn && req.body?.action === "start") {
+    res.status(503).json({ error: TASK6A_PROJECT_START_NO_SPAWN });
+    return;
+  }
   try {
     const { id } = req.params;
     const { action } = req.body;
@@ -1291,6 +1299,10 @@ router.post("/projects/stop-all", async (_req, res) => {
 });
 
 router.post("/projects/start-all", async (_req, res) => {
+  if (task6aProjectStartNoSpawn) {
+    res.status(503).json({ error: TASK6A_PROJECT_START_NO_SPAWN });
+    return;
+  }
   try {
     const projects = await enrichWithStatus(loadProjects());
     const results: { id: string; name: string; started: boolean; error?: string }[] = [];
