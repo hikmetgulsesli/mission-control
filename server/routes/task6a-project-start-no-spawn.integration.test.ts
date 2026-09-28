@@ -35,6 +35,15 @@ function stopDisposableProject(root: string): void {
   try { process.kill(-pid, 'SIGTERM'); } catch { /* already stopped */ }
 }
 
+async function cleanupFixture(root: string, child: ChildProcess | undefined): Promise<void> {
+  let failure: unknown;
+  try { stopDisposableProject(root); } catch (error) { failure = error; }
+  try { if (child) await stopChild(child); } catch (error) { failure ??= error; }
+  // Preserve the exact disposable root for diagnosis if identity/reaping failed.
+  if (failure) throw failure;
+  if (/^\/tmp\/mc-task6a-project-[A-Za-z0-9]+$/.test(root)) rmSync(root, { recursive: true });
+}
+
 function makeProject(root: string): void {
   const repo = path.join(root, 'repo');
   const bin = path.join(root, 'bin');
@@ -150,9 +159,7 @@ for (const flag of ['1', '0']) {
       assert.equal(stop.status, 200);
       assert.equal((await stop.json() as { success: unknown }).success, true);
     } finally {
-      stopDisposableProject(root);
-      if (child) await stopChild(child);
-      if (/^\/tmp\/mc-task6a-project-[A-Za-z0-9]+$/.test(root)) rmSync(root, { recursive: true });
+      await cleanupFixture(root, child);
     }
   });
 }
@@ -172,8 +179,6 @@ test('ordinary project start still executes a disposable child', async () => {
     projectPid = Number(readFileSync(path.join(root, 'child-ran'), 'utf8'));
     assert.equal(Number.isSafeInteger(projectPid) && projectPid > 0, true);
   } finally {
-    stopDisposableProject(root);
-    if (child) await stopChild(child);
-    if (/^\/tmp\/mc-task6a-project-[A-Za-z0-9]+$/.test(root)) rmSync(root, { recursive: true });
+    await cleanupFixture(root, child);
   }
 });
