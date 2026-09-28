@@ -616,6 +616,149 @@ export async function checkMissingInput(runId: string) {
 
 // === Agent Feed (chat-style agent output log) ===
 
+let restrictedAgentFeedReady: Promise<void> | null = null;
+
+/** Private Task6A historical-feed read proof; no live launcher selects it. */
+export function verifyRestrictedAgentFeedRead(): Promise<void> {
+  if (!restrictedAgentFeedReady) {
+    restrictedAgentFeedReady = (async () => {
+      try {
+        await sql.begin(async (transaction) => {
+          const tx = transaction as unknown as typeof sql;
+          await tx`SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY`;
+          await tx`SET LOCAL lock_timeout = '2s'`;
+          await tx`SET LOCAL statement_timeout = '5s'`;
+          await tx`SET LOCAL search_path = pg_catalog, public`;
+          const roles = await tx<Array<{ sessionLogin: string; login: string;
+            canLogin: boolean; inherits: boolean; memberships: number;
+            superuser: boolean; bypassRls: boolean; createRole: boolean;
+            createDatabase: boolean; databaseCreate: boolean; schemaCreate: boolean;
+            ownerMember: boolean; canSelect: boolean; extraTable: boolean;
+            extraColumn: boolean; sequenceWrite: boolean; sequenceName: string | null;
+            relationKind: string; persistence: string; rowSecurity: boolean;
+            forceRowSecurity: boolean; isPartition: boolean; hasAncestors: boolean;
+            hasDescendants: boolean }>>`
+            SELECT session_user AS "sessionLogin", current_user AS login,
+              r.rolcanlogin AS "canLogin", r.rolinherit AS inherits,
+              (SELECT COUNT(*)::integer FROM pg_catalog.pg_auth_members m
+                WHERE m.member = r.oid) AS memberships,
+              r.rolsuper AS superuser, r.rolbypassrls AS "bypassRls",
+              r.rolcreaterole AS "createRole", r.rolcreatedb AS "createDatabase",
+              has_database_privilege(current_user, current_database(), 'CREATE') AS "databaseCreate",
+              has_schema_privilege(current_user, 'public', 'CREATE') AS "schemaCreate",
+              pg_catalog.pg_has_role(current_user, c.relowner, 'MEMBER') AS "ownerMember",
+              has_table_privilege(current_user, c.oid, 'SELECT') AS "canSelect",
+              has_table_privilege(current_user, c.oid,
+                'INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN') AS "extraTable",
+              has_any_column_privilege(current_user, c.oid,
+                'INSERT, UPDATE, REFERENCES') AS "extraColumn",
+              pg_catalog.pg_get_serial_sequence('public.agent_feed', 'id') AS "sequenceName",
+              has_sequence_privilege(current_user,
+                pg_catalog.pg_get_serial_sequence('public.agent_feed', 'id'),
+                'USAGE, UPDATE') AS "sequenceWrite",
+              c.relkind AS "relationKind", c.relpersistence AS persistence,
+              c.relrowsecurity AS "rowSecurity", c.relforcerowsecurity AS "forceRowSecurity",
+              c.relispartition AS "isPartition",
+              EXISTS (SELECT 1 FROM pg_catalog.pg_inherits i WHERE i.inhrelid = c.oid)
+                AS "hasAncestors",
+              EXISTS (SELECT 1 FROM pg_catalog.pg_inherits i WHERE i.inhparent = c.oid)
+                AS "hasDescendants"
+            FROM pg_catalog.pg_roles r
+            JOIN pg_catalog.pg_class c ON c.oid = pg_catalog.to_regclass('public.agent_feed')
+            WHERE r.rolname = current_user`;
+          const role = roles[0];
+          if (roles.length !== 1 || !role || role.sessionLogin !== role.login
+            || !role.canLogin || role.inherits || role.memberships !== 0
+            || role.superuser || role.bypassRls || role.createRole
+            || role.createDatabase || role.databaseCreate || role.schemaCreate
+            || role.ownerMember || !role.canSelect || role.extraTable
+            || role.extraColumn || role.sequenceWrite
+            || role.sequenceName !== 'public.agent_feed_id_seq'
+            || role.relationKind !== 'r' || role.persistence !== 'p'
+            || role.rowSecurity || role.forceRowSecurity || role.isPartition
+            || role.hasAncestors || role.hasDescendants) {
+            throw new Error('MC_TASK6A_RESTRICTED_AGENT_FEED_ROLE_INVALID');
+          }
+          const effects = await tx<Array<{ triggers: boolean; rules: boolean;
+            otherConstraints: boolean }>>`
+            SELECT
+              EXISTS (SELECT 1 FROM pg_catalog.pg_trigger t
+                WHERE t.tgrelid = pg_catalog.to_regclass('public.agent_feed')) AS triggers,
+              EXISTS (SELECT 1 FROM pg_catalog.pg_rewrite w
+                WHERE w.ev_class = pg_catalog.to_regclass('public.agent_feed')) AS rules,
+              EXISTS (SELECT 1 FROM pg_catalog.pg_constraint k
+                WHERE (k.conrelid = pg_catalog.to_regclass('public.agent_feed')
+                  AND (k.contype NOT IN ('p', 'u')
+                    OR k.conname NOT IN ('agent_feed_pkey', 'agent_feed_msg_hash_key')))
+                  OR (k.confrelid = pg_catalog.to_regclass('public.agent_feed')
+                    AND k.contype = 'f')) AS "otherConstraints"`;
+          if (effects.length !== 1 || effects[0].triggers || effects[0].rules
+            || effects[0].otherConstraints) {
+            throw new Error('MC_TASK6A_RESTRICTED_AGENT_FEED_EFFECTS_INVALID');
+          }
+          const columns = await tx<Array<{ name: string; type: string;
+            notNull: boolean; defaultValue: string | null;
+            generated: string; identity: string }>>`
+            SELECT a.attname AS name, a.atttypid::regtype::text AS type,
+              a.attnotnull AS "notNull", a.attgenerated AS generated,
+              a.attidentity AS identity,
+              pg_catalog.pg_get_expr(d.adbin, d.adrelid) AS "defaultValue"
+            FROM pg_catalog.pg_attribute a
+            LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+            WHERE a.attrelid = pg_catalog.to_regclass('public.agent_feed')
+              AND a.attnum > 0 AND NOT a.attisdropped
+            ORDER BY a.attnum`;
+          const expectedColumns: ReadonlyArray<readonly [string, string, boolean, string | null]> = [
+            ['id', 'integer', true, "nextval('agent_feed_id_seq'::regclass)"],
+            ['agent_id', 'text', true, null], ['agent_name', 'text', true, null],
+            ['message', 'text', true, null], ['session_id', 'text', false, null],
+            ['msg_hash', 'text', false, null],
+            ['created_at', 'timestamp with time zone', true, 'now()'],
+          ];
+          if (columns.some((column) => column.generated !== '' || column.identity !== '')
+            || JSON.stringify(columns.map((column) => [column.name, column.type,
+              column.notNull, column.defaultValue])) !== JSON.stringify(expectedColumns)) {
+            throw new Error('MC_TASK6A_RESTRICTED_AGENT_FEED_COLUMNS_INVALID');
+          }
+          const indexes = await tx<Array<{ name: string; key: string; valid: boolean;
+            ready: boolean; unique: boolean; primary: boolean; accessMethod: string;
+            predicate: string | null; expression: string | null;
+            keyCount: number; totalCount: number; options: number }>>`
+            SELECT ic.relname AS name, pg_catalog.pg_get_indexdef(i.indexrelid, 1, true) AS key,
+              i.indisvalid AS valid, i.indisready AS ready, i.indisunique AS unique,
+              i.indisprimary AS primary, am.amname AS "accessMethod",
+              i.indoption[0]::integer AS options,
+              pg_catalog.pg_get_expr(i.indpred, i.indrelid) AS predicate,
+              pg_catalog.pg_get_expr(i.indexprs, i.indrelid) AS expression,
+              i.indnkeyatts AS "keyCount", i.indnatts AS "totalCount"
+            FROM pg_catalog.pg_index i
+            JOIN pg_catalog.pg_class ic ON ic.oid = i.indexrelid
+            JOIN pg_catalog.pg_am am ON am.oid = ic.relam
+            WHERE i.indrelid = pg_catalog.to_regclass('public.agent_feed')`;
+          const expectedIndexes: ReadonlyArray<readonly [string, string, boolean, boolean, number]> = [
+            ['agent_feed_pkey', 'id', true, true, 0],
+            ['agent_feed_msg_hash_key', 'msg_hash', true, false, 0],
+            ['idx_agent_feed_created', 'created_at', false, false, 3],
+          ];
+          const actualIndexes = indexes.map((index) => [index.name, index.key,
+            index.unique, index.primary, index.options] as const)
+            .sort((a, b) => a[0].localeCompare(b[0]));
+          if (indexes.length !== 3 || indexes.some((index) => !index.valid || !index.ready
+            || index.accessMethod !== 'btree' || index.predicate !== null
+            || index.expression !== null || index.keyCount !== 1 || index.totalCount !== 1)
+            || JSON.stringify(actualIndexes) !== JSON.stringify([...expectedIndexes]
+              .sort((a, b) => a[0].localeCompare(b[0])))) {
+            throw new Error('MC_TASK6A_RESTRICTED_AGENT_FEED_INDEX_INVALID');
+          }
+        });
+      } catch {
+        throw new Error('MC_TASK6A_RESTRICTED_AGENT_FEED_VERIFY_REFUSED');
+      }
+    })();
+  }
+  return restrictedAgentFeedReady;
+}
+
 export async function ensureAgentFeedTable(): Promise<void> {
   await sql`
     CREATE TABLE IF NOT EXISTS agent_feed (
@@ -653,6 +796,12 @@ export async function insertFeedEntry(agentId: string, agentName: string, messag
 export async function getAgentFeed(limit = 100): Promise<any[]> {
   const safeLimit = Math.min(Math.max(1, Number(limit) || 100), 500);
   return sql`SELECT * FROM agent_feed ORDER BY created_at DESC LIMIT ${safeLimit}`;
+}
+
+/** Only for the private, preverified DB-only historical feed route. */
+export async function getRestrictedAgentFeedFromDb(limit = 100): Promise<any[]> {
+  const safeLimit = Math.min(Math.max(1, Number(limit) || 100), 500);
+  return sql`SELECT * FROM public.agent_feed ORDER BY created_at DESC LIMIT ${safeLimit}`;
 }
 
 export async function pruneAgentFeed(keep = 5000): Promise<void> {

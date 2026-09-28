@@ -14,7 +14,7 @@ import {
   upsertCanonicalV3ProjectProjection,
 } from './projects.js';
 import { getRuns, getRunStories, getSetfarmActivity, getSetfarmAgentStats, getSetfarmAlerts, getStories } from '../utils/setfarm.js';
-import { ensureAgentFeedTable, insertFeedEntry, getAgentFeed as getAgentFeedFromDb, pruneAgentFeed, clearAgentFeed } from "../utils/setfarm-db.js";
+import { ensureAgentFeedTable, insertFeedEntry, getAgentFeed as getAgentFeedFromDb, getRestrictedAgentFeedFromDb, pruneAgentFeed, clearAgentFeed, verifyRestrictedAgentFeedRead } from "../utils/setfarm-db.js";
 
 // ── Service imports (extracted from this file) ──────────────────────
 import {
@@ -118,6 +118,22 @@ const v3TransferSchedulerState = new FileV3ProjectTransferSchedulerStateStore(
   join(PATHS.setfarmDir, 'mc-v3-project-transfer-scheduler-state.json'),
 );
 const router = Router();
+const restrictedAgentFeedMode = process.env.MC_TASK6A_RESTRICTED_AGENT_FEED_READS_VERIFY_V1;
+
+router.use((req, res, next) => {
+  const routePath = req.path.toLowerCase(); // Express Router matches paths case-insensitively.
+  if (routePath !== '/setfarm' && !routePath.startsWith('/setfarm/')) {
+    next();
+    return;
+  }
+  if (restrictedAgentFeedMode !== undefined
+    && (restrictedAgentFeedMode !== '1' || req.method !== 'GET'
+      || routePath !== '/setfarm/agent-feed')) {
+    res.status(503).json({ error: 'MC_TASK6A_RESTRICTED_AGENT_FEED_ROUTE_UNVERIFIED' });
+    return;
+  }
+  next();
+});
 
 function noStore(res: any): void {
   res.set('Cache-Control', 'no-store, max-age=0, must-revalidate');
@@ -1808,10 +1824,20 @@ router.post('/setfarm/sync-projects', async (req, res) => {
 router.get("/setfarm/agent-feed", async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+    if (restrictedAgentFeedMode === '1') {
+      await verifyRestrictedAgentFeedRead();
+      const data = await getRestrictedAgentFeedFromDb(limit);
+      noStore(res);
+      res.json(data);
+      return;
+    }
     const data = await cached("af-agent-feed", 10_000, () => getAgentFeedService(limit));
     res.json(data);
   } catch (err: any) {
-    res.status(500).json({ error: err.message || "Agent feed failed" });
+    if (restrictedAgentFeedMode === '1') {
+      noStore(res);
+      res.status(502).json({ error: 'MC_TASK6A_RESTRICTED_AGENT_FEED_VERIFY_REFUSED' });
+    } else res.status(500).json({ error: err.message || "Agent feed failed" });
   }
 });
 
