@@ -15,7 +15,7 @@ its existing evidence.
    only SELECT+INSERT on exact precreated `public.agent_feed` and USAGE on the
    owned SERIAL sequence; deny UPDATE/DELETE/TRUNCATE/DDL, ownership and broad
    role powers. V1 remains SELECT-only and ordinary behavior remains intact.
-2. RED: in the already identified private PG17 cluster, a disposable role/DB
+2. RED: in an explicitly identified private PG17 cluster, a disposable role/DB
    and isolated agent JSONL hold one valid assistant message. Current mode
    refuses the new append flag (or ordinary path returns a synthetic row after
    DDL fails); expected response must be a persisted row with positive DB id,
@@ -49,7 +49,8 @@ continuous old-writer exclusion remain separate gates.
   snapshot test for the child-process output capacity contract.
 - `server/routes/setfarm-activity.ts`: V2 opt-in and fail-closed private route.
 - `server/routes/task6a-private-agent-feed-restricted.integration.test.ts`:
-  add independent disposable V2 role/DB/JSONL RED/GREEN fixture.
+  add independent disposable V2 role/DB/JSONL RED/GREEN fixture, including
+  effective cross-database CONNECT and replication-role negative cases.
 - `package.json`: copy the private source reader into the build identity.
 
 The existing isolated V1 test command runs both V1 and V2 fixtures. Independent
@@ -101,5 +102,15 @@ EXCLUSIVE lock, rechecks the catalog/role on that same transaction, inserts,
 reads and commits. This blocks conflicting table DDL during the proof/write,
 but it is not a global GRANT/old-writer fence: that still needs external owner
 coordination at cutover.
+The fifth exact-head Codex review found two remaining role powers: effective
+CONNECT to another database and `rolreplication`. Both returned HTTP 200 in
+private RED fixtures after the test role was broadened, then fixed 502 after
+the V2-only proof rejected them. The cross-database test runs on a fresh,
+dedicated PG17 cluster with `PUBLIC CONNECT` removed from its `postgres` and
+`template1` databases; the shared older private cluster retains its original
+ACLs. The fixture asserts no pre-existing outside CONNECT, grants CONNECT on
+an additional disposable database, observes 502, revokes it, then observes
+200. This is a causal refinement of the same restricted V2 role contract,
+not a live permission change or a continuous old-writer fence.
 This is a private parser proof, not a claim that old live writers are fenced
 by the OS; that remains a separate cutover gate.

@@ -623,7 +623,7 @@ async function checkRestrictedAgentFeedShape(tx: typeof sql, append: boolean): P
           const roles = await tx<Array<{ sessionLogin: string; login: string;
             defaultReadOnly: string; recovering: boolean; loCompat: boolean;
             canLogin: boolean; inherits: boolean; memberships: number;
-            superuser: boolean; bypassRls: boolean; createRole: boolean;
+            superuser: boolean; replication: boolean; bypassRls: boolean; createRole: boolean;
             createDatabase: boolean; databaseCreate: boolean; databaseTemp: boolean;
             schemaCreate: boolean;
             ownerMember: boolean; canSelect: boolean; canInsert: boolean;
@@ -640,7 +640,8 @@ async function checkRestrictedAgentFeedShape(tx: typeof sql, append: boolean): P
               r.rolcanlogin AS "canLogin", r.rolinherit AS inherits,
               (SELECT COUNT(*)::integer FROM pg_catalog.pg_auth_members m
                 WHERE m.member = r.oid) AS memberships,
-              r.rolsuper AS superuser, r.rolbypassrls AS "bypassRls",
+              r.rolsuper AS superuser, r.rolreplication AS replication,
+              r.rolbypassrls AS "bypassRls",
               r.rolcreaterole AS "createRole", r.rolcreatedb AS "createDatabase",
               has_database_privilege(current_user, current_database(), 'CREATE') AS "databaseCreate",
               has_database_privilege(current_user, current_database(), 'TEMPORARY') AS "databaseTemp",
@@ -676,7 +677,7 @@ async function checkRestrictedAgentFeedShape(tx: typeof sql, append: boolean): P
           const role = roles[0];
           if (roles.length !== 1 || !role || role.sessionLogin !== role.login
             || !role.canLogin || role.inherits || role.memberships !== 0
-            || role.superuser || role.bypassRls || role.createRole
+            || role.superuser || role.replication || role.bypassRls || role.createRole
             || role.createDatabase || role.databaseCreate || role.schemaCreate
             || role.ownerMember || !role.canSelect || role.extraTable
             || role.extraColumn || role.sequenceSelect || role.sequenceUpdate
@@ -691,9 +692,13 @@ async function checkRestrictedAgentFeedShape(tx: typeof sql, append: boolean): P
             throw new Error('MC_TASK6A_RESTRICTED_AGENT_FEED_ROLE_INVALID');
           }
           if (append) {
-            const outside = await tx<Array<{ otherRelation: boolean;
+            const outside = await tx<Array<{ otherDatabase: boolean; otherRelation: boolean;
               otherSchema: boolean; otherFunction: boolean }>>`
               SELECT
+                EXISTS (SELECT 1 FROM pg_catalog.pg_database candidate
+                  WHERE candidate.datallowconn AND candidate.datname <> current_database()
+                    AND has_database_privilege(current_user, candidate.oid, 'CONNECT'))
+                  AS "otherDatabase",
                 EXISTS (SELECT 1 FROM pg_catalog.pg_class object
                   JOIN pg_catalog.pg_namespace namespace ON namespace.oid = object.relnamespace
                   WHERE namespace.nspname NOT IN ('information_schema')
@@ -718,7 +723,7 @@ async function checkRestrictedAgentFeedShape(tx: typeof sql, append: boolean): P
                     AND namespace.nspname !~ '^pg_'
                     AND has_function_privilege(current_user, routine.oid,
                       'EXECUTE')) AS "otherFunction"`;
-            if (outside.length !== 1 || outside[0].otherRelation
+            if (outside.length !== 1 || outside[0].otherDatabase || outside[0].otherRelation
               || outside[0].otherSchema || outside[0].otherFunction) {
               throw new Error('MC_TASK6A_RESTRICTED_AGENT_FEED_OTHER_ACCESS');
             }

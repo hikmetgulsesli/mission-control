@@ -360,6 +360,7 @@ test('private restricted agent-session append persists before returning feed', {
   assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname));
   assert.notEqual(parsed.port, '5432');
   const databaseName = `mc_task6a_append_${randomBytes(8).toString('hex')}`;
+  const outsideDatabaseName = `mc_task6a_outside_${randomBytes(8).toString('hex')}`;
   const roleName = `mc_task6a_append_role_${randomBytes(8).toString('hex')}`;
   const password = randomBytes(24).toString('hex');
   const admin = postgres(adminUrl, { max: 1 });
@@ -367,6 +368,7 @@ test('private restricted agent-session append persists before returning feed', {
   let child: ChildProcess | undefined;
   let privateRoot: string | undefined;
   let databaseCreated = false;
+  let outsideDatabaseCreated = false;
   let roleCreated = false;
   let stage = 'private-preflight';
   let failure: unknown;
@@ -411,6 +413,12 @@ test('private restricted agent-session append persists before returning feed', {
       NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS`);
     roleCreated = true;
     await admin.unsafe(`GRANT CONNECT ON DATABASE "${databaseName}" TO "${roleName}"`);
+    const outsideConnections = await admin<Array<{ name: string }>>`
+      SELECT candidate.datname AS name FROM pg_catalog.pg_database candidate
+      WHERE candidate.datallowconn AND candidate.datname <> ${databaseName}
+        AND has_database_privilege(${roleName}, candidate.oid, 'CONNECT')`;
+    assert.deepEqual([...outsideConnections], [],
+      'MC_TASK6A_PRIVATE_CLUSTER_CONNECT_ISOLATION_REQUIRED');
     await db.unsafe(`GRANT USAGE ON SCHEMA public TO "${roleName}"`);
     await db.unsafe(`GRANT SELECT, INSERT ON public.agent_feed TO "${roleName}"`);
     await db.unsafe(`GRANT USAGE ON SEQUENCE public.agent_feed_id_seq TO "${roleName}"`);
@@ -525,6 +533,29 @@ test('private restricted agent-session append persists before returning feed', {
     await db.unsafe(`REVOKE UPDATE ON public.agent_feed FROM "${roleName}"`);
     assert.equal((await db<Array<{ count: number }>>`
       SELECT COUNT(*)::integer AS count FROM public.agent_feed`)[0]?.count, 1);
+
+    stage = 'post-verify-replication-role-refusal';
+    await admin.unsafe(`ALTER ROLE "${roleName}" REPLICATION`);
+    const replicationRole = await request(base, '/api/setfarm/agent-feed');
+    assert.equal(replicationRole.status, 502);
+    assert.deepEqual(await replicationRole.json(),
+      { error: 'MC_TASK6A_RESTRICTED_AGENT_FEED_VERIFY_REFUSED' });
+    await admin.unsafe(`ALTER ROLE "${roleName}" NOREPLICATION`);
+
+    stage = 'post-verify-other-database-connect-refusal';
+    await admin.unsafe(`CREATE DATABASE "${outsideDatabaseName}"`);
+    outsideDatabaseCreated = true;
+    await admin.unsafe(`REVOKE CONNECT ON DATABASE "${outsideDatabaseName}" FROM PUBLIC`);
+    await admin.unsafe(`GRANT CONNECT ON DATABASE "${outsideDatabaseName}" TO "${roleName}"`);
+    const otherDatabase = await request(base, '/api/setfarm/agent-feed');
+    assert.equal(otherDatabase.status, 502);
+    assert.deepEqual(await otherDatabase.json(),
+      { error: 'MC_TASK6A_RESTRICTED_AGENT_FEED_VERIFY_REFUSED' });
+    await admin.unsafe(`REVOKE CONNECT ON DATABASE "${outsideDatabaseName}" FROM "${roleName}"`);
+    const restoredDatabaseFence = await request(base, '/api/setfarm/agent-feed');
+    assert.equal(restoredDatabaseFence.status, 200);
+    await admin.unsafe(`DROP DATABASE "${outsideDatabaseName}"`);
+    outsideDatabaseCreated = false;
 
     stage = 'post-verify-other-table-grant-refusal';
     await db`CREATE TABLE public.unrelated_feed (id integer PRIMARY KEY)`;
@@ -720,6 +751,8 @@ test('private restricted agent-session append persists before returning feed', {
     try { if (child) await stopChild(child); }
     catch { childReaped = false; cleanupFailures.push('child_not_reaped_fixture_retained'); }
     try { await db?.end({ timeout: 5 }); } catch { cleanupFailures.push('database_connection'); }
+    try { if (childReaped && outsideDatabaseCreated) await admin.unsafe(`DROP DATABASE IF EXISTS "${outsideDatabaseName}"`); }
+    catch { cleanupFailures.push('outside_fixture_database'); }
     try { if (childReaped && databaseCreated) await admin.unsafe(`DROP DATABASE IF EXISTS "${databaseName}"`); }
     catch { cleanupFailures.push('fixture_database'); }
     try { if (childReaped && roleCreated) await admin.unsafe(`DROP ROLE IF EXISTS "${roleName}"`); }
