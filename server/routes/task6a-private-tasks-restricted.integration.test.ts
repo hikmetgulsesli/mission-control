@@ -393,6 +393,20 @@ test("private restricted MC tasks perform scoped CRUD without DDL or story sync"
     child = undefined;
     await db.unsafe(`REVOKE CREATE ON SCHEMA public FROM "${roleName}"`);
 
+    stage = "read-only-session-refusal";
+    await db.unsafe(`ALTER ROLE "${roleName}" IN DATABASE "${databaseName}"
+      SET default_transaction_read_only = on`);
+    const readOnly = await startChild(privateUrl.toString());
+    child = readOnly.child;
+    const readOnlyResponse = await request(`http://127.0.0.1:${readOnly.port}`, "/api/tasks");
+    assert.equal(readOnlyResponse.status, 502);
+    assert.deepEqual(await readOnlyResponse.json(),
+      { error: "MC_TASK6A_RESTRICTED_TASKS_VERIFY_REFUSED" });
+    await stopChild(child);
+    child = undefined;
+    await db.unsafe(`ALTER ROLE "${roleName}" IN DATABASE "${databaseName}"
+      RESET default_transaction_read_only`);
+
     stage = "secondary-unique-index-refusal";
     await db`CREATE UNIQUE INDEX task6a_title_unique ON public.tasks(title)`;
     const uniqueIndexed = await startChild(privateUrl.toString());
@@ -447,6 +461,25 @@ test("private restricted MC tasks perform scoped CRUD without DDL or story sync"
     const generatedResponse = await request(`http://127.0.0.1:${generated.port}`, "/api/tasks");
     assert.equal(generatedResponse.status, 502);
     assert.deepEqual(await generatedResponse.json(),
+      { error: "MC_TASK6A_RESTRICTED_TASKS_VERIFY_REFUSED" });
+
+    stage = "unlogged-table-refusal";
+    await stopChild(child);
+    child = undefined;
+    await db`DROP TABLE public.tasks`;
+    await db`CREATE UNLOGGED TABLE public.tasks (
+      id text PRIMARY KEY, title text NOT NULL DEFAULT '',
+      description text NOT NULL DEFAULT '', assigned_agent text NOT NULL DEFAULT '',
+      priority text NOT NULL DEFAULT 'medium', status text NOT NULL DEFAULT 'todo',
+      images text NOT NULL DEFAULT '[]',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now())`;
+    await db.unsafe(`GRANT SELECT, INSERT, UPDATE, DELETE ON public.tasks TO "${roleName}"`);
+    const unlogged = await startChild(privateUrl.toString());
+    child = unlogged.child;
+    const unloggedResponse = await request(`http://127.0.0.1:${unlogged.port}`, "/api/tasks");
+    assert.equal(unloggedResponse.status, 502);
+    assert.deepEqual(await unloggedResponse.json(),
       { error: "MC_TASK6A_RESTRICTED_TASKS_VERIFY_REFUSED" });
 
     stage = "ordinary-mode-preserved";

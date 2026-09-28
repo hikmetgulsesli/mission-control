@@ -47,14 +47,18 @@ async function verifyRestrictedTasksTable(): Promise<void> {
       await tx`SET LOCAL lock_timeout = '2s'`;
       await tx`SET LOCAL statement_timeout = '5s'`;
       const role = await tx<Array<{ sessionLogin: string; login: string;
+        defaultReadOnly: string; recovering: boolean;
         canLogin: boolean; inherits: boolean; membershipCount: number;
         bypassRls: boolean; superuser: boolean; createRole: boolean; createDatabase: boolean;
         databaseCreate: boolean; schemaCreate: boolean; tableOwnerMember: boolean;
         tableSelect: boolean; tableInsert: boolean; tableUpdate: boolean; tableDelete: boolean;
         tableExtra: boolean; columnReferences: boolean; relationKind: string;
+        persistence: string;
         rowSecurity: boolean; forceRowSecurity: boolean; hasDescendants: boolean;
         hasAncestors: boolean; isPartition: boolean }>>`
         SELECT session_user AS "sessionLogin", current_user AS login,
+          pg_catalog.current_setting('default_transaction_read_only') AS "defaultReadOnly",
+          pg_catalog.pg_is_in_recovery() AS recovering,
           r.rolcanlogin AS "canLogin", r.rolinherit AS inherits,
           (SELECT COUNT(*)::integer FROM pg_catalog.pg_auth_members m
             WHERE m.member = r.oid) AS "membershipCount",
@@ -70,7 +74,8 @@ async function verifyRestrictedTasksTable(): Promise<void> {
           has_table_privilege(current_user, c.oid,
             'TRUNCATE, REFERENCES, TRIGGER, MAINTAIN') AS "tableExtra",
           has_any_column_privilege(current_user, c.oid, 'REFERENCES') AS "columnReferences",
-          c.relkind AS "relationKind", c.relispartition AS "isPartition",
+          c.relkind AS "relationKind", c.relpersistence AS persistence,
+          c.relispartition AS "isPartition",
           c.relrowsecurity AS "rowSecurity",
           c.relforcerowsecurity AS "forceRowSecurity",
           EXISTS (SELECT 1 FROM pg_catalog.pg_inherits inh
@@ -82,6 +87,7 @@ async function verifyRestrictedTasksTable(): Promise<void> {
         WHERE r.rolname = current_user`;
       const actualRole = role[0];
       if (role.length !== 1 || !actualRole
+        || actualRole.defaultReadOnly !== 'off' || actualRole.recovering
         || actualRole.sessionLogin !== actualRole.login || !actualRole.canLogin
         || actualRole.inherits || actualRole.membershipCount !== 0
         || actualRole.superuser || actualRole.bypassRls || actualRole.createRole
@@ -89,6 +95,7 @@ async function verifyRestrictedTasksTable(): Promise<void> {
         || actualRole.tableOwnerMember || !actualRole.tableSelect || !actualRole.tableInsert
         || !actualRole.tableUpdate || !actualRole.tableDelete || actualRole.tableExtra
         || actualRole.columnReferences || actualRole.relationKind !== 'r'
+        || actualRole.persistence !== 'p'
         || actualRole.rowSecurity || actualRole.forceRowSecurity
         || actualRole.hasDescendants || actualRole.hasAncestors || actualRole.isPartition) {
         throw new Error('MC_TASK6A_RESTRICTED_TASKS_ROLE_INVALID');

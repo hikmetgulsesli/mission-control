@@ -53,6 +53,14 @@ simple tasks-table verifier.
   negative fixture now seeds recognized `done` story states and restarts the
   child after creating an eligible task, so the first GET on the new child
   cannot consume the throttle before the assertion.
+- A second exact-head review found two remaining catalog-only false positives:
+  a LOGIN whose session defaults to read-only, and an otherwise matching
+  UNLOGGED tasks table. Each disposable fixture was RED (`GET` returned 200
+  rather than fixed refusal). The verifier now rejects default read-only
+  sessions and standby servers before caching readiness, and requires a
+  permanent (`relpersistence = 'p'`) tasks table. The private test is GREEN
+  for both; this startup check is not a continuous fence against later
+  session/server changes.
 - Test CRUD under the restricted role, shadow-table binding, descendants,
   privilege/schema drift, ordinary mode, schema fingerprint and child/fixture
   cleanup. Secrets stay in memory and out of logs/Git. The child gets only
