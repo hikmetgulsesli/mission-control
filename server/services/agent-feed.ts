@@ -99,6 +99,45 @@ export async function getRestrictedAgentSessionFeed(limit: number): Promise<any[
   return appendRestrictedAgentFeedEntries(entries, limit);
 }
 
+/** Private V3: transcript JSONL only, with no agent-session or memory fallback. */
+export async function getRestrictedTranscriptFeed(limit: number): Promise<any[]> {
+  const helper = fileURLToPath(new URL('./task6a-transcript-reader.py', import.meta.url));
+  const transcriptsDir = PATHS.transcriptsDir.startsWith('/tmp/')
+    ? join(realpathSync('/tmp'), PATHS.transcriptsDir.slice('/tmp/'.length))
+    : PATHS.transcriptsDir;
+  const snapshot = JSON.parse(await readPrivateAgentSessionSnapshot(helper, transcriptsDir)) as
+    Array<{ workflowId: string; sessionId: string; raw: string }>;
+  if (!Array.isArray(snapshot) || snapshot.length > 500) {
+    throw new Error('MC_TASK6A_RESTRICTED_AGENT_FEED_SOURCE_INVALID');
+  }
+  const entries: RestrictedAgentFeedText[] = [];
+  for (const item of snapshot) {
+    if (!item || typeof item.workflowId !== 'string'
+      || typeof item.sessionId !== 'string' || typeof item.raw !== 'string'
+      || Buffer.byteLength(item.raw) > 256_000) {
+      throw new Error('MC_TASK6A_RESTRICTED_AGENT_FEED_SOURCE_INVALID');
+    }
+    const agentId = item.sessionId.match(/^(.+?)-\d{4}-\d{2}-\d{2}T/)?.[1]
+      || item.sessionId;
+    for (const line of item.raw.trim().split('\n').slice(-120)) {
+      let record: any;
+      try { record = JSON.parse(line); } catch { continue; }
+      if (record?.type !== 'item.completed'
+        || record?.item?.type !== 'agent_message'
+        || typeof record?.item?.text !== 'string') continue;
+      const compact = compactAgentText(record.item.text);
+      if (shouldSkipAgentText(compact)) continue;
+      entries.push({ agentId, agentName: agentId,
+        message: Array.from(compact).slice(0, 500).join(''),
+        sessionId: item.sessionId });
+      if (entries.length > 1_000) {
+        throw new Error('MC_TASK6A_RESTRICTED_AGENT_FEED_SOURCE_UNBOUNDED');
+      }
+    }
+  }
+  return appendRestrictedAgentFeedEntries(entries, limit);
+}
+
 async function recordAgentText(
   dbAvailable: boolean,
   agentId: string,

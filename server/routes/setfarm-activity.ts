@@ -31,7 +31,8 @@ import {
   updatePortRegistry,
 } from '../services/auto-deploy.js';
 
-import { getAgentFeed as getAgentFeedService, getRestrictedAgentSessionFeed } from '../services/agent-feed.js';
+import { getAgentFeed as getAgentFeedService, getRestrictedAgentSessionFeed,
+  getRestrictedTranscriptFeed } from '../services/agent-feed.js';
 import { getAgentActivity } from '../services/agent-activity.js';
 import { sql } from '../utils/pg.js';
 import { setfarmOperationalSnapshotClient } from '../services/setfarm-operational-snapshot.js';
@@ -120,12 +121,15 @@ const v3TransferSchedulerState = new FileV3ProjectTransferSchedulerStateStore(
 const router = Router();
 const restrictedAgentFeedMode = process.env.MC_TASK6A_RESTRICTED_AGENT_FEED_READS_VERIFY_V1;
 const restrictedAgentFeedAppendMode = process.env.MC_TASK6A_RESTRICTED_AGENT_FEED_APPEND_V2;
+const restrictedTranscriptAppendMode = process.env.MC_TASK6A_RESTRICTED_AGENT_FEED_TRANSCRIPT_APPEND_V3;
 const restrictedFeedRead = restrictedAgentFeedMode === '1'
-  && restrictedAgentFeedAppendMode === undefined;
+  && restrictedAgentFeedAppendMode === undefined && restrictedTranscriptAppendMode === undefined;
 const restrictedFeedAppend = restrictedAgentFeedAppendMode === '1'
-  && restrictedAgentFeedMode === undefined;
+  && restrictedAgentFeedMode === undefined && restrictedTranscriptAppendMode === undefined;
+const restrictedTranscriptAppend = restrictedTranscriptAppendMode === '1'
+  && restrictedAgentFeedMode === undefined && restrictedAgentFeedAppendMode === undefined;
 const nonordinaryFeed = restrictedAgentFeedMode !== undefined
-  || restrictedAgentFeedAppendMode !== undefined;
+  || restrictedAgentFeedAppendMode !== undefined || restrictedTranscriptAppendMode !== undefined;
 
 router.use((req, res, next) => {
   const routePath = req.path.toLowerCase(); // Express Router matches paths case-insensitively.
@@ -134,7 +138,8 @@ router.use((req, res, next) => {
     return;
   }
   if (nonordinaryFeed
-    && ((!restrictedFeedRead && !restrictedFeedAppend) || req.method !== 'GET'
+    && ((!restrictedFeedRead && !restrictedFeedAppend && !restrictedTranscriptAppend)
+      || req.method !== 'GET'
       || routePath !== '/setfarm/agent-feed')) {
     res.status(503).json({ error: 'MC_TASK6A_RESTRICTED_AGENT_FEED_ROUTE_UNVERIFIED' });
     return;
@@ -1844,10 +1849,16 @@ router.get("/setfarm/agent-feed", async (req, res) => {
       res.json(data);
       return;
     }
+    if (restrictedTranscriptAppend) {
+      const data = await getRestrictedTranscriptFeed(limit);
+      noStore(res);
+      res.json(data);
+      return;
+    }
     const data = await cached("af-agent-feed", 10_000, () => getAgentFeedService(limit));
     res.json(data);
   } catch (err: any) {
-    if (restrictedFeedRead || restrictedFeedAppend) {
+    if (restrictedFeedRead || restrictedFeedAppend || restrictedTranscriptAppend) {
       noStore(res);
       res.status(502).json({ error: 'MC_TASK6A_RESTRICTED_AGENT_FEED_VERIFY_REFUSED' });
     } else res.status(500).json({ error: err.message || "Agent feed failed" });
