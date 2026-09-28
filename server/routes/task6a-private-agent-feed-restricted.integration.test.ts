@@ -573,6 +573,22 @@ test('private restricted agent-session append persists before returning feed', {
     assert.equal((await db<Array<{ count: number }>>`
       SELECT COUNT(*)::integer AS count FROM public.agent_feed`)[0]?.count, 1);
     assert.equal(readFileSync(fileMessage, 'utf8'), fileBefore);
+    await stopChild(child);
+    child = undefined;
+
+    stage = 'same-transaction-feed-order';
+    writeFileSync(fileMessage, fileBefore + ['SECOND APPEND MESSAGE', 'THIRD APPEND MESSAGE']
+      .map((text) => `${JSON.stringify({ message: { role: 'assistant',
+        content: [{ type: 'text', text }] } })}\n`).join(''));
+    const ordered = await startChild(privateUrl.toString(), privateRoot, null, '1');
+    child = ordered.child;
+    const limited = await request(`http://127.0.0.1:${ordered.port}`,
+      '/api/setfarm/agent-feed?limit=1');
+    assert.equal(limited.status, 200);
+    assert.deepEqual((await limited.json() as Array<{ message: string }>).map((row) => row.message),
+      ['THIRD APPEND MESSAGE']);
+    assert.equal((await db<Array<{ count: number }>>`
+      SELECT COUNT(*)::integer AS count FROM public.agent_feed`)[0]?.count, 3);
   } catch (error) {
     failure = error;
     process.stderr.write(`[mc-task6a-private-append] failed at ${stage}\n`);

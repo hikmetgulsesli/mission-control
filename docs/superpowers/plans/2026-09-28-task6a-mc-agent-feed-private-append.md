@@ -64,5 +64,10 @@ The third review found JSON Unicode escaping could expand a valid 8 MB
 snapshot past the child output buffer. A 40-file 8 MB Unicode fixture first
 failed with `ENOBUFS`, then passed with compact UTF-8 JSON; the service also
 allows 64 MB for the worst-case escaped control-character expansion.
+The first exact-head Codex PR review found nondeterministic limited results
+when a batch shares one PostgreSQL `NOW()` timestamp. A private V2 fixture
+with two newly ingested messages and `limit=1` was RED (returned the earlier
+message), then GREEN with `ORDER BY created_at DESC, id DESC` in the V2
+transactional reader only.
 This is a private parser proof, not a claim that old live writers are fenced
 by the OS; that remains a separate cutover gate.

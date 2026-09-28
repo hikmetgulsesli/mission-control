@@ -852,7 +852,8 @@ export async function appendRestrictedAgentFeedEntries(entries: readonly Restric
         throw new Error('MC_TASK6A_RESTRICTED_AGENT_FEED_APPEND_MISMATCH');
       }
     }
-    return tx`SELECT * FROM public.agent_feed ORDER BY created_at DESC LIMIT ${safeLimit}`;
+    return tx`SELECT * FROM public.agent_feed
+      ORDER BY created_at DESC, id DESC LIMIT ${safeLimit}`;
   });
 }
 
