@@ -74,5 +74,20 @@ so later broad grants or schema drift could pass while INSERT itself still
 succeeded. A same-child UPDATE-grant test was RED (HTTP 200) then GREEN (fixed
 502); V2 rechecks the restricted shape before every append request while V1
 retains its original cached historical-read proof.
+The third exact-head Codex review identified quote doubling in parameterized
+INSERT, invalid UTF-8 replacement, and unverified access to unrelated DB
+objects. The V2-only normalizer now strips controls without SQL quote escaping;
+the private parser decodes UTF-8 strictly; the V2 verifier checks effective
+rights on other user relations, schemas and routines plus database TEMP and
+sequence SELECT. Disposable tests grant another table, schema, sequence and
+TEMP right after readiness and require fixed 502; apostrophes round-trip
+exactly, and malformed UTF-8 leaves the DB count unchanged.
+Independent review found a handoff collision: ordinary mode stores a doubled
+apostrophe and hashes that transformed text, whereas V2 preserves it. A
+disposable legacy row/source fixture was RED (a second row inserted with HTTP
+200); V2 now checks the exact legacy hash and stored fields before INSERT and
+refuses the request transactionally with fixed 502 if the collision exists.
+No historical row is rewritten or silently duplicated; an explicit later
+history-migration decision is required before enabling V2 on such data.
 This is a private parser proof, not a claim that old live writers are fenced
 by the OS; that remains a separate cutover gate.

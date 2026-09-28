@@ -44,7 +44,7 @@ def read_bounded(fd):
         remaining -= len(chunk)
     if remaining == 0:
         raise ValueError("session file too large")
-    return b"".join(chunks).decode("utf-8", errors="replace")
+    return b"".join(chunks).decode("utf-8")
 
 
 def bounded_names(fd):

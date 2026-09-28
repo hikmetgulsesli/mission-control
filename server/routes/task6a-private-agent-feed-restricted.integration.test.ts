@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync,
   symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -398,6 +398,7 @@ test('private restricted agent-session append persists before returning feed', {
     const fileBefore = readFileSync(fileMessage, 'utf8');
     await admin.unsafe(`CREATE DATABASE "${databaseName}"`);
     databaseCreated = true;
+    await admin.unsafe(`REVOKE TEMPORARY ON DATABASE "${databaseName}" FROM PUBLIC`);
     const dbUrl = new URL(adminUrl);
     dbUrl.pathname = `/${databaseName}`;
     db = postgres(dbUrl.toString(), { max: 1 });
@@ -418,21 +419,25 @@ test('private restricted agent-session append persists before returning feed', {
     privateUrl.password = password;
     const probe = postgres(privateUrl.toString(), { max: 1 });
     try {
-      const rights = await probe<Array<{ login: string; databaseCreate: boolean;
+      const rights = await probe<Array<{ login: string; databaseCreate: boolean; databaseTemp: boolean;
         schemaCreate: boolean; tableSelect: boolean; tableInsert: boolean;
-        tableExtra: boolean; sequenceUsage: boolean; sequenceUpdate: boolean }>>`
+        tableExtra: boolean; sequenceUsage: boolean; sequenceSelect: boolean;
+        sequenceUpdate: boolean }>>`
         SELECT session_user AS login,
           has_database_privilege(current_user, current_database(), 'CREATE') AS "databaseCreate",
+          has_database_privilege(current_user, current_database(), 'TEMPORARY') AS "databaseTemp",
           has_schema_privilege(current_user, 'public', 'CREATE') AS "schemaCreate",
           has_table_privilege(current_user, 'public.agent_feed', 'SELECT') AS "tableSelect",
           has_table_privilege(current_user, 'public.agent_feed', 'INSERT') AS "tableInsert",
           has_table_privilege(current_user, 'public.agent_feed',
             'UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN') AS "tableExtra",
           has_sequence_privilege(current_user, 'public.agent_feed_id_seq', 'USAGE') AS "sequenceUsage",
+          has_sequence_privilege(current_user, 'public.agent_feed_id_seq', 'SELECT') AS "sequenceSelect",
           has_sequence_privilege(current_user, 'public.agent_feed_id_seq', 'UPDATE') AS "sequenceUpdate"`;
-      assert.deepEqual(rights[0], { login: roleName, databaseCreate: false,
+      assert.deepEqual(rights[0], { login: roleName, databaseCreate: false, databaseTemp: false,
         schemaCreate: false, tableSelect: true, tableInsert: true,
-        tableExtra: false, sequenceUsage: true, sequenceUpdate: false });
+        tableExtra: false, sequenceUsage: true, sequenceSelect: false,
+        sequenceUpdate: false });
     } finally { await probe.end({ timeout: 5 }); }
 
     stage = 'append-red-green';
@@ -521,6 +526,44 @@ test('private restricted agent-session append persists before returning feed', {
     assert.equal((await db<Array<{ count: number }>>`
       SELECT COUNT(*)::integer AS count FROM public.agent_feed`)[0]?.count, 1);
 
+    stage = 'post-verify-other-table-grant-refusal';
+    await db`CREATE TABLE public.unrelated_feed (id integer PRIMARY KEY)`;
+    await db.unsafe(`GRANT SELECT ON public.unrelated_feed TO "${roleName}"`);
+    const otherTable = await request(base, '/api/setfarm/agent-feed');
+    assert.equal(otherTable.status, 502);
+    assert.deepEqual(await otherTable.json(),
+      { error: 'MC_TASK6A_RESTRICTED_AGENT_FEED_VERIFY_REFUSED' });
+    await db.unsafe(`REVOKE SELECT ON public.unrelated_feed FROM "${roleName}"`);
+    await db`DROP TABLE public.unrelated_feed`;
+
+    stage = 'post-verify-other-schema-grant-refusal';
+    await db`CREATE SCHEMA unrelated_schema`;
+    await db.unsafe(`GRANT USAGE ON SCHEMA unrelated_schema TO "${roleName}"`);
+    const otherSchema = await request(base, '/api/setfarm/agent-feed');
+    assert.equal(otherSchema.status, 502);
+    assert.deepEqual(await otherSchema.json(),
+      { error: 'MC_TASK6A_RESTRICTED_AGENT_FEED_VERIFY_REFUSED' });
+    await db.unsafe(`REVOKE USAGE ON SCHEMA unrelated_schema FROM "${roleName}"`);
+    await db`DROP SCHEMA unrelated_schema`;
+
+    stage = 'post-verify-other-sequence-grant-refusal';
+    await db`CREATE SEQUENCE public.unrelated_feed_seq`;
+    await db.unsafe(`GRANT USAGE ON SEQUENCE public.unrelated_feed_seq TO "${roleName}"`);
+    const otherSequence = await request(base, '/api/setfarm/agent-feed');
+    assert.equal(otherSequence.status, 502);
+    assert.deepEqual(await otherSequence.json(),
+      { error: 'MC_TASK6A_RESTRICTED_AGENT_FEED_VERIFY_REFUSED' });
+    await db.unsafe(`REVOKE USAGE ON SEQUENCE public.unrelated_feed_seq FROM "${roleName}"`);
+    await db`DROP SEQUENCE public.unrelated_feed_seq`;
+
+    stage = 'post-verify-database-temp-grant-refusal';
+    await admin.unsafe(`GRANT TEMPORARY ON DATABASE "${databaseName}" TO "${roleName}"`);
+    const tempGrant = await request(base, '/api/setfarm/agent-feed');
+    assert.equal(tempGrant.status, 502);
+    assert.deepEqual(await tempGrant.json(),
+      { error: 'MC_TASK6A_RESTRICTED_AGENT_FEED_VERIFY_REFUSED' });
+    await admin.unsafe(`REVOKE TEMPORARY ON DATABASE "${databaseName}" FROM "${roleName}"`);
+
     stage = 'post-verify-insert-refusal';
     await db.unsafe(`REVOKE INSERT ON public.agent_feed FROM "${roleName}"`);
     const revokedAfterReady = await request(base, '/api/setfarm/agent-feed');
@@ -599,6 +642,53 @@ test('private restricted agent-session append persists before returning feed', {
       ['THIRD APPEND MESSAGE']);
     assert.equal((await db<Array<{ count: number }>>`
       SELECT COUNT(*)::integer AS count FROM public.agent_feed`)[0]?.count, 3);
+
+    stage = 'apostrophe-preservation';
+    writeFileSync(fileMessage, `${readFileSync(fileMessage, 'utf8')}${JSON.stringify({
+      message: { role: 'assistant', content: [{ type: 'text', text: "I'm done with this task" }] },
+    })}\n`);
+    const quoted = await request(`http://127.0.0.1:${ordered.port}`,
+      '/api/setfarm/agent-feed?limit=1');
+    assert.equal(quoted.status, 200);
+    assert.deepEqual((await quoted.json() as Array<{ message: string }>).map((row) => row.message),
+      ["I'm done with this task"]);
+    assert.equal((await db<Array<{ count: number }>>`
+      SELECT COUNT(*)::integer AS count FROM public.agent_feed`)[0]?.count, 4);
+
+    stage = 'malformed-utf8-refusal';
+    const validFeedBytes = readFileSync(fileMessage);
+    writeFileSync(fileMessage, Buffer.concat([validFeedBytes,
+      Buffer.from('{"message":{"role":"assistant","content":[{"type":"text","text":"BAD '),
+      Buffer.from([0xff]), Buffer.from(' BYTE"}]}}\n')]));
+    const malformed = await request(`http://127.0.0.1:${ordered.port}`,
+      '/api/setfarm/agent-feed?limit=1');
+    assert.equal(malformed.status, 502);
+    assert.deepEqual(await malformed.json(),
+      { error: 'MC_TASK6A_RESTRICTED_AGENT_FEED_VERIFY_REFUSED' });
+    assert.equal((await db<Array<{ count: number }>>`
+      SELECT COUNT(*)::integer AS count FROM public.agent_feed`)[0]?.count, 4);
+
+    stage = 'legacy-apostrophe-collision-refusal';
+    const sourceLegacy = "LEGACY I'm done";
+    const storedLegacy = "LEGACY I''m done";
+    const legacyHash = createHash('md5')
+      .update('agent-v2' + 'session-v2' + storedLegacy).digest('hex');
+    await db`INSERT INTO public.agent_feed
+      (agent_id, agent_name, message, session_id, msg_hash)
+      VALUES ('agent-v2', 'agent-v2', ${storedLegacy}, 'session-v2', ${legacyHash})`;
+    writeFileSync(fileMessage, Buffer.concat([validFeedBytes,
+      Buffer.from(`${JSON.stringify({ message: { role: 'assistant',
+        content: [{ type: 'text', text: sourceLegacy }] } })}\n`)]));
+    const legacyCollision = await request(`http://127.0.0.1:${ordered.port}`,
+      '/api/setfarm/agent-feed?limit=1');
+    assert.equal(legacyCollision.status, 502);
+    assert.deepEqual(await legacyCollision.json(),
+      { error: 'MC_TASK6A_RESTRICTED_AGENT_FEED_VERIFY_REFUSED' });
+    assert.equal((await db<Array<{ count: number }>>`
+      SELECT COUNT(*)::integer AS count FROM public.agent_feed`)[0]?.count, 5);
+    assert.equal((await db<Array<{ count: number }>>`
+      SELECT COUNT(*)::integer AS count FROM public.agent_feed
+      WHERE message = ${sourceLegacy}`)[0]?.count, 0);
   } catch (error) {
     failure = error;
     process.stderr.write(`[mc-task6a-private-append] failed at ${stage}\n`);

@@ -631,10 +631,12 @@ async function verifyRestrictedAgentFeedShape(append: boolean): Promise<void> {
             defaultReadOnly: string; recovering: boolean;
             canLogin: boolean; inherits: boolean; memberships: number;
             superuser: boolean; bypassRls: boolean; createRole: boolean;
-            createDatabase: boolean; databaseCreate: boolean; schemaCreate: boolean;
+            createDatabase: boolean; databaseCreate: boolean; databaseTemp: boolean;
+            schemaCreate: boolean;
             ownerMember: boolean; canSelect: boolean; canInsert: boolean;
             extraTable: boolean; columnInsert: boolean; extraColumn: boolean;
-            sequenceUsage: boolean; sequenceUpdate: boolean; sequenceName: string | null;
+            sequenceUsage: boolean; sequenceSelect: boolean; sequenceUpdate: boolean;
+            sequenceName: string | null;
             relationKind: string; persistence: string; rowSecurity: boolean;
             forceRowSecurity: boolean; isPartition: boolean; hasAncestors: boolean;
             hasDescendants: boolean }>>`
@@ -647,6 +649,7 @@ async function verifyRestrictedAgentFeedShape(append: boolean): Promise<void> {
               r.rolsuper AS superuser, r.rolbypassrls AS "bypassRls",
               r.rolcreaterole AS "createRole", r.rolcreatedb AS "createDatabase",
               has_database_privilege(current_user, current_database(), 'CREATE') AS "databaseCreate",
+              has_database_privilege(current_user, current_database(), 'TEMPORARY') AS "databaseTemp",
               has_schema_privilege(current_user, 'public', 'CREATE') AS "schemaCreate",
               pg_catalog.pg_has_role(current_user, c.relowner, 'MEMBER') AS "ownerMember",
               has_table_privilege(current_user, c.oid, 'SELECT') AS "canSelect",
@@ -660,6 +663,9 @@ async function verifyRestrictedAgentFeedShape(append: boolean): Promise<void> {
               has_sequence_privilege(current_user,
                 pg_catalog.pg_get_serial_sequence('public.agent_feed', 'id'),
                 'USAGE') AS "sequenceUsage",
+              has_sequence_privilege(current_user,
+                pg_catalog.pg_get_serial_sequence('public.agent_feed', 'id'),
+                'SELECT') AS "sequenceSelect",
               has_sequence_privilege(current_user,
                 pg_catalog.pg_get_serial_sequence('public.agent_feed', 'id'),
                 'UPDATE') AS "sequenceUpdate",
@@ -679,15 +685,49 @@ async function verifyRestrictedAgentFeedShape(append: boolean): Promise<void> {
             || role.superuser || role.bypassRls || role.createRole
             || role.createDatabase || role.databaseCreate || role.schemaCreate
             || role.ownerMember || !role.canSelect || role.extraTable
-            || role.extraColumn || role.sequenceUpdate
+            || role.extraColumn || role.sequenceSelect || role.sequenceUpdate
             || (append ? !role.canInsert || !role.sequenceUsage
               : role.canInsert || role.columnInsert || role.sequenceUsage)
-            || (append && (role.defaultReadOnly !== 'off' || role.recovering))
+            || (append && (role.defaultReadOnly !== 'off' || role.recovering
+              || role.databaseTemp))
             || role.sequenceName !== 'public.agent_feed_id_seq'
             || role.relationKind !== 'r' || role.persistence !== 'p'
             || role.rowSecurity || role.forceRowSecurity || role.isPartition
             || role.hasAncestors || role.hasDescendants) {
             throw new Error('MC_TASK6A_RESTRICTED_AGENT_FEED_ROLE_INVALID');
+          }
+          if (append) {
+            const outside = await tx<Array<{ otherRelation: boolean;
+              otherSchema: boolean; otherFunction: boolean }>>`
+              SELECT
+                EXISTS (SELECT 1 FROM pg_catalog.pg_class object
+                  JOIN pg_catalog.pg_namespace namespace ON namespace.oid = object.relnamespace
+                  WHERE namespace.nspname NOT IN ('information_schema')
+                    AND namespace.nspname !~ '^pg_'
+                    AND object.oid <> pg_catalog.to_regclass('public.agent_feed')
+                    AND object.oid <> pg_catalog.to_regclass('public.agent_feed_id_seq')
+                    AND ((object.relkind = 'S' AND has_sequence_privilege(current_user,
+                      object.oid, 'USAGE, SELECT, UPDATE'))
+                      OR (object.relkind IN ('r', 'p', 'v', 'm', 'f')
+                        AND (has_table_privilege(current_user, object.oid,
+                          'SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN')
+                          OR has_any_column_privilege(current_user, object.oid,
+                            'SELECT, INSERT, UPDATE, REFERENCES'))))) AS "otherRelation",
+                EXISTS (SELECT 1 FROM pg_catalog.pg_namespace namespace
+                  WHERE namespace.nspname NOT IN ('public', 'information_schema')
+                    AND namespace.nspname !~ '^pg_'
+                    AND has_schema_privilege(current_user, namespace.oid,
+                      'USAGE, CREATE')) AS "otherSchema",
+                EXISTS (SELECT 1 FROM pg_catalog.pg_proc routine
+                  JOIN pg_catalog.pg_namespace namespace ON namespace.oid = routine.pronamespace
+                  WHERE namespace.nspname NOT IN ('information_schema')
+                    AND namespace.nspname !~ '^pg_'
+                    AND has_function_privilege(current_user, routine.oid,
+                      'EXECUTE')) AS "otherFunction"`;
+            if (outside.length !== 1 || outside[0].otherRelation
+              || outside[0].otherSchema || outside[0].otherFunction) {
+              throw new Error('MC_TASK6A_RESTRICTED_AGENT_FEED_OTHER_ACCESS');
+            }
           }
           const effects = await tx<Array<{ triggers: boolean; rules: boolean;
             otherConstraints: boolean }>>`
@@ -817,6 +857,10 @@ export type RestrictedAgentFeedText = Readonly<{
   agentId: string; agentName: string; message: string; sessionId: string;
 }>;
 
+function normalizeBoundFeedText(value: string): string {
+  return value.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '');
+}
+
 /** Private V2 only: all appends/read commit together; never hide a DB error. */
 export async function appendRestrictedAgentFeedEntries(entries: readonly RestrictedAgentFeedText[],
   limit = 100): Promise<any[]> {
@@ -827,10 +871,32 @@ export async function appendRestrictedAgentFeedEntries(entries: readonly Restric
     await tx`SET LOCAL statement_timeout = '5s'`;
     for (const entry of entries) {
       const safeAgentId = validateId(entry.agentId, 'agentId');
-      const safeAgentName = escapeStr(entry.agentName).slice(0, 50);
-      const safeMessage = escapeStr(entry.message).slice(0, 500);
-      const safeSessionId = entry.sessionId ? escapeStr(entry.sessionId).slice(0, 100) : '';
+      const safeAgentName = normalizeBoundFeedText(entry.agentName).slice(0, 50);
+      const safeMessage = normalizeBoundFeedText(entry.message).slice(0, 500);
+      const safeSessionId = entry.sessionId ? normalizeBoundFeedText(entry.sessionId).slice(0, 100) : '';
       const hash = createHash('md5').update(safeAgentId + safeSessionId + safeMessage).digest('hex');
+      const legacyMessage = escapeStr(entry.message).slice(0, 500);
+      const legacySessionId = entry.sessionId ? escapeStr(entry.sessionId).slice(0, 100) : '';
+      const legacyHash = createHash('md5')
+        .update(safeAgentId + legacySessionId + legacyMessage).digest('hex');
+      if (legacyHash !== hash) {
+        const legacyRows = await tx<Array<{ agent_id: string; agent_name: string;
+          message: string; session_id: string; msg_hash: string }>>`
+          SELECT agent_id, agent_name, message, session_id, msg_hash
+          FROM public.agent_feed WHERE msg_hash = ${legacyHash}`;
+        if (legacyRows.length > 0) {
+          const legacy = legacyRows[0];
+          const expectedLegacyName = escapeStr(entry.agentName).slice(0, 50);
+          if (legacyRows.length !== 1 || legacy.agent_id !== safeAgentId
+            || legacy.agent_name !== expectedLegacyName
+            || legacy.message !== legacyMessage
+            || legacy.session_id !== legacySessionId
+            || legacy.msg_hash !== legacyHash) {
+            throw new Error('MC_TASK6A_RESTRICTED_AGENT_FEED_LEGACY_HASH_MISMATCH');
+          }
+          throw new Error('MC_TASK6A_RESTRICTED_AGENT_FEED_LEGACY_COLLISION');
+        }
+      }
       await tx`
         INSERT INTO public.agent_feed (agent_id, agent_name, message, session_id, msg_hash)
         VALUES (${safeAgentId}, ${safeAgentName}, ${safeMessage}, ${safeSessionId}, ${hash})
