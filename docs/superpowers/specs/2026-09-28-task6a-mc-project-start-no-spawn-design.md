@@ -28,8 +28,10 @@ A disposable runnable project and fake `npm` marker demonstrate that ordinary
 start reaches child execution (RED), then private mode returns fixed 503 with
 no marker, registry, runner log/PID or project runtime artifact (GREEN). Both
 entry routes, invalid flag value, aliases, stop behavior and normal mode are
-covered. The normal-mode proof stops only its identity-checked disposable
-child process group; it never calls the production port-killing stop path.
+covered. The normal-mode proof first stops its router fixture, then scans for
+only its exact disposable command/process group (also checking marker/PID-file
+identity), signals it and verifies exit. It never calls the production
+port-killing stop path or removes a root with a still-running fixture child.
 The fixture may create and remove only its own exact temporary root.
 No live flag, service, DB role/credential, selected CLI or generated project is
 changed. This negative proof is not the full Task6A writer fence.

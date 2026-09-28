@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -18,30 +18,53 @@ async function stopChild(child: ChildProcess): Promise<void> {
   }
 }
 
-function stopDisposableProject(root: string): void {
-  const marker = path.join(root, 'child-ran');
-  if (!existsSync(marker)) return;
-  const pid = Number(readFileSync(marker, 'utf8'));
-  if (!Number.isSafeInteger(pid) || pid < 1) throw new Error('MC_TASK6A_PRIVATE_PROJECT_PID_INVALID');
-  let command: string;
-  try {
-    command = execFileSync('/bin/ps', ['-o', 'command=', '-p', String(pid)], {
-      encoding: 'utf8', timeout: 2000,
-    }).trim();
-  } catch { return; } // Fixture child already exited; never target a port.
-  if (!command.includes(`${path.join(root, 'bin', 'npm')} run dev`)) {
-    throw new Error('MC_TASK6A_PRIVATE_PROJECT_IDENTITY_CHANGED');
+function disposableProjectPids(root: string): number[] {
+  const output = execFileSync('/bin/ps', ['-axww', '-o', 'pid=', '-o', 'pgid=', '-o', 'command='], {
+    encoding: 'utf8', timeout: 2000,
+  });
+  const commandPrefix = `${path.join(root, 'bin', 'npm')} run dev --`;
+  const pids: number[] = [];
+  for (const line of output.split('\n')) {
+    const match = /^\s*(\d+)\s+(\d+)\s+(.+)$/.exec(line);
+    if (!match || !match[3]!.includes(commandPrefix)) continue;
+    const pid = Number(match[1]);
+    const pgid = Number(match[2]);
+    if (!Number.isSafeInteger(pid) || pid < 1 || pgid !== pid) {
+      throw new Error('MC_TASK6A_PRIVATE_PROJECT_IDENTITY_CHANGED');
+    }
+    pids.push(pid);
   }
-  try { process.kill(-pid, 'SIGTERM'); } catch { /* already stopped */ }
+  return pids;
 }
 
 async function cleanupFixture(root: string, child: ChildProcess | undefined): Promise<void> {
-  let failure: unknown;
-  try { stopDisposableProject(root); } catch (error) { failure = error; }
-  try { if (child) await stopChild(child); } catch (error) { failure ??= error; }
-  // Preserve the exact disposable root for diagnosis if identity/reaping failed.
-  if (failure) throw failure;
-  if (/^\/tmp\/mc-task6a-project-[A-Za-z0-9]+$/.test(root)) rmSync(root, { recursive: true });
+  // First prevent any new spawn by terminating the only router fixture. A
+  // detached npm may exist before either its marker or router PID file appears.
+  if (child) await stopChild(child);
+  const marker = path.join(root, 'child-ran');
+  const pidFile = path.join(root, 'local-project-runners', 'private-project.pid');
+  const recorded = [marker, pidFile]
+    .filter(existsSync)
+    .map((file) => Number(readFileSync(file, 'utf8')));
+  if (recorded.some((pid) => !Number.isSafeInteger(pid) || pid < 1)) {
+    throw new Error('MC_TASK6A_PRIVATE_PROJECT_PID_INVALID');
+  }
+  const running = disposableProjectPids(root);
+  if (recorded.some((pid) => running.length > 0 && !running.includes(pid))) {
+    throw new Error('MC_TASK6A_PRIVATE_PROJECT_IDENTITY_CHANGED');
+  }
+  for (const pid of running) {
+    try { process.kill(-pid, 'SIGTERM'); } catch { /* already exited */ }
+  }
+  for (let attempt = 0; attempt < 50; attempt++) {
+    if (disposableProjectPids(root).length === 0) {
+      if (/^\/tmp\/mc-task6a-project-[A-Za-z0-9]+$/.test(root)) rmSync(root, { recursive: true });
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  // Never remove a fixture root while its own child is still running.
+  throw new Error('MC_TASK6A_PRIVATE_PROJECT_NOT_REAPED');
 }
 
 function makeProject(root: string): void {
@@ -180,5 +203,31 @@ test('ordinary project start still executes a disposable child', async () => {
     assert.equal(Number.isSafeInteger(projectPid) && projectPid > 0, true);
   } finally {
     await cleanupFixture(root, child);
+  }
+});
+
+test('cleanup reaps its detached child even when the marker is missing', async () => {
+  const root = mkdtempSync('/tmp/mc-task6a-project-');
+  let cleaned = false;
+  try {
+    makeProject(root);
+    const marker = path.join(root, 'child-ran');
+    const child = spawn(path.join(root, 'bin', 'npm'),
+      ['run', 'dev', '--', '--port', '0'], {
+        cwd: path.join(root, 'repo'), detached: true, stdio: 'ignore',
+        env: { PATH: '/opt/homebrew/bin:/usr/bin:/bin', TASK6A_MARKER: marker },
+      });
+    child.unref();
+    for (let attempt = 0; attempt < 50 && !existsSync(marker); attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assert.equal(existsSync(marker), true);
+    unlinkSync(marker); // Rehearse the gap before child-ran is available.
+    assert.equal(disposableProjectPids(root).length, 1);
+    await cleanupFixture(root, undefined);
+    cleaned = true;
+    assert.equal(disposableProjectPids(root).length, 0);
+  } finally {
+    if (!cleaned && existsSync(root)) await cleanupFixture(root, undefined);
   }
 });
