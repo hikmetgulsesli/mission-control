@@ -45,6 +45,11 @@ and inherited Setfarm CLI writer path, so this is a real pre-live-role gap.
   cleanup and background scanner, and rejects any call to the persistence
   helper. Normal mode retains its writers. Both direct INSERT/DELETE and a
   column-level UPDATE grant are negative fixtures.
+- The second exact-head GitHub review found the restricted router gate caught
+  unrelated routes mounted after live-feed in the full server. An ephemeral
+  route mounted after the feed was RED (503 instead of 200). The gate now
+  matches only the `/live-feed` path segment, case-insensitively; later
+  unrelated routes pass through, while every unverified feed route refuses.
 - This proves only read-only live-feed stats in a private route harness. The
   fixture intentionally denies live-feed writes, and restricted mode does not
   start cleanup or background persistence. Tasks, PRD and agent-feed lazy DDL, scoped
@@ -64,7 +69,8 @@ HTTP checks. No service restart in this slice.
 - `server/routes/live-feed.ts`: explicit private restricted catalog-verify
   branch, schema-qualified relation use, descendant refusal, and stats-only
   route gate; normal DDL behavior unchanged.
-- `server/routes/task6a-private-live-feed-child.ts`: ephemeral route harness.
+- `server/routes/task6a-private-live-feed-child.ts`: ephemeral route harness
+  with a post-live-feed sentinel proving unrelated route pass-through.
 - `server/routes/task6a-private-live-feed-restricted.integration.test.ts`:
   exact private PG17 fixture, role rights, HTTP and schema-drift checks.
 - `package.json`: explicit opt-in private test command.

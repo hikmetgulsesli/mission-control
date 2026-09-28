@@ -14,6 +14,9 @@ app.get("/api/health", async (_request, response) => {
   }
 });
 app.use("/api", liveFeedRouter);
+app.get("/api/task6a-after-live-feed", (_request, response) => {
+  response.json({ reachable: true });
+});
 
 const server = app.listen(0, "127.0.0.1", () => {
   const address = server.address();

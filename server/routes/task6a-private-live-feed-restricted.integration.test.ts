@@ -218,6 +218,10 @@ test("private restricted MC live feed verifies catalog without DDL while health 
     const stats = await fetch(`${base}/api/live-feed/stats`, { signal: AbortSignal.timeout(5000) });
     assert.equal(stats.status, 200);
     assert.equal((await stats.json() as { total: number }).total, 0);
+    const afterLiveFeed = await fetch(`${base}/api/task6a-after-live-feed`,
+      { signal: AbortSignal.timeout(5000) });
+    assert.equal(afterLiveFeed.status, 200);
+    assert.deepEqual(await afterLiveFeed.json(), { reachable: true });
     assert.equal(await publicFingerprint(db), before);
 
     stage = "shadow-search-path-binding";
@@ -240,7 +244,7 @@ test("private restricted MC live feed verifies catalog without DDL while health 
     assert.equal(shadowStats.status, 200);
     assert.equal((await shadowStats.json() as { total: number }).total, 0);
     for (const route of ["/api/live-feed", "/api/live-feed/projects?format=rich",
-      "/api/live-feed/errors", "/api/live-feed/history"]) {
+      "/api/live-feed/errors", "/api/live-feed/history", "/api/LIVE-FEED/history"]) {
       const refused = await fetch(`http://127.0.0.1:${shadowed.port}${route}`,
         { signal: AbortSignal.timeout(5000) });
       assert.equal(refused.status, 503, route);

@@ -11,7 +11,10 @@ const restrictedLiveFeed = process.env.MC_TASK6A_RESTRICTED_LIVE_FEED_VERIFY_V1 
 
 // The private restricted rehearsal proves only this read-only route.
 router.use((req, res, next) => {
-  if (restrictedLiveFeed && (req.method !== 'GET' || req.path !== '/live-feed/stats')) {
+  const routePath = req.path.toLowerCase();
+  const isLiveFeedPath = routePath === '/live-feed' || routePath.startsWith('/live-feed/');
+  if (restrictedLiveFeed && isLiveFeedPath
+    && (req.method !== 'GET' || routePath !== '/live-feed/stats')) {
     res.status(503).json({ error: 'MC_TASK6A_RESTRICTED_LIVE_FEED_ROUTE_UNVERIFIED' });
     return;
   }
