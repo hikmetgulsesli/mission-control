@@ -31,7 +31,7 @@
 
 **Interfaces:** `task6aSelectedCliNoSpawn` is a startup Boolean; `TASK6A_SELECTED_CLI_NO_SPAWN` is the fixed refusal code. `runCli(cmd,args)` preserves its signature.
 
-- [ ] **Step 1: Write RED test.** In the new utility test, create a bounded `/tmp/mc-task6a-cli-*` fixture with executable `probe` that writes a marker and prints `CHILD_RAN`. Spawn a separate Node process with `--import tsx --input-type=module -e` to import real `runCli` and invoke the absolute probe path. With `MC_TASK6A_SELECTED_CLI_NO_SPAWN_V1=1` and a dummy non-live `SETFARM_PG_URL`, assert fixed rejection, absent marker and no stdout containing dummy credentials. Also test invalid value `0`. The production change this test catches is a child launch before/after denial.
+- [ ] **Step 1: Write RED test.** In the new utility test, create a bounded `/tmp/mc-task6a-cli-*` fixture with executable `probe` that writes a marker and prints `CHILD_RAN`. Spawn a separate Node process with `--import tsx --input-type=module -e` to import real `runCli` and invoke the absolute probe path. Require an `.env`/`.env.local`-free worktree and pass a dummy `GATEWAY_TOKEN` so config loading never reads the host gateway credential. With `MC_TASK6A_SELECTED_CLI_NO_SPAWN_V1=1` and a dummy non-live `SETFARM_PG_URL`, assert fixed rejection, absent marker and no stdout containing dummy credentials. Also test invalid value `0`. The production change this test catches is a child launch before/after denial.
 
   ```ts
   assert.equal(child.status, 0, child.stderr);
@@ -54,7 +54,7 @@
 
 **Interfaces:** Under the same flag, `POST /api/prd/start-run` returns 503 `{error:'MC_TASK6A_SELECTED_CLI_NO_SPAWN'}` before input validation or the handler. The rest of the PRD route behavior is unchanged with the flag absent.
 
-- [ ] **Step 1: Write RED HTTP test.** Start an Express child mounting the real PRD router with explicit harmless env (`SETFARM_PG_URL=postgresql://invalid@127.0.0.1:1/private`, no ambient `DATABASE_URL` or `.env`). POST `/api/prd/start-run` with `{}` under the flag and assert exact 503. Current route returns 400 before the new guard, so this is RED without contacting a DB or launching host Setfarm. Assert the same for `/api/PRD/START-RUN`, invalid flag `0`, and that `/api/task6a-after-prd` remains 200. With flag absent, `{}` remains 400.
+- [ ] **Step 1: Write RED HTTP test.** Start an Express child mounting the real PRD router with explicit harmless env (`SETFARM_PG_URL=postgresql://invalid@127.0.0.1:1/private`, no ambient `DATABASE_URL` or `.env`, dummy `GATEWAY_TOKEN`). POST `/api/prd/start-run` with `{}` under the flag and assert exact 503. Current route returns 400 before the new guard, so this is RED without contacting a DB or launching host Setfarm. Assert the same for `/api/PRD/START-RUN`, `/api/prd/start-run/`, invalid flag `0`, and that `/api/task6a-after-prd` remains 200. With flag absent, `{}` remains 400.
 
   ```ts
   const response = await fetch(`${base}/api/prd/start-run`, {
@@ -84,3 +84,14 @@
 ## Self-review
 
 The two production child paths in scope each have an observable negative test; the absent-flag baseline and invalid-flag fail-closed behavior are covered. The plan does not pretend that denying these two paths fences every Mission Control child or Setfarm's own agent env. No PostgreSQL fixture or secret/grant mutation is needed for a no-spawn proof.
+
+## Review-directed root refinement
+
+Read-only review found that Express accepts the PRD handler's trailing-slash
+alias while the first exact path comparison missed it. The File Map's PRD
+route and HTTP test therefore cover a deterministic 400-vs-503 RED alias
+and a normalized-path GREEN denial before the handler. The same review
+found the test child would read the host gateway token through `config.ts`
+unless its environment supplied a dummy token; both private fixtures now
+do so and require no worktree `.env` files. These are source/test isolation
+corrections for this selected-CLI proof, not live credential changes.

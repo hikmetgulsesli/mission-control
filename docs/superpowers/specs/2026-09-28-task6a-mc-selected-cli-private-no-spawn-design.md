@@ -15,7 +15,8 @@ Use a separate startup-only opt-in flag,
 `MC_TASK6A_SELECTED_CLI_NO_SPAWN_V1=1`. The presence of the flag, including
 an invalid value, denies shared `runCli` calls before in-flight deduplication,
 queue acquisition or `execFile`, with a fixed non-secret error. The PRD
-router rejects `POST /prd/start-run` (including case-insensitive aliases)
+router rejects `POST /prd/start-run` (including case-insensitive and
+trailing-slash aliases)
 in its first middleware with fixed HTTP 503, before database reads, repo or
 temporary-file creation, or direct `spawn`. The flag absent preserves all
 ordinary behavior. This proof does not enable a live flag.
@@ -32,7 +33,7 @@ Focused tests use only a disposable executable marker and an isolated
 Express child: under the flag, `runCli` rejects and the marker is absent;
 with the flag absent, the marker runs to prove the test is sensitive. The
 PRD HTTP test requires exact fixed 503 for `POST /prd/start-run`, including
-case aliases, with no source fixture mutation. Invalid flag values also
+case and trailing-slash aliases, with no source fixture mutation. Invalid flag values also
 refuse. The new tests run without the live PostgreSQL URL and never launch
 the selected host `setfarm` executable. The normal suite and build verify
 that the absent-flag route remains unchanged.

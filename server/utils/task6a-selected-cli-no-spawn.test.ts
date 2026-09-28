@@ -8,6 +8,8 @@ const cliModule = new URL('./cli.ts', import.meta.url).href;
 const privateUrl = 'postgresql://invalid@127.0.0.1:1/private';
 
 function runProbe(flag: string | undefined): { result: ReturnType<typeof spawnSync>; marker: boolean } {
+  assert.equal(existsSync(path.join(process.cwd(), '.env')), false);
+  assert.equal(existsSync(path.join(process.cwd(), '.env.local')), false);
   const root = mkdtempSync('/tmp/mc-task6a-cli-');
   try {
     const markerPath = path.join(root, 'child-ran');
@@ -28,6 +30,7 @@ function runProbe(flag: string | undefined): { result: ReturnType<typeof spawnSy
       ['--import', 'tsx', '--input-type=module', '-e', program, executable], {
         cwd: process.cwd(), encoding: 'utf8', timeout: 10_000, maxBuffer: 1_000_000,
         env: { PATH: '/usr/bin:/bin', LANG: 'C', LC_ALL: 'C',
+          GATEWAY_TOKEN: 'private-fixture-no-live-read',
           SETFARM_PG_URL: privateUrl,
           ...(flag === undefined ? {} : { MC_TASK6A_SELECTED_CLI_NO_SPAWN_V1: flag }) },
       });
@@ -42,7 +45,7 @@ function runProbe(flag: string | undefined): { result: ReturnType<typeof spawnSy
 for (const flag of ['1', '0']) {
   test(`private selected-CLI flag ${flag} refuses before running the child`, () => {
     const { result, marker } = runProbe(flag);
-    assert.equal(result.status, 0, result.stderr || result.error?.message);
+    assert.equal(result.status, 0, String(result.stderr || result.error?.message || ''));
     assert.deepEqual(JSON.parse(result.stdout as string),
       { error: 'MC_TASK6A_SELECTED_CLI_NO_SPAWN' });
     assert.equal(marker, false);
@@ -52,7 +55,7 @@ for (const flag of ['1', '0']) {
 
 test('ordinary shared CLI still runs a disposable executable with the flag absent', () => {
   const { result, marker } = runProbe(undefined);
-  assert.equal(result.status, 0, result.stderr || result.error?.message);
+  assert.equal(result.status, 0, String(result.stderr || result.error?.message || ''));
   assert.deepEqual(JSON.parse(result.stdout as string), { output: 'CHILD_RAN' });
   assert.equal(marker, true);
 });

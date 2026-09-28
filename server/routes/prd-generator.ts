@@ -10,6 +10,7 @@ import { config, PATHS } from '../config.js';
 import { join } from 'path';
 import { mkdirSync, existsSync } from 'fs';
 import { execFileSync } from 'child_process';
+import { task6aSelectedCliNoSpawn, TASK6A_SELECTED_CLI_NO_SPAWN } from '../utils/task6a-selected-cli-fence.js';
 
 const router = Router();
 const restrictedPrdMode = process.env.MC_TASK6A_RESTRICTED_PRD_READS_VERIFY_V1;
@@ -18,6 +19,11 @@ router.use((req, res, next) => {
   const path = req.path.toLowerCase(); // Express Router matches routes case-insensitively by default.
   if (path !== '/prd' && !path.startsWith('/prd/')) {
     next();
+    return;
+  }
+  if (task6aSelectedCliNoSpawn && req.method === 'POST'
+    && path.replace(/\/+$/, '') === '/prd/start-run') {
+    res.status(503).json({ error: TASK6A_SELECTED_CLI_NO_SPAWN });
     return;
   }
   if (restrictedPrdMode !== undefined
