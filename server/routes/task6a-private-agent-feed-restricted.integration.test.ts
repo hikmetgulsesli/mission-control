@@ -511,6 +511,16 @@ test('private restricted agent-session append persists before returning feed', {
     unlinkSync(sessions);
     renameSync(hiddenSessions, sessions);
 
+    stage = 'post-verify-extra-grant-refusal';
+    await db.unsafe(`GRANT UPDATE ON public.agent_feed TO "${roleName}"`);
+    const broadenedAfterReady = await request(base, '/api/setfarm/agent-feed');
+    assert.equal(broadenedAfterReady.status, 502);
+    assert.deepEqual(await broadenedAfterReady.json(),
+      { error: 'MC_TASK6A_RESTRICTED_AGENT_FEED_VERIFY_REFUSED' });
+    await db.unsafe(`REVOKE UPDATE ON public.agent_feed FROM "${roleName}"`);
+    assert.equal((await db<Array<{ count: number }>>`
+      SELECT COUNT(*)::integer AS count FROM public.agent_feed`)[0]?.count, 1);
+
     stage = 'post-verify-insert-refusal';
     await db.unsafe(`REVOKE INSERT ON public.agent_feed FROM "${roleName}"`);
     const revokedAfterReady = await request(base, '/api/setfarm/agent-feed');

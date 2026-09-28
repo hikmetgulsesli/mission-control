@@ -69,5 +69,10 @@ when a batch shares one PostgreSQL `NOW()` timestamp. A private V2 fixture
 with two newly ingested messages and `limit=1` was RED (returned the earlier
 message), then GREEN with `ORDER BY created_at DESC, id DESC` in the V2
 transactional reader only.
+The second exact-head Codex review found that V2 cached a successful verifier,
+so later broad grants or schema drift could pass while INSERT itself still
+succeeded. A same-child UPDATE-grant test was RED (HTTP 200) then GREEN (fixed
+502); V2 rechecks the restricted shape before every append request while V1
+retains its original cached historical-read proof.
 This is a private parser proof, not a claim that old live writers are fenced
 by the OS; that remains a separate cutover gate.

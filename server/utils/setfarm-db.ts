@@ -617,7 +617,6 @@ export async function checkMissingInput(runId: string) {
 // === Agent Feed (chat-style agent output log) ===
 
 let restrictedAgentFeedReady: Promise<void> | null = null;
-let restrictedAgentFeedAppendReady: Promise<void> | null = null;
 
 /** Private Task6A table/role proof; no live launcher selects either mode. */
 async function verifyRestrictedAgentFeedShape(append: boolean): Promise<void> {
@@ -777,10 +776,7 @@ export function verifyRestrictedAgentFeedRead(): Promise<void> {
 
 /** SELECT+INSERT/sequence-USAGE private agent-session proof. */
 export function verifyRestrictedAgentFeedAppend(): Promise<void> {
-  if (!restrictedAgentFeedAppendReady) {
-    restrictedAgentFeedAppendReady = verifyRestrictedAgentFeedShape(true);
-  }
-  return restrictedAgentFeedAppendReady;
+  return verifyRestrictedAgentFeedShape(true);
 }
 
 export async function ensureAgentFeedTable(): Promise<void> {
