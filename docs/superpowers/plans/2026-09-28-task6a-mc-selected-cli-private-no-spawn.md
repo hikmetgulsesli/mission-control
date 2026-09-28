@@ -26,6 +26,7 @@
 - Create `server/utils/task6a-selected-cli-no-spawn.test.ts`: real disposable executable marker RED/GREEN for flag-present, invalid flag, and flag-absent behavior.
 - Create `server/routes/task6a-selected-cli-no-spawn-child.ts`: isolated PRD-only HTTP harness with no live DB URL.
 - Create `server/routes/task6a-selected-cli-no-spawn.integration.test.ts`: POST start-run denial before input validation and case aliases; absent-flag 400 characterization and unrelated route reachability.
+- Modify `package.json`: include the new `server/utils/*.test.ts` path in the normal `npm test` suite so the real child-process regression cannot silently drop from ordinary verification.
 
 ## Task 1: Generic CLI negative proof
 
@@ -95,3 +96,7 @@ found the test child would read the host gateway token through `config.ts`
 unless its environment supplied a dummy token; both private fixtures now
 do so and require no worktree `.env` files. These are source/test isolation
 corrections for this selected-CLI proof, not live credential changes.
+The exact-head review then found the repository's normal `npm test` glob
+omitted `server/utils` entirely. The File Map and Task 3 verification now
+include the one-file test-glob addition, so the real child regression runs
+on every ordinary suite instead of only a manually focused command.
