@@ -741,6 +741,21 @@ test('private restricted agent-session append persists before returning feed', {
     assert.equal((await db<Array<{ count: number }>>`
       SELECT COUNT(*)::integer AS count FROM public.agent_feed
       WHERE message = ${sourceLegacy}`)[0]?.count, 0);
+
+    stage = 'unicode-truncation-at-code-point-boundary';
+    const unicodeSource = `${'A'.repeat(499)}😀X`;
+    const unicodeExpected = `${'A'.repeat(499)}😀`;
+    writeFileSync(fileMessage, Buffer.concat([validFeedBytes,
+      Buffer.from(`${JSON.stringify({ message: { role: 'assistant',
+        content: [{ type: 'text', text: unicodeSource }] } })}\n`)]));
+    const unicodeFeed = await request(`http://127.0.0.1:${ordered.port}`,
+      '/api/setfarm/agent-feed?limit=1');
+    assert.equal(unicodeFeed.status, 200);
+    assert.deepEqual((await unicodeFeed.json() as Array<{ message: string }>).map((row) => row.message),
+      [unicodeExpected]);
+    assert.equal((await db<Array<{ count: number }>>`
+      SELECT COUNT(*)::integer AS count FROM public.agent_feed
+      WHERE message = ${unicodeExpected}`)[0]?.count, 1);
   } catch (error) {
     failure = error;
     process.stderr.write(`[mc-task6a-private-append] failed at ${stage}\n`);

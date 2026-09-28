@@ -3,8 +3,9 @@
  * a chat-style feed of recent agent messages.
  */
 
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "fs";
 import { basename, join } from "path";
 import { PATHS } from "../config.js";
@@ -41,6 +42,25 @@ function shouldSkipAgentText(text: string): boolean {
   return !text || text.length < 5 || /HEARTBEAT|\[idle\]|polling|no.?tasks?/i.test(text);
 }
 
+let privateAgentSessionReaderActive = false;
+
+/** Run at most one bounded, descriptor-pinned private source reader per process. */
+export async function readPrivateAgentSessionSnapshot(helper: string, agentsDir: string): Promise<string> {
+  if (privateAgentSessionReaderActive) {
+    throw new Error('MC_TASK6A_RESTRICTED_AGENT_FEED_SOURCE_BUSY');
+  }
+  privateAgentSessionReaderActive = true;
+  try {
+    const { stdout } = await promisify(execFile)('/usr/bin/python3', ['-I', helper, agentsDir], {
+      encoding: 'utf8', timeout: 10_000, maxBuffer: 64_000_000,
+      env: { PATH: '/usr/bin:/bin', LANG: 'C', LC_ALL: 'C' },
+    });
+    return stdout;
+  } finally {
+    privateAgentSessionReaderActive = false;
+  }
+}
+
 /** Private V2: agent-session JSONL only, with no memory or events fallback. */
 export async function getRestrictedAgentSessionFeed(limit: number): Promise<any[]> {
   const helper = fileURLToPath(new URL('./task6a-agent-session-reader.py', import.meta.url));
@@ -48,9 +68,7 @@ export async function getRestrictedAgentSessionFeed(limit: number): Promise<any[
   const agentsDir = PATHS.agentsDir.startsWith('/tmp/')
     ? join(realpathSync('/tmp'), PATHS.agentsDir.slice('/tmp/'.length))
     : PATHS.agentsDir;
-  const snapshot = JSON.parse(execFileSync('/usr/bin/python3',
-    ['-I', helper, agentsDir], { encoding: 'utf8', timeout: 10_000,
-      maxBuffer: 64_000_000, env: { PATH: '/usr/bin:/bin', LANG: 'C', LC_ALL: 'C' } })) as
+  const snapshot = JSON.parse(await readPrivateAgentSessionSnapshot(helper, agentsDir)) as
     Array<{ agentId: string; sessionId: string; raw: string }>;
   if (!Array.isArray(snapshot) || snapshot.length > 100) {
     throw new Error('MC_TASK6A_RESTRICTED_AGENT_FEED_SOURCE_INVALID');
@@ -71,7 +89,7 @@ export async function getRestrictedAgentSessionFeed(limit: number): Promise<any[
         .map((item: any) => item.text || '').join(' '));
       if (shouldSkipAgentText(compact)) continue;
       entries.push({ agentId, agentName: agentId,
-        message: compact.length > 500 ? compact.slice(0, 500) + '...' : compact,
+        message: Array.from(compact).slice(0, 500).join(''),
         sessionId });
       if (entries.length > 1_000) {
         throw new Error('MC_TASK6A_RESTRICTED_AGENT_FEED_SOURCE_UNBOUNDED');

@@ -901,8 +901,9 @@ export type RestrictedAgentFeedText = Readonly<{
   agentId: string; agentName: string; message: string; sessionId: string;
 }>;
 
-function normalizeBoundFeedText(value: string): string {
-  return value.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '');
+function normalizeBoundFeedText(value: string, maxCodePoints: number): string {
+  return Array.from(value.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, ''))
+    .slice(0, maxCodePoints).join('');
 }
 
 /** Private V2 only: all appends/read commit together; never hide a DB error. */
@@ -919,9 +920,9 @@ export async function appendRestrictedAgentFeedEntries(entries: readonly Restric
     catch { throw new Error('MC_TASK6A_RESTRICTED_AGENT_FEED_VERIFY_REFUSED'); }
     for (const entry of entries) {
       const safeAgentId = validateId(entry.agentId, 'agentId');
-      const safeAgentName = normalizeBoundFeedText(entry.agentName).slice(0, 50);
-      const safeMessage = normalizeBoundFeedText(entry.message).slice(0, 500);
-      const safeSessionId = entry.sessionId ? normalizeBoundFeedText(entry.sessionId).slice(0, 100) : '';
+      const safeAgentName = normalizeBoundFeedText(entry.agentName, 50);
+      const safeMessage = normalizeBoundFeedText(entry.message, 500);
+      const safeSessionId = entry.sessionId ? normalizeBoundFeedText(entry.sessionId, 100) : '';
       const hash = createHash('md5').update(safeAgentId + safeSessionId + safeMessage).digest('hex');
       const legacyMessage = escapeStr(entry.message).slice(0, 500);
       const legacySessionId = entry.sessionId ? escapeStr(entry.sessionId).slice(0, 100) : '';

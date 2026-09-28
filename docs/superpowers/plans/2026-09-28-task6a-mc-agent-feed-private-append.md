@@ -46,7 +46,8 @@ continuous old-writer exclusion remain separate gates.
 - `server/services/task6a-agent-session-reader.py`: descriptor-pinned,
   no-follow, bounded private source snapshot; no live launcher selects it.
 - `server/services/task6a-agent-session-reader.test.ts`: near-bound Unicode
-  snapshot test for the child-process output capacity contract.
+  snapshot test for the child-process output capacity contract and event-loop
+  liveness while the private reader child runs.
 - `server/routes/setfarm-activity.ts`: V2 opt-in and fail-closed private route.
 - `server/routes/task6a-private-agent-feed-restricted.integration.test.ts`:
   add independent disposable V2 role/DB/JSONL RED/GREEN fixture, including
@@ -112,5 +113,18 @@ ACLs. The fixture asserts no pre-existing outside CONNECT, grants CONNECT on
 an additional disposable database, observes 502, revokes it, then observes
 200. This is a causal refinement of the same restricted V2 role contract,
 not a live permission change or a continuous old-writer fence.
+The sixth exact-head Codex review found two parser-path defects within the
+same private append slice. A 499-ASCII-plus-emoji boundary fixture returned
+502 before code-point truncation, then persisted the exact 500-code-point
+message after the V2 service and DB bound normalizer were changed. The
+ordinary feed path is unchanged. A deliberately slow disposable Python reader
+showed the synchronous runner completed before the Node timer (RED); the V2
+runner now awaits bounded asynchronous `execFile`, and the timer fires before
+its result (GREEN). Independent review then identified unbounded concurrent
+reader children; a second overlapping slow-reader call succeeded in RED, then
+was refused with `SOURCE_BUSY` after a per-process single-flight guard, while
+a post-completion call succeeds. The route maps that refusal to fixed 502 and
+never shares a stale snapshot. The same private PG17 route fixture remains
+green.
 This is a private parser proof, not a claim that old live writers are fenced
 by the OS; that remains a separate cutover gate.
