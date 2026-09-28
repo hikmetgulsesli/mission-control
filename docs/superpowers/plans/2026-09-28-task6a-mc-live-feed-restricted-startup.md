@@ -38,10 +38,16 @@ and inherited Setfarm CLI writer path, so this is a real pre-live-role gap.
   readiness. Other live-feed endpoints read unverified `runs`/`steps` and
   may enrich from Setfarm helpers, so restricted mode serves stats only and
   returns a fixed refusal for every other live-feed route.
+- Exact-head GitHub review found that a role with direct table-write grants
+  could pass the first verifier and allow startup cleanup/background inserts.
+  Private RED confirms the granted role returned 200. Restricted mode now
+  refuses table-level and column-level write privileges, skips the startup
+  cleanup and background scanner, and rejects any call to the persistence
+  helper. Normal mode retains its writers. Both direct INSERT/DELETE and a
+  column-level UPDATE grant are negative fixtures.
 - This proves only read-only live-feed stats in a private route harness. The
-  fixture intentionally denies live-feed INSERT/DELETE, so startup cleanup
-  and background event persistence are not proved functional; those errors
-  are currently swallowed/logged. Tasks, PRD and agent-feed lazy DDL, scoped
+  fixture intentionally denies live-feed writes, and restricted mode does not
+  start cleanup or background persistence. Tasks, PRD and agent-feed lazy DDL, scoped
   MC write grants, the shared/inherited credential path, all other MC writes,
   and the continuous DB/OS writer fence remain separate blockers. A bounded
   snapshot is not a held continuous schema fence.

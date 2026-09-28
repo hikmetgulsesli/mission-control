@@ -7,11 +7,11 @@ import { PATHS } from '../config.js';
 import { getSetfarmActivity } from '../utils/setfarm.js';
 
 const router = Router();
+const restrictedLiveFeed = process.env.MC_TASK6A_RESTRICTED_LIVE_FEED_VERIFY_V1 === '1';
 
 // The private restricted rehearsal proves only this read-only route.
 router.use((req, res, next) => {
-  if (process.env.MC_TASK6A_RESTRICTED_LIVE_FEED_VERIFY_V1 === '1'
-    && (req.method !== 'GET' || req.path !== '/live-feed/stats')) {
+  if (restrictedLiveFeed && (req.method !== 'GET' || req.path !== '/live-feed/stats')) {
     res.status(503).json({ error: 'MC_TASK6A_RESTRICTED_LIVE_FEED_ROUTE_UNVERIFIED' });
     return;
   }
@@ -449,7 +449,8 @@ async function pgVerifyRestrictedLiveFeedReadOnlyV1(): Promise<void> {
       canLogin: boolean; inherits: boolean; membershipCount: number;
       bypassRls: boolean; superuser: boolean; createRole: boolean; createDatabase: boolean;
       databaseCreate: boolean; schemaCreate: boolean; tableOwnerMember: boolean;
-      tableSelect: boolean; relationKind: string; rowSecurity: boolean;
+      tableSelect: boolean; tableWrite: boolean; columnWrite: boolean;
+      relationKind: string; rowSecurity: boolean;
       forceRowSecurity: boolean; hasDescendants: boolean }>>`
       SELECT session_user AS "sessionLogin", current_user AS login,
         r.rolcanlogin AS "canLogin", r.rolinherit AS inherits,
@@ -462,6 +463,10 @@ async function pgVerifyRestrictedLiveFeedReadOnlyV1(): Promise<void> {
         has_schema_privilege(current_user, 'public', 'CREATE') AS "schemaCreate",
         pg_catalog.pg_has_role(current_user, c.relowner, 'MEMBER') AS "tableOwnerMember",
         has_table_privilege(current_user, c.oid, 'SELECT') AS "tableSelect",
+        has_table_privilege(current_user, c.oid,
+          'INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER') AS "tableWrite",
+        has_any_column_privilege(current_user, c.oid,
+          'INSERT, UPDATE, REFERENCES') AS "columnWrite",
         c.relkind AS "relationKind", c.relrowsecurity AS "rowSecurity",
         c.relforcerowsecurity AS "forceRowSecurity",
         EXISTS (SELECT 1 FROM pg_catalog.pg_inherits inh
@@ -476,6 +481,7 @@ async function pgVerifyRestrictedLiveFeedReadOnlyV1(): Promise<void> {
       || actualRole.superuser || actualRole.bypassRls
       || actualRole.createRole || actualRole.createDatabase || actualRole.databaseCreate
       || actualRole.schemaCreate || actualRole.tableOwnerMember || !actualRole.tableSelect
+      || actualRole.tableWrite || actualRole.columnWrite
       || actualRole.relationKind !== 'r' || actualRole.rowSecurity
       || actualRole.forceRowSecurity || actualRole.hasDescendants) {
       throw new Error('MC_TASK6A_RESTRICTED_LIVE_FEED_ROLE_INVALID');
@@ -559,6 +565,7 @@ async function ensurePgReady(): Promise<void> {
 }
 
 async function pgPersistEvents(events: LiveEvent[]): Promise<void> {
+  if (restrictedLiveFeed) throw new Error('MC_TASK6A_RESTRICTED_LIVE_FEED_WRITE_REFUSED');
   if (events.length === 0) return;
   await ensurePgReady();
   // Use pgSql.begin with type assertion — TransactionSql loses call signatures due to Omit<>
@@ -590,22 +597,24 @@ async function persistEvents(events: LiveEvent[]): Promise<void> {
   }
 }
 
-// Cleanup events older than 30 days (runs once on startup)
-ensurePgReady().then(async () => {
-  try {
-    await pgSql`DELETE FROM public.live_events WHERE ts < NOW() - INTERVAL '30 days'`;
-  } catch {}
-}).catch(() => {});
+if (!restrictedLiveFeed) {
+  // Cleanup events older than 30 days (runs once on ordinary startup).
+  ensurePgReady().then(async () => {
+    try {
+      await pgSql`DELETE FROM public.live_events WHERE ts < NOW() - INTERVAL '30 days'`;
+    } catch {}
+  }).catch(() => {});
 
-// Background scanner — keeps DB populated even when no client is viewing live feed
-setInterval(async () => {
-  try {
-    const events = scanSessions();
-    await persistEvents(events);
-  } catch (err: any) {
-    console.error('[live-feed-db] Background scan error:', err.message);
-  }
-}, 5000);
+  // Background scanner — keeps DB populated even when no client is viewing live feed.
+  setInterval(async () => {
+    try {
+      const events = scanSessions();
+      await persistEvents(events);
+    } catch (err: any) {
+      console.error('[live-feed-db] Background scan error:', err.message);
+    }
+  }, 5000);
+}
 
 // Cache
 let feedCache: { data: LiveEvent[]; ts: number } = { data: [], ts: 0 };

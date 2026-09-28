@@ -267,6 +267,31 @@ test("private restricted MC live feed verifies catalog without DDL while health 
     await stopChild(child);
     child = undefined;
     await db`DROP TABLE shadow.live_events_child`;
+    stage = "write-capable-role-refusal";
+    await db.unsafe(`GRANT INSERT, DELETE ON public.live_events TO "${roleName}"`);
+    const writeCapable = await startChild(privateUrl.toString());
+    child = writeCapable.child;
+    const writeCapableStats = await fetch(`http://127.0.0.1:${writeCapable.port}/api/live-feed/stats`,
+      { signal: AbortSignal.timeout(5000) });
+    assert.equal(writeCapableStats.status, 500);
+    assert.deepEqual(await writeCapableStats.json(),
+      { error: "MC_TASK6A_RESTRICTED_LIVE_FEED_VERIFY_REFUSED" });
+    await stopChild(child);
+    child = undefined;
+    await db.unsafe(`REVOKE INSERT, DELETE ON public.live_events FROM "${roleName}"`);
+    await db.unsafe(`GRANT UPDATE(status) ON public.live_events TO "${roleName}"`);
+    const columnWriter = await startChild(privateUrl.toString());
+    child = columnWriter.child;
+    const columnWriterStats = await fetch(`http://127.0.0.1:${columnWriter.port}/api/live-feed/stats`,
+      { signal: AbortSignal.timeout(5000) });
+    assert.equal(columnWriterStats.status, 500);
+    assert.deepEqual(await columnWriterStats.json(),
+      { error: "MC_TASK6A_RESTRICTED_LIVE_FEED_VERIFY_REFUSED" });
+    await stopChild(child);
+    child = undefined;
+    await db.unsafe(`REVOKE UPDATE(status) ON public.live_events FROM "${roleName}"`);
+
+    stage = "ordinary-mode-preserved";
     const ordinary = await startChild(dbUrl.toString(), false);
     child = ordinary.child;
     const ordinaryStats = await fetch(`http://127.0.0.1:${ordinary.port}/api/live-feed/stats`,
