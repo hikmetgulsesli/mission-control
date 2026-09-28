@@ -7,6 +7,19 @@ import { PATHS } from '../config.js';
 import { getSetfarmActivity } from '../utils/setfarm.js';
 
 const router = Router();
+const restrictedLiveFeed = process.env.MC_TASK6A_RESTRICTED_LIVE_FEED_VERIFY_V1 === '1';
+
+// The private restricted rehearsal proves only this read-only route.
+router.use((req, res, next) => {
+  const routePath = req.path.toLowerCase();
+  const isLiveFeedPath = routePath === '/live-feed' || routePath.startsWith('/live-feed/');
+  if (restrictedLiveFeed && isLiveFeedPath
+    && (req.method !== 'GET' || routePath !== '/live-feed/stats')) {
+    res.status(503).json({ error: 'MC_TASK6A_RESTRICTED_LIVE_FEED_ROUTE_UNVERIFIED' });
+    return;
+  }
+  next();
+});
 
 // Phase 7: PG-only backend
 
@@ -400,7 +413,7 @@ function normalizePersistedSetfarmEvent(event: LiveEvent, stepNameByInternal: Ma
 
 async function pgEnsureTable(): Promise<void> {
   await pgSql`
-    CREATE TABLE IF NOT EXISTS live_events (
+    CREATE TABLE IF NOT EXISTS public.live_events (
       id TEXT PRIMARY KEY,
       ts TIMESTAMPTZ NOT NULL,
       agent TEXT NOT NULL,
@@ -419,29 +432,150 @@ async function pgEnsureTable(): Promise<void> {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
-  await pgSql`CREATE INDEX IF NOT EXISTS idx_live_events_ts ON live_events(ts)`;
-  await pgSql`CREATE INDEX IF NOT EXISTS idx_live_events_status ON live_events(status)`;
-  await pgSql`CREATE INDEX IF NOT EXISTS idx_live_events_project ON live_events(project)`;
-  await pgSql`CREATE INDEX IF NOT EXISTS idx_live_events_agent ON live_events(agent)`;
-  await pgSql`CREATE INDEX IF NOT EXISTS idx_live_events_action ON live_events(action)`;
-  await pgSql`CREATE INDEX IF NOT EXISTS idx_live_events_error ON live_events(exit_code) WHERE exit_code IS NOT NULL AND exit_code != 0`;
+  await pgSql`CREATE INDEX IF NOT EXISTS idx_live_events_ts ON public.live_events(ts)`;
+  await pgSql`CREATE INDEX IF NOT EXISTS idx_live_events_status ON public.live_events(status)`;
+  await pgSql`CREATE INDEX IF NOT EXISTS idx_live_events_project ON public.live_events(project)`;
+  await pgSql`CREATE INDEX IF NOT EXISTS idx_live_events_agent ON public.live_events(agent)`;
+  await pgSql`CREATE INDEX IF NOT EXISTS idx_live_events_action ON public.live_events(action)`;
+  await pgSql`CREATE INDEX IF NOT EXISTS idx_live_events_error ON public.live_events(exit_code) WHERE exit_code IS NOT NULL AND exit_code != 0`;
+}
+
+/** Private Task6A rehearsal only; no live MC launcher selects this mode. */
+async function pgVerifyRestrictedLiveFeedReadOnlyV1(): Promise<void> {
+  try {
+    await pgSql.begin(async (transaction) => {
+      const tx = transaction as unknown as typeof pgSql;
+      await tx`SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY`;
+      await tx`SET LOCAL lock_timeout = '2s'`;
+      await tx`SET LOCAL statement_timeout = '5s'`;
+    const role = await tx<Array<{ sessionLogin: string; login: string;
+      canLogin: boolean; inherits: boolean; membershipCount: number;
+      bypassRls: boolean; superuser: boolean; createRole: boolean; createDatabase: boolean;
+      databaseCreate: boolean; schemaCreate: boolean; tableOwnerMember: boolean;
+      tableSelect: boolean; tableWrite: boolean; columnWrite: boolean;
+      relationKind: string; rowSecurity: boolean;
+      forceRowSecurity: boolean; hasDescendants: boolean }>>`
+      SELECT session_user AS "sessionLogin", current_user AS login,
+        r.rolcanlogin AS "canLogin", r.rolinherit AS inherits,
+        (SELECT COUNT(*)::integer FROM pg_catalog.pg_auth_members m
+          WHERE m.member = r.oid) AS "membershipCount",
+        r.rolsuper AS superuser,
+        r.rolbypassrls AS "bypassRls", r.rolcreaterole AS "createRole",
+        r.rolcreatedb AS "createDatabase",
+        has_database_privilege(current_user, current_database(), 'CREATE') AS "databaseCreate",
+        has_schema_privilege(current_user, 'public', 'CREATE') AS "schemaCreate",
+        pg_catalog.pg_has_role(current_user, c.relowner, 'MEMBER') AS "tableOwnerMember",
+        has_table_privilege(current_user, c.oid, 'SELECT') AS "tableSelect",
+        has_table_privilege(current_user, c.oid,
+          'INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER') AS "tableWrite",
+        has_any_column_privilege(current_user, c.oid,
+          'INSERT, UPDATE, REFERENCES') AS "columnWrite",
+        c.relkind AS "relationKind", c.relrowsecurity AS "rowSecurity",
+        c.relforcerowsecurity AS "forceRowSecurity",
+        EXISTS (SELECT 1 FROM pg_catalog.pg_inherits inh
+          WHERE inh.inhparent = c.oid) AS "hasDescendants"
+      FROM pg_catalog.pg_roles r
+      JOIN pg_catalog.pg_class c ON c.oid = pg_catalog.to_regclass('public.live_events')
+      WHERE r.rolname = current_user`;
+    const actualRole = role[0];
+    if (role.length !== 1 || !actualRole
+      || actualRole.sessionLogin !== actualRole.login || !actualRole.canLogin
+      || actualRole.inherits || actualRole.membershipCount !== 0
+      || actualRole.superuser || actualRole.bypassRls
+      || actualRole.createRole || actualRole.createDatabase || actualRole.databaseCreate
+      || actualRole.schemaCreate || actualRole.tableOwnerMember || !actualRole.tableSelect
+      || actualRole.tableWrite || actualRole.columnWrite
+      || actualRole.relationKind !== 'r' || actualRole.rowSecurity
+      || actualRole.forceRowSecurity || actualRole.hasDescendants) {
+      throw new Error('MC_TASK6A_RESTRICTED_LIVE_FEED_ROLE_INVALID');
+    }
+    const columns = await tx<Array<{ name: string; type: string;
+      notNull: boolean; defaultValue: string | null }>>`
+      SELECT a.attname AS name, a.atttypid::regtype::text AS type,
+        a.attnotnull AS "notNull",
+        pg_catalog.pg_get_expr(d.adbin, d.adrelid) AS "defaultValue"
+      FROM pg_catalog.pg_attribute a
+      LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+      WHERE a.attrelid = pg_catalog.to_regclass('public.live_events')
+        AND a.attnum > 0 AND NOT a.attisdropped
+      ORDER BY a.attnum`;
+    const expectedColumns: ReadonlyArray<readonly [string, string, boolean, string | null]> = [
+      ['id', 'text', true, null], ['ts', 'timestamp with time zone', true, null],
+      ['agent', 'text', true, null], ['model', 'text', false, null],
+      ['tool', 'text', false, null], ['action', 'text', true, null],
+      ['summary', 'text', false, null], ['file', 'text', false, null],
+      ['status', 'text', true, "'completed'::text"],
+      ['duration_ms', 'integer', false, null], ['exit_code', 'integer', false, null],
+      ['cwd', 'text', false, null], ['project', 'text', false, null],
+      ['detail', 'text', false, null], ['output', 'text', false, null],
+      ['created_at', 'timestamp with time zone', true, 'now()'],
+    ];
+    if (JSON.stringify(columns.map((column) => [column.name, column.type,
+      column.notNull, column.defaultValue]))
+      !== JSON.stringify(expectedColumns)) {
+      throw new Error('MC_TASK6A_RESTRICTED_LIVE_FEED_COLUMNS_INVALID');
+    }
+    const indexes = await tx<Array<{ name: string; key: string;
+      valid: boolean; ready: boolean; unique: boolean; primary: boolean;
+      accessMethod: string; predicate: string | null }>>`
+      SELECT ic.relname AS name, pg_catalog.pg_get_indexdef(i.indexrelid, 1, true) AS key,
+        i.indisvalid AS valid, i.indisready AS ready, i.indisunique AS unique,
+        i.indisprimary AS primary, am.amname AS "accessMethod",
+        pg_catalog.pg_get_expr(i.indpred, i.indrelid) AS predicate
+      FROM pg_catalog.pg_index i
+      JOIN pg_catalog.pg_class ic ON ic.oid = i.indexrelid
+      JOIN pg_catalog.pg_am am ON am.oid = ic.relam
+      WHERE i.indrelid = pg_catalog.to_regclass('public.live_events')
+        AND i.indnkeyatts = 1 AND i.indnatts = 1
+      ORDER BY ic.relname`;
+    const required = new Map<string, readonly [string, boolean, boolean]>([
+      ['live_events_pkey', ['id', true, false]],
+      ['idx_live_events_ts', ['ts', false, false]],
+      ['idx_live_events_status', ['status', false, false]],
+      ['idx_live_events_project', ['project', false, false]],
+      ['idx_live_events_agent', ['agent', false, false]],
+      ['idx_live_events_action', ['action', false, false]],
+      ['idx_live_events_error', ['exit_code', false, true]],
+    ]);
+    for (const index of indexes) {
+      const expected = required.get(index.name);
+      if (!expected) continue;
+      const partial = index.predicate !== null;
+      if (!index.valid || !index.ready || index.accessMethod !== 'btree'
+        || index.key !== expected[0] || index.unique !== expected[1]
+        || index.primary !== (index.name === 'live_events_pkey')
+        || partial !== expected[2]
+        || (partial && index.predicate !== '((exit_code IS NOT NULL) AND (exit_code <> 0))')) {
+        throw new Error('MC_TASK6A_RESTRICTED_LIVE_FEED_INDEX_INVALID');
+      }
+      required.delete(index.name);
+    }
+    if (required.size !== 0) throw new Error('MC_TASK6A_RESTRICTED_LIVE_FEED_INDEX_MISSING');
+    });
+  } catch {
+    throw new Error('MC_TASK6A_RESTRICTED_LIVE_FEED_VERIFY_REFUSED');
+  }
 }
 
 let pgReady = false;
 async function ensurePgReady(): Promise<void> {
   if (pgReady) return;
-  await pgEnsureTable();
+  const mode = process.env.MC_TASK6A_RESTRICTED_LIVE_FEED_VERIFY_V1;
+  if (mode === '1') await pgVerifyRestrictedLiveFeedReadOnlyV1();
+  else if (mode === undefined) await pgEnsureTable();
+  else throw new Error('MC_TASK6A_RESTRICTED_LIVE_FEED_MODE_INVALID');
   pgReady = true;
 }
 
 async function pgPersistEvents(events: LiveEvent[]): Promise<void> {
+  if (restrictedLiveFeed) throw new Error('MC_TASK6A_RESTRICTED_LIVE_FEED_WRITE_REFUSED');
   if (events.length === 0) return;
   await ensurePgReady();
   // Use pgSql.begin with type assertion — TransactionSql loses call signatures due to Omit<>
   await pgSql.begin(async (tx: any) => {
     for (const e of events) {
       await tx`
-        INSERT INTO live_events (id, ts, agent, model, tool, action, summary, file, status, duration_ms, exit_code, cwd, project, detail, output)
+        INSERT INTO public.live_events (id, ts, agent, model, tool, action, summary, file, status, duration_ms, exit_code, cwd, project, detail, output)
         VALUES (${e.id}, ${e.ts}, ${e.agent}, ${e.model || null}, ${e.tool || null}, ${e.action}, ${e.summary || null}, ${e.file}, ${e.status}, ${e.durationMs}, ${e.exitCode}, ${e.cwd}, ${e.project}, ${e.detail}, ${e.output})
         ON CONFLICT (id) DO NOTHING
       `;
@@ -466,22 +600,24 @@ async function persistEvents(events: LiveEvent[]): Promise<void> {
   }
 }
 
-// Cleanup events older than 30 days (runs once on startup)
-ensurePgReady().then(async () => {
-  try {
-    await pgSql`DELETE FROM live_events WHERE ts < NOW() - INTERVAL '30 days'`;
-  } catch {}
-}).catch(() => {});
+if (!restrictedLiveFeed) {
+  // Cleanup events older than 30 days (runs once on ordinary startup).
+  ensurePgReady().then(async () => {
+    try {
+      await pgSql`DELETE FROM public.live_events WHERE ts < NOW() - INTERVAL '30 days'`;
+    } catch {}
+  }).catch(() => {});
 
-// Background scanner — keeps DB populated even when no client is viewing live feed
-setInterval(async () => {
-  try {
-    const events = scanSessions();
-    await persistEvents(events);
-  } catch (err: any) {
-    console.error('[live-feed-db] Background scan error:', err.message);
-  }
-}, 5000);
+  // Background scanner — keeps DB populated even when no client is viewing live feed.
+  setInterval(async () => {
+    try {
+      const events = scanSessions();
+      await persistEvents(events);
+    } catch (err: any) {
+      console.error('[live-feed-db] Background scan error:', err.message);
+    }
+  }, 5000);
+}
 
 // Cache
 let feedCache: { data: LiveEvent[]; ts: number } = { data: [], ts: 0 };
@@ -812,7 +948,7 @@ router.get('/live-feed/projects', async (req, res) => {
     const realProjects = getRealProjects();
 
     await ensurePgReady();
-    const rows = await pgSql`SELECT DISTINCT project FROM live_events WHERE project IS NOT NULL AND project != '' ORDER BY project`;
+    const rows = await pgSql`SELECT DISTINCT project FROM public.live_events WHERE project IS NOT NULL AND project != '' ORDER BY project`;
     const dbProjects = rows.map((r: any) => r.project).filter((p: string) => realProjects.has(p));
     const setfarmProjects = await getSetfarmActivity(200)
       .then((events: any[]) => [...new Set(events.map((event) => String(event?.runId || '').trim()).filter(Boolean))])
@@ -855,7 +991,7 @@ router.get('/live-feed/errors', async (req, res) => {
     if (since) { conditions.push(`ts > $${paramIdx++}`); params.push(since); }
 
     const where = conditions.join(' AND ');
-    const query = `SELECT * FROM live_events WHERE ${where} ORDER BY ts DESC LIMIT $${paramIdx}`;
+    const query = `SELECT * FROM public.live_events WHERE ${where} ORDER BY ts DESC LIMIT $${paramIdx}`;
     params.push(limit);
 
     const rows = await pgSql.unsafe(query, params);
@@ -911,7 +1047,7 @@ router.get('/live-feed/history', async (req, res) => {
     }
 
     const where = conditions.join(' AND ');
-    const query = `SELECT * FROM live_events WHERE ${where} ORDER BY ts DESC LIMIT $${paramIdx}`;
+    const query = `SELECT * FROM public.live_events WHERE ${where} ORDER BY ts DESC LIMIT $${paramIdx}`;
     params.push(limit);
 
     const rows = await pgSql.unsafe(query, params);
@@ -944,12 +1080,12 @@ router.get('/live-feed/history', async (req, res) => {
 router.get('/live-feed/stats', async (_req, res) => {
   try {
     await ensurePgReady();
-    const [totalRow] = await pgSql`SELECT COUNT(*) as count FROM live_events`;
-    const [errorsRow] = await pgSql`SELECT COUNT(*) as count FROM live_events WHERE status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0)`;
-    const byProject = await pgSql`SELECT project, COUNT(*)::int as count, SUM(CASE WHEN status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0) THEN 1 ELSE 0 END)::int as errors FROM live_events WHERE project IS NOT NULL GROUP BY project ORDER BY count DESC`;
-    const byAgent = await pgSql`SELECT agent, COUNT(*)::int as count, SUM(CASE WHEN status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0) THEN 1 ELSE 0 END)::int as errors FROM live_events GROUP BY agent ORDER BY count DESC`;
-    const byAction = await pgSql`SELECT action, COUNT(*)::int as count, SUM(CASE WHEN status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0) THEN 1 ELSE 0 END)::int as errors FROM live_events GROUP BY action ORDER BY count DESC`;
-    const [oldestRow] = await pgSql`SELECT MIN(ts) as oldest FROM live_events`;
+    const [totalRow] = await pgSql`SELECT COUNT(*) as count FROM public.live_events`;
+    const [errorsRow] = await pgSql`SELECT COUNT(*) as count FROM public.live_events WHERE status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0)`;
+    const byProject = await pgSql`SELECT project, COUNT(*)::int as count, SUM(CASE WHEN status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0) THEN 1 ELSE 0 END)::int as errors FROM public.live_events WHERE project IS NOT NULL GROUP BY project ORDER BY count DESC`;
+    const byAgent = await pgSql`SELECT agent, COUNT(*)::int as count, SUM(CASE WHEN status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0) THEN 1 ELSE 0 END)::int as errors FROM public.live_events GROUP BY agent ORDER BY count DESC`;
+    const byAction = await pgSql`SELECT action, COUNT(*)::int as count, SUM(CASE WHEN status = 'error' OR (exit_code IS NOT NULL AND exit_code != 0) THEN 1 ELSE 0 END)::int as errors FROM public.live_events GROUP BY action ORDER BY count DESC`;
+    const [oldestRow] = await pgSql`SELECT MIN(ts) as oldest FROM public.live_events`;
 
     const total = Number(totalRow.count);
     const errors = Number(errorsRow.count);
