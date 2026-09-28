@@ -8,12 +8,159 @@ import sql from '../utils/pg.js';
 // ── Schema ──────────────────────────────────────────────────────────
 
 let schemaInitialized = false;
+const restrictedPrdMode = process.env.MC_TASK6A_RESTRICTED_PRD_READS_VERIFY_V1;
+let restrictedPrdReady: Promise<void> | null = null;
+
+/** Private Task6A read-only rehearsal only; the live launcher does not select this mode. */
+async function verifyRestrictedPrdReads(): Promise<void> {
+  try {
+    await sql.begin(async (transaction) => {
+      const tx = transaction as unknown as typeof sql;
+      await tx`SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY`;
+      await tx`SET LOCAL lock_timeout = '2s'`;
+      await tx`SET LOCAL statement_timeout = '5s'`;
+      const expected: ReadonlyArray<Readonly<{
+        relation: string; primaryIndex: string;
+        columns: ReadonlyArray<readonly [string, string, boolean, string | null]>;
+      }>> = [
+        { relation: 'public.prds', primaryIndex: 'prds_pkey', columns: [
+          ['id', 'text', true, null], ['title', 'text', true, null],
+          ['platform', 'text', false, "'web'::text"], ['urls', 'text', false, null],
+          ['description', 'text', false, null], ['analysis', 'text', false, null],
+          ['research', 'text', false, null], ['chat_history', 'text', false, null],
+          ['prd_content', 'text', false, null], ['prd_version', 'integer', false, '1'],
+          ['score', 'integer', false, null], ['score_details', 'text', false, null],
+          ['mockup_screens', 'text', false, null], ['pages', 'text', false, null],
+          ['cost_estimate', 'text', false, null], ['run_id', 'text', false, null],
+          ['template_id', 'text', false, null], ['stitch_project_id', 'text', false, null],
+          ['created_at', 'timestamp with time zone', false, 'now()'],
+          ['updated_at', 'timestamp with time zone', false, 'now()'],
+        ] },
+        { relation: 'public.prd_templates', primaryIndex: 'prd_templates_pkey', columns: [
+          ['id', 'text', true, null], ['name', 'text', true, null],
+          ['category', 'text', false, null], ['platform', 'text', false, "'web'::text"],
+          ['prd_content', 'text', false, null], ['description', 'text', false, null],
+          ['created_at', 'timestamp with time zone', false, 'now()'],
+        ] },
+      ];
+      for (const table of expected) {
+        const role = await tx<Array<{ sessionLogin: string; login: string;
+          canLogin: boolean; inherits: boolean; memberships: number;
+          superuser: boolean; bypassRls: boolean; createRole: boolean;
+          createDatabase: boolean; databaseCreate: boolean; schemaCreate: boolean;
+          ownerMember: boolean; canSelect: boolean; extraTable: boolean;
+          extraColumn: boolean; relationKind: string; persistence: string;
+          rowSecurity: boolean; forceRowSecurity: boolean; isPartition: boolean;
+          hasAncestors: boolean; hasDescendants: boolean }>>`
+          SELECT session_user AS "sessionLogin", current_user AS login,
+            r.rolcanlogin AS "canLogin", r.rolinherit AS inherits,
+            (SELECT COUNT(*)::integer FROM pg_catalog.pg_auth_members m
+              WHERE m.member = r.oid) AS memberships,
+            r.rolsuper AS superuser, r.rolbypassrls AS "bypassRls",
+            r.rolcreaterole AS "createRole", r.rolcreatedb AS "createDatabase",
+            has_database_privilege(current_user, current_database(), 'CREATE') AS "databaseCreate",
+            has_schema_privilege(current_user, 'public', 'CREATE') AS "schemaCreate",
+            pg_catalog.pg_has_role(current_user, c.relowner, 'MEMBER') AS "ownerMember",
+            has_table_privilege(current_user, c.oid, 'SELECT') AS "canSelect",
+            has_table_privilege(current_user, c.oid,
+              'INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN') AS "extraTable",
+            has_any_column_privilege(current_user, c.oid,
+              'INSERT, UPDATE, REFERENCES') AS "extraColumn",
+            c.relkind AS "relationKind", c.relpersistence AS persistence,
+            c.relrowsecurity AS "rowSecurity", c.relforcerowsecurity AS "forceRowSecurity",
+            c.relispartition AS "isPartition",
+            EXISTS (SELECT 1 FROM pg_catalog.pg_inherits i WHERE i.inhrelid = c.oid)
+              AS "hasAncestors",
+            EXISTS (SELECT 1 FROM pg_catalog.pg_inherits i WHERE i.inhparent = c.oid)
+              AS "hasDescendants"
+          FROM pg_catalog.pg_roles r
+          JOIN pg_catalog.pg_class c ON c.oid = pg_catalog.to_regclass(${table.relation})
+          WHERE r.rolname = current_user`;
+        const actual = role[0];
+        if (role.length !== 1 || !actual || actual.sessionLogin !== actual.login
+          || !actual.canLogin || actual.inherits || actual.memberships !== 0
+          || actual.superuser || actual.bypassRls || actual.createRole
+          || actual.createDatabase || actual.databaseCreate || actual.schemaCreate
+          || actual.ownerMember || !actual.canSelect || actual.extraTable
+          || actual.extraColumn || actual.relationKind !== 'r'
+          || actual.persistence !== 'p' || actual.rowSecurity || actual.forceRowSecurity
+          || actual.isPartition || actual.hasAncestors || actual.hasDescendants) {
+          throw new Error('MC_TASK6A_RESTRICTED_PRD_ROLE_INVALID');
+        }
+        const effects = await tx<Array<{ triggers: boolean; rules: boolean;
+          otherConstraints: boolean }>>`
+          SELECT
+            EXISTS (SELECT 1 FROM pg_catalog.pg_trigger t
+              WHERE t.tgrelid = pg_catalog.to_regclass(${table.relation})) AS triggers,
+            EXISTS (SELECT 1 FROM pg_catalog.pg_rewrite w
+              WHERE w.ev_class = pg_catalog.to_regclass(${table.relation})) AS rules,
+            EXISTS (SELECT 1 FROM pg_catalog.pg_constraint k
+              WHERE (k.conrelid = pg_catalog.to_regclass(${table.relation}) AND k.contype != 'p')
+                OR (k.confrelid = pg_catalog.to_regclass(${table.relation}) AND k.contype = 'f'))
+              AS "otherConstraints"`;
+        if (effects.length !== 1 || effects[0].triggers || effects[0].rules
+          || effects[0].otherConstraints) throw new Error('MC_TASK6A_RESTRICTED_PRD_EFFECTS_INVALID');
+        const columns = await tx<Array<{ name: string; type: string;
+          notNull: boolean; defaultValue: string | null;
+          generated: string; identity: string }>>`
+          SELECT a.attname AS name, a.atttypid::regtype::text AS type,
+            a.attnotnull AS "notNull", a.attgenerated AS generated,
+            a.attidentity AS identity,
+            pg_catalog.pg_get_expr(d.adbin, d.adrelid) AS "defaultValue"
+          FROM pg_catalog.pg_attribute a
+          LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+          WHERE a.attrelid = pg_catalog.to_regclass(${table.relation})
+            AND a.attnum > 0 AND NOT a.attisdropped
+          ORDER BY a.attnum`;
+        if (columns.some((column) => column.generated !== '' || column.identity !== '')
+          || JSON.stringify(columns.map((column) => [column.name, column.type,
+            column.notNull, column.defaultValue])) !== JSON.stringify(table.columns)) {
+          throw new Error('MC_TASK6A_RESTRICTED_PRD_COLUMNS_INVALID');
+        }
+        const indexes = await tx<Array<{ name: string; key: string;
+          valid: boolean; ready: boolean; unique: boolean; primary: boolean;
+          accessMethod: string; predicate: string | null; expression: string | null;
+          keyCount: number; totalCount: number }>>`
+          SELECT ic.relname AS name, pg_catalog.pg_get_indexdef(i.indexrelid, 1, true) AS key,
+            i.indisvalid AS valid, i.indisready AS ready, i.indisunique AS unique,
+            i.indisprimary AS primary, am.amname AS "accessMethod",
+            pg_catalog.pg_get_expr(i.indpred, i.indrelid) AS predicate,
+            pg_catalog.pg_get_expr(i.indexprs, i.indrelid) AS expression,
+            i.indnkeyatts AS "keyCount", i.indnatts AS "totalCount"
+          FROM pg_catalog.pg_index i
+          JOIN pg_catalog.pg_class ic ON ic.oid = i.indexrelid
+          JOIN pg_catalog.pg_am am ON am.oid = ic.relam
+          WHERE i.indrelid = pg_catalog.to_regclass(${table.relation})`;
+        const primary = indexes[0];
+        if (indexes.length !== 1 || !primary || primary.name !== table.primaryIndex
+          || primary.key !== 'id' || !primary.valid || !primary.ready
+          || !primary.unique || !primary.primary || primary.accessMethod !== 'btree'
+          || primary.predicate !== null || primary.expression !== null
+          || primary.keyCount !== 1 || primary.totalCount !== 1) {
+          throw new Error('MC_TASK6A_RESTRICTED_PRD_INDEX_INVALID');
+        }
+      }
+      const templates = await tx<Array<{ count: number }>>`
+        SELECT COUNT(*)::integer AS count FROM public.prd_templates`;
+      if (templates.length !== 1 || templates[0].count < 1) {
+        throw new Error('MC_TASK6A_RESTRICTED_PRD_TEMPLATES_EMPTY');
+      }
+    });
+  } catch {
+    throw new Error('MC_TASK6A_RESTRICTED_PRD_VERIFY_REFUSED');
+  }
+}
 
 async function ensureSchema(): Promise<void> {
+  if (restrictedPrdMode !== undefined) {
+    if (restrictedPrdMode !== '1') throw new Error('MC_TASK6A_RESTRICTED_PRD_VERIFY_REFUSED');
+    if (!restrictedPrdReady) restrictedPrdReady = verifyRestrictedPrdReads();
+    return restrictedPrdReady;
+  }
   if (schemaInitialized) return;
 
   await sql`
-    CREATE TABLE IF NOT EXISTS prds (
+    CREATE TABLE IF NOT EXISTS public.prds (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
       platform TEXT DEFAULT 'web',
@@ -38,7 +185,7 @@ async function ensureSchema(): Promise<void> {
   `;
 
   await sql`
-    CREATE TABLE IF NOT EXISTS prd_templates (
+    CREATE TABLE IF NOT EXISTS public.prd_templates (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       category TEXT,
@@ -50,7 +197,7 @@ async function ensureSchema(): Promise<void> {
   `;
 
   // Seed templates if empty
-  const [{ count }] = await sql`SELECT COUNT(*)::int as count FROM prd_templates`;
+  const [{ count }] = await sql`SELECT COUNT(*)::int as count FROM public.prd_templates`;
   if (count === 0) {
     await seedTemplates();
   }
@@ -75,7 +222,7 @@ async function seedTemplates(): Promise<void> {
   for (const t of templates) {
     const content = TEMPLATE_CONTENTS[t.id] || '';
     await sql`
-      INSERT INTO prd_templates (id, name, category, platform, description, prd_content)
+      INSERT INTO public.prd_templates (id, name, category, platform, description, prd_content)
       VALUES (${t.id}, ${t.name}, ${t.category}, ${t.platform}, ${t.description}, ${content})
       ON CONFLICT (id) DO NOTHING
     `;
@@ -141,7 +288,7 @@ export async function createPrd(data: {
   const urls = JSON.stringify(data.urls || []);
 
   await sql`
-    INSERT INTO prds (id, title, platform, urls, description, template_id)
+    INSERT INTO public.prds (id, title, platform, urls, description, template_id)
     VALUES (${id}, ${data.title}, ${data.platform || 'web'}, ${urls}, ${data.description || ''}, ${data.template_id || ''})
   `;
   return (await getPrd(id))!;
@@ -149,14 +296,14 @@ export async function createPrd(data: {
 
 export async function getPrd(id: string): Promise<PrdRecord | null> {
   await ensureSchema();
-  const rows = await sql`SELECT * FROM prds WHERE id = ${id}`;
+  const rows = await sql`SELECT * FROM public.prds WHERE id = ${id}`;
   return rows.length > 0 ? deserializePrd(rows[0]) : null;
 }
 
 export async function listPrds(limit = 50): Promise<PrdRecord[]> {
   await ensureSchema();
   const safeLimit = Math.max(1, Math.min(200, Number(limit) || 50));
-  const rows = await sql`SELECT * FROM prds ORDER BY updated_at DESC LIMIT ${safeLimit}`;
+  const rows = await sql`SELECT * FROM public.prds ORDER BY updated_at DESC LIMIT ${safeLimit}`;
   return rows.map(deserializePrd);
 }
 
@@ -198,13 +345,13 @@ export async function updatePrd(id: string, updates: Partial<{
 
   sets.push(`updated_at = NOW()`);
   vals.push(id);
-  await sql.unsafe(`UPDATE prds SET ${sets.join(', ')} WHERE id = $${paramIdx}`, vals);
+  await sql.unsafe(`UPDATE public.prds SET ${sets.join(', ')} WHERE id = $${paramIdx}`, vals);
   return getPrd(id);
 }
 
 export async function deletePrd(id: string): Promise<boolean> {
   await ensureSchema();
-  await sql`DELETE FROM prds WHERE id = ${id}`;
+  await sql`DELETE FROM public.prds WHERE id = ${id}`;
   return true;
 }
 
@@ -212,11 +359,11 @@ export async function deletePrd(id: string): Promise<boolean> {
 
 export async function listTemplates(): Promise<any[]> {
   await ensureSchema();
-  return sql`SELECT * FROM prd_templates ORDER BY name`;
+  return sql`SELECT * FROM public.prd_templates ORDER BY name`;
 }
 
 export async function getTemplate(id: string): Promise<any> {
   await ensureSchema();
-  const rows = await sql`SELECT * FROM prd_templates WHERE id = ${id}`;
+  const rows = await sql`SELECT * FROM public.prd_templates WHERE id = ${id}`;
   return rows[0] || null;
 }

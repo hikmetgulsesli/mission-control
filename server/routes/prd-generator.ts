@@ -12,6 +12,22 @@ import { mkdirSync, existsSync } from 'fs';
 import { execFileSync } from 'child_process';
 
 const router = Router();
+const restrictedPrdMode = process.env.MC_TASK6A_RESTRICTED_PRD_READS_VERIFY_V1;
+
+router.use((req, res, next) => {
+  const path = req.path.toLowerCase(); // Express Router matches routes case-insensitively by default.
+  if (path !== '/prd' && !path.startsWith('/prd/')) {
+    next();
+    return;
+  }
+  if (restrictedPrdMode !== undefined
+    && (restrictedPrdMode !== '1' || req.method !== 'GET'
+      || (path !== '/prd/history' && path !== '/prd/templates'))) {
+    res.status(503).json({ error: 'MC_TASK6A_RESTRICTED_PRD_ROUTE_UNVERIFIED' });
+    return;
+  }
+  next();
+});
 
 // POST /prd/analyze - analyze URL or screenshot.
 router.post('/prd/analyze', async (req, res) => {
@@ -890,7 +906,9 @@ router.get('/prd/history', async (_req, res) => {
     const prds = await listPrds(50);
     res.json(prds);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    if (restrictedPrdMode === '1') {
+      res.status(502).json({ error: 'MC_TASK6A_RESTRICTED_PRD_VERIFY_REFUSED' });
+    } else res.status(500).json({ error: err.message });
   }
 });
 
@@ -941,7 +959,9 @@ router.get('/prd/templates', async (_req, res) => {
     const templates = await listTemplates();
     res.json(templates);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    if (restrictedPrdMode === '1') {
+      res.status(502).json({ error: 'MC_TASK6A_RESTRICTED_PRD_VERIFY_REFUSED' });
+    } else res.status(500).json({ error: err.message });
   }
 });
 
