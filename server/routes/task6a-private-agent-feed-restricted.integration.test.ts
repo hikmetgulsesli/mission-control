@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync,
+  symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 
@@ -28,7 +29,8 @@ async function stopChild(child: ChildProcess): Promise<void> {
   throw new Error('MC_TASK6A_PRIVATE_CHILD_NOT_REAPED');
 }
 
-async function startChild(privateUrl: string, root: string, mode: string | null = '1'):
+async function startChild(privateUrl: string, root: string, mode: string | null = '1',
+  appendMode?: string):
   Promise<Readonly<{ child: ChildProcess; port: number }>> {
   const child = spawn(process.execPath,
     ['--import', 'tsx', 'server/routes/task6a-private-agent-feed-child.ts'], {
@@ -49,6 +51,7 @@ async function startChild(privateUrl: string, root: string, mode: string | null 
         SETFARM_REPO_DIR: path.join(root, 'repos'),
         PORT_REGISTRY: path.join(root, 'port-registry.json'),
         ...(mode === null ? {} : { MC_TASK6A_RESTRICTED_AGENT_FEED_READS_VERIFY_V1: mode }),
+        ...(appendMode === undefined ? {} : { MC_TASK6A_RESTRICTED_AGENT_FEED_APPEND_V2: appendMode }),
       },
       stdio: ['ignore', 'pipe', 'ignore'],
     });
@@ -317,6 +320,262 @@ test('private restricted agent-feed returns DB rows, never file fallback', {
   } catch (error) {
     failure = error;
     process.stderr.write(`[mc-task6a-private-feed] failed at ${stage}\n`);
+    throw error;
+  } finally {
+    const cleanupFailures: string[] = [];
+    let childReaped = true;
+    try { if (child) await stopChild(child); }
+    catch { childReaped = false; cleanupFailures.push('child_not_reaped_fixture_retained'); }
+    try { await db?.end({ timeout: 5 }); } catch { cleanupFailures.push('database_connection'); }
+    try { if (childReaped && databaseCreated) await admin.unsafe(`DROP DATABASE IF EXISTS "${databaseName}"`); }
+    catch { cleanupFailures.push('fixture_database'); }
+    try { if (childReaped && roleCreated) await admin.unsafe(`DROP ROLE IF EXISTS "${roleName}"`); }
+    catch { cleanupFailures.push('fixture_role'); }
+    try { await admin.end({ timeout: 5 }); } catch { cleanupFailures.push('admin_connection'); }
+    try {
+      if (childReaped && privateRoot && /^\/tmp\/mc-task6a-feed-[A-Za-z0-9]+$/.test(privateRoot)) {
+        rmSync(privateRoot, { recursive: true });
+      }
+    } catch { cleanupFailures.push('fixture_files'); }
+    if (cleanupFailures.length > 0) {
+      const cleanup = new Error(`MC_TASK6A_PRIVATE_CLEANUP_FAILED:${cleanupFailures.join(',')}`);
+      if (failure !== undefined) throw new AggregateError([failure, cleanup],
+        'MC_TASK6A_PRIVATE_TEST_AND_CLEANUP_FAILED');
+      throw cleanup;
+    }
+  }
+});
+
+test('private restricted agent-session append persists before returning feed', {
+  skip: expectedDataDirectory ? false : 'requires explicitly identified private PostgreSQL 17 cluster',
+}, async () => {
+  assert.equal(process.env.SETFARM_PG_URL, undefined);
+  assert.match(expectedDataDirectory!, /^\/tmp\/setfarm-task6a-pg\.[A-Za-z0-9]+\/data$/);
+  assert.equal(existsSync(path.join(process.cwd(), '.env')), false);
+  assert.equal(existsSync(path.join(process.cwd(), '.env.local')), false);
+  const adminUrl = process.env.SETFARM_TEST_PG_ADMIN_URL;
+  assert.ok(adminUrl);
+  const parsed = new URL(adminUrl);
+  assert.equal(parsed.pathname, '/postgres');
+  assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname));
+  assert.notEqual(parsed.port, '5432');
+  const databaseName = `mc_task6a_append_${randomBytes(8).toString('hex')}`;
+  const roleName = `mc_task6a_append_role_${randomBytes(8).toString('hex')}`;
+  const password = randomBytes(24).toString('hex');
+  const admin = postgres(adminUrl, { max: 1 });
+  let db: postgres.Sql | undefined;
+  let child: ChildProcess | undefined;
+  let privateRoot: string | undefined;
+  let databaseCreated = false;
+  let roleCreated = false;
+  let stage = 'private-preflight';
+  let failure: unknown;
+  try {
+    const identity = await admin<Array<{ dataDirectory: string; port: string;
+      socketDirectories: string; version: number }>>`
+      SELECT current_setting('data_directory') AS "dataDirectory",
+        current_setting('port') AS port,
+        current_setting('unix_socket_directories') AS "socketDirectories",
+        current_setting('server_version_num')::integer AS version`;
+    assert.equal(identity[0]?.dataDirectory, expectedDataDirectory);
+    assert.equal(identity[0]?.port, parsed.port);
+    assert.ok(identity[0]?.socketDirectories.split(',').map((item) => item.trim())
+      .includes(path.dirname(expectedDataDirectory!)));
+    assert.ok(identity[0]!.version >= 170000 && identity[0]!.version < 180000);
+
+    stage = 'private-fixture';
+    privateRoot = mkdtempSync('/tmp/mc-task6a-feed-');
+    const sessions = path.join(privateRoot, 'agents', 'agent-v2', 'sessions');
+    mkdirSync(sessions, { recursive: true });
+    const fileMessage = path.join(sessions, 'session-v2.jsonl');
+    writeFileSync(fileMessage, `${JSON.stringify({ message: { role: 'assistant',
+      content: [{ type: 'text', text: 'PRIVATE APPEND MESSAGE' }] } })}\n`);
+    const transcripts = path.join(privateRoot, 'transcripts');
+    mkdirSync(transcripts);
+    writeFileSync(path.join(transcripts, 'excluded.jsonl'), `${JSON.stringify({
+      role: 'assistant', content: [{ type: 'text', text: 'TRANSCRIPT MUST NOT BE APPENDED' }],
+    })}\n`);
+    const fileBefore = readFileSync(fileMessage, 'utf8');
+    await admin.unsafe(`CREATE DATABASE "${databaseName}"`);
+    databaseCreated = true;
+    const dbUrl = new URL(adminUrl);
+    dbUrl.pathname = `/${databaseName}`;
+    db = postgres(dbUrl.toString(), { max: 1 });
+    await db`CREATE TABLE public.agent_feed (
+      id SERIAL PRIMARY KEY, agent_id TEXT NOT NULL, agent_name TEXT NOT NULL,
+      message TEXT NOT NULL, session_id TEXT, msg_hash TEXT UNIQUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`;
+    await db`CREATE INDEX idx_agent_feed_created ON public.agent_feed(created_at DESC)`;
+    await admin.unsafe(`CREATE ROLE "${roleName}" LOGIN PASSWORD '${password}'
+      NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS`);
+    roleCreated = true;
+    await admin.unsafe(`GRANT CONNECT ON DATABASE "${databaseName}" TO "${roleName}"`);
+    await db.unsafe(`GRANT USAGE ON SCHEMA public TO "${roleName}"`);
+    await db.unsafe(`GRANT SELECT, INSERT ON public.agent_feed TO "${roleName}"`);
+    await db.unsafe(`GRANT USAGE ON SEQUENCE public.agent_feed_id_seq TO "${roleName}"`);
+    const privateUrl = new URL(dbUrl);
+    privateUrl.username = roleName;
+    privateUrl.password = password;
+    const probe = postgres(privateUrl.toString(), { max: 1 });
+    try {
+      const rights = await probe<Array<{ login: string; databaseCreate: boolean;
+        schemaCreate: boolean; tableSelect: boolean; tableInsert: boolean;
+        tableExtra: boolean; sequenceUsage: boolean; sequenceUpdate: boolean }>>`
+        SELECT session_user AS login,
+          has_database_privilege(current_user, current_database(), 'CREATE') AS "databaseCreate",
+          has_schema_privilege(current_user, 'public', 'CREATE') AS "schemaCreate",
+          has_table_privilege(current_user, 'public.agent_feed', 'SELECT') AS "tableSelect",
+          has_table_privilege(current_user, 'public.agent_feed', 'INSERT') AS "tableInsert",
+          has_table_privilege(current_user, 'public.agent_feed',
+            'UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN') AS "tableExtra",
+          has_sequence_privilege(current_user, 'public.agent_feed_id_seq', 'USAGE') AS "sequenceUsage",
+          has_sequence_privilege(current_user, 'public.agent_feed_id_seq', 'UPDATE') AS "sequenceUpdate"`;
+      assert.deepEqual(rights[0], { login: roleName, databaseCreate: false,
+        schemaCreate: false, tableSelect: true, tableInsert: true,
+        tableExtra: false, sequenceUsage: true, sequenceUpdate: false });
+    } finally { await probe.end({ timeout: 5 }); }
+
+    stage = 'append-red-green';
+    const started = await startChild(privateUrl.toString(), privateRoot, null, '1');
+    child = started.child;
+    const base = `http://127.0.0.1:${started.port}`;
+    const health = await request(base, '/api/health');
+    assert.equal(health.status, 200);
+    assert.deepEqual(await health.json(), { database: 'up', feed: 0 });
+    const feed = await request(base, '/api/setfarm/agent-feed?limit=10');
+    assert.equal(feed.status, 200);
+    const rows = await feed.json() as Array<{ id: number; message: string; agent_id: string;
+      session_id: string; msg_hash: string }>;
+    assert.equal(rows.length, 1);
+    assert.ok(Number.isSafeInteger(rows[0].id) && rows[0].id > 0);
+    assert.deepEqual({ message: rows[0].message, agent_id: rows[0].agent_id,
+      session_id: rows[0].session_id },
+      { message: 'PRIVATE APPEND MESSAGE', agent_id: 'agent-v2', session_id: 'session-v2' });
+    assert.match(rows[0].msg_hash, /^[a-f0-9]{32}$/);
+    const persisted = await db<Array<{ id: number; message: string; msg_hash: string }>>`
+      SELECT id, message, msg_hash FROM public.agent_feed`;
+    assert.deepEqual([...persisted], [{ id: rows[0].id, message: rows[0].message,
+      msg_hash: rows[0].msg_hash }]);
+    const repeated = await request(base, '/api/setfarm/agent-feed?limit=10');
+    assert.equal(repeated.status, 200);
+    assert.deepEqual((await repeated.json() as Array<{ id: number }>).map((row) => row.id),
+      [rows[0].id]);
+    const count = await db<Array<{ count: number }>>`
+      SELECT COUNT(*)::integer AS count FROM public.agent_feed`;
+    assert.equal(count[0]?.count, 1);
+    assert.equal(readFileSync(fileMessage, 'utf8'), fileBefore);
+
+    stage = 'route-and-source-refusal';
+    for (const [route, method] of [
+      ['/api/setfarm/agent-feed', 'DELETE'],
+      ['/api/SETFARM/AGENT-FEED', 'DELETE'],
+      ['/api/setfarm/activity', 'DELETE'],
+      ['/api/setfarm/sync-projects', 'POST'],
+    ]) {
+      const refused = await request(base, route, method);
+      assert.equal(refused.status, 503);
+      assert.deepEqual(await refused.json(),
+        { error: 'MC_TASK6A_RESTRICTED_AGENT_FEED_ROUTE_UNVERIFIED' });
+    }
+    const after = await request(base, '/api/task6a-after-feed');
+    assert.equal(after.status, 200);
+    assert.deepEqual(await after.json(), { reachable: true });
+    const agentsDir = path.join(privateRoot, 'agents');
+    const hiddenAgentsDir = path.join(privateRoot, 'agents-hidden');
+    renameSync(agentsDir, hiddenAgentsDir);
+    const missingSource = await request(base, '/api/setfarm/agent-feed');
+    assert.equal(missingSource.status, 502);
+    assert.deepEqual(await missingSource.json(),
+      { error: 'MC_TASK6A_RESTRICTED_AGENT_FEED_VERIFY_REFUSED' });
+    symlinkSync(hiddenAgentsDir, agentsDir);
+    const unsafeRoot = await request(base, '/api/setfarm/agent-feed');
+    assert.equal(unsafeRoot.status, 502);
+    assert.deepEqual(await unsafeRoot.json(),
+      { error: 'MC_TASK6A_RESTRICTED_AGENT_FEED_VERIFY_REFUSED' });
+    unlinkSync(agentsDir);
+    renameSync(hiddenAgentsDir, agentsDir);
+    const symlink = path.join(sessions, 'symlink.jsonl');
+    symlinkSync(path.join(transcripts, 'excluded.jsonl'), symlink);
+    const unsafeSource = await request(base, '/api/setfarm/agent-feed');
+    assert.equal(unsafeSource.status, 502);
+    assert.deepEqual(await unsafeSource.json(),
+      { error: 'MC_TASK6A_RESTRICTED_AGENT_FEED_VERIFY_REFUSED' });
+    unlinkSync(symlink);
+    const hiddenSessions = path.join(privateRoot, 'sessions-hidden');
+    renameSync(sessions, hiddenSessions);
+    symlinkSync(transcripts, sessions);
+    const unsafeParent = await request(base, '/api/setfarm/agent-feed');
+    assert.equal(unsafeParent.status, 502);
+    assert.deepEqual(await unsafeParent.json(),
+      { error: 'MC_TASK6A_RESTRICTED_AGENT_FEED_VERIFY_REFUSED' });
+    unlinkSync(sessions);
+    renameSync(hiddenSessions, sessions);
+
+    stage = 'post-verify-insert-refusal';
+    await db.unsafe(`REVOKE INSERT ON public.agent_feed FROM "${roleName}"`);
+    const revokedAfterReady = await request(base, '/api/setfarm/agent-feed');
+    assert.equal(revokedAfterReady.status, 502);
+    assert.deepEqual(await revokedAfterReady.json(),
+      { error: 'MC_TASK6A_RESTRICTED_AGENT_FEED_VERIFY_REFUSED' });
+    await db.unsafe(`GRANT INSERT ON public.agent_feed TO "${roleName}"`);
+    const unchanged = await db<Array<{ count: number }>>`
+      SELECT COUNT(*)::integer AS count FROM public.agent_feed`;
+    assert.equal(unchanged[0]?.count, 1);
+
+    stage = 'insert-grant-refusal';
+    await stopChild(child);
+    child = undefined;
+    await db.unsafe(`REVOKE INSERT ON public.agent_feed FROM "${roleName}"`);
+    const noInsert = await startChild(privateUrl.toString(), privateRoot, null, '1');
+    child = noInsert.child;
+    const noInsertResponse = await request(`http://127.0.0.1:${noInsert.port}`, '/api/setfarm/agent-feed');
+    assert.equal(noInsertResponse.status, 502);
+    assert.deepEqual(await noInsertResponse.json(),
+      { error: 'MC_TASK6A_RESTRICTED_AGENT_FEED_VERIFY_REFUSED' });
+    await stopChild(child);
+    child = undefined;
+    await db.unsafe(`GRANT INSERT ON public.agent_feed TO "${roleName}"`);
+
+    stage = 'sequence-grant-refusal';
+    await db.unsafe(`REVOKE USAGE ON SEQUENCE public.agent_feed_id_seq FROM "${roleName}"`);
+    const noSequence = await startChild(privateUrl.toString(), privateRoot, null, '1');
+    child = noSequence.child;
+    const noSequenceResponse = await request(`http://127.0.0.1:${noSequence.port}`, '/api/setfarm/agent-feed');
+    assert.equal(noSequenceResponse.status, 502);
+    assert.deepEqual(await noSequenceResponse.json(),
+      { error: 'MC_TASK6A_RESTRICTED_AGENT_FEED_VERIFY_REFUSED' });
+    await stopChild(child);
+    child = undefined;
+    await db.unsafe(`GRANT USAGE ON SEQUENCE public.agent_feed_id_seq TO "${roleName}"`);
+    const stillOne = await db<Array<{ count: number }>>`
+      SELECT COUNT(*)::integer AS count FROM public.agent_feed`;
+    assert.equal(stillOne[0]?.count, 1);
+
+    stage = 'schema-drift-refusal';
+    await db`DROP INDEX public.idx_agent_feed_created`;
+    const noIndex = await startChild(privateUrl.toString(), privateRoot, null, '1');
+    child = noIndex.child;
+    const noIndexResponse = await request(`http://127.0.0.1:${noIndex.port}`, '/api/setfarm/agent-feed');
+    assert.equal(noIndexResponse.status, 502);
+    assert.deepEqual(await noIndexResponse.json(),
+      { error: 'MC_TASK6A_RESTRICTED_AGENT_FEED_VERIFY_REFUSED' });
+    await stopChild(child);
+    child = undefined;
+    await db`CREATE INDEX idx_agent_feed_created ON public.agent_feed(created_at DESC)`;
+
+    stage = 'simultaneous-mode-refusal';
+    const mixed = await startChild(privateUrl.toString(), privateRoot, '1', '1');
+    child = mixed.child;
+    const mixedResponse = await request(`http://127.0.0.1:${mixed.port}`, '/api/setfarm/agent-feed');
+    assert.equal(mixedResponse.status, 503);
+    assert.deepEqual(await mixedResponse.json(),
+      { error: 'MC_TASK6A_RESTRICTED_AGENT_FEED_ROUTE_UNVERIFIED' });
+    assert.equal((await db<Array<{ count: number }>>`
+      SELECT COUNT(*)::integer AS count FROM public.agent_feed`)[0]?.count, 1);
+    assert.equal(readFileSync(fileMessage, 'utf8'), fileBefore);
+  } catch (error) {
+    failure = error;
+    process.stderr.write(`[mc-task6a-private-append] failed at ${stage}\n`);
     throw error;
   } finally {
     const cleanupFailures: string[] = [];

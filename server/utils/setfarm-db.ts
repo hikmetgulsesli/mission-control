@@ -617,11 +617,10 @@ export async function checkMissingInput(runId: string) {
 // === Agent Feed (chat-style agent output log) ===
 
 let restrictedAgentFeedReady: Promise<void> | null = null;
+let restrictedAgentFeedAppendReady: Promise<void> | null = null;
 
-/** Private Task6A historical-feed read proof; no live launcher selects it. */
-export function verifyRestrictedAgentFeedRead(): Promise<void> {
-  if (!restrictedAgentFeedReady) {
-    restrictedAgentFeedReady = (async () => {
+/** Private Task6A table/role proof; no live launcher selects either mode. */
+async function verifyRestrictedAgentFeedShape(append: boolean): Promise<void> {
       try {
         await sql.begin(async (transaction) => {
           const tx = transaction as unknown as typeof sql;
@@ -630,15 +629,19 @@ export function verifyRestrictedAgentFeedRead(): Promise<void> {
           await tx`SET LOCAL statement_timeout = '5s'`;
           await tx`SET LOCAL search_path = pg_catalog, public`;
           const roles = await tx<Array<{ sessionLogin: string; login: string;
+            defaultReadOnly: string; recovering: boolean;
             canLogin: boolean; inherits: boolean; memberships: number;
             superuser: boolean; bypassRls: boolean; createRole: boolean;
             createDatabase: boolean; databaseCreate: boolean; schemaCreate: boolean;
-            ownerMember: boolean; canSelect: boolean; extraTable: boolean;
-            extraColumn: boolean; sequenceWrite: boolean; sequenceName: string | null;
+            ownerMember: boolean; canSelect: boolean; canInsert: boolean;
+            extraTable: boolean; columnInsert: boolean; extraColumn: boolean;
+            sequenceUsage: boolean; sequenceUpdate: boolean; sequenceName: string | null;
             relationKind: string; persistence: string; rowSecurity: boolean;
             forceRowSecurity: boolean; isPartition: boolean; hasAncestors: boolean;
             hasDescendants: boolean }>>`
             SELECT session_user AS "sessionLogin", current_user AS login,
+              pg_catalog.current_setting('default_transaction_read_only') AS "defaultReadOnly",
+              pg_catalog.pg_is_in_recovery() AS recovering,
               r.rolcanlogin AS "canLogin", r.rolinherit AS inherits,
               (SELECT COUNT(*)::integer FROM pg_catalog.pg_auth_members m
                 WHERE m.member = r.oid) AS memberships,
@@ -648,14 +651,19 @@ export function verifyRestrictedAgentFeedRead(): Promise<void> {
               has_schema_privilege(current_user, 'public', 'CREATE') AS "schemaCreate",
               pg_catalog.pg_has_role(current_user, c.relowner, 'MEMBER') AS "ownerMember",
               has_table_privilege(current_user, c.oid, 'SELECT') AS "canSelect",
+              has_table_privilege(current_user, c.oid, 'INSERT') AS "canInsert",
               has_table_privilege(current_user, c.oid,
-                'INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN') AS "extraTable",
+                'UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER, MAINTAIN') AS "extraTable",
+              has_any_column_privilege(current_user, c.oid, 'INSERT') AS "columnInsert",
               has_any_column_privilege(current_user, c.oid,
-                'INSERT, UPDATE, REFERENCES') AS "extraColumn",
+                'UPDATE, REFERENCES') AS "extraColumn",
               pg_catalog.pg_get_serial_sequence('public.agent_feed', 'id') AS "sequenceName",
               has_sequence_privilege(current_user,
                 pg_catalog.pg_get_serial_sequence('public.agent_feed', 'id'),
-                'USAGE, UPDATE') AS "sequenceWrite",
+                'USAGE') AS "sequenceUsage",
+              has_sequence_privilege(current_user,
+                pg_catalog.pg_get_serial_sequence('public.agent_feed', 'id'),
+                'UPDATE') AS "sequenceUpdate",
               c.relkind AS "relationKind", c.relpersistence AS persistence,
               c.relrowsecurity AS "rowSecurity", c.relforcerowsecurity AS "forceRowSecurity",
               c.relispartition AS "isPartition",
@@ -672,7 +680,10 @@ export function verifyRestrictedAgentFeedRead(): Promise<void> {
             || role.superuser || role.bypassRls || role.createRole
             || role.createDatabase || role.databaseCreate || role.schemaCreate
             || role.ownerMember || !role.canSelect || role.extraTable
-            || role.extraColumn || role.sequenceWrite
+            || role.extraColumn || role.sequenceUpdate
+            || (append ? !role.canInsert || !role.sequenceUsage
+              : role.canInsert || role.columnInsert || role.sequenceUsage)
+            || (append && (role.defaultReadOnly !== 'off' || role.recovering))
             || role.sequenceName !== 'public.agent_feed_id_seq'
             || role.relationKind !== 'r' || role.persistence !== 'p'
             || role.rowSecurity || role.forceRowSecurity || role.isPartition
@@ -754,9 +765,22 @@ export function verifyRestrictedAgentFeedRead(): Promise<void> {
       } catch {
         throw new Error('MC_TASK6A_RESTRICTED_AGENT_FEED_VERIFY_REFUSED');
       }
-    })();
+}
+
+/** SELECT-only private historical-feed proof. */
+export function verifyRestrictedAgentFeedRead(): Promise<void> {
+  if (!restrictedAgentFeedReady) {
+    restrictedAgentFeedReady = verifyRestrictedAgentFeedShape(false);
   }
   return restrictedAgentFeedReady;
+}
+
+/** SELECT+INSERT/sequence-USAGE private agent-session proof. */
+export function verifyRestrictedAgentFeedAppend(): Promise<void> {
+  if (!restrictedAgentFeedAppendReady) {
+    restrictedAgentFeedAppendReady = verifyRestrictedAgentFeedShape(true);
+  }
+  return restrictedAgentFeedAppendReady;
 }
 
 export async function ensureAgentFeedTable(): Promise<void> {
@@ -791,6 +815,45 @@ export async function insertFeedEntry(agentId: string, agentName: string, messag
   } catch {
     return false;
   }
+}
+
+export type RestrictedAgentFeedText = Readonly<{
+  agentId: string; agentName: string; message: string; sessionId: string;
+}>;
+
+/** Private V2 only: all appends/read commit together; never hide a DB error. */
+export async function appendRestrictedAgentFeedEntries(entries: readonly RestrictedAgentFeedText[],
+  limit = 100): Promise<any[]> {
+  const safeLimit = Math.min(Math.max(1, Number(limit) || 100), 500);
+  return sql.begin(async (transaction) => {
+    const tx = transaction as unknown as typeof sql;
+    await tx`SET LOCAL lock_timeout = '2s'`;
+    await tx`SET LOCAL statement_timeout = '5s'`;
+    for (const entry of entries) {
+      const safeAgentId = validateId(entry.agentId, 'agentId');
+      const safeAgentName = escapeStr(entry.agentName).slice(0, 50);
+      const safeMessage = escapeStr(entry.message).slice(0, 500);
+      const safeSessionId = entry.sessionId ? escapeStr(entry.sessionId).slice(0, 100) : '';
+      const hash = createHash('md5').update(safeAgentId + safeSessionId + safeMessage).digest('hex');
+      await tx`
+        INSERT INTO public.agent_feed (agent_id, agent_name, message, session_id, msg_hash)
+        VALUES (${safeAgentId}, ${safeAgentName}, ${safeMessage}, ${safeSessionId}, ${hash})
+        ON CONFLICT (msg_hash) DO NOTHING
+      `;
+      const persisted = await tx<Array<{ id: number; agent_id: string;
+        agent_name: string; message: string; session_id: string; msg_hash: string }>>`
+        SELECT id, agent_id, agent_name, message, session_id, msg_hash
+        FROM public.agent_feed WHERE msg_hash = ${hash}`;
+      const row = persisted[0];
+      if (persisted.length !== 1 || !row || !Number.isSafeInteger(row.id) || row.id < 1
+        || row.agent_id !== safeAgentId || row.agent_name !== safeAgentName
+        || row.message !== safeMessage || row.session_id !== safeSessionId
+        || row.msg_hash !== hash) {
+        throw new Error('MC_TASK6A_RESTRICTED_AGENT_FEED_APPEND_MISMATCH');
+      }
+    }
+    return tx`SELECT * FROM public.agent_feed ORDER BY created_at DESC LIMIT ${safeLimit}`;
+  });
 }
 
 export async function getAgentFeed(limit = 100): Promise<any[]> {
