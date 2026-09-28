@@ -564,6 +564,27 @@ test('private restricted agent-session append persists before returning feed', {
       { error: 'MC_TASK6A_RESTRICTED_AGENT_FEED_VERIFY_REFUSED' });
     await admin.unsafe(`REVOKE TEMPORARY ON DATABASE "${databaseName}" FROM "${roleName}"`);
 
+    stage = 'post-verify-large-object-grant-refusal';
+    const largeObject = await db<Array<{ oid: number }>>`
+      SELECT pg_catalog.lo_create(0) AS oid`;
+    const largeObjectOid = largeObject[0]!.oid;
+    assert.ok(Number.isSafeInteger(largeObjectOid) && largeObjectOid > 0);
+    await db.unsafe(`GRANT SELECT ON LARGE OBJECT ${largeObjectOid} TO "${roleName}"`);
+    const largeObjectGrant = await request(base, '/api/setfarm/agent-feed');
+    assert.equal(largeObjectGrant.status, 502);
+    assert.deepEqual(await largeObjectGrant.json(),
+      { error: 'MC_TASK6A_RESTRICTED_AGENT_FEED_VERIFY_REFUSED' });
+    await db.unsafe(`REVOKE SELECT ON LARGE OBJECT ${largeObjectOid} FROM "${roleName}"`);
+    await db`SELECT pg_catalog.lo_unlink(${largeObjectOid})`;
+
+    stage = 'post-verify-other-type-refusal';
+    await db`CREATE TYPE public.unrelated_type AS ENUM ('unexpected')`;
+    const otherType = await request(base, '/api/setfarm/agent-feed');
+    assert.equal(otherType.status, 502);
+    assert.deepEqual(await otherType.json(),
+      { error: 'MC_TASK6A_RESTRICTED_AGENT_FEED_VERIFY_REFUSED' });
+    await db`DROP TYPE public.unrelated_type`;
+
     stage = 'post-verify-insert-refusal';
     await db.unsafe(`REVOKE INSERT ON public.agent_feed FROM "${roleName}"`);
     const revokedAfterReady = await request(base, '/api/setfarm/agent-feed');

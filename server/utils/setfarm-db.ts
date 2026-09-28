@@ -618,17 +618,10 @@ export async function checkMissingInput(runId: string) {
 
 let restrictedAgentFeedReady: Promise<void> | null = null;
 
-/** Private Task6A table/role proof; no live launcher selects either mode. */
-async function verifyRestrictedAgentFeedShape(append: boolean): Promise<void> {
-      try {
-        await sql.begin(async (transaction) => {
-          const tx = transaction as unknown as typeof sql;
-          await tx`SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY`;
-          await tx`SET LOCAL lock_timeout = '2s'`;
-          await tx`SET LOCAL statement_timeout = '5s'`;
-          await tx`SET LOCAL search_path = pg_catalog, public`;
+/** Shared private catalog proof; callers choose a read-only or append transaction. */
+async function checkRestrictedAgentFeedShape(tx: typeof sql, append: boolean): Promise<void> {
           const roles = await tx<Array<{ sessionLogin: string; login: string;
-            defaultReadOnly: string; recovering: boolean;
+            defaultReadOnly: string; recovering: boolean; loCompat: boolean;
             canLogin: boolean; inherits: boolean; memberships: number;
             superuser: boolean; bypassRls: boolean; createRole: boolean;
             createDatabase: boolean; databaseCreate: boolean; databaseTemp: boolean;
@@ -643,6 +636,7 @@ async function verifyRestrictedAgentFeedShape(append: boolean): Promise<void> {
             SELECT session_user AS "sessionLogin", current_user AS login,
               pg_catalog.current_setting('default_transaction_read_only') AS "defaultReadOnly",
               pg_catalog.pg_is_in_recovery() AS recovering,
+              pg_catalog.current_setting('lo_compat_privileges') = 'on' AS "loCompat",
               r.rolcanlogin AS "canLogin", r.rolinherit AS inherits,
               (SELECT COUNT(*)::integer FROM pg_catalog.pg_auth_members m
                 WHERE m.member = r.oid) AS memberships,
@@ -688,7 +682,7 @@ async function verifyRestrictedAgentFeedShape(append: boolean): Promise<void> {
             || role.extraColumn || role.sequenceSelect || role.sequenceUpdate
             || (append ? !role.canInsert || !role.sequenceUsage
               : role.canInsert || role.columnInsert || role.sequenceUsage)
-            || (append && (role.defaultReadOnly !== 'off' || role.recovering
+            || (append && (role.defaultReadOnly !== 'off' || role.recovering || role.loCompat
               || role.databaseTemp))
             || role.sequenceName !== 'public.agent_feed_id_seq'
             || role.relationKind !== 'r' || role.persistence !== 'p'
@@ -726,6 +720,44 @@ async function verifyRestrictedAgentFeedShape(append: boolean): Promise<void> {
                       'EXECUTE')) AS "otherFunction"`;
             if (outside.length !== 1 || outside[0].otherRelation
               || outside[0].otherSchema || outside[0].otherFunction) {
+              throw new Error('MC_TASK6A_RESTRICTED_AGENT_FEED_OTHER_ACCESS');
+            }
+            const omitted = await tx<Array<{ largeObject: boolean; otherType: boolean;
+              foreignServer: boolean; foreignWrapper: boolean; tablespace: boolean;
+              parameter: boolean }>>`
+              SELECT
+                EXISTS (SELECT 1 FROM pg_catalog.pg_largeobject_metadata object
+                  WHERE object.lomowner = (SELECT role.oid FROM pg_catalog.pg_roles role
+                    WHERE role.rolname = current_user)
+                    OR EXISTS (SELECT 1 FROM pg_catalog.aclexplode(object.lomacl) grant_entry
+                      WHERE grant_entry.grantee IN (0, (SELECT role.oid
+                        FROM pg_catalog.pg_roles role WHERE role.rolname = current_user))
+                        AND grant_entry.privilege_type IN ('SELECT', 'UPDATE'))) AS "largeObject",
+                EXISTS (SELECT 1 FROM pg_catalog.pg_type object
+                  JOIN pg_catalog.pg_namespace namespace ON namespace.oid = object.typnamespace
+                  WHERE namespace.nspname NOT IN ('information_schema')
+                    AND namespace.nspname !~ '^pg_'
+                    AND object.typrelid <> pg_catalog.to_regclass('public.agent_feed')
+                    AND object.typelem <> (SELECT relation.reltype
+                      FROM pg_catalog.pg_class relation
+                      WHERE relation.oid = pg_catalog.to_regclass('public.agent_feed'))
+                    AND has_type_privilege(current_user, object.oid, 'USAGE')) AS "otherType",
+                EXISTS (SELECT 1 FROM pg_catalog.pg_foreign_server object
+                  WHERE has_server_privilege(current_user, object.oid,
+                    'USAGE')) AS "foreignServer",
+                EXISTS (SELECT 1 FROM pg_catalog.pg_foreign_data_wrapper object
+                  WHERE has_foreign_data_wrapper_privilege(current_user, object.oid,
+                    'USAGE')) AS "foreignWrapper",
+                EXISTS (SELECT 1 FROM pg_catalog.pg_tablespace object
+                  WHERE object.spcname NOT IN ('pg_default', 'pg_global')
+                    AND has_tablespace_privilege(current_user, object.oid,
+                      'CREATE')) AS tablespace,
+                EXISTS (SELECT 1 FROM pg_catalog.pg_parameter_acl object
+                  WHERE has_parameter_privilege(current_user, object.parname,
+                    'SET, ALTER SYSTEM')) AS parameter`;
+            if (omitted.length !== 1 || omitted[0].largeObject || omitted[0].otherType
+              || omitted[0].foreignServer || omitted[0].foreignWrapper
+              || omitted[0].tablespace || omitted[0].parameter) {
               throw new Error('MC_TASK6A_RESTRICTED_AGENT_FEED_OTHER_ACCESS');
             }
           }
@@ -800,10 +832,22 @@ async function verifyRestrictedAgentFeedShape(append: boolean): Promise<void> {
               .sort((a, b) => a[0].localeCompare(b[0])))) {
             throw new Error('MC_TASK6A_RESTRICTED_AGENT_FEED_INDEX_INVALID');
           }
-        });
-      } catch {
-        throw new Error('MC_TASK6A_RESTRICTED_AGENT_FEED_VERIFY_REFUSED');
-      }
+}
+
+/** SELECT-only private historical-feed snapshot. */
+async function verifyRestrictedAgentFeedShape(append: boolean): Promise<void> {
+  try {
+    await sql.begin(async (transaction) => {
+      const tx = transaction as unknown as typeof sql;
+      await tx`SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY`;
+      await tx`SET LOCAL lock_timeout = '2s'`;
+      await tx`SET LOCAL statement_timeout = '5s'`;
+      await tx`SET LOCAL search_path = pg_catalog, public`;
+      await checkRestrictedAgentFeedShape(tx, append);
+    });
+  } catch {
+    throw new Error('MC_TASK6A_RESTRICTED_AGENT_FEED_VERIFY_REFUSED');
+  }
 }
 
 /** SELECT-only private historical-feed proof. */
@@ -812,11 +856,6 @@ export function verifyRestrictedAgentFeedRead(): Promise<void> {
     restrictedAgentFeedReady = verifyRestrictedAgentFeedShape(false);
   }
   return restrictedAgentFeedReady;
-}
-
-/** SELECT+INSERT/sequence-USAGE private agent-session proof. */
-export function verifyRestrictedAgentFeedAppend(): Promise<void> {
-  return verifyRestrictedAgentFeedShape(true);
 }
 
 export async function ensureAgentFeedTable(): Promise<void> {
@@ -869,6 +908,10 @@ export async function appendRestrictedAgentFeedEntries(entries: readonly Restric
     const tx = transaction as unknown as typeof sql;
     await tx`SET LOCAL lock_timeout = '2s'`;
     await tx`SET LOCAL statement_timeout = '5s'`;
+    await tx`SET LOCAL search_path = pg_catalog, public`;
+    await tx`LOCK TABLE public.agent_feed IN ROW EXCLUSIVE MODE`;
+    try { await checkRestrictedAgentFeedShape(tx, true); }
+    catch { throw new Error('MC_TASK6A_RESTRICTED_AGENT_FEED_VERIFY_REFUSED'); }
     for (const entry of entries) {
       const safeAgentId = validateId(entry.agentId, 'agentId');
       const safeAgentName = normalizeBoundFeedText(entry.agentName).slice(0, 50);

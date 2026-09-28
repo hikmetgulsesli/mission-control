@@ -89,5 +89,17 @@ disposable legacy row/source fixture was RED (a second row inserted with HTTP
 refuses the request transactionally with fixed 502 if the collision exists.
 No historical row is rewritten or silently duplicated; an explicit later
 history-migration decision is required before enabling V2 on such data.
+The fourth exact-head Codex review identified omitted PostgreSQL large-object
+rights and the verifier/source-scan/write gap. A large-object grant returned
+HTTP 200 in the pre-fix private fixture; the fixture now requires that grant
+and a user-defined type both return fixed 502. The
+V2 proof now rejects effective non-feed rights on large objects (PG17 ACL
+catalog), user types, foreign servers/wrappers, tablespaces and parameter
+ACLs, and rejects `lo_compat_privileges=on`. Source scanning completes before
+the DB transaction; the append transaction then takes an explicit ROW
+EXCLUSIVE lock, rechecks the catalog/role on that same transaction, inserts,
+reads and commits. This blocks conflicting table DDL during the proof/write,
+but it is not a global GRANT/old-writer fence: that still needs external owner
+coordination at cutover.
 This is a private parser proof, not a claim that old live writers are fenced
 by the OS; that remains a separate cutover gate.

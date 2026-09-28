@@ -14,7 +14,7 @@ import {
   upsertCanonicalV3ProjectProjection,
 } from './projects.js';
 import { getRuns, getRunStories, getSetfarmActivity, getSetfarmAgentStats, getSetfarmAlerts, getStories } from '../utils/setfarm.js';
-import { ensureAgentFeedTable, insertFeedEntry, getAgentFeed as getAgentFeedFromDb, getRestrictedAgentFeedFromDb, pruneAgentFeed, clearAgentFeed, verifyRestrictedAgentFeedRead, verifyRestrictedAgentFeedAppend } from "../utils/setfarm-db.js";
+import { ensureAgentFeedTable, insertFeedEntry, getAgentFeed as getAgentFeedFromDb, getRestrictedAgentFeedFromDb, pruneAgentFeed, clearAgentFeed, verifyRestrictedAgentFeedRead } from "../utils/setfarm-db.js";
 
 // ── Service imports (extracted from this file) ──────────────────────
 import {
@@ -1839,7 +1839,6 @@ router.get("/setfarm/agent-feed", async (req, res) => {
       return;
     }
     if (restrictedFeedAppend) {
-      await verifyRestrictedAgentFeedAppend();
       const data = await getRestrictedAgentSessionFeed(limit);
       noStore(res);
       res.json(data);
