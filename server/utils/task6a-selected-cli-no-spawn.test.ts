@@ -3,13 +3,13 @@ import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 const cliModule = new URL('./cli.ts', import.meta.url).href;
+const noEnvPreload = fileURLToPath(new URL('../../tests/fixtures/task6a-no-env-preload.mjs', import.meta.url));
 const privateUrl = 'postgresql://invalid@127.0.0.1:1/private';
 
 function runProbe(flag: string | undefined): { result: ReturnType<typeof spawnSync>; marker: boolean } {
-  assert.equal(existsSync(path.join(process.cwd(), '.env')), false);
-  assert.equal(existsSync(path.join(process.cwd(), '.env.local')), false);
   const root = mkdtempSync('/tmp/mc-task6a-cli-');
   try {
     const markerPath = path.join(root, 'child-ran');
@@ -27,7 +27,8 @@ function runProbe(flag: string | undefined): { result: ReturnType<typeof spawnSy
       }
     `;
     const result = spawnSync(process.execPath,
-      ['--import', 'tsx', '--input-type=module', '-e', program, executable], {
+      ['--import', 'tsx', '--import', noEnvPreload,
+        '--input-type=module', '-e', program, executable], {
         cwd: process.cwd(), encoding: 'utf8', timeout: 10_000, maxBuffer: 1_000_000,
         env: { PATH: '/usr/bin:/bin', LANG: 'C', LC_ALL: 'C',
           GATEWAY_TOKEN: 'private-fixture-no-live-read',

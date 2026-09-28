@@ -3,6 +3,9 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
+
+const noEnvPreload = fileURLToPath(new URL('../../tests/fixtures/task6a-no-env-preload.mjs', import.meta.url));
 
 async function stopChild(child: ChildProcess): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) return;
@@ -26,7 +29,8 @@ async function stopChild(child: ChildProcess): Promise<void> {
 async function startChild(root: string, flag: string | undefined):
   Promise<Readonly<{ child: ChildProcess; port: number }>> {
   const child = spawn(process.execPath,
-    ['--import', 'tsx', 'server/routes/task6a-selected-cli-no-spawn-child.ts'], {
+    ['--import', 'tsx', '--import', noEnvPreload,
+      'server/routes/task6a-selected-cli-no-spawn-child.ts'], {
       cwd: process.cwd(),
       env: {
         PATH: '/opt/homebrew/bin:/usr/bin:/bin', LANG: 'C', LC_ALL: 'C',
@@ -84,8 +88,6 @@ async function postStartRun(port: number, route = '/api/prd/start-run'): Promise
 }
 
 test('private selected-CLI mode refuses PRD start-run before handler effects', async () => {
-  assert.equal(existsSync(path.join(process.cwd(), '.env')), false);
-  assert.equal(existsSync(path.join(process.cwd(), '.env.local')), false);
   const root = mkdtempSync('/tmp/mc-task6a-cli-route-');
   let child: ChildProcess | undefined;
   try {

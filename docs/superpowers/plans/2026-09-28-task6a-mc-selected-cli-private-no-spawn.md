@@ -26,13 +26,14 @@
 - Create `server/utils/task6a-selected-cli-no-spawn.test.ts`: real disposable executable marker RED/GREEN for flag-present, invalid flag, and flag-absent behavior.
 - Create `server/routes/task6a-selected-cli-no-spawn-child.ts`: isolated PRD-only HTTP harness with no live DB URL.
 - Create `server/routes/task6a-selected-cli-no-spawn.integration.test.ts`: POST start-run denial before input validation and case aliases; absent-flag 400 characterization and unrelated route reachability.
+- Create `tests/fixtures/task6a-no-env-preload.mjs` and `tests/task6a-no-env-preload.test.ts`: test-child env-file read refusal verified against a disposable `.env` sentinel; normal configured checkouts remain untouched.
 - Modify `package.json`: include the new `server/utils/*.test.ts` path in the normal `npm test` suite so the real child-process regression cannot silently drop from ordinary verification.
 
 ## Task 1: Generic CLI negative proof
 
 **Interfaces:** `task6aSelectedCliNoSpawn` is a startup Boolean; `TASK6A_SELECTED_CLI_NO_SPAWN` is the fixed refusal code. `runCli(cmd,args)` preserves its signature.
 
-- [ ] **Step 1: Write RED test.** In the new utility test, create a bounded `/tmp/mc-task6a-cli-*` fixture with executable `probe` that writes a marker and prints `CHILD_RAN`. Spawn a separate Node process with `--import tsx --input-type=module -e` to import real `runCli` and invoke the absolute probe path. Require an `.env`/`.env.local`-free worktree and pass a dummy `GATEWAY_TOKEN` so config loading never reads the host gateway credential. With `MC_TASK6A_SELECTED_CLI_NO_SPAWN_V1=1` and a dummy non-live `SETFARM_PG_URL`, assert fixed rejection, absent marker and no stdout containing dummy credentials. Also test invalid value `0`. The production change this test catches is a child launch before/after denial.
+- [ ] **Step 1: Write RED test.** In the new utility test, create a bounded `/tmp/mc-task6a-cli-*` fixture with executable `probe` that writes a marker and prints `CHILD_RAN`. Spawn a separate Node process with `--import tsx --input-type=module -e` to import real `runCli` and invoke the absolute probe path. Preload the test-only env-file denial module and pass a dummy `GATEWAY_TOKEN` so config loading never reads the host gateway credential or repo env files. With `MC_TASK6A_SELECTED_CLI_NO_SPAWN_V1=1` and a dummy non-live `SETFARM_PG_URL`, assert fixed rejection, absent marker and no stdout containing dummy credentials. Also test invalid value `0`. The production change this test catches is a child launch before/after denial.
 
   ```ts
   assert.equal(child.status, 0, child.stderr);
@@ -55,7 +56,7 @@
 
 **Interfaces:** Under the same flag, `POST /api/prd/start-run` returns 503 `{error:'MC_TASK6A_SELECTED_CLI_NO_SPAWN'}` before input validation or the handler. The rest of the PRD route behavior is unchanged with the flag absent.
 
-- [ ] **Step 1: Write RED HTTP test.** Start an Express child mounting the real PRD router with explicit harmless env (`SETFARM_PG_URL=postgresql://invalid@127.0.0.1:1/private`, no ambient `DATABASE_URL` or `.env`, dummy `GATEWAY_TOKEN`). POST `/api/prd/start-run` with `{}` under the flag and assert exact 503. Current route returns 400 before the new guard, so this is RED without contacting a DB or launching host Setfarm. Assert the same for `/api/PRD/START-RUN`, `/api/prd/start-run/`, invalid flag `0`, and that `/api/task6a-after-prd` remains 200. With flag absent, `{}` remains 400.
+- [ ] **Step 1: Write RED HTTP test.** Start an Express child mounting the real PRD router with explicit harmless env (`SETFARM_PG_URL=postgresql://invalid@127.0.0.1:1/private`, no ambient `DATABASE_URL`, dummy `GATEWAY_TOKEN`) and the test-only no-env preload. POST `/api/prd/start-run` with `{}` under the flag and assert exact 503. Current route returns 400 before the new guard, so this is RED without contacting a DB or launching host Setfarm. Assert the same for `/api/PRD/START-RUN`, `/api/prd/start-run/`, invalid flag `0`, and that `/api/task6a-after-prd` remains 200. With flag absent, `{}` remains 400.
 
   ```ts
   const response = await fetch(`${base}/api/prd/start-run`, {
@@ -94,9 +95,15 @@ route and HTTP test therefore cover a deterministic 400-vs-503 RED alias
 and a normalized-path GREEN denial before the handler. The same review
 found the test child would read the host gateway token through `config.ts`
 unless its environment supplied a dummy token; both private fixtures now
-do so and require no worktree `.env` files. These are source/test isolation
+do so and the test-only preload refuses local env-file reads. These are source/test isolation
 corrections for this selected-CLI proof, not live credential changes.
 The exact-head review then found the repository's normal `npm test` glob
 omitted `server/utils` entirely. The File Map and Task 3 verification now
 include the one-file test-glob addition, so the real child regression runs
 on every ordinary suite instead of only a manually focused command.
+GitHub exact-head review found the earlier test preflight would reject a
+normal configured checkout with a gitignored `.env`/`.env.local`. The File
+Map now includes a disposable-sentinel-tested preload that blocks env-file
+reads in the two test children without removing, reading or changing host
+files; it supersedes the no-env checkout preflight and leaves production
+`config.ts` unchanged.

@@ -30,12 +30,16 @@ its handler. No child receives a substitute credential; this mode denies
 the operation rather than silently falling back to an ambient/default URL.
 
 Focused tests use only a disposable executable marker and an isolated
-Express child: under the flag, `runCli` rejects and the marker is absent;
+Express child. A test-only preload blocks reads of repo `.env` and
+`.env.local` before either child imports `config.ts`, while harmless explicit
+environment values avoid host credential fallback. Under the flag, `runCli` rejects and the marker is absent;
 with the flag absent, the marker runs to prove the test is sensitive. The
 PRD HTTP test requires exact fixed 503 for `POST /prd/start-run`, including
 case and trailing-slash aliases, with no source fixture mutation. Invalid flag values also
 refuse. The new tests run without the live PostgreSQL URL and never launch
-the selected host `setfarm` executable. The normal suite and build verify
+the selected host `setfarm` executable. The tests remain runnable from a
+normal checkout even when it contains supported gitignored env files. The
+normal suite and build verify
 that the absent-flag route remains unchanged.
 
 ## Explicit exclusions
