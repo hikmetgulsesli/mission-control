@@ -160,7 +160,7 @@ test("private restricted MC tasks perform scoped CRUD without DDL or story sync"
     await db`INSERT INTO public.runs (id, status) VALUES ('private-run', 'running')`;
     for (const story of ["US-004", "US-005", "US-010"]) {
       await db`INSERT INTO public.stories (run_id, story_id, status)
-        VALUES ('private-run', ${story}, 'completed')`;
+        VALUES ('private-run', ${story}, 'done')`;
     }
     await db`CREATE TABLE public.tasks (
       id text PRIMARY KEY, title text NOT NULL DEFAULT '',
@@ -207,7 +207,7 @@ test("private restricted MC tasks perform scoped CRUD without DDL or story sync"
     stage = "restricted-route-red-green";
     const started = await startChild(privateUrl.toString());
     child = started.child;
-    const base = `http://127.0.0.1:${started.port}`;
+    let base = `http://127.0.0.1:${started.port}`;
     const health = await request(base, "/api/health");
     assert.equal(health.status, 200);
     assert.deepEqual(await health.json(), { database: "up", runs: 1 });
@@ -227,11 +227,16 @@ test("private restricted MC tasks perform scoped CRUD without DDL or story sync"
     const createdTask = await created.json() as { id: string; title: string; status: string };
     assert.match(createdTask.id, /^[0-9a-f-]{36}$/);
     assert.equal(createdTask.title, "Frontend");
+    await stopChild(child);
+    child = undefined;
+    const syncProbe = await startChild(privateUrl.toString());
+    child = syncProbe.child;
+    base = `http://127.0.0.1:${syncProbe.port}`;
     const listed = await request(base, "/api/tasks");
     assert.equal(listed.status, 200);
     const listedTasks = await listed.json() as Array<{ id: string; status: string }>;
     assert.deepEqual(listedTasks.map((task) => task.id), [createdTask.id]);
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 250));
     const unsynced = await db<Array<{ status: string }>>`
       SELECT status FROM public.tasks WHERE id = ${createdTask.id}`;
     assert.equal(unsynced[0]?.status, "todo");
@@ -388,6 +393,31 @@ test("private restricted MC tasks perform scoped CRUD without DDL or story sync"
     child = undefined;
     await db.unsafe(`REVOKE CREATE ON SCHEMA public FROM "${roleName}"`);
 
+    stage = "secondary-unique-index-refusal";
+    await db`CREATE UNIQUE INDEX task6a_title_unique ON public.tasks(title)`;
+    const uniqueIndexed = await startChild(privateUrl.toString());
+    child = uniqueIndexed.child;
+    const uniqueResponse = await request(`http://127.0.0.1:${uniqueIndexed.port}`, "/api/tasks");
+    assert.equal(uniqueResponse.status, 502);
+    assert.deepEqual(await uniqueResponse.json(),
+      { error: "MC_TASK6A_RESTRICTED_TASKS_VERIFY_REFUSED" });
+    await stopChild(child);
+    child = undefined;
+    await db`DROP INDEX public.task6a_title_unique`;
+
+    stage = "secondary-expression-index-refusal";
+    await db`CREATE INDEX task6a_title_expression ON public.tasks ((lower(title)))`;
+    const expressionIndexed = await startChild(privateUrl.toString());
+    child = expressionIndexed.child;
+    const expressionResponse = await request(`http://127.0.0.1:${expressionIndexed.port}`, "/api/tasks");
+    assert.equal(expressionResponse.status, 502);
+    assert.deepEqual(await expressionResponse.json(),
+      { error: "MC_TASK6A_RESTRICTED_TASKS_VERIFY_REFUSED" });
+    await stopChild(child);
+    child = undefined;
+    await db`DROP INDEX public.task6a_title_expression`;
+    assert.equal(await publicFingerprint(db), before);
+
     stage = "column-drift-refusal";
     await db`ALTER TABLE public.tasks DROP COLUMN images`;
     const drifted = await publicFingerprint(db);
@@ -398,6 +428,26 @@ test("private restricted MC tasks perform scoped CRUD without DDL or story sync"
     assert.deepEqual(await driftResponse.json(),
       { error: "MC_TASK6A_RESTRICTED_TASKS_VERIFY_REFUSED" });
     assert.equal(await publicFingerprint(db), drifted);
+
+    stage = "generated-column-refusal";
+    await stopChild(child);
+    child = undefined;
+    await db`DROP TABLE public.tasks`;
+    await db`CREATE TABLE public.tasks (
+      id text PRIMARY KEY, title text NOT NULL DEFAULT '',
+      description text NOT NULL DEFAULT '', assigned_agent text NOT NULL DEFAULT '',
+      priority text NOT NULL DEFAULT 'medium',
+      status text GENERATED ALWAYS AS ('todo'::text) STORED NOT NULL,
+      images text NOT NULL DEFAULT '[]',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now())`;
+    await db.unsafe(`GRANT SELECT, INSERT, UPDATE, DELETE ON public.tasks TO "${roleName}"`);
+    const generated = await startChild(privateUrl.toString());
+    child = generated.child;
+    const generatedResponse = await request(`http://127.0.0.1:${generated.port}`, "/api/tasks");
+    assert.equal(generatedResponse.status, 502);
+    assert.deepEqual(await generatedResponse.json(),
+      { error: "MC_TASK6A_RESTRICTED_TASKS_VERIFY_REFUSED" });
 
     stage = "ordinary-mode-preserved";
     await stopChild(child);

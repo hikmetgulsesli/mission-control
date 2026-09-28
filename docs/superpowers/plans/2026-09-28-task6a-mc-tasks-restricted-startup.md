@@ -44,6 +44,15 @@ simple tasks-table verifier.
   while preserving the exact local column list. A private `INHERIT` fixture
   was RED (GET 200), then GREEN after rejecting both ancestors and
   descendants, including partition-child identity.
+- Exact-head GitHub review found that `pg_get_expr` alone did not distinguish
+  a generated `status` column from its expected default. The disposable
+  generated-column fixture was RED (GET 200), then GREEN after explicit
+  `attgenerated`/`attidentity` denial. A standalone unique secondary index
+  was also RED (GET 200); the verifier now requires exactly the one expected
+  primary index, and an expression-index fixture refuses too. The story-sync
+  negative fixture now seeds recognized `done` story states and restarts the
+  child after creating an eligible task, so the first GET on the new child
+  cannot consume the throttle before the assertion.
 - Test CRUD under the restricted role, shadow-table binding, descendants,
   privilege/schema drift, ordinary mode, schema fingerprint and child/fixture
   cleanup. Secrets stay in memory and out of logs/Git. The child gets only

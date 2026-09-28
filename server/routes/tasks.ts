@@ -109,9 +109,11 @@ async function verifyRestrictedTasksTable(): Promise<void> {
         throw new Error('MC_TASK6A_RESTRICTED_TASKS_EFFECTS_INVALID');
       }
       const columns = await tx<Array<{ name: string; type: string;
-        notNull: boolean; defaultValue: string | null }>>`
+        notNull: boolean; defaultValue: string | null;
+        generated: string; identity: string }>>`
         SELECT a.attname AS name, a.atttypid::regtype::text AS type,
-          a.attnotnull AS "notNull",
+          a.attnotnull AS "notNull", a.attgenerated AS generated,
+          a.attidentity AS identity,
           pg_catalog.pg_get_expr(d.adbin, d.adrelid) AS "defaultValue"
         FROM pg_catalog.pg_attribute a
         LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
@@ -128,8 +130,9 @@ async function verifyRestrictedTasksTable(): Promise<void> {
         ['created_at', 'timestamp with time zone', true, 'now()'],
         ['updated_at', 'timestamp with time zone', true, 'now()'],
       ];
-      if (JSON.stringify(columns.map((column) => [column.name, column.type,
-        column.notNull, column.defaultValue])) !== JSON.stringify(expectedColumns)) {
+      if (columns.some((column) => column.generated !== '' || column.identity !== '')
+        || JSON.stringify(columns.map((column) => [column.name, column.type,
+          column.notNull, column.defaultValue])) !== JSON.stringify(expectedColumns)) {
         throw new Error('MC_TASK6A_RESTRICTED_TASKS_COLUMNS_INVALID');
       }
       const indexes = await tx<Array<{ name: string; key: string;
@@ -147,7 +150,7 @@ async function verifyRestrictedTasksTable(): Promise<void> {
         JOIN pg_catalog.pg_am am ON am.oid = ic.relam
         WHERE i.indrelid = pg_catalog.to_regclass('public.tasks')`;
       const primary = indexes.filter((index) => index.primary);
-      if (primary.length !== 1 || primary[0].name !== 'tasks_pkey'
+      if (indexes.length !== 1 || primary.length !== 1 || primary[0].name !== 'tasks_pkey'
         || primary[0].key !== 'id' || !primary[0].valid || !primary[0].ready
         || !primary[0].unique || primary[0].accessMethod !== 'btree'
         || primary[0].predicate !== null || primary[0].expression !== null
