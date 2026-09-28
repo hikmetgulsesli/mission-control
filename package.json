@@ -10,6 +10,7 @@
     "dev": "concurrently \"tsx watch server/index.ts\" \"vite\"",
     "test": "node --import tsx --test server/routes/*.test.ts server/services/*.test.ts tests/*.test.ts",
     "test:task6a-mc-restricted-pg:isolated": "node -e \"if (!process.env.SETFARM_TASK6A_TEST_PG_DATA_DIRECTORY || !process.env.SETFARM_TEST_PG_ADMIN_URL) throw new Error('TASK6A_PRIVATE_CLUSTER_REQUIRED')\" && env -u SETFARM_PG_URL node --import tsx --test server/routes/task6a-private-live-feed-restricted.integration.test.ts",
+    "test:task6a-mc-tasks-pg:isolated": "node -e \"if (!process.env.SETFARM_TASK6A_TEST_PG_DATA_DIRECTORY || !process.env.SETFARM_TEST_PG_ADMIN_URL) throw new Error('TASK6A_PRIVATE_CLUSTER_REQUIRED')\" && env -u SETFARM_PG_URL node --import tsx --test server/routes/task6a-private-tasks-restricted.integration.test.ts",
     "check:version": "node scripts/check-version-contract.mjs",
     "check:prompts": "node scripts/check-prompt-language.mjs",
     "check:paths": "node scripts/check-path-contract.mjs",
