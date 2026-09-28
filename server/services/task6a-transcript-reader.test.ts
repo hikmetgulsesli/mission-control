@@ -64,3 +64,119 @@ for (const caseName of ['workflow-symlink', 'file-symlink', 'oversize', 'invalid
     }
   });
 }
+
+test('private transcript reader rejects a regular file replaced between stat and open', () => {
+  const root = mkdtempSync('/tmp/mc-task6a-transcript-');
+  try {
+    const transcripts = path.join(root, 'transcripts');
+    const workflow = path.join(transcripts, 'wf-1');
+    mkdirSync(workflow, { recursive: true });
+    const name = 'agent-2026-09-28T00-00-00.log';
+    const source = path.join(workflow, name);
+    const replacement = path.join(root, 'replacement.log');
+    writeFileSync(source, 'ORIGINAL\n');
+    writeFileSync(replacement, 'REPLACED\n');
+    const race = `import importlib.util, json, os, sys
+spec = importlib.util.spec_from_file_location('reader', sys.argv[1])
+reader = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(reader)
+original_open = os.open
+switched = False
+def racing_open(name, flags, mode=0o777, *, dir_fd=None):
+    global switched
+    if name == sys.argv[4] and dir_fd is not None and not switched:
+        switched = True
+        os.rename(sys.argv[3], sys.argv[3] + '.old')
+        os.rename(sys.argv[5], sys.argv[3])
+    return original_open(name, flags, mode, dir_fd=dir_fd)
+os.open = racing_open
+print(json.dumps(reader.snapshot(sys.argv[2])))
+`;
+    const result = spawnSync('/usr/bin/python3', ['-I', '-c', race,
+      helper, realpathSync(transcripts), source, name, replacement], {
+      encoding: 'utf8', timeout: 10_000, maxBuffer: 64_000_000, env: childEnv,
+    });
+    assert.notEqual(result.status, 0, result.stdout);
+    assert.match(result.stderr, /changed transcript file/);
+  } finally {
+    if (/^\/tmp\/mc-task6a-transcript-[A-Za-z0-9]+$/.test(root)) {
+      rmSync(root, { recursive: true });
+    }
+  }
+});
+
+test('private transcript reader rejects a file added after workflow enumeration', () => {
+  const root = mkdtempSync('/tmp/mc-task6a-transcript-');
+  try {
+    const transcripts = path.join(root, 'transcripts');
+    const workflow = path.join(transcripts, 'wf-1');
+    mkdirSync(workflow, { recursive: true });
+    writeFileSync(path.join(workflow, 'agent-2026-09-28T00-00-00.log'), 'ORIGINAL\n');
+    const race = `import importlib.util, json, os, sys
+spec = importlib.util.spec_from_file_location('reader', sys.argv[1])
+reader = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(reader)
+original_names = reader.bounded_names
+workflow_inode = os.stat(sys.argv[3]).st_ino
+added = False
+def racing_names(fd, limit):
+    global added
+    names = original_names(fd, limit)
+    if os.fstat(fd).st_ino == workflow_inode and not added:
+        added = True
+        with open(os.path.join(sys.argv[3], 'late.log'), 'w') as late:
+            late.write('LATE\\n')
+    return names
+reader.bounded_names = racing_names
+print(json.dumps(reader.snapshot(sys.argv[2])))
+`;
+    const result = spawnSync('/usr/bin/python3', ['-I', '-c', race,
+      helper, realpathSync(transcripts), workflow], {
+      encoding: 'utf8', timeout: 10_000, maxBuffer: 64_000_000, env: childEnv,
+    });
+    assert.notEqual(result.status, 0, result.stdout);
+    assert.match(result.stderr, /changed transcript workflow/);
+  } finally {
+    if (/^\/tmp\/mc-task6a-transcript-[A-Za-z0-9]+$/.test(root)) {
+      rmSync(root, { recursive: true });
+    }
+  }
+});
+
+test('private transcript reader rejects an earlier file changed while later files are read', () => {
+  const root = mkdtempSync('/tmp/mc-task6a-transcript-');
+  try {
+    const transcripts = path.join(root, 'transcripts');
+    const workflow = path.join(transcripts, 'wf-1');
+    mkdirSync(workflow, { recursive: true });
+    const first = path.join(workflow, 'a.log');
+    writeFileSync(first, 'FIRST\n');
+    writeFileSync(path.join(workflow, 'b.log'), 'SECOND\n');
+    const race = `import importlib.util, json, os, sys
+spec = importlib.util.spec_from_file_location('reader', sys.argv[1])
+reader = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(reader)
+original_open = os.open
+changed = False
+def racing_open(name, flags, mode=0o777, *, dir_fd=None):
+    global changed
+    if name == 'b.log' and dir_fd is not None and not changed:
+        changed = True
+        with open(sys.argv[3], 'a') as earlier:
+            earlier.write('CHANGED\\n')
+    return original_open(name, flags, mode, dir_fd=dir_fd)
+os.open = racing_open
+print(json.dumps(reader.snapshot(sys.argv[2])))
+`;
+    const result = spawnSync('/usr/bin/python3', ['-I', '-c', race,
+      helper, realpathSync(transcripts), first], {
+      encoding: 'utf8', timeout: 10_000, maxBuffer: 64_000_000, env: childEnv,
+    });
+    assert.notEqual(result.status, 0, result.stdout);
+    assert.match(result.stderr, /changed transcript file/);
+  } finally {
+    if (/^\/tmp\/mc-task6a-transcript-[A-Za-z0-9]+$/.test(root)) {
+      rmSync(root, { recursive: true });
+    }
+  }
+});

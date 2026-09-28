@@ -57,3 +57,7 @@
 ## Self-review
 
 The spec's separate V3 mode, exact source limits, atomic DB write/read, refusal cases, unchanged V1/V2/ordinary behavior and no-live-cutover boundary each map to a task above. V3's parser is not a retention or credential-fence implementation. `TRANSCRIPTS_DIR` comes from `server/config.ts`, and the existing PG17 private proof is the only database target.
+
+## Review-directed root refinement
+
+The transcript snapshot is a prerequisite to the same V3 append proof. Read-only review identified a source race: a previously read `.log` can change while a later file is scanned, without changing its parent directory metadata. The File Map's Python reader and focused test therefore also cover a deterministic two-file late-mutation RED case and a final no-follow revalidation of every observed workflow/file before the helper emits JSON. This is a fail-closed source correction within Task 1, not a live runtime or authority expansion. An adversarial writer can still mutate after the last filesystem check; no global atomic snapshot is claimed.
