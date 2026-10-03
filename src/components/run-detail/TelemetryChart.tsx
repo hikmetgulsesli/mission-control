@@ -1,21 +1,6 @@
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { api } from '../../lib/api';
-
-interface TelemetryStep {
-  step_id: string;
-  agent_id: string | null;
-  status: string;
-  started_at: string | null;
-  updated_at: string | null;
-  duration_ms: number | null;
-  isBottleneck: boolean;
-}
-
-interface TelemetryData {
-  steps: TelemetryStep[];
-  transitions: any[];
-}
+import { api, type TelemetryResult as TelemetryResultData } from '../../lib/api';
 
 function statusColor(status: string, isBottleneck: boolean): string {
   if (isBottleneck) return '#f59e0b'; // orange for bottleneck
@@ -43,30 +28,36 @@ const STEP_SHORT: Record<string, string> = {
 };
 
 export function TelemetryChart({ runId }: { runId: string }) {
-  const [data, setData] = useState<TelemetryData | null>(null);
+  const [data, setData] = useState<TelemetryResultData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    setError(null);
+    setData(null);
     api.telemetry(runId)
       .then(d => { if (!cancelled) setData(d); })
-      .catch(e => { if (!cancelled) setError(e.message); })
+      .catch(() => { if (!cancelled) setData({ status: 'unavailable', runId, reason: 'network' }); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [runId]);
 
-  if (loading) return <div style={{ padding: 16, color: 'var(--text-dim)', fontSize: 13 }}>Loading telemetry...</div>;
-  if (error) return <div style={{ padding: 16, color: '#ff4444', fontSize: 13 }}>Telemetry failed: {error}</div>;
-  const steps = Array.isArray(data?.steps) ? data.steps : [];
-  if (steps.length === 0) return <div style={{ padding: 16, color: 'var(--text-dim)', fontSize: 13 }}>No telemetry data</div>;
+  if (loading || data && data.runId !== null && data.runId !== runId) return <div style={{ padding: 16, color: 'var(--text-dim)', fontSize: 13 }}>Loading telemetry...</div>;
+  return <TelemetryResult result={data ?? { status: 'unavailable', runId, reason: 'invalid_response' }} />;
+}
+
+export function TelemetryResult({ result }: { result: TelemetryResultData }) {
+  if (result.status === 'unavailable') {
+    return <div role="status" style={{ padding: 16, color: '#ff4444', fontSize: 13 }}>Telemetry unavailable ({result.reason})</div>;
+  }
+  const notice = <p role="status" style={{ color: 'var(--text-dim)', fontSize: 12 }}>Precise transition history unavailable. Analysis covers historical execution duration only.</p>;
+  const steps = result.steps;
+  if (steps.length === 0) return <div style={{ padding: 16 }}>{notice}<div style={{ color: 'var(--text-dim)', fontSize: 13 }}>No telemetry data</div></div>;
 
   const chartData = steps
     .filter(s => s.duration_ms !== null)
     .map(s => ({
-      name: STEP_SHORT[s.step_id] || s.step_id.toUpperCase(),
+      name: Object.hasOwn(STEP_SHORT, s.step_id) ? STEP_SHORT[s.step_id] : s.step_id.toUpperCase(),
       stepId: s.step_id,
       duration: s.duration_ms!,
       status: s.status,
@@ -75,10 +66,11 @@ export function TelemetryChart({ runId }: { runId: string }) {
     }));
 
   if (chartData.length === 0) {
-    return <div style={{ padding: 16, color: 'var(--text-dim)', fontSize: 13 }}>No completed steps yet</div>;
+    return <div style={{ padding: 16 }}>{notice}<div style={{ color: 'var(--text-dim)', fontSize: 13 }}>No completed steps yet</div></div>;
   }
 
   const totalMs = chartData.reduce((sum, d) => sum + d.duration, 0);
+  if (!Number.isFinite(totalMs)) return <TelemetryResult result={{ status: 'unavailable', runId: result.runId, reason: 'invalid_response' }} />;
   const bottlenecks = chartData.filter(d => d.isBottleneck);
 
   return (
@@ -88,6 +80,7 @@ export function TelemetryChart({ runId }: { runId: string }) {
       borderRadius: 8,
       padding: 16,
     }}>
+      {notice}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',

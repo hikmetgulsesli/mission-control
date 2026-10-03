@@ -11,6 +11,154 @@ import {
 const BASE = '';
 const AUTH_TOKEN = (document.querySelector('meta[name="mc-token"]') as HTMLMetaElement)?.content || '';
 
+export type TelemetryUnavailableReason = 'invalid_run_id' | 'sql' | 'http' | 'network'
+  | 'invalid_json' | 'invalid_response' | 'run_id_mismatch';
+export interface TelemetryStep {
+  step_id: string; agent_id: string | null; status: string;
+  started_at: string | null; updated_at: string | null;
+  duration_ms: number | null; isBottleneck: boolean;
+}
+export interface TelemetryAvailable {
+  schema: 'mission-control.pipeline-telemetry.v1'; status: 'available_limited'; runId: string;
+  history: { state: 'unavailable'; reasonCode: 'PRECISE_TRANSITION_HISTORY_UNAVAILABLE' };
+  analysis: { coverage: ['historical_execution_duration'] };
+  steps: TelemetryStep[]; transitions: [];
+  bottlenecks: Array<{ type: 'execution_bottleneck'; stepId: string; message: string; value: number; threshold: number }>;
+}
+export type TelemetryResult = TelemetryAvailable
+  | { status: 'unavailable'; runId: string | null; reason: TelemetryUnavailableReason };
+
+function telemetryUnavailable(runId: string | null, reason: TelemetryUnavailableReason): TelemetryResult {
+  return { status: 'unavailable', runId, reason };
+}
+
+export function isTelemetryRunId(value: unknown): value is string {
+  if (typeof value !== 'string' || !value.length || value.includes('\0')) return false;
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = value.charCodeAt(++i);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
+    } else if (code >= 0xdc00 && code <= 0xdfff) return false;
+  }
+  return new TextEncoder().encode(value).byteLength <= 256;
+}
+
+function telemetryKeys(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    && Object.getPrototypeOf(value) === Object.prototype
+    && Reflect.ownKeys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
+}
+
+// Canonical PostgreSQL UTC diagnostic text; deliberately not JavaScript Date.
+function telemetryTimestamp(value: unknown): boolean {
+  if (value === null) return true;
+  if (typeof value !== 'string') return false;
+  const match = /^(\d{4,6})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\.(\d{6})Z (AD|BC)$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]), month = Number(match[2]), day = Number(match[3]);
+  if (!year || match[1] !== String(year).padStart(4, '0') || month < 1 || month > 12
+      || Number(match[4]) > 23 || Number(match[5]) > 59 || Number(match[6]) > 59) return false;
+  const astronomical = match[8] === 'BC' ? 1 - year : year;
+  const leap = astronomical % 4 === 0 && (astronomical % 100 !== 0 || astronomical % 400 === 0);
+  if (day < 1 || day > [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1]!) return false;
+  if (match[8] === 'BC') return year < 4714 || year === 4714 && (month > 11 || month === 11 && day >= 24);
+  return year <= 294276;
+}
+
+export function parseTelemetryResponse(status: number, body: unknown, runId: string): TelemetryResult {
+  const invalid = () => telemetryUnavailable(runId, 'invalid_response');
+  if (status !== 200 && status !== 400 && status !== 503) return telemetryUnavailable(runId, 'http');
+  if (status === 400 || status === 503) {
+    if (!telemetryKeys(body, ['schema', 'status', 'runId', 'code', 'reason'])
+        || body.schema !== 'mission-control.pipeline-telemetry.v1' || body.status !== 'unavailable') return invalid();
+    if (status === 400) return body.runId === null && body.code === 'TELEMETRY_RUN_ID_INVALID'
+      && body.reason === 'invalid_run_id' ? telemetryUnavailable(null, 'invalid_run_id') : invalid();
+    if (!isTelemetryRunId(body.runId) || body.code !== 'TELEMETRY_READ_FAILED' || body.reason !== 'sql') return invalid();
+    return telemetryUnavailable(runId, body.runId === runId ? 'sql' : 'run_id_mismatch');
+  }
+  if (!telemetryKeys(body, ['schema', 'status', 'runId', 'history', 'analysis', 'steps', 'transitions', 'bottlenecks'])
+      || body.schema !== 'mission-control.pipeline-telemetry.v1' || body.status !== 'available_limited'
+      || !isTelemetryRunId(body.runId)
+      || !telemetryKeys(body.history, ['state', 'reasonCode']) || body.history.state !== 'unavailable'
+      || body.history.reasonCode !== 'PRECISE_TRANSITION_HISTORY_UNAVAILABLE'
+      || !telemetryKeys(body.analysis, ['coverage']) || !Array.isArray(body.analysis.coverage)
+      || body.analysis.coverage.length !== 1 || body.analysis.coverage[0] !== 'historical_execution_duration'
+      || !Array.isArray(body.steps) || !Array.isArray(body.transitions) || body.transitions.length !== 0
+      || !Array.isArray(body.bottlenecks)) return invalid();
+  let total = 0;
+  for (const step of body.steps) {
+    if (!telemetryKeys(step, ['step_id', 'agent_id', 'status', 'started_at', 'updated_at', 'duration_ms', 'isBottleneck'])
+        || typeof step.step_id !== 'string' || typeof step.status !== 'string'
+        || step.agent_id !== null && typeof step.agent_id !== 'string'
+        || !telemetryTimestamp(step.started_at) || !telemetryTimestamp(step.updated_at)
+        || typeof step.isBottleneck !== 'boolean'
+        || step.duration_ms !== null && (typeof step.duration_ms !== 'number' || !Number.isFinite(step.duration_ms)
+          || !Number.isInteger(step.duration_ms) || step.duration_ms < 0 || !['done', 'failed'].includes(step.status))) return invalid();
+    if (step.duration_ms !== null) { total += step.duration_ms as number; if (!Number.isFinite(total)) return invalid(); }
+  }
+  for (const flag of body.bottlenecks) {
+    if (!telemetryKeys(flag, ['type', 'stepId', 'message', 'value', 'threshold'])
+        || flag.type !== 'execution_bottleneck' || typeof flag.stepId !== 'string' || typeof flag.message !== 'string'
+        || typeof flag.value !== 'number' || !Number.isFinite(flag.value)
+        || typeof flag.threshold !== 'number' || !Number.isFinite(flag.threshold)
+        || !(flag.value > flag.threshold && flag.threshold > 0)) return invalid();
+  }
+  if (body.runId !== runId) return telemetryUnavailable(runId, 'run_id_mismatch');
+  return body as unknown as TelemetryAvailable;
+}
+
+async function fetchTelemetry(runId: string): Promise<TelemetryResult> {
+  if (!isTelemetryRunId(runId)) return telemetryUnavailable(null, 'invalid_run_id');
+  let response: Response;
+  try {
+    response = await fetch(`${BASE}/api/telemetry?runId=${encodeURIComponent(runId)}`, {
+      headers: AUTH_TOKEN ? { 'X-MC-Token': AUTH_TOKEN } : {}, cache: 'no-store',
+    });
+  } catch { return telemetryUnavailable(runId, 'network'); }
+  const refused = async (reason: TelemetryUnavailableReason) => {
+    try { await response.body?.cancel(); } catch { /* preserve the selected refusal */ }
+    return telemetryUnavailable(runId, reason);
+  };
+  if (![200, 400, 503].includes(response.status)) return refused('http');
+  if (!/^[ \t]*application\/json[ \t]*(?:;[ \t]*charset[ \t]*=[ \t]*(?:utf-8|"utf-8")[ \t]*)?$/i.test(response.headers.get('content-type') || '')) return refused('invalid_response');
+  if (!response.body) return telemetryUnavailable(runId, 'invalid_response');
+  const chunks: Uint8Array[] = []; let bytes = 0, ended = false;
+  let result: TelemetryResult | undefined;
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  try {
+    reader = response.body.getReader();
+    for (;;) {
+      const next = await reader.read();
+      if (next.done) { ended = true; break; }
+      if (!(next.value instanceof Uint8Array) || bytes + next.value.byteLength > 1048576) {
+        result = telemetryUnavailable(runId, 'invalid_response'); break;
+      }
+      bytes += next.value.byteLength; chunks.push(next.value);
+    }
+    if (!result) {
+      const all = new Uint8Array(bytes); let offset = 0;
+      for (const chunk of chunks) { all.set(chunk, offset); offset += chunk.byteLength; }
+      let text: string | undefined;
+      try { text = new TextDecoder('utf-8', { fatal: true }).decode(all); }
+      catch { result = telemetryUnavailable(runId, 'invalid_response'); }
+      if (text !== undefined) {
+        let body: unknown;
+        try { body = JSON.parse(text); } catch { result = telemetryUnavailable(runId, 'invalid_json'); }
+        if (!result) result = parseTelemetryResponse(response.status, body, runId);
+      }
+    }
+  } catch { result ??= telemetryUnavailable(runId, 'network'); }
+  finally {
+    if (reader) {
+      if (!ended) try { await reader.cancel(); } catch { result ??= telemetryUnavailable(runId, 'network'); }
+      try { reader.releaseLock(); }
+      catch { if (!result || result.status === 'available_limited') result = telemetryUnavailable(runId, 'network'); }
+    }
+  }
+  return result ?? telemetryUnavailable(runId, 'invalid_response');
+}
+
 async function fetchApi<T>(path: string, opts?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {
     ...(AUTH_TOKEN ? { 'X-MC-Token': AUTH_TOKEN } : {}),
@@ -211,7 +359,7 @@ export const api = {
   toggleRule: (id: string) => fetchApi<any>(`/api/rules/${id}/toggle`, { method: 'PUT' }),
   exportRules: () => fetchApi<any>('/api/rules/export'),
   // Telemetry
-  telemetry: (runId: string) => fetchApi<any>(`/api/telemetry/${runId}`),
+  telemetry: (runId: string) => fetchTelemetry(runId),
   runErrors: (runId: string) => fetchApi<any[]>(`/api/runs/${runId}/errors`),
   // Live Feed
   liveFeed: (since?: string, agent?: string) => {
