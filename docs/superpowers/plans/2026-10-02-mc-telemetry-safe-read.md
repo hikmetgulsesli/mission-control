@@ -19,11 +19,12 @@ React19.2.4/Recharts2.15.4, PostgreSQL17.10. No dependency changes.
 
 ## Global constraints and File Map
 
-Exactly seven files listed in the spec. Root writes only the new own-Git clone
+Exactly nine files listed in the amended spec. Root writes only the new own-Git clone
 `.worktrees/mission-control-telemetry-safe-read-20261003-v1` on
 `fix/mc-telemetry-safe-read`, baselineb677c470/tree da0143. Preserve all old
-roots/builds/dirty contents. No package/lock/globalDB/config/index/auth/service/
-native changes. Stream limit1048576 decoded bytes; ID limit256UTF8bytes; schema
+roots/builds/dirty contents. Package/lock changes are root engine metadata only:
+`^22.18.0 || >=24.3.0`, with every dependency and script unchanged. No globalDB/
+config/index/auth/service/native changes. Stream limit1048576 decoded bytes; ID limit256UTF8bytes; schema
 mission-control.pipeline-telemetry.v1; exact closed wire/reason/SQL/calendar
 contracts in spec are requirements for every task.
 
@@ -206,9 +207,36 @@ after that factory resolves. backofffalse is zero delay, never no-retry proof.
 
 ## Task5: Scoped verified delivery, preserving runtime authority
 
-Final selected verification:125tests/124PASS/0FAIL/1skip111018.157125ms.
+Actual PR33 review refinement before merge: remove the workstation UID/GID
+constants, not generation comparisons, O_NOFOLLOW, SHA256 or nlink1 protection.
+Retain synchronous hooks and actual import-only raw-TS witness; align only
+package/lock root engines to the warning-free default stripping floors above.
+
+- [x] Add an actual held-read consumer of realpath(process.execPath); current
+  GID80 must expose the existing GID20 assertion as genuine RED. Add existing
+  node_modules/.bin/tsc symlink refusal, without creating/deleting any fixture.
+- [x] Remove only fixed UID/GID assertions; same actual handle/path metadata,
+  one-link, length and SHA256 remain pinned. Observe focused GREEN.
+- [x] Check old engine range accepts unsupported22.14/23.4 with npm's actual
+  semver consumer. Amend package/lock root metadata only; check unsupported
+  versions refuse and22.18/24.3/26.4 admit. This is configuration verification,
+  not an executed older-runtime compatibility matrix.
+- [x] Run the complete selected focused suite, strict noemit and normal build;
+  independently review the exact amended nine-file scope before commit/push.
+- [ ] Reply to both actual review threads with evidence and the retained alias
+  restriction; request fresh exact-head Codex review and read all feedback.
+
+Current post-review selected verification:120tests/119PASS/0FAIL/1skip,
+100200.851292ms. The actual complete current footer is authoritative; earlier
+125/124 counters in the historical operational record are not reconciled and
+are not used as this head's coverage proof. Both newly added held-read consumers
+passed. Strict server noemit and normal isolated build also completed exit0;
+the existing chunk-size warning remains visible. Package/root-lock diff changes
+only engine metadata, not dependencies or scripts.
 The sole skip is the missing-opt-in negative, inapplicable with the real flag
-selected; it passed the earlier complete default116tests/115PASS/1SQLskip run.
+selected. That negative consumer was previously observed passing without the
+flag; earlier default116/115 aggregate counters are also historical and
+unreconciled, not this head's coverage proof.
 The final sole SQL owner completed positive24/13 frozen results and a fresh
 current-exclusion semantic control, with exact five historical-only averages
 and natural owned closure in both children. Earlier separate combined SQL
@@ -219,7 +247,7 @@ strict noemit and six compiled unchanged adjacent tests passed. Dirty build
 identity is not clean source binding. Final scoped commit/PR/merge and separate
 clean-main build remain pending; no live rollout or cutover is claimed.
 
-**Files:** All seven scoped files only.
+**Files:** All nine amended scoped files only.
 **Consumes:** genuine RED/GREEN/mutants/realSQL and independent reviews.
 **Produces:** reviewed normal PR and clean-main build; NOT live cutover proof.
 
@@ -228,7 +256,7 @@ clean-main build remain pending; no live rollout or cutover is claimed.
 - [x] Run normal npmrunbuild only in this new isolated root (build deletes its
   own dist/dist-server). Check package/lock and canonical retained hashes.
 - [ ] Review diff/filemap/public hygiene; no external logs/journals/PIDs/paths/
-  credentials/runtime data. Stage exact seven; conventional scoped commit.
+  credentials/runtime data. Stage exact nine; conventional scoped commit.
 - [ ] Normalpush/PR, request Copilot/Gemini under existing convention, read all
   comments/threads/checks; request acceptance/quota/silence is not review approval.
 - [ ] Independent exact-head review, normal SHA-bound merge, noadmin/force/delete.

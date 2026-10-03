@@ -5,14 +5,16 @@
 The qualifying Setfarm ALL observed unsupported `step_transitions` reads.
 Mission Control also interpolates opaque run identifiers into executable
 JavaScript and hides failed history/bottleneck discovery behind empty arrays.
-This seven-file root fix replaces that consumer with an honest, bounded,
+This scoped root fix replaces that consumer with an honest, bounded,
 steps-only read. It is required by the same internal-production completion
 objective, not a new analytics feature or Setfarm schema change.
 
 Root is the sole writer and delivery owner. Read-only agents review independently.
 All retained worktrees, builds, journals and historical dirty-file contents stay
-visible and unchanged. No live selector, service, port, auth, pool, migration,
-package or lock changes. Ordinary P1 does not authorize native/protected cutover.
+visible and unchanged. No live selector, service, port, auth, pool or migration
+changes. Only root Node engine metadata changes in package/lock; dependency
+versions, integrity values and install/build scripts stay unchanged. Ordinary
+P1 does not authorize native/protected cutover.
 
 ## File map
 
@@ -30,8 +32,10 @@ package or lock changes. Ordinary P1 does not authorize native/protected cutover
    same exported test-only harness, not extracted implementation.
 6. This design.
 7. `docs/superpowers/plans/2026-10-02-mc-telemetry-safe-read.md`.
+8. `package.json`: engine declaration only, matching the actual loader contract.
+9. `package-lock.json`: the same root engine metadata only, no dependency changes.
 
-No helper file, global DB utility, schema, source outside these seven, config,
+No helper file, global DB utility, schema, source outside these nine, config,
 dependency, index entry or generated runtime artifact is part of this change.
 The shared route test module registers its tests only when it is the directly
 selected process.argv[1] entry, verified against its canonical import.meta.url.
@@ -145,6 +149,27 @@ invalid_response, never Infinity/healthy display.
 
 ## Test ownership and safety
 
+PR33's actual Codex review identified fixed UID501/GID20 admission and an engine
+declaration that included runtimes without synchronous hooks. Admit regular
+single-link files by their actual before/open/after generation, including UID
+and GID; arbitrary account numbers are not source authority. Preserve O_NOFOLLOW,
+all metadata comparisons, SHA256, loaded-byte checks and final revalidation.
+Hard-linked layouts remain intentionally unsupported: do not remove the
+single-link guard or claim portable alias exclusion from a stable snapshot.
+An ordinary actual read of the current Node executable (on this host GID80)
+must succeed without executing or admitting that file as a module. A symlink
+read must still refuse before opening its target.
+
+Declare Node `^22.18.0 || >=24.3.0` in both package roots. Synchronous hooks
+require22.15/23.5, but the owned import-only child also imports raw erasable TS
+without tsx/preloads and requires clean stderr. Node22.18 enables type stripping
+by default without its experimental warning; Node24.3 removes that warning in
+the newer line. Do not install a loader fallback, hide warnings, skip consumers
+or weaken any child boundary. Primary version documentation motivates these
+floors; only actual tested Node26.4 evidence qualifies this host, not an executed
+cross-version compatibility matrix. This causal refinement is not a dependency
+upgrade, service rollout or protected vendor-Node contract change.
+
 Outer focused Node26 test imports pinned TypeScript5.9.3 and transpiles exact
 raw source snapshots in memory with original filename, ES2022/ESNext/Bundler,
 ReactJSX/esModuleInterop, reportDiagnostics; no custom transformer, emitted
@@ -257,3 +282,6 @@ is inferred from ordinary tests.
 - https://www.postgresql.org/docs/17/sql-select.html#SQL-FROM
 - https://www.postgresql.org/docs/17/functions-formatting.html
 - https://nodejs.org/docs/v26.4.0/api/module.html#moduleregisterhooksoptions
+- https://nodejs.org/download/release/v22.15.0/docs/api/module.html
+- https://nodejs.org/download/release/v22.18.0/docs/api/typescript.html
+- https://nodejs.org/download/release/v24.3.0/docs/api/typescript.html

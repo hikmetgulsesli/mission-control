@@ -56,7 +56,6 @@ const TELEMETRY_EXCLUDE_CURRENT_SQL_V1 = [TELEMETRY_SQL_V1[0],
 function heldBytes(file: string) {
   const before = lstatSync(file, { bigint: true });
   assert.ok(before.isFile() && !before.isSymbolicLink());
-  assert.equal(before.uid, 501n); assert.equal(before.gid, 20n);
   assert.equal(before.nlink, 1n);
   const fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
@@ -737,6 +736,20 @@ export async function runTelemetrySqlWitnessV1(mode: 'admission' | 'socket' | 'r
 
 const DIRECT_ENTRY = process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
 if (DIRECT_ENTRY) {
+  test('held reads accept actual file ownership without workstation account constants', () => {
+    const file = realpathSync(process.execPath), before = lstatSync(file, { bigint: true });
+    const observed = heldBytes(file);
+    assert.equal(observed.pin.uid, Number(before.uid));
+    assert.equal(observed.pin.gid, Number(before.gid));
+    assert.equal(observed.pin.size, Number(before.size));
+    assert.equal(observed.pin.nlink, 1);
+    assert.equal(observed.pin.sha256, digest(observed.bytes));
+  });
+  test('held reads still refuse existing dependency symlinks before target admission', () => {
+    const file = path.join(ROOT, 'node_modules/.bin/tsc');
+    assert.ok(lstatSync(file).isSymbolicLink());
+    assert.throws(() => heldBytes(file), assert.AssertionError);
+  });
   test('SQL failure projection preserves primary first and every ordered cleanup cause', async () => {
     const helpers = await import(import.meta.url);
     assert.equal(typeof helpers.telemetrySqlFailureV1, 'function');
