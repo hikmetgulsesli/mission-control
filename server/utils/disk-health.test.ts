@@ -55,3 +55,30 @@ test("a failed disk probe reports unknown without leaking command output", async
   dfOutput(report("52%"), new Error("private diagnostic must not be returned"));
   assert.deepEqual(await readWorkingVolumeDiskHealth(), { status: "unknown" });
 });
+
+for (const failure of [null, new Error("private probe failure")]) {
+  test(`concurrent health calls share one pending probe and retry after ${failure ? "failure" : "success"}`, async () => {
+    const callbacks: DfCallback[] = [];
+    mock.method(childProcess, "execFile", (
+      _file: string, _args: string[], _options: unknown, callback: DfCallback,
+    ) => {
+      callbacks.push(callback);
+      return new childProcess.ChildProcess();
+    });
+    const requests = Array.from({ length: 32 }, () => readWorkingVolumeDiskHealth());
+    await Promise.resolve();
+    try {
+      assert.equal(callbacks.length, 1, "a public burst must own only one subprocess");
+    } finally {
+      for (const callback of callbacks) callback(failure, report("95%"), "");
+      await Promise.all(requests);
+    }
+    const expected = failure ? { status: "unknown" } : { status: "warning", detail: "95%" };
+    for (const result of await Promise.all(requests)) assert.deepEqual(result, expected);
+    const next = readWorkingVolumeDiskHealth();
+    await Promise.resolve();
+    assert.equal(callbacks.length, 2, "settled observations must not become a stale cache");
+    callbacks[1]!(null, report("89%"), "");
+    assert.deepEqual(await next, { status: "up", detail: "89%" });
+  });
+}

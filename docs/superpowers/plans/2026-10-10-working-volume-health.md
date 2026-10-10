@@ -15,12 +15,18 @@ Reject missing/malformed/out-of-range percentages as `unknown` without echoing
 command output. Do not change runtime configuration, auth, other mounts, project
 visibility, service ports, or OpenClaw state. This probe is not a capacity
 reservation or proof that every externally configured storage path is healthy.
+Since the public health route precedes authentication/rate limits, concurrent
+callers must share one pending original probe; clear it only after settlement,
+including failure, and do not cache observations after completion. This resolves
+the causal subprocess-fanout issue identified by the exact-head GitHub review
+without changing authentication or rate-limit policy.
 
 File Map:
 
 - `server/utils/disk-health.ts`: own the working-volume observation and classify it.
 - `server/utils/disk-health.test.ts`: protect root-vs-working volume, thresholds,
   invalid output, and failed probes through the operating-system command boundary.
+  Concurrent bursts cover both failed/successful settlement and fresh retry.
 - `server/index.ts`: consume that observation in the existing registered health route.
 
 ## Execution
@@ -31,7 +37,7 @@ File Map:
 - [ ] Verify focused tests and registered route behavior without starting MC's
   project-transfer scheduler or performing live database writes.
 - [x] Obtain independent read-only review; resolve substantive findings.
-- [ ] Commit scoped files, run the normal build on the clean branch, deliver a PR.
+- [x] Commit scoped files, run the normal build on the clean branch, deliver PR34.
 - [ ] Require reviewed integration and clean-main build before any live rollout.
 
 Current OpenClaw candidate migration and Setfarm cutover plans remain unchanged.
@@ -55,3 +61,12 @@ bounded-probe test suggestion is implemented: assert exact executable/argv,
 three-second timeout, 64-KiB output cap, and UTF-8 encoding. Current-base focused
 12-test rerun and server TypeScript compilation pass. Registered live route and
 clean-main rollout proof remain later gates; no live-health success is inferred.
+
+Clean head e6c2c25 normal full build passed; all236 emitted artifacts were bound
+to its source/tree/content identity. Full existing npm test naturally exited0:
+390tests,378passed,12skipped,0failed/cancelled,101.411s. Private-PG/real-SQL and
+branch-specific observer skips are not qualification. GitGuardian passed.
+GitHub exact-head Codex review found P2 public probe fanout before integration.
+Two genuine added burst tests RED32subprocesses versus1, with12prior tests passing.
+The smallest fix coalesces pending original work and releases it after settlement;
+current14tests and complete branch qualification must be rerun before delivery.

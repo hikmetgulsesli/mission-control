@@ -1,9 +1,20 @@
 import childProcess from "node:child_process";
 
 type DiskHealth = { status: "up" | "warning" | "unknown"; detail?: string };
+let inFlight: Promise<DiskHealth> | undefined;
 
 /** Observe the service's working volume, not macOS's separate read-only root. */
-export async function readWorkingVolumeDiskHealth(): Promise<DiskHealth> {
+export function readWorkingVolumeDiskHealth(): Promise<DiskHealth> {
+  // Public concurrent callers share only pending work, never a stale observation.
+  if (!inFlight) {
+    inFlight = Promise.resolve().then(probeWorkingVolumeDiskHealth).finally(() => {
+      inFlight = undefined;
+    });
+  }
+  return inFlight;
+}
+
+async function probeWorkingVolumeDiskHealth(): Promise<DiskHealth> {
   try {
     const output = await new Promise<string>((resolve, reject) => {
       childProcess.execFile(
