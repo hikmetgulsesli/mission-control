@@ -7,6 +7,7 @@ import os from 'os';
 import { resolve, join } from 'path';
 import { existsSync } from 'fs';
 import { config, PATHS } from './config.js';
+import { readWorkingVolumeDiskHealth } from './utils/disk-health.js';
 import { warmupAll } from './utils/cache.js';
 import { setupWsProxy } from './ws-proxy.js';
 import { assertProjectsJsonLockCapability } from './services/projects-json-repository.js';
@@ -204,15 +205,8 @@ app.get('/api/health', async (_req, res) => {
     checks.database = { status: 'up', detail: `${rows[0]?.count || 0} runs` };
   } catch (e: any) { checks.database = { status: 'down', detail: e.message }; }
   
-  // 3. Disk space
-  try {
-    const { execSync } = await import('child_process');
-    const df = execSync('df -k /', { timeout: 3000 }).toString().trim().split(/\r?\n/).pop() || '';
-    const parts = df.split(/\s+/);
-    const pctText = parts[4] || '';
-    const pct = parseInt(pctText.replace('%', ''), 10);
-    checks.disk = { status: Number.isFinite(pct) && pct < 90 ? 'up' : 'warning', detail: pctText || df };
-  } catch { checks.disk = { status: 'unknown' }; }
+  // 3. Disk space on the service's actual working volume.
+  checks.disk = await readWorkingVolumeDiskHealth();
   
   // 4. Memory
   try {
