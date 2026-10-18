@@ -1,5 +1,5 @@
 /** Selected PRD start composition. Receipt DATA alone is never run authority. */
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
@@ -90,6 +90,107 @@ function cleanupOwnedTaskV1(file:string,before:fs.BigIntStats):void {
   if(!now.isFile()||IDENTITY_KEYS.some(key=>now[key]!==before[key]))throw Error('MC_FRESH_TASK_FILE_CHANGED');
   fs.unlinkSync(file); // Checked same-owner name, not an atomic unlink claim.
 }
+
+// These limits bound cleanup preparation for this request's exclusively new repo.
+// They are ordinary MC request limits, unrelated to NativeH accounting/admission.
+const OWNED_PROJECT_LIMITS_V1 = Object.freeze({ entries:4096, bytes:64*1024*1024, fileBytes:8*1024*1024, depth:32 });
+type OwnedRegularFileV1 = Readonly<{ identity:fs.BigIntStats; sha256:string }>;
+type OwnedProjectEntryV1 = Readonly<{ relative:string; kind:'file'|'directory'; identity:fs.BigIntStats; sha256?:string }>;
+type OwnedProjectSnapshotV1 = Readonly<{ directory:string; identity:fs.BigIntStats; entries:readonly OwnedProjectEntryV1[] }>;
+function sameOwnedIdentityV1(left:fs.BigIntStats,right:fs.BigIntStats):boolean {
+  return IDENTITY_KEYS.every(key=>left[key]===right[key]);
+}
+function readOwnedRegularFileV1(file:string,budget:{bytes:number}):OwnedRegularFileV1 {
+  const before=fs.lstatSync(file,{bigint:true});
+  if(!before.isFile()||before.isSymbolicLink()||before.nlink!==1n||before.uid!==BigInt(process.getuid!())
+    ||(before.mode&0o7022n)!==0n||before.size<0n||before.size>BigInt(OWNED_PROJECT_LIMITS_V1.fileBytes)
+    ||fs.realpathSync(file)!==file)throw Error('MC_FRESH_OWNED_FILE_INVALID');
+  const length=Number(before.size);budget.bytes+=length;
+  if(budget.bytes>OWNED_PROJECT_LIMITS_V1.bytes)throw Error('MC_FRESH_OWNED_PROJECT_TOO_LARGE');
+  const descriptor=fs.openSync(file,fs.constants.O_RDONLY|fs.constants.O_NOFOLLOW|fs.constants.O_NONBLOCK);
+  let primary:unknown,failed=false;
+  try{
+    if(!sameOwnedIdentityV1(before,fs.fstatSync(descriptor,{bigint:true})))throw Error('MC_FRESH_OWNED_FILE_CHANGED');
+    const hash=createHash('sha256'),buffer=Buffer.alloc(Math.min(65_536,Math.max(1,length)));let consumed=0;
+    while(consumed<length){
+      const count=fs.readSync(descriptor,buffer,0,Math.min(buffer.length,length-consumed),null);
+      if(count===0)throw Error('MC_FRESH_OWNED_FILE_TRUNCATED');
+      hash.update(buffer.subarray(0,count));consumed+=count;
+    }
+    if(fs.readSync(descriptor,buffer,0,1,null)!==0
+      ||!sameOwnedIdentityV1(before,fs.fstatSync(descriptor,{bigint:true}))
+      ||!sameOwnedIdentityV1(before,fs.lstatSync(file,{bigint:true})))throw Error('MC_FRESH_OWNED_FILE_CHANGED');
+    return Object.freeze({identity:before,sha256:hash.digest('hex')});
+  }catch(error){failed=true;primary=error;throw error;}
+  finally{try{fs.closeSync(descriptor);}catch(error){if(failed)throw new AggregateError([primary,error],'MC_FRESH_OWNED_FILE_READ_AND_CLOSE_FAILED');throw error;}}
+}
+function captureOwnedProjectV1(directory:string,createdIdentity:fs.BigIntStats):OwnedProjectSnapshotV1 {
+  const root=privateDirectory(directory);
+  if(root.dev!==createdIdentity.dev||root.ino!==createdIdentity.ino)throw Error('MC_FRESH_PROJECT_DIRECTORY_CHANGED');
+  const entries:OwnedProjectEntryV1[]=[],budget={bytes:0};
+  function visit(relative:string,depth:number):void {
+    if(depth>OWNED_PROJECT_LIMITS_V1.depth)throw Error('MC_FRESH_OWNED_PROJECT_TOO_DEEP');
+    const current=relative?path.join(directory,relative):directory,before=fs.lstatSync(current,{bigint:true});
+    if(!before.isDirectory()||before.isSymbolicLink()||before.uid!==BigInt(process.getuid!())
+      ||(before.mode&0o7022n)!==0n||fs.realpathSync(current)!==current)throw Error('MC_FRESH_OWNED_DIRECTORY_INVALID');
+    const names=fs.readdirSync(current).sort();
+    for(const name of names){
+      if(!name||name==='.'||name==='..'||name.includes('/')||name.includes('\0'))throw Error('MC_FRESH_OWNED_NAME_INVALID');
+      if(entries.length>=OWNED_PROJECT_LIMITS_V1.entries)throw Error('MC_FRESH_OWNED_PROJECT_TOO_LARGE');
+      const child=relative?path.join(relative,name):name,full=path.join(directory,child),identity=fs.lstatSync(full,{bigint:true});
+      if(identity.isDirectory()&&!identity.isSymbolicLink()){
+        entries.push(Object.freeze({relative:child,kind:'directory',identity}));visit(child,depth+1);
+      }else{
+        const file=readOwnedRegularFileV1(full,budget);
+        entries.push(Object.freeze({relative:child,kind:'file',...file}));
+      }
+    }
+    if(!sameOwnedIdentityV1(before,fs.lstatSync(current,{bigint:true}))
+      ||names.join('\0')!==fs.readdirSync(current).sort().join('\0'))throw Error('MC_FRESH_OWNED_DIRECTORY_CHANGED');
+  }
+  visit('',0);
+  if(!sameOwnedIdentityV1(root,fs.lstatSync(directory,{bigint:true})))throw Error('MC_FRESH_PROJECT_DIRECTORY_CHANGED');
+  return Object.freeze({directory,identity:root,entries:Object.freeze(entries)});
+}
+function cleanupBusyOwnedArtifactsV1(project:OwnedProjectSnapshotV1,taskFile:string,task:OwnedRegularFileV1):void {
+  // Validate the WHOLE original graph and task before any unlink. Unknown,
+  // accepted, changed or additional artifacts never reach this cleanup path.
+  const now=captureOwnedProjectV1(project.directory,project.identity);
+  if(!sameOwnedIdentityV1(project.identity,now.identity)||now.entries.length!==project.entries.length
+    ||project.entries.some((entry,index)=>{
+      const current=now.entries[index];return !current||current.relative!==entry.relative||current.kind!==entry.kind
+        ||current.sha256!==entry.sha256||!sameOwnedIdentityV1(current.identity,entry.identity);
+    }))throw Error('MC_FRESH_OWNED_PROJECT_CHANGED');
+  const currentTask=readOwnedRegularFileV1(taskFile,{bytes:0});
+  if(currentTask.sha256!==task.sha256||!sameOwnedIdentityV1(currentTask.identity,task.identity))throw Error('MC_FRESH_TASK_FILE_CHANGED');
+  const directories=new Map(project.entries.filter(entry=>entry.kind==='directory').map(entry=>[entry.relative,entry.identity]));
+  directories.set('',project.identity);
+  function assertParents(relative:string):void {
+    let parent=path.dirname(relative);
+    while(true){
+      const key=parent==='.'?'':parent,expected=directories.get(key);
+      if(!expected)throw Error('MC_FRESH_OWNED_DIRECTORY_CHANGED');
+      const full=key?path.join(project.directory,key):project.directory,current=fs.lstatSync(full,{bigint:true});
+      if(!current.isDirectory()||current.isSymbolicLink()||fs.realpathSync(full)!==full
+        ||(['dev','ino','mode','uid','gid'] as const).some(field=>current[field]!==expected[field]))throw Error('MC_FRESH_OWNED_DIRECTORY_CHANGED');
+      if(!key)break;parent=path.dirname(key);
+    }
+  }
+  cleanupOwnedTaskV1(taskFile,task.identity);
+  for(const entry of project.entries.filter(entry=>entry.kind==='file')){
+    assertParents(entry.relative);const file=path.join(project.directory,entry.relative),current=readOwnedRegularFileV1(file,{bytes:0});
+    if(current.sha256!==entry.sha256||!sameOwnedIdentityV1(current.identity,entry.identity))throw Error('MC_FRESH_OWNED_FILE_CHANGED');
+    fs.unlinkSync(file);
+  }
+  for(const entry of [...project.entries].filter(entry=>entry.kind==='directory').sort((a,b)=>b.relative.split(path.sep).length-a.relative.split(path.sep).length)){
+    assertParents(path.join(entry.relative,'leaf'));
+    fs.rmdirSync(path.join(project.directory,entry.relative)); // Empty-only; never recursive deletion.
+  }
+  assertParents('leaf');fs.rmdirSync(project.directory);
+  // Identity-checked names are not an atomic unlink guarantee against same-UID
+  // concurrent mutation; a later mismatch stops and preserves remaining names.
+}
+
 const gitAsync=promisify(execFile);
 function gitEnvironmentV1():NodeJS.ProcessEnv {
   const environment:NodeJS.ProcessEnv={...process.env,GIT_CONFIG_NOSYSTEM:'1',GIT_CONFIG_GLOBAL:'/dev/null'};
@@ -149,13 +250,22 @@ export async function startFreshPrdWorkflowV1(params:{prdId?:unknown;projectName
     const taskIdentity=fs.lstatSync(taskFile,{bigint:true});
     if(!taskIdentity.isFile()||taskIdentity.nlink!==1n||taskIdentity.uid!==BigInt(process.getuid!())||(taskIdentity.mode&0o7777n)!==0o600n
       ||taskIdentity.size!==BigInt(Buffer.byteLength(task,'utf8'))||fs.realpathSync(taskFile)!==taskFile)throw Error('MC_FRESH_TASK_FILE_INVALID');
-    check();attempted=true;
+    check();
+    const ownedProject=captureOwnedProjectV1(repoPath,repoIdentity);
+    const ownedTask=readOwnedRegularFileV1(taskFile,{bytes:0});
+    if(!sameOwnedIdentityV1(ownedTask.identity,taskIdentity)||ownedTask.sha256!==createHash('sha256').update(task,'utf8').digest('hex'))throw Error('MC_FRESH_TASK_FILE_CHANGED');
+    attempted=true;
     // This promise settles on the actual execFile child callback/terminal path.
     // Fixed selected workflow120s/1MiB capture; other CLI commands keep25s.
     // Capacity refusal is proved before launch; all other errors may follow COMMIT.
     let output:string;
     try{output=await runCliRaw('setfarm',['workflow','run',workflowId,'@'+taskFile,'--json']);}
-    catch(error){if(error instanceof FreshWorkflowCliBusyErrorV1)attempted=false;throw error;}
+    catch(error){
+      if(error instanceof FreshWorkflowCliBusyErrorV1){
+        attempted=false;check();cleanupBusyOwnedArtifactsV1(ownedProject,taskFile,ownedTask);repoPath=null;
+      }
+      throw error;
+    }
     const receipt=parseFreshWorkflowRunAcceptanceV1(output,workflowId,sourceSha);reportedRunId=receipt.runId;check();
     await sql.begin(async tx=>{
       await tx.unsafe("SELECT set_config('lock_timeout','1000ms',true),set_config('statement_timeout','5000ms',true),set_config('search_path','public',true)");
@@ -170,7 +280,8 @@ export async function startFreshPrdWorkflowV1(params:{prdId?:unknown;projectName
     check();cleanupOwnedTaskV1(taskFile,taskIdentity);
     return {success:true as const,accepted:true as const,runId:receipt.runId,repoPath,acceptance:receipt,output:'Run accepted'};
   }catch{
-    // Task/new-project evidence is preserved on unknown acceptance. No retry,
+    // Busy cleanup is exclusive to the proved pre-launch path above. Task/new-project
+    // evidence is preserved on unknown/accepted or changed artifacts. No retry,
     // latest-row lookup or manual acknowledgement deletion is performed.
     throw new FreshPrdStartErrorV1(confirmed?'accepted':attempted?'unknown':'not-started',confirmed?.runId??reportedRunId,repoPath);
   }

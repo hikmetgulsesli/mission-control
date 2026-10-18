@@ -14,35 +14,54 @@ function parseEnvValue(raw: string): string {
   return value;
 }
 
-function loadEnvFile(filename: string, overrideFileValues: boolean) {
+// Selected runtime/process administration is captured before config is imported.
+// Env files remain ordinary configuration DATA, never a late selection port.
+const FRESH_PROTECTED_ENV_KEYS_V1 = new Set([
+  'DATABASE_URL','DB_BACKEND','PROJECTS_DIR','SCRIPTS_DIR','CLI_PATH','DATA_JSON','JOBS_JSON',
+  'AVATARS_DIR','CLAWTABS_CONFIG','PROJECTS_JSON','DELETED_PROJECTS_JSON','UPLOADS_DIR','MOBILE_DIR',
+  'EVENTS_JSONL','SESSIONS_DIR','TRANSCRIPTS_DIR','AGENTS_DIR','PORT_REGISTRY','SERVE_BIN','MC_REPO_DIR',
+  'PATH','HOME','USER','LOGNAME','SHELL','PWD','OLDPWD','TMPDIR','TMP','TEMP','ENV','BASH_ENV','IFS','CDPATH',
+]);
+function selectedEnvFileKeyAllowedV1(key: string): boolean {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key) || FRESH_PROTECTED_ENV_KEYS_V1.has(key)) return false;
+  // These two are existing MC network/auth settings, not Setfarm runtime inputs.
+  if (key === 'SETFARM_URL' || key === 'SETFARM_OPERATIONAL_WRITE_TOKEN') return true;
+  return !['SETFARM_','OPENCLAW_','MC_TASK6A_','PG','NODE_','GIT_','DYLD_','LD_'].some(prefix => key.startsWith(prefix));
+}
+
+function applyEnvFileDataV1(contents: string, overrideFileValues: boolean, selected: boolean): void {
+  for (const line of contents.split('\n')) {
+    const trimmed = line.trim().replace(/^export\s+/, '');
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq === -1) continue;
+    const key = trimmed.slice(0, eq).trim();
+    if (selected && !selectedEnvFileKeyAllowedV1(key)) continue;
+    const val = parseEnvValue(trimmed.slice(eq + 1));
+    const alreadyFromProcess = process.env[key] !== undefined && !loadedEnvKeys.has(key);
+    if (alreadyFromProcess) continue;
+    if (!overrideFileValues && process.env[key] !== undefined) continue;
+    process.env[key] = val;
+    loadedEnvKeys.add(key);
+  }
+}
+
+function loadEnvFile(filename: string, overrideFileValues: boolean, selected = false) {
   try {
     const baseDir = resolve(import.meta.dirname || __dirname, '..');
     const envPath = resolve(baseDir, filename);
-    const lines = readFileSync(envPath, 'utf-8').split('\n');
-    for (const line of lines) {
-      const trimmed = line.trim().replace(/^export\s+/, '');
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const eq = trimmed.indexOf('=');
-      if (eq === -1) continue;
-      const key = trimmed.slice(0, eq).trim();
-      const val = parseEnvValue(trimmed.slice(eq + 1));
-      const alreadyFromProcess = process.env[key] !== undefined && !loadedEnvKeys.has(key);
-      if (alreadyFromProcess) continue;
-      if (!overrideFileValues && process.env[key] !== undefined) continue;
-      process.env[key] = val;
-      loadedEnvKeys.add(key);
-    }
+    applyEnvFileDataV1(readFileSync(envPath, 'utf-8'), overrideFileValues, selected);
   } catch {
     // Missing env files are expected in packaged deployments.
   }
 }
 
-function loadEnv() {
-  loadEnvFile('.env', false);
-  loadEnvFile('.env.local', true);
+function loadEnv(selected = false) {
+  loadEnvFile('.env', false, selected);
+  loadEnvFile('.env.local', true, selected);
 }
 const selectedPaths = freshMissionControlPathsV1();
-if (!selectedPaths) loadEnv();
+loadEnv(selectedPaths !== null);
 
 const HOME = homedir();
 
