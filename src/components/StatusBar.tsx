@@ -25,11 +25,11 @@ export function StatusBar() {
         <span className="status-bar__sep">|</span>
         {system && (
           <>
-            <span>RAM {system.ram.used}/{system.ram.total}GB</span>
+            <span title={`${system.ram.source} · total−os.freemem (used)`}>RAM kullanılan {system.ram.used === null || system.ram.total === null ? 'Bilinmiyor' : `${system.ram.used}/${system.ram.total}GB`}</span>
             <span className="status-bar__sep">|</span>
-            <span>CPU {system.cpu.percent}%</span>
+            <span title={`${system.cpu.source} · ${system.cpu.observedAt}`}>CPU {system.cpu.percent === null ? 'Bilinmiyor' : `${system.cpu.percent}%`}</span>
             <span className="status-bar__sep">|</span>
-            <span>DISK {system.disk.percent}%</span>
+            <span title={`${system.disk.source} · ${system.disk.mount ?? system.disk.path}`}>DISK {system.disk.percent === null ? 'Bilinmiyor' : `${system.disk.percent}%`}</span>
             <span className="status-bar__sep">|</span>
           </>
         )}

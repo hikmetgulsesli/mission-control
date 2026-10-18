@@ -3,12 +3,13 @@ import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { PATHS } from '../config.js';
+import { readMissionControlIdentity, resolveMissionControlRoot } from '../services/mission-control-identity.js';
 
 const execAsync = promisify(exec);
 const router = Router();
 
 const SETFARM_REPO = PATHS.setfarmRepoDir;
-const MC_REPO = process.env.MC_REPO_DIR || path.join(PATHS.projectsDir, 'mission-control');
+const MC_REPO = resolveMissionControlRoot(undefined, process.env.MC_REPO_DIR);
 
 interface Commit {
   hash: string;
@@ -68,8 +69,8 @@ router.get('/changelog', async (_req, res) => {
       .slice(0, 50);
 
     // Read BUILD_INFO for current deployed versions
-    let setfarmBuild: { commit: string; branch: string; builtAt: string } | null = null;
-    let mcBuild: { version: string; commit: string; builtAt: string } | null = null;
+    let setfarmBuild: { commit: string | null; branch: string | null; builtAt: string | null } | null = null;
+    const mcBuild = await readMissionControlIdentity();
 
     try {
       const fs = await import('node:fs/promises');
@@ -77,23 +78,11 @@ router.get('/changelog', async (_req, res) => {
       const raw = JSON.parse(setfarmBuildRaw);
       // BUILD_INFO.json uses `sha` field, normalize to `commit` for consistency with mc
       setfarmBuild = {
-        commit: raw.sha || raw.commit || 'unknown',
-        branch: raw.branch || 'main',
-        builtAt: raw.builtAt || new Date().toISOString(),
+        commit: raw.sha || raw.commit || null,
+        branch: raw.branch || null,
+        builtAt: raw.builtAt || null,
       };
     } catch { /* setfarm not built yet */ }
-
-    try {
-      const fs = await import('node:fs/promises');
-      const mcPkgRaw = await fs.readFile(path.join(MC_REPO, 'package.json'), 'utf-8');
-      const mcPkg = JSON.parse(mcPkgRaw);
-      const { stdout: mcCommit } = await execAsync('git rev-parse --short HEAD', { cwd: MC_REPO, timeout: 2000 });
-      mcBuild = {
-        version: mcPkg.version || 'unknown',
-        commit: mcCommit.trim(),
-        builtAt: new Date().toISOString(),
-      };
-    } catch { /* skip */ }
 
     // Read CHANGELOG.md files (structured release notes)
     let setfarmChangelog: string | null = null;

@@ -194,7 +194,7 @@ app.use(helmet({
 
 // Health check endpoint (before auth)
 app.get('/api/health', async (_req, res) => {
-  const checks: Record<string, { status: string; detail?: string }> = {};
+  const checks: Record<string, { status: string; detail?: string; volume?: Awaited<ReturnType<typeof readWorkingVolumeDiskHealth>>['volume']; source?: string; semantics?: string; observedAt?: string }> = {};
 
   // 1. Gateway check. Gateway is optional in local Mission Control development;
   // server deployments can attach it for live chat/agent control.
@@ -220,8 +220,11 @@ app.get('/api/health', async (_req, res) => {
   try {
     const total = os.totalmem();
     const used = total - os.freemem();
-    const pct = total > 0 ? Math.round((used / total) * 100) : 0;
-    checks.memory = { status: pct < 90 ? 'up' : 'warning', detail: `${pct}%` };
+    const valid = Number.isFinite(total) && total > 0 && Number.isFinite(used) && used >= 0 && used <= total;
+    const pct = valid ? Math.round((used / total) * 100) : null;
+    checks.memory = { status: pct === null ? 'unknown' : pct < 90 ? 'up' : 'warning',
+      ...(pct === null ? {} : { detail: `${pct}% used (total−os.freemem)` }),
+      source: 'node:os', semantics: 'total-os.freemem', observedAt: new Date().toISOString() };
   } catch { checks.memory = { status: 'unknown' }; }
 
   const requiredUp = Object.entries(checks)

@@ -11,11 +11,18 @@ export interface Agent {
   isDefault: boolean;
 }
 
+export interface MetricObservation {
+  source: string;
+  observedAt: string;
+  status: 'available' | 'unknown';
+}
 export interface SystemMetrics {
-  ram: { total: number; used: number; percent: number };
-  cpu: { percent: number };
-  disk: { total: number; used: number; percent: number };
-  load: number;
+  ram: MetricObservation & { total: number | null; used: number | null; percent: number | null; semantics: 'total-os.freemem' };
+  cpu: MetricObservation & { percent: number | null };
+  disk: MetricObservation & { total: number | null; used: number | null; percent: number | null;
+    path: string; mount: string | null; totalBytes: number | null; usedBytes: number | null; freeBytes: number | null };
+  load: number | null;
+  loadObservation?: MetricObservation;
 }
 
 export interface CronJob {

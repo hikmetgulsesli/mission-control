@@ -4,18 +4,19 @@ interface Props {
   metrics: Metrics;
 }
 
-function MetricBar({ label, value, max, unit, color }: { label: string; value: number; max: number; unit: string; color: string }) {
-  const pct = max > 0 ? (value / max) * 100 : 0;
-  const barColor = pct > 90 ? '#ff0040' : pct > 70 ? '#ff6600' : color;
+function MetricBar({ label, value, max, unit, color, percent }: { label: string; value: number | null; max: number | null; percent?: number | null; unit: string; color: string }) {
+  const known = value !== null && max !== null;
+  const pct = percent !== undefined ? percent : known && max > 0 ? (value / max) * 100 : null;
+  const barColor = pct !== null && pct > 90 ? '#ff0040' : pct !== null && pct > 70 ? '#ff6600' : color;
 
   return (
     <div className="metric-bar">
       <div className="metric-bar__header">
         <span className="metric-bar__label">{label}</span>
-        <span className="metric-bar__value">{value}{unit} / {max}{unit}</span>
+        <span className="metric-bar__value">{known ? `${value}${unit} / ${max}${unit}` : 'Bilinmiyor'}{percent != null ? ` · ${percent}%` : ''}</span>
       </div>
       <div className="metric-bar__track">
-        <div className="metric-bar__fill" style={{ width: `${pct}%`, background: barColor }} />
+        {pct !== null && <div className="metric-bar__fill" style={{ width: `${pct}%`, background: barColor }} />}
       </div>
     </div>
   );
@@ -23,14 +24,16 @@ function MetricBar({ label, value, max, unit, color }: { label: string; value: n
 
 export function SystemMetricsPanel({ metrics }: Props) {
   return (
-    <div className="system-metrics">
-      <MetricBar label="RAM" value={metrics.ram.used} max={metrics.ram.total} unit="GB" color="#00ff41" />
+    <div className="system-metrics" title={`Observed: RAM ${metrics.ram.observedAt}; CPU ${metrics.cpu.source} ${metrics.cpu.observedAt}; disk ${metrics.disk.observedAt}`}>
+      <MetricBar label="RAM kullanılan" value={metrics.ram.used} max={metrics.ram.total} unit="GB" color="#00ff41" />
+      <div className="metric-bar__label">{metrics.ram.source} · total−os.freemem (used)</div>
       <MetricBar label="CPU" value={metrics.cpu.percent} max={100} unit="%" color="#00ffff" />
-      <MetricBar label="DISK" value={metrics.disk.used} max={metrics.disk.total} unit="GB" color="#ff6600" />
+      <MetricBar label="DISK" percent={metrics.disk.percent} value={metrics.disk.used} max={metrics.disk.total} unit="GB" color="#ff6600" />
+      <div className="metric-bar__label">{metrics.disk.source} · {metrics.disk.mount ?? metrics.disk.path} · free: {metrics.disk.freeBytes === null ? 'Bilinmiyor' : `${metrics.disk.freeBytes} bytes`}</div>
       <div className="metric-bar">
         <div className="metric-bar__header">
           <span className="metric-bar__label">LOAD</span>
-          <span className="metric-bar__value">{metrics.load.toFixed(2)}</span>
+          <span className="metric-bar__value">{metrics.load === null ? 'Bilinmiyor' : metrics.load.toFixed(2)}</span>
         </div>
       </div>
     </div>
