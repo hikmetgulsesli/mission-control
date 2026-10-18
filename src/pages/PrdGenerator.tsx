@@ -1,4 +1,6 @@
 import { useCallback, useRef, useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import { createPrdInitializer } from '../lib/prd-initialization';
 import { api, PrdWorkflowStartError } from '../lib/api';
 import { usePrdStore } from '../store/prdStore';
 import type { RefinementState } from '../store/prdStore';
@@ -65,47 +67,21 @@ export function PrdGenerator() {
   const [trendEnhancing, setTrendEnhancing] = useState(false);
   const esRef = useRef<EventSource | null>(null);
 
-  // Auto-load the latest PRD from the database when the page opens.
+  const location = useLocation();
+  const initializerRef = useRef<ReturnType<typeof createPrdInitializer> | null>(null);
+  if (!initializerRef.current) {
+    initializerRef.current = createPrdInitializer({
+      store: usePrdStore,
+      history: api.prdHistory,
+      pipeline: api.setfarmPipeline,
+      storage: sessionStorage,
+    });
+  }
+
   useEffect(() => {
-    if (usePrdStore.getState().id || usePrdStore.getState().skipAutoLoad || sessionStorage.getItem('prd_skip_autoload')) return; // Already loaded or user requested a fresh PRD.
-    api.prdHistory().then(prds => {
-      if (prds.length > 0 && !usePrdStore.getState().id) {
-        const last = prds[0];
-        setStore({
-          id: last.id,
-          title: last.title,
-          platform: last.platform || 'web',
-          urls: last.urls?.length ? last.urls : [''],
-          description: last.description || '',
-          prdContent: last.prd_content || '',
-          prdVersion: last.prd_version || 0,
-          score: last.score,
-          scoreDetails: last.score_details,
-          costEstimate: last.cost_estimate,
-          analysis: last.analysis,
-          research: last.research,
-          chatHistory: last.chat_history || [],
-          stitchProjectId: (last as any).stitch_project_id || (last.mockup_screens || []).find((s: any) => s.projectId)?.projectId || null,
-          mockupScreens: (() => {
-            const pid = (last as any).stitch_project_id || (last.mockup_screens || []).find((s: any) => s.projectId)?.projectId;
-            return pid ? (last.mockup_screens || []).filter((s: any) => s.projectId === pid) : (last.mockup_screens || []);
-          })(),
-          runId: null, // Will be set below if run is still active
-          projectName: last.title || '',
-        });
-      }
-      // Check if last run is still active — if not, clear runId
-      if (prds.length > 0 && (prds[0] as any).run_id) {
-        fetch('/api/setfarm/pipeline').then(r => r.json()).then((pipe: any) => {
-          const running = [...(pipe.running || []), ...(pipe.recent || [])];
-          const run = running.find((r: any) => r.id === prds[0]?.run_id);
-          if (run && run.status === 'running') {
-            setStore({ runId: prds[0]?.run_id });
-          }
-        }).catch(() => {});
-      }
-    }).catch(() => {});
-  }, []);
+    const initialization = initializerRef.current!.beginNavigation({ key: location.key, search: location.search });
+    return initialization.cancel;
+  }, [location.key, location.search]);
   const { setState: setStore, addLog, setLoading, reset } = store;
 
   // Suggest a project name from the URL or description.
