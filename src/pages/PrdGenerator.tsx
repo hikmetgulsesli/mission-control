@@ -1,5 +1,5 @@
 import { useCallback, useRef, useEffect, useState } from 'react';
-import { api } from '../lib/api';
+import { api, PrdWorkflowStartError } from '../lib/api';
 import { usePrdStore } from '../store/prdStore';
 import type { RefinementState } from '../store/prdStore';
 import { PrdChat } from '../components/prd/PrdChat';
@@ -608,7 +608,7 @@ export function PrdGenerator() {
     const screens = store.mockupScreens;
 
     addLog('--- STARTING PIPELINE ---');
-    addLog(`1/6 Creating repo: ~/projects/${projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/`);
+    addLog(`1/6 Preparing project: ${projectName}`);
 
     if (screens.length > 0) {
       addLog(`2/6 Placing design files (${screens.length} screens)...`);
@@ -626,13 +626,21 @@ export function PrdGenerator() {
         projectName,
         workflow: store.workflow,
       });
+      if(result?.success!==true||typeof result.runId!=='string'||!result.runId)throw new Error('Run acceptance was not confirmed');
+      if(result.accepted===true&&(result.acceptance?.schema!=='setfarm.workflow-run-accepted.v1'
+        ||result.acceptance.accepted!==true||result.acceptance.runId!==result.runId))throw new Error('Run acceptance response was invalid');
       setStore({ runId: result.runId });
-      addLog(`5/6 Pipeline started. Run ID: ${result.runId}`);
+      addLog(`5/6 Run accepted. Run ID: ${result.runId}`);
       if (result.repoPath) addLog(`   Repo: ${result.repoPath}`);
-      addLog('6/6 Track progress from the AGENTS tab');
-      addLog('--- PIPELINE ACTIVE ---');
+      addLog('6/6 Track execution from the AGENTS tab');
+      addLog('--- RUN ACCEPTED ---');
     } catch (err: any) {
-      addLog(`Pipeline failed: ${err.message}`);
+      if(err instanceof PrdWorkflowStartError&&err.acceptance==='accepted'&&err.runId){
+        setStore({runId:err.runId});addLog(`Run accepted. Run ID: ${err.runId}`);
+      }else if(err instanceof PrdWorkflowStartError&&err.acceptance==='unknown'&&err.runId){
+        addLog(`Unverified receipt run ID: ${err.runId}`);
+      }
+      addLog(`Pipeline start not completed: ${err.message}`);
     }
     setLoading('startRun', false);
   };

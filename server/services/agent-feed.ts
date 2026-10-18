@@ -9,6 +9,7 @@ import { promisify } from 'node:util';
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "fs";
 import { basename, join } from "path";
 import { PATHS } from "../config.js";
+import { assertFreshMissionControlRuntimeV1 } from './fresh-installation-runtime.js';
 import {
   ensureAgentFeedTable,
   insertFeedEntry,
@@ -178,6 +179,7 @@ async function fallbackAgentFeed(limit: number): Promise<any[]> {
  * the feed DB table, and return the latest entries.
  */
 export async function getAgentFeed(limit: number): Promise<any[]> {
+  assertFreshMissionControlRuntimeV1();
   let dbAvailable = true;
   const memoryRows: FeedEntry[] = [];
   const seenMemoryRows = new Set<string>();

@@ -1,3 +1,5 @@
+import { startFreshPrdWorkflowV1, freshPrdStartFailureV1 } from '../services/fresh-prd-workflow-run.js';
+import { freshSetfarmCliInvocationV1, freshMissionControlSelectedV1 } from '../services/fresh-installation-runtime.js';
 import { Router } from 'express';
 import { createPrd, getPrd, listPrds, updatePrd, deletePrd, listTemplates, getTemplate } from '../services/prd-db.js';
 import { scorePrd, estimateCost, checkScreenCoverage, extractPages } from '../services/prd-scoring.js';
@@ -794,6 +796,11 @@ router.post('/prd/estimate', async (req, res) => {
 
 // POST /prd/start-run - Start pipeline with design files.
 router.post('/prd/start-run', async (req, res) => {
+  if (freshMissionControlSelectedV1()) {
+    try { res.json(await startFreshPrdWorkflowV1(req.body)); }
+    catch (error) { res.status(503).json(freshPrdStartFailureV1(error)); }
+    return; // The legacy detached/latest-row route never handles a selected request.
+  }
   try {
     const { prdId, projectName, workflow } = req.body;
     if (!prdId) { res.status(400).json({ error: 'prdId required' }); return; }
@@ -877,8 +884,13 @@ router.post('/prd/start-run', async (req, res) => {
     // Fire-and-forget: spawn setfarm, don't wait for stdout (avoids timeout)
     const { spawn } = await import('child_process');
     const userBin = config.cliPath;
-    const child = spawn('setfarm', ['workflow', 'run', wf, '@' + tmpTask], {
-      env: { ...process.env, DB_BACKEND: "postgres", SETFARM_PG_URL: process.env.SETFARM_PG_URL || process.env.DATABASE_URL || "", PATH: `${userBin}:/usr/local/bin:/usr/bin:/bin:${process.env.PATH || ''}` },
+    const legacyEnvironment = { ...process.env, DB_BACKEND: "postgres", SETFARM_PG_URL: process.env.SETFARM_PG_URL || process.env.DATABASE_URL || "", PATH: `${userBin}:/usr/local/bin:/usr/bin:/bin:${process.env.PATH || ''}` };
+    const selected = freshSetfarmCliInvocationV1('setfarm',['workflow','run',wf,'@'+tmpTask],legacyEnvironment);
+    // The locator is authority for fresh children. Do not introduce an empty
+    // PG URL that conflicts with its captured real private runtime credential.
+    if (selected && selected.env.SETFARM_PG_URL === '') delete selected.env.SETFARM_PG_URL;
+    const child = spawn(selected?.file ?? 'setfarm', selected ? [...selected.args] : ['workflow', 'run', wf, '@' + tmpTask], {
+      env: selected?.env ?? legacyEnvironment,
       detached: true,
       stdio: 'ignore',
     });

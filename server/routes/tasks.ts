@@ -1,13 +1,14 @@
+import { freshMissionControlSelectedV1, assertPreprovisionedFreshMissionControlStoreV1 } from '../services/fresh-installation-runtime.js';
 import { Router } from "express";
 import { writeFileSync, mkdirSync, existsSync, unlinkSync } from "fs";
 import { join, resolve } from "path";
 import { randomUUID } from "crypto";
 import express from "express";
-import { config } from "../config.js";
+import { config, PATHS } from "../config.js";
 import { sql } from "../utils/pg.js";
 
 const router = Router();
-const UPLOADS_DIR = resolve(import.meta.dirname || __dirname, "..", "..", "uploads");
+const UPLOADS_DIR = PATHS.uploadsDir;
 const USE_PG = true; // Phase 7: PG-only (SQLite removed)
 const restrictedTasksMode = process.env.MC_TASK6A_RESTRICTED_TASKS_VERIFY_V1;
 const restrictedTasks = restrictedTasksMode === "1";
@@ -171,6 +172,9 @@ async function verifyRestrictedTasksTable(): Promise<void> {
 }
 
 function ensureTasksTable(): Promise<void> {
+  if (freshMissionControlSelectedV1()) {
+    assertPreprovisionedFreshMissionControlStoreV1(); return Promise.resolve();
+  }
   if (!tasksTableReady) {
     if (restrictedTasks) tasksTableReady = verifyRestrictedTasksTable();
     else if (restrictedTasksMode !== undefined) {

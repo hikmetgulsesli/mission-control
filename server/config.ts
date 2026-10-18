@@ -1,3 +1,4 @@
+import { freshMissionControlPathsV1 } from './services/fresh-installation-runtime.js';
 import { readFileSync } from 'fs';
 import { resolve, join } from 'path';
 import { homedir } from 'os';
@@ -40,7 +41,8 @@ function loadEnv() {
   loadEnvFile('.env', false);
   loadEnvFile('.env.local', true);
 }
-loadEnv();
+const selectedPaths = freshMissionControlPathsV1();
+if (!selectedPaths) loadEnv();
 
 const HOME = homedir();
 
@@ -77,28 +79,32 @@ export const config = {
   setfarmUrl: process.env.SETFARM_URL || process.env.ANTFARM_URL || 'http://127.0.0.1:3333',
   setfarmOperationalWriteToken: process.env.SETFARM_OPERATIONAL_WRITE_TOKEN || '',
   prometheusUrl: process.env.PROMETHEUS_URL || 'http://127.0.0.1:9090',
-  dataJson: envPath('DATA_JSON', join(HOME, '.openclaw/dashboard/data.json')),
+  dataJson: selectedPaths?.dataJson ?? envPath('DATA_JSON', join(HOME, '.openclaw/dashboard/data.json')),
   jobsJson: envPath('JOBS_JSON', join(HOME, '.openclaw/cron/jobs.json')),
-  avatarsDir: envPath('AVATARS_DIR', join(HOME, '.openclaw/dashboard/avatars')),
-  cliPath: envPath('CLI_PATH', join(HOME, '.local/bin')),
+  avatarsDir: selectedPaths?.avatarsDir ?? envPath('AVATARS_DIR', join(HOME, '.openclaw/dashboard/avatars')),
+  cliPath: selectedPaths?.cliPath ?? envPath('CLI_PATH', join(HOME, '.local/bin')),
   clawtabsConfig: envPath('CLAWTABS_CONFIG', join(HOME, '.openclaw/clawtabs-config.json')),
   gatewayToken: readOpenClawGatewayToken(),
-  projectsJson: envPath('PROJECTS_JSON', join(HOME, 'projects/mission-control/projects.json')),
+  projectsJson: selectedPaths?.projectsJson ?? envPath('PROJECTS_JSON', join(HOME, 'projects/mission-control/projects.json')),
+  deletedProjectsJson: selectedPaths?.deletedProjectsJson ?? resolve(import.meta.dirname || __dirname, '..', 'deleted-projects.json'),
   wsOrigin: process.env.WS_ORIGIN || '',
   authToken: process.env.AUTH_TOKEN || '',
 };
 
 export const PATHS = {
-  setfarmDb: envPath('SETFARM_DB_PATH', join(HOME, '.openclaw/setfarm/setfarm.db')),
-  setfarmDir: envPath('SETFARM_DIR', join(HOME, '.openclaw/setfarm')),
-  setfarmRepoDir: envPath('SETFARM_REPO_DIR', join(HOME, '.openclaw/setfarm-repo')),
-  projectsDir: envPath('PROJECTS_DIR', join(HOME, 'projects')),
-  mobileDir: envPath('MOBILE_DIR', join(HOME, 'mobile')),
-  eventsJsonl: envPath('EVENTS_JSONL', join(HOME, '.openclaw/setfarm/events.jsonl')),
-  sessionsDir: envPath('SESSIONS_DIR', join(HOME, '.openclaw/sessions')),
-  transcriptsDir: envPath('TRANSCRIPTS_DIR', join(HOME, '.openclaw/workspace/transcripts')),
-  scriptsDir: envPath('SCRIPTS_DIR', join(HOME, '.openclaw/scripts')),
-  agentsDir: envPath('AGENTS_DIR', join(HOME, '.openclaw/agents')),
-  portRegistry: envPath('PORT_REGISTRY', join(HOME, '.openclaw/setfarm/port-registry.json')),
+  uploadsDir: selectedPaths?.uploadsDir ?? resolve(import.meta.dirname || __dirname, '..', 'uploads'),
+  setfarmDb: selectedPaths?.setfarmDb ?? envPath('SETFARM_DB_PATH', join(HOME, '.openclaw/setfarm/setfarm.db')),
+  setfarmDir: selectedPaths?.setfarmDir ?? envPath('SETFARM_DIR', join(HOME, '.openclaw/setfarm')),
+  setfarmRepoDir: selectedPaths?.setfarmRepoDir ?? envPath('SETFARM_REPO_DIR', join(HOME, '.openclaw/setfarm-repo')),
+  projectsDir: selectedPaths?.projectsDir ?? envPath('PROJECTS_DIR', join(HOME, 'projects')),
+  mobileDir: selectedPaths?.mobileDir ?? envPath('MOBILE_DIR', join(HOME, 'mobile')),
+  eventsJsonl: selectedPaths?.eventsJsonl ?? envPath('EVENTS_JSONL', join(HOME, '.openclaw/setfarm/events.jsonl')),
+  sessionsDir: selectedPaths?.sessionsDir ?? envPath('SESSIONS_DIR', join(HOME, '.openclaw/sessions')),
+  transcriptsDir: selectedPaths?.transcriptsDir ?? envPath('TRANSCRIPTS_DIR', join(HOME, '.openclaw/workspace/transcripts')),
+  scriptsDir: selectedPaths?.scriptsDir ?? envPath('SCRIPTS_DIR', join(HOME, '.openclaw/scripts')),
+  agentsDir: selectedPaths?.agentsDir ?? envPath('AGENTS_DIR', join(HOME, '.openclaw/agents')),
+  portRegistry: selectedPaths?.portRegistry ?? envPath('PORT_REGISTRY', join(HOME, '.openclaw/setfarm/port-registry.json')),
   serveBin: envPath('SERVE_BIN', join(HOME, '.npm-global/bin/serve')),
 };
+
+if (selectedPaths) { Object.freeze(config); Object.freeze(PATHS); }

@@ -1,3 +1,4 @@
+import { freshMissionControlSelectedV1, assertPreprovisionedFreshMissionControlStoreV1 } from '../services/fresh-installation-runtime.js';
 import { homedir } from 'os';
 import path from 'path';
 import { createHash } from 'crypto';
@@ -450,6 +451,8 @@ const KNOWN_PATTERNS = [
 ];
 
 export async function diagnoseStuckStep(runId: string, stepId?: string) {
+  // Private log/session ownership is not wired for this legacy diagnostic.
+  if (freshMissionControlSelectedV1()) throw new Error('MC_FRESH_INSTALLATION_DIAGNOSE_NOT_WIRED');
   const safeRunId = validateId(runId, 'runId');
 
   let steps: any[];
@@ -864,6 +867,9 @@ export function verifyRestrictedAgentFeedRead(): Promise<void> {
 }
 
 export async function ensureAgentFeedTable(): Promise<void> {
+  if (freshMissionControlSelectedV1()) {
+    assertPreprovisionedFreshMissionControlStoreV1(); return;
+  }
   await sql`
     CREATE TABLE IF NOT EXISTS agent_feed (
       id SERIAL PRIMARY KEY,

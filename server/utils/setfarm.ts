@@ -1,3 +1,4 @@
+import { freshMissionControlSelectedV1 } from '../services/fresh-installation-runtime.js';
 import { homedir } from 'os';
 import { join } from 'path';
 import { config, PATHS } from '../config.js';
@@ -222,6 +223,7 @@ function uniqueStrings(values: string[]): string[] {
 }
 
 function eventFileCandidates(): string[] {
+    if (freshMissionControlSelectedV1()) return [PATHS.eventsJsonl];
     return uniqueStrings([
         PATHS.eventsJsonl,
         process.env.SETFARM_EVENTS_JSONL || '',
