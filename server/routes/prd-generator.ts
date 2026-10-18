@@ -1,3 +1,4 @@
+import { assertSelectedDesignIdsV1, selectedDesignCacheRootV1, selectedDesignCacheDirectoryV1 } from '../services/fresh-design-artifact-paths-v1.js';
 import { startFreshPrdWorkflowV1, freshPrdStartFailureV1 } from '../services/fresh-prd-workflow-run.js';
 import { freshSetfarmCliInvocationV1, freshMissionControlSelectedV1 } from '../services/fresh-installation-runtime.js';
 import { Router } from 'express';
@@ -495,6 +496,7 @@ router.get("/prd/mockups/stream", async (req, res) => {
 
   try {
     const projectId = existingProjectId || await createStitchProject("PRD: " + prdTitle);
+    assertSelectedDesignIdsV1(projectId);
     // Persist stitch_project_id to DB
     if (prdId && projectId) { try { await updatePrd(prdId, { stitch_project_id: projectId } as any); } catch {} }
     if (!projectId) { clearInterval(keepalive); send("error", { message: "Failed to create Stitch project" }); res.end(); return; }
@@ -508,8 +510,9 @@ router.get("/prd/mockups/stream", async (req, res) => {
     send("start", { projectId, total: totalAll, remaining: prompts.length, resumed: skipCount > 0 });
 
     const allScreens: any[] = [];
-    const cacheDir = join(PATHS.setfarmDir, "stitch-cache", projectId);
-    mkdirSync(cacheDir, { recursive: true });
+    const cacheDir = selectedDesignCacheDirectoryV1(projectId) ?? join(PATHS.setfarmDir, "stitch-cache", projectId);
+    if (selectedDesignCacheRootV1() !== null) mkdirSync(cacheDir, { recursive: true, mode: 0o700 });
+    else mkdirSync(cacheDir, { recursive: true });
 
     for (let i = 0; i < prompts.length; i++) {
       const sp = prompts[i];
@@ -657,6 +660,7 @@ router.post('/prd/screens/:prdId/variant', async (req, res) => {
     if (!sourceScreen) { res.status(404).json({ error: 'Source screen not found' }); return; }
 
     const projectId = sourceScreen.projectId || '';
+    assertSelectedDesignIdsV1(projectId);
     if (!projectId) { res.status(400).json({ error: 'No Stitch projectId' }); return; }
 
     const prompt = variantPrompt || sourceScreen.prompt || `Create a variant of: ${sourceScreen.name}`;
@@ -667,8 +671,9 @@ router.post('/prd/screens/:prdId/variant', async (req, res) => {
     if (!newScreen) { res.status(500).json({ error: 'Variant generation failed' }); return; }
 
     // Download to cache
-    const cacheDir = join(PATHS.setfarmDir, 'stitch-cache', projectId);
-    mkdirSync(cacheDir, { recursive: true });
+    const cacheDir = selectedDesignCacheDirectoryV1(projectId) ?? join(PATHS.setfarmDir, 'stitch-cache', projectId);
+    if (selectedDesignCacheRootV1() !== null) mkdirSync(cacheDir, { recursive: true, mode: 0o700 });
+    else mkdirSync(cacheDir, { recursive: true });
     if (newScreen.screenId && newScreen.status === 'done') {
       try {
         const downloaded = await downloadScreen(projectId, newScreen.screenId, cacheDir);
@@ -708,14 +713,16 @@ router.post('/prd/screens/:prdId/generate-missing', async (req, res) => {
   const { title, prompt, projectId } = req.body;
   if (!projectId || !title) { res.status(400).json({ error: 'projectId and title required' }); return; }
   try {
+    assertSelectedDesignIdsV1(projectId);
     const screen = await generateScreen(projectId, prompt || `Create a web page for: ${title}`, title);
     if (!screen || !screen.screenId) { res.json({ screen: null }); return; }
     screen.prompt = prompt;
     // Download to cache
     const { join } = await import('path');
     const { mkdirSync } = await import('fs');
-    const cacheDir = join(PATHS.setfarmDir, 'stitch-cache', projectId);
-    mkdirSync(cacheDir, { recursive: true });
+    const cacheDir = selectedDesignCacheDirectoryV1(projectId) ?? join(PATHS.setfarmDir, 'stitch-cache', projectId);
+    if (selectedDesignCacheRootV1() !== null) mkdirSync(cacheDir, { recursive: true, mode: 0o700 });
+    else mkdirSync(cacheDir, { recursive: true });
     try {
       const dl = await downloadScreen(projectId, screen.screenId, cacheDir);
       if (dl) {

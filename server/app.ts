@@ -1,3 +1,4 @@
+import { selectedDesignCacheRootV1 } from './services/fresh-design-artifact-paths-v1.js';
 import { assertFreshMissionControlRuntimeV1, closeFreshMissionControlRuntimeV1 } from './services/fresh-installation-runtime.js';
 import express from 'express';
 import { createHash, timingSafeEqual } from 'node:crypto';
@@ -242,7 +243,7 @@ app.use('/projects-stitch', authMiddleware);
 app.use(jsonBodyParser);
 
 // Stitch static files (behind auth)
-const stitchCacheDir = join(PATHS.setfarmDir, "stitch-cache");
+const stitchCacheDir = selectedDesignCacheRootV1() ?? join(PATHS.setfarmDir, "stitch-cache");
 const stitchProjectRoots = [...new Set([
   PATHS.projectsDir,
   process.env.SETFARM_PROJECTS_DIR || "",

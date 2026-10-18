@@ -1,3 +1,4 @@
+import { assertSelectedDesignIdsV1, selectedDesignCacheRootV1, selectedDesignCacheDirectoryV1, selectedDesignArtifactFileV1, selectedDesignRepositoryV1, selectedDesignRepositoryPathV1 } from './fresh-design-artifact-paths-v1.js';
 import { execFile as execFileCb } from 'child_process';
 import { promisify } from 'util';
 import { homedir } from 'os';
@@ -39,6 +40,7 @@ function getStitchScript(): string {
 }
 
 async function runStitch(args: string[]): Promise<string> {
+  selectedDesignCacheRootV1();
   const script = getStitchScript();
   const { stdout, stderr } = await execFileAsync('node', [script, ...args], {
     timeout: 300000,
@@ -65,19 +67,25 @@ export interface StitchScreen {
 }
 
 export async function ensureStitchProject(name: string, repoPath?: string): Promise<{ projectId: string; name: string }> {
+  const selectedCache = selectedDesignCacheRootV1();
+  if (selectedCache !== null && repoPath && !selectedDesignRepositoryV1(repoPath)) throw Error('MC_FRESH_DESIGN_INPUT_INVALID');
   const args = ['ensure-project', name];
   if (repoPath) args.push(repoPath);
   const output = await runStitch(args);
   const projectId = parseProjectId(output);
+  assertSelectedDesignIdsV1(projectId);
   return { projectId, name };
 }
 
 export async function createStitchProject(title: string): Promise<string> {
   const output = await runStitch(['create-project', title]);
-  return parseProjectId(output);
+  const projectId = parseProjectId(output);
+  assertSelectedDesignIdsV1(projectId);
+  return projectId;
 }
 
 export async function generateScreen(projectId: string, prompt: string, title: string, device = 'DESKTOP'): Promise<StitchScreen | null> {
+  assertSelectedDesignIdsV1(projectId);
   try {
     const output = await runStitch(['generate-screen-safe', projectId, prompt, title, device, 'GEMINI_3_PRO']);
     try {
@@ -112,6 +120,7 @@ export async function generateScreen(projectId: string, prompt: string, title: s
 }
 
 export async function listScreens(projectId: string): Promise<StitchScreen[]> {
+  assertSelectedDesignIdsV1(projectId);
   try {
     const output = await runStitch(['list-screens', projectId]);
     const data = JSON.parse(output);
@@ -136,9 +145,14 @@ export async function downloadScreen(projectId: string, screenId: string, output
   try {
     validateStitchId(projectId, 'projectId');
     validateStitchId(screenId, 'screenId');
-    mkdirSync(outputDir, { recursive: true });
+    assertSelectedDesignIdsV1(projectId, [screenId]);
+    const selectedCache = selectedDesignCacheDirectoryV1(projectId);
+    if (selectedCache !== null && outputDir !== selectedCache) throw Error('MC_FRESH_DESIGN_INPUT_INVALID');
+    const outputFile = selectedDesignArtifactFileV1(outputDir, `${screenId}.html`) ?? join(outputDir, `${screenId}.html`);
+    selectedDesignArtifactFileV1(outputDir, `${screenId}.png`);
+    if (selectedCache !== null) mkdirSync(outputDir, { recursive: true, mode: 0o700 });
+    else mkdirSync(outputDir, { recursive: true });
     // stitch-api.mjs expects a FILE path, not directory
-    const outputFile = join(outputDir, `${screenId}.html`);
     const output = await runStitch(['download-screen', projectId, screenId, outputFile]);
     const htmlPath = join(outputDir, `${screenId}.html`);
     const screenshotPath = join(outputDir, `${screenId}.png`);
@@ -184,8 +198,9 @@ export async function generateMockupsFromPrd(prdContent: string, title: string, 
     await new Promise(r => setTimeout(r, 2000));
   }
 
-  const cacheDir = join(STITCH_CACHE_DIR, projectId);
-  mkdirSync(cacheDir, { recursive: true });
+  const cacheDir = selectedDesignCacheDirectoryV1(projectId) ?? join(STITCH_CACHE_DIR, projectId);
+  if (selectedDesignCacheRootV1() !== null) mkdirSync(cacheDir, { recursive: true, mode: 0o700 });
+  else mkdirSync(cacheDir, { recursive: true });
 
   for (const screen of screens) {
     if (screen.screenId && screen.status === 'done') {
@@ -207,23 +222,26 @@ export async function deleteScreenFromCache(projectId: string, screenId: string)
   if (!projectId || !screenId || !SAFE_ID_RE.test(projectId) || !SAFE_ID_RE.test(screenId)) {
     return false;
   }
-  const cacheDir = join(STITCH_CACHE_DIR, projectId);
+  assertSelectedDesignIdsV1(projectId, [screenId]);
+  const cacheDir = selectedDesignCacheDirectoryV1(projectId) ?? join(STITCH_CACHE_DIR, projectId);
   const { unlink } = await import('fs/promises');
   for (const ext of ['.html', '.png']) {
-    try { await unlink(join(cacheDir, `${screenId}${ext}`)); } catch { /* ok */ }
+    try { await unlink(selectedDesignArtifactFileV1(cacheDir, `${screenId}${ext}`) ?? join(cacheDir, `${screenId}${ext}`)); } catch { /* ok */ }
   }
   return true;
 }
 
 export async function regenerateScreen(projectId: string, screenId: string, prompt: string, title: string, device = 'DESKTOP'): Promise<StitchScreen | null> {
+  assertSelectedDesignIdsV1(projectId, [screenId]);
   validateStitchId(projectId, 'projectId');
   validateStitchId(screenId, 'screenId');
   await deleteScreenFromCache(projectId, screenId);
   const screen = await generateScreen(projectId, prompt, title, device);
   if (screen) {
     screen.prompt = prompt;
-    const cacheDir = join(STITCH_CACHE_DIR, projectId);
-    mkdirSync(cacheDir, { recursive: true });
+    const cacheDir = selectedDesignCacheDirectoryV1(projectId) ?? join(STITCH_CACHE_DIR, projectId);
+    if (selectedDesignCacheRootV1() !== null) mkdirSync(cacheDir, { recursive: true, mode: 0o700 });
+  else mkdirSync(cacheDir, { recursive: true });
     if (screen.screenId && screen.status === 'done') {
       try {
         const downloaded = await downloadScreen(projectId, screen.screenId, cacheDir);
@@ -239,32 +257,36 @@ export async function prepareDesignFilesForRepo(
   screens: StitchScreen[],
   repoPath: string,
 ): Promise<{ screenMap: Record<string, string>; designSystem: any }> {
+  assertSelectedDesignIdsV1(projectId, screens.filter(screen => screen.screenId && screen.status === 'done').map(screen => screen.screenId));
+  const selectedRepo = selectedDesignRepositoryV1(repoPath);
+  if (selectedDesignCacheRootV1() !== null && !selectedRepo) throw Error('MC_FRESH_DESIGN_INPUT_INVALID');
   validateStitchId(projectId, 'projectId');
   const { writeFile, copyFile } = await import('fs/promises');
 
-  const stitchDir = join(repoPath, 'stitch');
-  mkdirSync(stitchDir, { recursive: true });
+  const stitchDir = selectedRepo ? selectedDesignRepositoryPathV1(selectedRepo, 'stitch')! : join(repoPath, 'stitch');
+  if (selectedRepo) mkdirSync(stitchDir, { recursive: true, mode: 0o700 });
+  else mkdirSync(stitchDir, { recursive: true });
 
-  const cacheDir = join(STITCH_CACHE_DIR, projectId);
+  const cacheDir = selectedDesignCacheDirectoryV1(projectId) ?? join(STITCH_CACHE_DIR, projectId);
   const screenMap: Record<string, string> = {};
   const manifestScreens: any[] = [];
 
   for (const screen of screens) {
     if (!screen.screenId || screen.status !== 'done') continue;
-    const srcHtml = join(cacheDir, `${screen.screenId}.html`);
-    const srcPng = join(cacheDir, `${screen.screenId}.png`);
+    const srcHtml = selectedDesignArtifactFileV1(cacheDir, `${screen.screenId}.html`) ?? join(cacheDir, `${screen.screenId}.html`);
+    const srcPng = selectedDesignArtifactFileV1(cacheDir, `${screen.screenId}.png`) ?? join(cacheDir, `${screen.screenId}.png`);
     // Readable filename: "Home Page" -> "Home-Page.html"
     const safeName = (screen.title || screen.screenId).replace(/[^a-zA-Z0-9\u00C0-\u024F\u0400-\u04FF -]/g, '').replace(/\s+/g, '-');
-    const destHtml = join(stitchDir, `${safeName}.html`);
-    const destPng = join(stitchDir, `${safeName}.png`);
+    const destHtml = selectedRepo ? selectedDesignRepositoryPathV1(selectedRepo, `stitch/${safeName}.html`)! : join(stitchDir, `${safeName}.html`);
+    const destPng = selectedRepo ? selectedDesignRepositoryPathV1(selectedRepo, `stitch/${safeName}.png`)! : join(stitchDir, `${safeName}.png`);
     try { if (existsSync(srcHtml)) await copyFile(srcHtml, destHtml); } catch { /* ok */ }
     try { if (existsSync(srcPng)) await copyFile(srcPng, destPng); } catch { /* ok */ }
     screenMap[screen.title] = screen.screenId;
     manifestScreens.push({ id: screen.screenId, title: screen.title, file: `${safeName}.html`, screenshot: `${safeName}.png`, width: screen.width, height: screen.height });
   }
 
-  await writeFile(join(repoPath, '.stitch'), JSON.stringify({ projectId, name: 'PRD Design', updatedAt: new Date().toISOString() }, null, 2));
-  await writeFile(join(stitchDir, 'DESIGN_MANIFEST.json'), JSON.stringify({ projectId, screens: manifestScreens, generatedAt: new Date().toISOString() }, null, 2));
+  await writeFile(selectedRepo ? selectedDesignRepositoryPathV1(selectedRepo, '.stitch')! : join(repoPath, '.stitch'), JSON.stringify({ projectId, name: 'PRD Design', updatedAt: new Date().toISOString() }, null, 2));
+  await writeFile(selectedRepo ? selectedDesignRepositoryPathV1(selectedRepo, 'stitch/DESIGN_MANIFEST.json')! : join(stitchDir, 'DESIGN_MANIFEST.json'), JSON.stringify({ projectId, screens: manifestScreens, generatedAt: new Date().toISOString() }, null, 2));
 
   let designSystem: any = {};
   if (manifestScreens.length > 0) {
@@ -272,7 +294,7 @@ export async function prepareDesignFilesForRepo(
       const output = await runStitch(['extract-tokens', projectId, cacheDir]);
       const data = JSON.parse(output);
       designSystem = data;
-      if (data.css) await writeFile(join(stitchDir, 'design-tokens.css'), data.css);
+      if (data.css) await writeFile(selectedRepo ? selectedDesignRepositoryPathV1(selectedRepo, 'stitch/design-tokens.css')! : join(stitchDir, 'design-tokens.css'), data.css);
     } catch { /* extract-tokens failed */ }
   }
 

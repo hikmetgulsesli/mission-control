@@ -1,3 +1,4 @@
+import { assertSelectedDesignIdsV1, selectedDesignCacheDirectoryV1, selectedDesignArtifactFileV1, selectedDesignRepositoryV1, selectedDesignRepositoryPathV1 } from '../services/fresh-design-artifact-paths-v1.js';
 import { Router } from 'express';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync } from 'fs';
 import { basename, extname, join } from 'path';
@@ -236,11 +237,13 @@ function countFiles(dir: string, extension: string): number {
 }
 
 function readRepoContract(run: any): any | null {
+  const selected = freshMissionControlPathsV1();
   const ctx = parseRunContext(run);
+  const selectedRepo = selected ? selectedDesignRepositoryV1(ctx.repo) : null;
   const fromContext = safeJson(ctx.run_contract, null);
   if (fromContext?.schema === 'setfarm.run-contract.v1') return fromContext;
   const repo = typeof ctx.repo === 'string' ? ctx.repo : '';
-  const candidate = repo ? join(repo, '.setfarm', 'RUN_CONTRACT.json') : '';
+  const candidate = selected ? (selectedRepo ? selectedDesignRepositoryPathV1(selectedRepo, '.setfarm/RUN_CONTRACT.json')! : '') : repo ? join(repo, '.setfarm', 'RUN_CONTRACT.json') : '';
   if (candidate && existsSync(candidate)) {
     const parsed = safeJson(readFileSync(candidate, 'utf-8'), null);
     if (parsed?.schema === 'setfarm.run-contract.v1') return parsed;
@@ -249,9 +252,10 @@ function readRepoContract(run: any): any | null {
 }
 
 function buildFallbackContract(run: any, stories: any[]): any {
+  const selected = freshMissionControlPathsV1();
   const ctx = parseRunContext(run);
-  const repo = typeof ctx.repo === 'string' ? ctx.repo : '';
-  const stitchDir = repo ? join(repo, 'stitch') : '';
+  const repo = selected ? (selectedDesignRepositoryV1(ctx.repo) ?? '') : typeof ctx.repo === 'string' ? ctx.repo : '';
+  const stitchDir = selected ? (repo ? selectedDesignRepositoryPathV1(repo, 'stitch')! : '') : repo ? join(repo, 'stitch') : '';
   const steps = Array.isArray(run.steps) ? run.steps : [];
   const nowIso = new Date().toISOString();
   const item = (id: string, label: string, status: string, owner: string, evidence = '', stepId?: string) => ({
@@ -269,9 +273,9 @@ function buildFallbackContract(run: any, stories: any[]): any {
     if (status === 'pending') return 'pending';
     return present ? 'pass' : 'fail';
   };
-  const designManifest = existsSync(join(stitchDir, 'DESIGN_MANIFEST.json'));
-  const domManifest = existsSync(join(stitchDir, 'DESIGN_DOM.json'));
-  const uiContract = existsSync(join(stitchDir, 'UI_CONTRACT.json'));
+  const designManifest = selected ? Boolean(stitchDir && existsSync(designArtifactFilePathV1(stitchDir, 'DESIGN_MANIFEST.json'))) : existsSync(join(stitchDir, 'DESIGN_MANIFEST.json'));
+  const domManifest = selected ? Boolean(stitchDir && existsSync(designArtifactFilePathV1(stitchDir, 'DESIGN_DOM.json'))) : existsSync(join(stitchDir, 'DESIGN_DOM.json'));
+  const uiContract = selected ? Boolean(stitchDir && existsSync(designArtifactFilePathV1(stitchDir, 'UI_CONTRACT.json'))) : existsSync(join(stitchDir, 'UI_CONTRACT.json'));
   const htmlCount = countFiles(stitchDir, '.html');
   const pngCount = countFiles(stitchDir, '.png');
   const phases = [
@@ -463,18 +467,21 @@ function projectRootCandidates(): string[] {
 }
 
 function stitchCacheDir(projectId: string): string {
-  const selected = freshMissionControlPathsV1();
-  if (selected) {
-    if (typeof projectId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(projectId)) throw Error('MC_FRESH_DESIGN_INPUT_INVALID');
-    return join(selected.setfarmDir, 'stitch-cache', projectId);
-  }
+  const selected = selectedDesignCacheDirectoryV1(projectId);
+  if (selected !== null) return selected;
   const home = process.env.HOME || process.cwd();
   return join(home, '.openclaw', 'setfarm', 'stitch-cache', projectId);
 }
 
 function resolveRunStitchDirs(run: any, projectId?: string | null): string[] {
+  const selected = freshMissionControlPathsV1();
   const ctx = parseRunContext(run);
   const repo = typeof ctx.repo === 'string' ? ctx.repo : '';
+  if (selected) {
+    if (projectId) assertSelectedDesignIdsV1(projectId);
+    const ownedRepo = selectedDesignRepositoryV1(ctx.repo);
+    return uniquePaths([ownedRepo ? selectedDesignRepositoryPathV1(ownedRepo, 'stitch')! : '', projectId ? stitchCacheDir(projectId) : '']);
+  }
   const projectName = repo ? basename(repo) : '';
   const dirs = [
     repo ? join(repo, 'stitch') : '',
@@ -484,10 +491,14 @@ function resolveRunStitchDirs(run: any, projectId?: string | null): string[] {
   return uniquePaths(dirs);
 }
 
+function designArtifactFilePathV1(directory: string, fileName: string): string {
+  return selectedDesignArtifactFileV1(directory, fileName) ?? join(directory, fileName);
+}
+
 function findRunStitchFile(run: any, projectId: string | null | undefined, fileName: string): string | null {
   if (!fileName || fileName !== basename(fileName)) return null;
   for (const dir of resolveRunStitchDirs(run, projectId)) {
-    const fullPath = join(dir, fileName);
+    const fullPath = designArtifactFilePathV1(dir, fileName);
     if (existsSync(fullPath)) return fullPath;
   }
   return null;
@@ -498,28 +509,31 @@ function designArtifactUrl(runId: string, fileName: string): string {
 }
 
 function resolveRunProjectId(run: any, output?: string): string | null {
-  const pidMatch = output?.match(/STITCH_PROJECT_ID:\s*(\S+)/);
-  if (pidMatch) return pidMatch[1];
-
+  const selected = freshMissionControlPathsV1();
   const ctx = parseRunContext(run);
+  const selectedRepo = selected ? selectedDesignRepositoryV1(ctx.repo) : null;
+  const pidMatch = output?.match(/STITCH_PROJECT_ID:\s*(\S+)/);
+  if (pidMatch) { assertSelectedDesignIdsV1(pidMatch[1]); return pidMatch[1]; }
+
   const repo = typeof ctx.repo === 'string' ? ctx.repo : '';
   for (const dir of resolveRunStitchDirs(run, null)) {
-    const dotStitch = join(dir.replace(/\/stitch$/, ''), '.stitch');
+    const dotStitch = selected ? (selectedRepo ? selectedDesignRepositoryPathV1(selectedRepo, '.stitch')! : '') : join(dir.replace(/\/stitch$/, ''), '.stitch');
+    if (!dotStitch) continue;
     if (!existsSync(dotStitch)) continue;
     try {
       const parsed = JSON.parse(readFileSync(dotStitch, 'utf-8'));
-      if (parsed?.projectId) return parsed.projectId;
+      if (parsed?.projectId) { assertSelectedDesignIdsV1(parsed.projectId); return parsed.projectId; }
     } catch {
       // Continue through other candidate locations.
     }
   }
 
-  if (repo) {
+  if (repo && !selected) {
     try {
       const dotStitch = join(repo, '.stitch');
       if (existsSync(dotStitch)) {
         const parsed = JSON.parse(readFileSync(dotStitch, 'utf-8'));
-        if (parsed?.projectId) return parsed.projectId;
+        if (parsed?.projectId) { assertSelectedDesignIdsV1(parsed.projectId); return parsed.projectId; }
       }
     } catch {
       // Project id is optional for older runs.
@@ -1176,7 +1190,7 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
     // ENRICH: If screenMap exists but lacks htmlFile/screenshot, merge from DESIGN_MANIFEST.json
     if (screenMap.length > 0 && projectId) {
       try {
-        const manifestCandidates = resolveRunStitchDirs(run, projectId).map((dir) => join(dir, 'DESIGN_MANIFEST.json'));
+        const manifestCandidates = resolveRunStitchDirs(run, projectId).map((dir) => designArtifactFilePathV1(dir, 'DESIGN_MANIFEST.json'));
         const mp = manifestCandidates.find(p => existsSync(p));
         if (mp) {
           const mfRaw = JSON.parse(readFileSync(mp, 'utf-8'));
@@ -1195,7 +1209,7 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
     // FALLBACK 1: Read from DESIGN_MANIFEST.json (design step writes this to repo)
     if (screenMap.length === 0 && projectId) {
       try {
-        const candidatePaths = resolveRunStitchDirs(run, projectId).map((dir) => join(dir, 'DESIGN_MANIFEST.json'));
+        const candidatePaths = resolveRunStitchDirs(run, projectId).map((dir) => designArtifactFilePathV1(dir, 'DESIGN_MANIFEST.json'));
         const manifestPath = candidatePaths.find(p => existsSync(p)) || '';
         if (manifestPath) {
           const manifestRaw = JSON.parse(readFileSync(manifestPath, 'utf-8'));
@@ -1258,7 +1272,8 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
     // Cache dir for this project's screenshots
 
     const cacheDir = stitchCacheDir(projectId);
-    mkdirSync(cacheDir, { recursive: true });
+    if (freshMissionControlPathsV1()) mkdirSync(cacheDir, { recursive: true, mode: 0o700 });
+    else mkdirSync(cacheDir, { recursive: true });
 
     const STITCH_SCRIPT = join(PATHS.setfarmRepoDir, 'scripts/stitch-api.mjs');
 
@@ -1271,8 +1286,9 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
       // Stitch API deletes screens after hours, so repo-local files are the only reliable source
       try {
         const ctx = parseRunContext(run);
-        const repo = ctx.repo || '';
-        const repoStitchDir = repo ? join(repo, 'stitch') : '';
+        const selected = freshMissionControlPathsV1();
+        const repo = selected ? (selectedDesignRepositoryV1(ctx.repo) ?? '') : ctx.repo || '';
+        const repoStitchDir = selected ? (repo ? selectedDesignRepositoryPathV1(repo, 'stitch')! : '') : repo ? join(repo, 'stitch') : '';
         let populated = false;
         if (repoStitchDir) {
           if (existsSync(repoStitchDir)) {
@@ -1300,13 +1316,14 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
           for (const rs of remoteScreens) {
             const sid: string = ((rs.name || '').replace(/^projects\/\d+\/screens\//, '') || rs.id || rs.screenId || '');
             if (!sid) continue;
+            assertSelectedDesignIdsV1(projectId, [sid]);
             const screenshotUrl: string | null = rs.screenshotUrl || rs.screenshot?.downloadUrl || rs.screenshot?.download_url || null;
             const htmlDownloadUrl: string | null = rs.htmlUrl || rs.htmlCode?.downloadUrl || rs.html_code?.download_url || null;
             if (screenshotUrl) {
-              try { execFileSync('node', [STITCH_SCRIPT, 'download', screenshotUrl, join(cacheDir, sid + '.png')], { timeout: 60_000, stdio: 'pipe' }); } catch { /* best effort */ }
+              try { execFileSync('node', [STITCH_SCRIPT, 'download', screenshotUrl, designArtifactFilePathV1(cacheDir, sid + '.png')], { timeout: 60_000, stdio: 'pipe' }); } catch { /* best effort */ }
             }
             if (htmlDownloadUrl) {
-              try { execFileSync('node', [STITCH_SCRIPT, 'download', htmlDownloadUrl, join(cacheDir, sid + '.html')], { timeout: 60_000, stdio: 'pipe' }); } catch { /* best effort */ }
+              try { execFileSync('node', [STITCH_SCRIPT, 'download', htmlDownloadUrl, designArtifactFilePathV1(cacheDir, sid + '.html')], { timeout: 60_000, stdio: 'pipe' }); } catch { /* best effort */ }
             }
           }
         } catch { /* list-screens failed or Stitch API unavailable */ }
@@ -1420,6 +1437,12 @@ async function createBuildingProject(run: any): Promise<void> {
     }
   }
 
+  if (freshMissionControlPathsV1()) {
+    const selectedRepo = selectedDesignRepositoryV1(repo);
+    if (!selectedRepo) return;
+    repo = selectedRepo;
+  }
+
   // Get next available port
   let port: number | null = null;
   try {
@@ -1428,6 +1451,12 @@ async function createBuildingProject(run: any): Promise<void> {
     const data = await res.json() as any;
     port = data.port || null;
   } catch (e: any) { console.warn('next-port fetch failed:', e?.message || e); }
+
+  if (freshMissionControlPathsV1()) {
+    const selectedRepo = selectedDesignRepositoryV1(repo);
+    if (!selectedRepo) return;
+    repo = selectedRepo;
+  }
 
   const stack = repo ? detectStack(repo) : [];
 
@@ -1597,10 +1626,12 @@ async function syncProjectsFromRuns(options: Readonly<{
     }
     if (r.status === 'completed') return allowedDeployWorkflows.has(r.workflow_id);
     if ((r.status === 'failed' || r.status === 'cancelled') && allowedDeployWorkflows.has(r.workflow_id)) {
+      const selected = freshMissionControlPathsV1();
+      const selectedRepo = selected ? selectedDesignRepositoryV1(context.repo) : null;
       try {
         const ctx = typeof r.context === 'string' ? JSON.parse(r.context) : r.context;
-        const repo = ctx?.repo || '';
-        if (repo && existsSync(join(repo, 'dist', 'index.html'))) return true;
+        const repo = selected ? (selectedRepo ?? '') : ctx?.repo || '';
+        if (repo && existsSync(selected ? selectedDesignRepositoryPathV1(repo, 'dist/index.html')! : join(repo, 'dist', 'index.html'))) return true;
       } catch { /* context parse failed */ }
     }
     return false;
@@ -1651,6 +1682,8 @@ async function syncProjectsFromRuns(options: Readonly<{
         if (labelMatch) repo = labelMatch[1].replace(/\/+$/, '');
       }
     }
+
+    if (freshMissionControlPathsV1()) repo = selectedDesignRepositoryV1(repo) ?? '';
 
     // Repo validation: only ~/projects/ and ~/mobile/
     if (repo) {
