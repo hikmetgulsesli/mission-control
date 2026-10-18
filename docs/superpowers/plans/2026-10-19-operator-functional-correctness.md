@@ -92,7 +92,9 @@ assert.match(html, /kullanılan|used/i); // total minus os.freemem, not pressure
 
 ### Task 5: Shared agent identity and honest empty usage
 
-**Files:** Modify `server/shared/agents.ts`, `src/lib/constants.ts`, `server/routes/{agents,performance}.ts`, `src/pages/{Agents,Chat,Costs,Performance}.tsx`, `src/components/AgentCard.tsx`; create `server/services/agent-identity.ts`, its tests and `tests/performance-empty-render.test.tsx`.
+**Files:** Modify `server/shared/agents.ts`, `src/lib/constants.ts`, `server/routes/{agents,performance,costs}.ts`, `src/pages/{Agents,Chat,Costs,Performance}.tsx`, `src/components/AgentCard.tsx`; create `server/services/agent-identity.ts`, its tests and `tests/performance-empty-render.test.tsx`.
+
+The costs route currently turns absent/ENOENT totals into zero; add availability/source metadata at that actual HTTP boundary so all consumers can distinguish missing from measured zero. Preserve compatible numeric fields where required, but never present unknown as measured; behavioral HTTP coverage belongs in the task tests.
 
 **Interfaces:** Existing safe static roster is shared/re-exported, all14agents retained. `resolveAgentModelIdentity` returns spec `ModelIdentity` with raw IDs and provenance; agents/performance consume the same resolver. Preserve existing arrays/fields compatibly; add source/status metadata rather than converting missing costs to real0.
 

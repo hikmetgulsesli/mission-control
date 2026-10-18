@@ -11,7 +11,7 @@ import { AgentLivePanel } from '../components/AgentLivePanel';
 import { GlitchText } from '../components/GlitchText';
 
 export function Agents() {
-  const { data: agents, loading, refresh } = usePolling(api.agents, 30000);
+  const { data: agents, loading, error, refresh } = usePolling(api.agents, 30000);
   const { data: sessions, loading: sessionsLoading } = usePolling(api.sessions, 30000);
   const [editAgent, setEditAgent] = useState<Agent | null>(null);
   const [activityAgent, setActivityAgent] = useState<{ id: string; name: string } | null>(null);
@@ -40,6 +40,7 @@ export function Agents() {
     return () => { cancelled = true; clearInterval(interval); };
   }, [agents]);
 
+  if (error && !agents) return <div className="page-loading">Kullanılamıyor: {error}</div>;
   if (loading || sessionsLoading) return <div className="page-loading">Loading agents...</div>;
 
   const handleChat = (agent: Agent) => {
@@ -104,7 +105,7 @@ export function Agents() {
                     stats={agentStatsMap[agent.id] || null}
                     onChat={handleChat}
                     onActivity={() => handleActivity(agent)}
-                    onEdit={(a) => setEditAgent(a)}
+                    onEdit={(a) => setEditAgent({...a, model:a.modelIdentity?.configuredModelId ?? a.modelIdentity?.staticModelId ?? a.model})}
                   />
                   <button
                     className="agent-card-wrap__live-btn"

@@ -5,43 +5,32 @@ import { cached } from '../utils/cache.js';
 
 const router = Router();
 
-function emptyCostData() {
-  return {
-    totalToday: 0,
-    totalAllTime: 0,
-    projectedMonthly: 0,
-    breakdownAllTime: [],
-    breakdownToday: [],
-    subagentCostAllTime: 0,
-    subagentCostToday: 0,
-    tokenUsage: [],
-    tokenUsageToday: [],
-  };
-}
-
 router.get('/costs', async (_req, res) => {
   try {
     const data = await cached('costs', 60000, async () => {
-      const raw = readFileSync(config.dataJson, 'utf-8');
-      const d = JSON.parse(raw);
+      let d: any = {};
+      try { d = JSON.parse(readFileSync(config.dataJson, 'utf-8')); }
+      catch (error: any) { if (error?.code !== 'ENOENT') throw error; }
+      const fields: Record<string,unknown> = {
+        totalToday:d.totalCostToday, totalAllTime:d.totalCostAllTime, projectedMonthly:d.projectedMonthly,
+        subagentCostAllTime:d.subagentCostAllTime, subagentCostToday:d.subagentCostToday,
+      };
+      const costStatus: Record<string,'available'|'unknown'> = {};
+      const totals = Object.fromEntries(Object.entries(fields).map(([key,value]) => {
+        const available = typeof value === 'number' && Number.isFinite(value) && value >= 0;
+        costStatus[key] = available ? 'available' : 'unknown';
+        return [key,available ? value : null];
+      }));
       return {
-        totalToday: d.totalCostToday || 0,
-        totalAllTime: d.totalCostAllTime || 0,
-        projectedMonthly: d.projectedMonthly || 0,
-        breakdownAllTime: d.costBreakdown || [],
-        breakdownToday: d.costBreakdownToday || [],
-        subagentCostAllTime: d.subagentCostAllTime || 0,
-        subagentCostToday: d.subagentCostToday || 0,
-        tokenUsage: d.tokenUsage || {},
-        tokenUsageToday: d.tokenUsageToday || {},
+        ...totals, costStatus, usageSource:'dashboard_data',
+        breakdownAllTime:Array.isArray(d.costBreakdown) ? d.costBreakdown : [],
+        breakdownToday:Array.isArray(d.costBreakdownToday) ? d.costBreakdownToday : [],
+        tokenUsage:Array.isArray(d.tokenUsage) ? d.tokenUsage : [],
+        tokenUsageToday:Array.isArray(d.tokenUsageToday) ? d.tokenUsageToday : [],
       };
     });
     res.json(data);
   } catch (err: any) {
-    if (String(err?.code || '') === 'ENOENT') {
-      res.json(emptyCostData());
-      return;
-    }
     res.status(500).json({ error: err.message });
   }
 });

@@ -1,140 +1,59 @@
 import { Router } from 'express';
 import { readFileSync } from 'fs';
-import { homedir } from 'os';
-import { join } from 'path';
-
 import { config } from '../config.js';
 import { cached } from '../utils/cache.js';
+import { runCliJson } from '../utils/cli.js';
+import { freshMissionControlSelectedV1 } from '../services/fresh-installation-runtime.js';
+import { resolveAgentRoster, sessionAgentId, sessionTimestamp } from '../services/agent-identity.js';
 
 const router = Router();
-
-const MODEL_NORMALIZE: Record<string, string> = {
-  'anthropic/claude-sonnet-4-5-20250929': 'sonnet-4.5',
-  'anthropic/claude-opus-4-6': 'opus-4.6',
-  'minimax/MiniMax-M2.7': 'minimax-m2.7',
-  'minimax-coding/MiniMax-M2.7': 'minimax-m2.7',
-  'kimi-coding/k2p5': 'kimi-k2p5',
-};
-
-function normalizeModel(raw: string): string {
-  if (MODEL_NORMALIZE[raw]) return MODEL_NORMALIZE[raw];
-  const slash = raw.indexOf('/');
-  return slash >= 0 ? raw.slice(slash + 1) : raw;
-}
-
-function loadAgentModels(): Record<string, string> {
-  try {
-    const ocPath = `${homedir()}/.openclaw/openclaw.json`;
-    const raw = readFileSync(ocPath, 'utf-8');
-    const oc = JSON.parse(raw);
-    const agents = oc.agents || {};
-    const defaultModel = agents.defaults?.model?.primary || agents.defaults?.primary || 'unknown';
-    const list: any[] = agents.list || [];
-
-    const models: Record<string, string> = {};
-    const knownIds = ['main', 'koda', 'flux', 'atlas', 'iris', 'sentinel', 'cipher', 'lux', 'nexus', 'prism'];
-
-    for (const id of knownIds) {
-      const entry = list.find((a: any) => a.id === id);
-      const primary = entry?.model?.primary || defaultModel;
-      models[id] = normalizeModel(primary);
-    }
-    return models;
-  } catch {
-    // Fallback if config is unreadable
-    return {
-      main: 'minimax-m2.7', koda: 'kimi-k2p5', flux: 'kimi-k2p5', atlas: 'kimi-k2p5',
-      iris: 'minimax-m2.7', sentinel: 'minimax-m2.7', cipher: 'kimi-k2p5',
-      lux: 'minimax-m2.7', nexus: 'minimax-m2.7', prism: 'minimax-m2.7',
-    };
-  }
-}
-
-function emptyPerformanceData() {
-  const agentModels = loadAgentModels();
-  const agents = Object.fromEntries(Object.entries(agentModels).map(([id, model]) => [
-    id,
-    { id, model, sessionCount: 0, totalTokens: 0, lastActive: null },
-  ]));
-  return {
-    agents,
-    modelCosts: {},
-    modelCostsToday: {},
-    modelTokens: {},
-    totalCostToday: 0,
-    totalCostAllTime: 0,
-  };
-}
+const measured = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0;
 
 router.get('/performance', async (_req, res) => {
   try {
     const data = await cached('performance', 30000, async () => {
-      const raw = readFileSync(config.dataJson, 'utf-8');
-      const d = JSON.parse(raw);
-      const agentModels = loadAgentModels();
-
-      const sessions = d.sessions || [];
-      const tokenUsage = Array.isArray(d.tokenUsage) ? d.tokenUsage : [];
-      const tokenUsageToday = Array.isArray(d.tokenUsageToday) ? d.tokenUsageToday : [];
-      const costBreakdown = d.costBreakdown || [];
-      const costBreakdownToday = d.costBreakdownToday || [];
-
-      // Per-agent session count and last activity
-      const agentStats: Record<string, any> = {};
-      for (const [agentId, model] of Object.entries(agentModels)) {
-        const agentSessions = sessions.filter((s: any) => {
-          const sid = s.agent || s.key?.split(':')?.[1];
-          return sid === agentId;
-        });
-        const lastTs = agentSessions.reduce((max: number, s: any) => {
-          const t = s.updatedAt || (s.lastActivity ? new Date(s.lastActivity).getTime() : 0);
-          return t > max ? t : max;
-        }, 0);
-
-        agentStats[agentId] = {
-          id: agentId,
-          model,
-          sessionCount: agentSessions.length,
-          totalTokens: agentSessions.reduce((sum: number, s: any) => sum + (s.totalTokens || 0), 0),
-          lastActive: lastTs || null,
-        };
-      }
-
-      // Per-model cost data
-      const modelCosts: Record<string, number> = {};
-      const modelCostsToday: Record<string, number> = {};
-      for (const c of costBreakdown) {
-        modelCosts[c.model] = (modelCosts[c.model] || 0) + c.cost;
-      }
-      for (const c of costBreakdownToday) {
-        modelCostsToday[c.model] = (modelCostsToday[c.model] || 0) + c.cost;
-      }
-
-      // Per-model token stats
-      const modelTokens: Record<string, any> = {};
-      for (const t of tokenUsage) {
-        modelTokens[t.model] = {
-          calls: t.calls || 0,
-          totalTokens: t.totalTokens || '0',
-          cost: t.cost || 0,
-        };
-      }
-
+      let d: any = {};
+      try { d = JSON.parse(readFileSync(config.dataJson, 'utf-8')); }
+      catch (error: any) { if (error?.code !== 'ENOENT') throw error; }
+      const configured = freshMissionControlSelectedV1() ? [] : await cached('agents', 30000, async () => {
+        try { return await runCliJson<any[]>('openclaw', ['agents', 'list', '--json']); }
+        catch { return []; }
+      });
+      const sessions = Array.isArray(d.sessions) ? d.sessions : [];
+      const roster = resolveAgentRoster(configured, sessions);
+      const agents = Object.fromEntries(roster.map(agent => {
+        const ownSessions = sessions.filter((session: any) => sessionAgentId(session) === agent.id);
+        const tokens = ownSessions.map((session: any) => session.totalTokens);
+        return [agent.id, {
+          ...agent,
+          sessionCount: ownSessions.length,
+          totalTokens: tokens.every(measured) ? tokens.reduce((sum: number, n: number) => sum + n, 0) : null,
+          lastActive: ownSessions.reduce((latest: number, session: any) => Math.max(latest,sessionTimestamp(session)),0) || null,
+        }];
+      }));
+      const costs = (rows: unknown) => {
+        const result: Record<string, number> = {};
+        for (const row of Array.isArray(rows) ? rows : []) {
+          if (typeof row?.model === 'string' && measured(row.cost)) result[row.model] = (result[row.model] ?? 0) + row.cost;
+        }
+        return result;
+      };
+      const modelTokens = Object.fromEntries((Array.isArray(d.tokenUsage) ? d.tokenUsage : [])
+        .filter((row: any) => typeof row?.model === 'string').map((row: any) => [row.model,{
+          calls:measured(row.calls) ? row.calls : null, totalTokens:row.totalTokens ?? null,
+          cost:measured(row.cost) ? row.cost : null,
+        }]));
       return {
-        agents: agentStats,
-        modelCosts,
-        modelCostsToday,
-        modelTokens,
-        totalCostToday: d.totalCostToday || 0,
-        totalCostAllTime: d.totalCostAllTime || 0,
+        agents, modelCosts:costs(d.costBreakdown), modelCostsToday:costs(d.costBreakdownToday), modelTokens,
+        totalCostToday:measured(d.totalCostToday) ? d.totalCostToday : null,
+        totalCostAllTime:measured(d.totalCostAllTime) ? d.totalCostAllTime : null,
+        sessionsStatus:Array.isArray(d.sessions) ? 'available' : 'unknown',
+        costStatus:{today:measured(d.totalCostToday) ? 'available' : 'unknown',allTime:measured(d.totalCostAllTime) ? 'available' : 'unknown'},
+        usageSource:'dashboard_data',
       };
     });
     res.json(data);
   } catch (err: any) {
-    if (String(err?.code || '') === 'ENOENT') {
-      res.json(emptyPerformanceData());
-      return;
-    }
     res.status(500).json({ error: err.message });
   }
 });

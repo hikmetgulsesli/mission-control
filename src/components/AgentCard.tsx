@@ -1,20 +1,8 @@
 import React from 'react';
 import { AGENT_MAP } from '../lib/constants';
+import type { ModelIdentity } from '../../server/shared/agents.js';
 
 
-function normalizeModel(raw: string): string {
-  const map: Record<string, string> = {
-    'anthropic/claude-sonnet-4-5-20250929': 'sonnet-4.5',
-    'anthropic/claude-opus-4-6': 'opus-4.6',
-    'minimax/MiniMax-M2.7': 'minimax-m2.7',
-    'minimax-coding/MiniMax-M2.7': 'minimax-m2.7',
-    'kimi-coding/k2p5': 'kimi-k2p5',
-  };
-  if (map[raw]) return map[raw];
-  // Strip provider prefix (e.g. "anthropic/claude-..." -> "claude-...")
-  const slash = raw.indexOf('/');
-  return slash >= 0 ? raw.slice(slash + 1) : raw;
-}
 export interface AgentStats {
   agentId: string;
   storiesCompleted: number;
@@ -32,6 +20,7 @@ interface AgentCardProps {
     identityName?: string;
     identityEmoji?: string;
     model?: string;
+    modelIdentity?: ModelIdentity;
     role?: string;
     description?: string;
     tags?: string[];
@@ -59,6 +48,8 @@ export const AgentCard = React.memo(function AgentCard({ agent, sessions = [], c
   const name = agent.identityName || agent.name || meta?.name || agent.id;
   const emoji = agent.identityEmoji || meta?.emoji || '?';
   const color = meta?.color || '#00ffff';
+  const model = agent.modelIdentity?.rawModelId ?? agent.model ?? meta?.model ?? 'unknown';
+  const provenance = agent.modelIdentity?.provenance ?? (meta && agent.model === meta.model ? 'static_fallback' : 'unknown');
 
   const agentSessions = sessions.filter(s => {
     const sid = s.agent || s.key?.split(':')?.[1];
@@ -121,7 +112,7 @@ export const AgentCard = React.memo(function AgentCard({ agent, sessions = [], c
         <div className="agent-card__details">
           <div className="agent-card__detail">
             <span className="agent-card__label">MODEL</span>
-            <span>{normalizeModel(agent.model || meta?.model || 'unknown')}</span>
+            <span>{model} <small>({provenance}){agent.modelIdentity?.rawProviderId ? ` · ${agent.modelIdentity.rawProviderId}` : ''}</small></span>
           </div>
           <div className="agent-card__detail">
             <span className="agent-card__label">SESSIONS</span>
@@ -164,7 +155,7 @@ export const AgentCard = React.memo(function AgentCard({ agent, sessions = [], c
       <div className="agent-card__details">
         <div className="agent-card__detail">
           <span className="agent-card__label">MODEL</span>
-          <span>{normalizeModel(agent.model || meta?.model || 'unknown')}</span>
+          <span>{model} <small>({provenance}){agent.modelIdentity?.rawProviderId ? ` · ${agent.modelIdentity.rawProviderId}` : ''}</small></span>
         </div>
         <div className="agent-card__detail">
           <span className="agent-card__label">SESSIONS</span>

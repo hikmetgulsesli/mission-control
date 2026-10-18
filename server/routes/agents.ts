@@ -1,4 +1,6 @@
-import { AGENT_DEFINITIONS, REAL_AGENT_IDS } from '../shared/agents.js';
+import { resolveAgentRoster } from '../services/agent-identity.js';
+import { freshMissionControlSelectedV1 } from '../services/fresh-installation-runtime.js';
+import { REAL_AGENT_IDS } from '../shared/agents.js';
 import { Router } from 'express';
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
@@ -10,22 +12,23 @@ const router = Router();
 
 const REAL_AGENTS = REAL_AGENT_IDS as unknown as string[];
 
-function fallbackAgents(): any[] {
-  return REAL_AGENTS.map((id) => {
-    const definition = AGENT_DEFINITIONS[id as keyof typeof AGENT_DEFINITIONS];
-    return {
-      id,
-      name: definition?.name || id,
-      emoji: definition?.emoji || '',
-      role: definition?.role || '',
-      model: definition?.model || 'unknown',
-      color: definition?.color || '#00ffff',
-      source: 'mission-control-fallback',
-    };
+async function readAgents() {
+  const configured = freshMissionControlSelectedV1() ? [] : await cached('agents', 30000, async () => {
+    try { return await runCliJson<any[]>('openclaw', ['agents', 'list', '--json']); }
+    catch { return []; }
   });
+  let sessions: any[] = [];
+  try {
+    const data = JSON.parse(readFileSync(config.dataJson, 'utf8'));
+    if (Array.isArray(data.sessions)) sessions = data.sessions;
+  } catch { /* Missing usage is not configured-model evidence. */ }
+  return resolveAgentRoster(configured, sessions);
 }
 
 function getAgentActivity(agentId: string): { lastActive?: string; status: string } {
+  // Discovery retains raw runtime IDs; only a single safe directory component
+  // may participate in the optional local activity lookup.
+  if (!/^[A-Za-z0-9_-]+$/.test(agentId)) return { status: 'idle' };
   const dir = agentId === "main" ? "main" : agentId;
   const sessionsDir = join(PATHS.agentsDir, dir, "sessions");
   if (!existsSync(sessionsDir)) return { status: "idle" };
@@ -44,6 +47,7 @@ function getAgentActivity(agentId: string): { lastActive?: string; status: strin
 }
 
 function loadProfiles(): Record<string, any> {
+  if (freshMissionControlSelectedV1()) return {};
   try {
     const raw = readFileSync(config.clawtabsConfig, 'utf-8');
     const parsed = JSON.parse(raw);
@@ -91,26 +95,10 @@ function mergeProfile(agent: any, profiles: Record<string, any>) {
 
 router.get('/agents', async (_req, res) => {
   try {
-    const [all, profiles] = await Promise.all([
-      cached('agents', 30000, async () => {
-        try {
-          return await runCliJson<any[]>('openclaw', ['agents', 'list', '--json']);
-        } catch (err: any) {
-          console.warn('[agents] openclaw agents list failed; using Mission Control fallback agents:', err?.message || err);
-          return fallbackAgents();
-        }
-      }),
-      cached('profiles', 120000, async () => loadProfiles()),
+    const [agents, profiles] = await Promise.all([
+      readAgents(), cached('profiles', 120000, async () => loadProfiles()),
     ]);
-    const byId = new Map((Array.isArray(all) ? all : []).map((agent: any) => [agent.id, agent]));
-    const filtered = fallbackAgents()
-      .map((fallback) => ({ ...fallback, ...(byId.get(fallback.id) || {}) }))
-      .map((a: any) => {
-        const enriched = mergeProfile(a, profiles);
-        const activity = getAgentActivity(a.id);
-        return { ...enriched, ...activity };
-      });
-    res.json(filtered);
+    res.json(agents.map(agent => ({...mergeProfile(agent, profiles), ...getAgentActivity(agent.id)})));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -118,18 +106,10 @@ router.get('/agents', async (_req, res) => {
 
 router.get('/agents/:id', async (req, res) => {
   try {
-    const [all, profiles] = await Promise.all([
-      cached('agents', 30000, async () => {
-        try {
-          return await runCliJson<any[]>('openclaw', ['agents', 'list', '--json']);
-        } catch (err: any) {
-          console.warn('[agents] openclaw agents list failed; using Mission Control fallback agents:', err?.message || err);
-          return fallbackAgents();
-        }
-      }),
-      cached('profiles', 120000, async () => loadProfiles()),
+    const [agents, profiles] = await Promise.all([
+      readAgents(), cached('profiles', 120000, async () => loadProfiles()),
     ]);
-    const agent = all.find((a: any) => a.id === req.params.id);
+    const agent = agents.find(agent => agent.id === req.params.id);
     if (!agent) { res.status(404).json({ error: 'Agent not found' }); return; }
     res.json(mergeProfile(agent, profiles));
   } catch (err: any) {
