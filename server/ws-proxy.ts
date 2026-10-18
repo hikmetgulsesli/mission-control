@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { Server } from 'http';
 import { config } from './config.js';
+import { assertFreshMissionControlRuntimeV1 } from './services/fresh-installation-runtime.js';
 
 let lastGatewayUnavailableLogAt = 0;
 
@@ -12,9 +13,24 @@ function logGatewayUnavailable(message: string) {
 }
 
 export function setupWsProxy(server: Server) {
-  const wss = new WebSocketServer({ server, path: '/ws' });
+  assertFreshMissionControlRuntimeV1();
+  const disposeOnRefusalV1 = new Set<() => void>();
+  function runtimeAvailableV1(): boolean {
+    try { assertFreshMissionControlRuntimeV1(); return true; }
+    catch {
+      for (const dispose of [...disposeOnRefusalV1]) dispose();
+      return false;
+    }
+  }
+  const wss = new WebSocketServer({ server, path: '/ws',
+    verifyClient: (_info: unknown, done: (accepted: boolean, code?: number, message?: string) => void) => {
+      if (runtimeAvailableV1()) done(true);
+      else done(false, 503, 'Service unavailable');
+    },
+  });
 
   wss.on('connection', (clientWs, req) => {
+    if (!runtimeAvailableV1()) { clientWs.terminate(); return; }
     // Auth check for WebSocket connections
     if (config.authToken) {
       const url = new URL(req.url || '', 'http://localhost');
@@ -30,12 +46,29 @@ export function setupWsProxy(server: Server) {
     let authenticated = false;
     let reqId = 0;
     let gatewaySettled = false;
+    let pingInterval: ReturnType<typeof setInterval> | undefined;
+    function disposeForRefusalV1(): void {
+      clearInterval(pingInterval);
+      for (const socket of [clientWs, gatewayWs]) {
+        if (socket && socket.readyState !== WebSocket.CLOSED) {
+          try { socket.terminate(); } catch { /* Still attempt the other owned socket. */ }
+        }
+      }
+      releaseClosedPairV1();
+    }
+    function releaseClosedPairV1(): void {
+      if (clientWs.readyState === WebSocket.CLOSED && (!gatewayWs || gatewayWs.readyState === WebSocket.CLOSED)) {
+        disposeOnRefusalV1.delete(disposeForRefusalV1);
+      }
+    }
+    disposeOnRefusalV1.add(disposeForRefusalV1);
 
     try {
       gatewayWs = new WebSocket(config.gatewayWs, {
         headers: { Origin: config.wsOrigin || config.publicOrigin || config.internalUrl },
       });
     } catch (err) {
+      disposeOnRefusalV1.delete(disposeForRefusalV1);
       logGatewayUnavailable((err as Error)?.message || String(err));
       clientWs.close(1013, 'Gateway unavailable');
       return;
@@ -66,18 +99,21 @@ export function setupWsProxy(server: Server) {
     }
 
     // Keepalive ping to prevent Cloudflare/proxy idle timeout
-    const pingInterval = setInterval(() => {
+    pingInterval = setInterval(() => {
+      if (!runtimeAvailableV1()) return;
       if (clientWs.readyState === WebSocket.OPEN) {
         clientWs.ping();
       }
     }, 20000);
 
     gatewayWs.on('open', () => {
+      if (!runtimeAvailableV1()) return;
       gatewaySettled = true;
       console.log('[WS] Connected to gateway');
     });
 
     gatewayWs.on('message', (data) => {
+      if (!runtimeAvailableV1()) return;
       const raw = data.toString();
       let msg: any;
       try {
@@ -123,6 +159,7 @@ export function setupWsProxy(server: Server) {
       if (clientWs.readyState === WebSocket.OPEN) {
         clientWs.close(gatewaySettled ? code : 1013, gatewaySettled ? reason.toString() : 'Gateway unavailable');
       }
+      releaseClosedPairV1();
     });
 
     gatewayWs.on('error', (err) => {
@@ -138,6 +175,7 @@ export function setupWsProxy(server: Server) {
 
     // Client messages: wrap as gateway requests if needed
     clientWs.on('message', (data) => {
+      if (!runtimeAvailableV1()) return;
       if (!gatewayWs || gatewayWs.readyState !== WebSocket.OPEN) return;
 
       const raw = data.toString();
@@ -170,6 +208,7 @@ export function setupWsProxy(server: Server) {
       if (gatewayWs && gatewayWs.readyState === WebSocket.OPEN) {
         gatewayWs.close();
       }
+      releaseClosedPairV1();
     });
 
     clientWs.on('error', (err) => {

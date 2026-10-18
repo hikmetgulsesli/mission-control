@@ -248,6 +248,14 @@ async function fetchPrdWorkflowStart(data:{prdId:string;projectName?:string;work
         &&(body.repoPath===null||typeof body.repoPath==='string')&&typeof body.error==='string'&&body.error.length<=512){
         throw new PrdWorkflowStartError(body.error,body.acceptance,body.runId,body.repoPath);
       }
+      // These exact legacy/auth refusals are emitted before workflow launch.
+      if(body!==null&&typeof body==='object'&&!Array.isArray(body)
+        &&Object.keys(body).join(',')==='error'
+        &&((response.status===400&&body.error==='prdId required')
+          ||(response.status===404&&body.error==='PRD not found or empty')
+          ||(response.status===401&&body.error==='Unauthorized'))){
+        throw new PrdWorkflowStartError(body.error,'not-started',null,null);
+      }
       throw new Error('Unconfirmed workflow response');
     }
     if(body?.success!==true||typeof body.runId!=='string'||!body.runId
