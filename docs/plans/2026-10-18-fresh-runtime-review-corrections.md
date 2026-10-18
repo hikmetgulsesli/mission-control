@@ -50,3 +50,26 @@ Server TypeScript and all version, prompt, path and12-artifact contracts passed.
 Original RED/GREEN captures are private workspace evidence. Independent exact
 production/test review reported no critical, important or minor findings.
 Clean-main stock build and actual selected runtime checks remain delivery gates.
+
+## Selected design artifacts review correction
+
+Current-head cloud review found a remaining legacy fallback in the design
+artifact reader. This is part of the same private-installation objective:
+missing selected artifacts must not be replaced with same-named old artifacts.
+File map: server/routes/setfarm-activity.ts calls the existing guarded selected
+paths getter before resolving project roots/cache; selected mode uses its own
+projects and runtime cache. Legacy ordering/layout remains unchanged.
+tests/fresh-design-artifact-isolation.test.ts exercises those actual helper
+bodies, including a temporary filesystem with colliding legacy artifact names,
+selected cache/repository precedence and propagated context refusal. These are
+component checks; actual selected HTTP verification remains required. Preserve
+original RED before applying the source correction, then focused GREEN, types,
+contracts and independent review before the next scoped commit.
+
+Independent review also identified unvalidated project IDs before the selected
+cache join. Selected cache IDs now require one safe1..128-character segment
+(ASCII letters, digits, underscore or hyphen); wrong types, separators, dots,
+NUL and oversized values refuse before filesystem lookup. Optional absent IDs
+still skip the cache in the existing resolver. The new fifth regression first
+failed on the path-only correction, then all30 focused cases passed with the
+bounded ID check. Original legacy cache behavior remains unchanged.

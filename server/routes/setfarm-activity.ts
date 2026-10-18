@@ -5,6 +5,7 @@ import { execSync, execFileSync } from 'child_process';
 import { cached } from '../utils/cache.js';
 import { getBatchStoryProgress } from '../utils/setfarm-db.js';
 import { config, PATHS } from '../config.js';
+import { freshMissionControlPathsV1 } from '../services/fresh-installation-runtime.js';
 import { readFileSync as readSync, writeFileSync as writeSync, renameSync } from 'fs';
 import { tmpdir } from 'os';
 import {
@@ -450,6 +451,8 @@ function uniquePaths(paths: string[]): string[] {
 }
 
 function projectRootCandidates(): string[] {
+  const selected = freshMissionControlPathsV1();
+  if (selected) return [selected.projectsDir];
   const home = process.env.HOME || process.cwd();
   return uniquePaths([
     PATHS.projectsDir,
@@ -460,6 +463,11 @@ function projectRootCandidates(): string[] {
 }
 
 function stitchCacheDir(projectId: string): string {
+  const selected = freshMissionControlPathsV1();
+  if (selected) {
+    if (typeof projectId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(projectId)) throw Error('MC_FRESH_DESIGN_INPUT_INVALID');
+    return join(selected.setfarmDir, 'stitch-cache', projectId);
+  }
   const home = process.env.HOME || process.cwd();
   return join(home, '.openclaw', 'setfarm', 'stitch-cache', projectId);
 }
