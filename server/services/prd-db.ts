@@ -1,3 +1,4 @@
+import { freshMissionControlSelectedV1, assertPreprovisionedFreshMissionControlStoreV1 } from '../services/fresh-installation-runtime.js';
 /**
  * PRD Database Service — PostgreSQL
  * Replaces the old SQLite CLI-based implementation.
@@ -152,6 +153,9 @@ async function verifyRestrictedPrdReads(): Promise<void> {
 }
 
 async function ensureSchema(): Promise<void> {
+  if (freshMissionControlSelectedV1()) {
+    assertPreprovisionedFreshMissionControlStoreV1(); return;
+  }
   if (restrictedPrdMode !== undefined) {
     if (restrictedPrdMode !== '1') throw new Error('MC_TASK6A_RESTRICTED_PRD_VERIFY_REFUSED');
     if (!restrictedPrdReady) restrictedPrdReady = verifyRestrictedPrdReads();

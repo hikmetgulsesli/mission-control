@@ -1,3 +1,4 @@
+import { freshSetfarmCliInvocationV1, freshMissionControlSelectedV1 } from '../services/fresh-installation-runtime.js';
 import { execFile as execFileCb } from 'child_process';
 import { promisify } from 'util';
 import { dirname } from 'path';
@@ -27,6 +28,13 @@ const env = {
 
 const CLI_TIMEOUT_MS = 25_000;
 const MAX_CONCURRENT = 3;
+const FRESH_WORKFLOW_RUN_TIMEOUT_MS = 120_000;
+export class FreshWorkflowCliBusyErrorV1 extends Error { constructor(){super('MC_FRESH_WORKFLOW_CLI_BUSY');} }
+function commandTimeoutMsV1(selected:boolean,command:string,args:readonly string[]):number {
+  return selected&&command==='setfarm'&&args[0]==='workflow'&&args[1]==='run'
+    ? FRESH_WORKFLOW_RUN_TIMEOUT_MS : CLI_TIMEOUT_MS;
+}
+
 
 const inflight = new Map<string, Promise<string>>();
 let active = 0;
@@ -48,22 +56,27 @@ function release(): void {
   if (next) next();
 }
 
-export async function runCli(cmd: string, args: string[]): Promise<string> {
+export async function runCliRaw(cmd: string, args: string[]): Promise<string> {
   if (task6aSelectedCliNoSpawn) throw new Error(TASK6A_SELECTED_CLI_NO_SPAWN);
   const key = `${cmd} ${args.join(' ')}`;
   const existing = inflight.get(key);
   if (existing) return existing;
 
   const p = (async () => {
+    // A new selected workflow request never waits in the ambient CLI queue.
+    // The synchronous check+acquire cannot enqueue between these statements.
+    const selectedRun=cmd==='setfarm'&&args[0]==='workflow'&&args[1]==='run'&&freshMissionControlSelectedV1();
+    if(selectedRun&&active>=MAX_CONCURRENT)throw new FreshWorkflowCliBusyErrorV1();
     await acquire();
     try {
-      const { stdout } = await execFileAsync(cmd, args, {
-        env,
-        timeout: CLI_TIMEOUT_MS,
+      const selected = freshSetfarmCliInvocationV1(cmd,args,env);
+      const { stdout } = await execFileAsync(selected?.file ?? cmd, selected ? [...selected.args] : args, {
+        env:selected?.env ?? env,
+        timeout: commandTimeoutMsV1(selected!==null,cmd,args),
         killSignal: 'SIGKILL',
         maxBuffer: 1024 * 1024,
       });
-      return stdout.trim();
+      return stdout;
     } catch (err: any) {
       console.error(`CLI error: ${cmd} ${args.join(' ')}:`, err.message);
       throw err;
@@ -75,6 +88,11 @@ export async function runCli(cmd: string, args: string[]): Promise<string> {
   inflight.set(key, p);
   p.finally(() => { inflight.delete(key); }).catch(() => {});
   return p;
+}
+
+/** Existing callers retain trimmed output; strict receipt consumers use the same bounded raw capture. */
+export async function runCli(cmd: string, args: string[]): Promise<string> {
+  return (await runCliRaw(cmd,args)).trim();
 }
 
 export async function runCliJson<T = unknown>(cmd: string, args: string[]): Promise<T> {

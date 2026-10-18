@@ -232,6 +232,42 @@ async function fetchProductBuildAuthority(runId: string): Promise<Exclude<Produc
 
 const CT_JSON = { 'Content-Type': 'application/json' };
 
+export class PrdWorkflowStartError extends Error {
+  constructor(message:string,readonly acceptance:'not-started'|'unknown'|'accepted',readonly runId:string|null,readonly repoPath:string|null){super(message);}
+}
+async function fetchPrdWorkflowStart(data:{prdId:string;projectName?:string;workflow?:string}):Promise<any>{
+  try{
+    const response=await fetch(`${BASE}/api/prd/start-run`,{method:'POST',headers:{...CT_JSON,...(AUTH_TOKEN?{'X-MC-Token':AUTH_TOKEN}:{})},body:JSON.stringify(data)});
+    const body=await response.json();
+    if(!response.ok){
+      if(body?.schema==='mission-control.workflow-start-result.v1'&&body.success===false&&body.retrySafe===false
+        &&Object.keys(body).sort().join(',')==='acceptance,error,repoPath,retrySafe,runId,schema,success'
+        &&['not-started','unknown','accepted'].includes(body.acceptance)
+        &&(body.runId===null||(typeof body.runId==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(body.runId)))
+        &&(body.acceptance!=='accepted'||body.runId!==null)
+        &&(body.repoPath===null||typeof body.repoPath==='string')&&typeof body.error==='string'&&body.error.length<=512){
+        throw new PrdWorkflowStartError(body.error,body.acceptance,body.runId,body.repoPath);
+      }
+      // These exact legacy/auth refusals are emitted before workflow launch.
+      if(body!==null&&typeof body==='object'&&!Array.isArray(body)
+        &&Object.keys(body).join(',')==='error'
+        &&((response.status===400&&body.error==='prdId required')
+          ||(response.status===404&&body.error==='PRD not found or empty')
+          ||(response.status===401&&body.error==='Unauthorized'))){
+        throw new PrdWorkflowStartError(body.error,'not-started',null,null);
+      }
+      throw new Error('Unconfirmed workflow response');
+    }
+    if(body?.success!==true||typeof body.runId!=='string'||!body.runId
+      ||(body.accepted===true&&(body.acceptance?.schema!=='setfarm.workflow-run-accepted.v1'||body.acceptance.accepted!==true||body.acceptance.runId!==body.runId)))throw new Error('Unconfirmed workflow response');
+    return body;
+  }catch(error){
+    if(error instanceof PrdWorkflowStartError)throw error;
+    // The browser may lose the HTTP response after the server/child committed.
+    throw new PrdWorkflowStartError('Run acceptance could not be confirmed. Do not start another run until this attempt is checked.','unknown',null,null);
+  }
+}
+
 export const api = {
   overview: () => fetchApi<OverviewData>('/api/overview'),
   agents: () => fetchApi<Agent[]>('/api/agents'),
@@ -400,7 +436,7 @@ export const api = {
   prdEstimate: (data: { content?: string; prdId?: string }) =>
     fetchApi<any>('/api/prd/estimate', { method: 'POST', headers: CT_JSON, body: JSON.stringify(data) }),
   prdStartRun: (data: { prdId: string; projectName?: string; workflow?: string }) =>
-    fetchApi<any>('/api/prd/start-run', { method: 'POST', headers: CT_JSON, body: JSON.stringify(data) }),
+    fetchPrdWorkflowStart(data),
   prdHistory: () => fetchApi<any[]>('/api/prd/history'),
   prdHistoryDetail: (id: string) => fetchApi<any>(`/api/prd/history/${id}`),
   prdTemplates: () => fetchApi<any[]>('/api/prd/templates'),

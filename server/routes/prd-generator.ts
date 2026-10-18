@@ -1,3 +1,6 @@
+import { assertSelectedDesignIdsV1, selectedDesignCacheRootV1, selectedDesignCacheDirectoryV1 } from '../services/fresh-design-artifact-paths-v1.js';
+import { startFreshPrdWorkflowV1, freshPrdStartFailureV1 } from '../services/fresh-prd-workflow-run.js';
+import { freshSetfarmCliInvocationV1, freshMissionControlSelectedV1 } from '../services/fresh-installation-runtime.js';
 import { Router } from 'express';
 import { createPrd, getPrd, listPrds, updatePrd, deletePrd, listTemplates, getTemplate } from '../services/prd-db.js';
 import { scorePrd, estimateCost, checkScreenCoverage, extractPages } from '../services/prd-scoring.js';
@@ -493,6 +496,7 @@ router.get("/prd/mockups/stream", async (req, res) => {
 
   try {
     const projectId = existingProjectId || await createStitchProject("PRD: " + prdTitle);
+    assertSelectedDesignIdsV1(projectId);
     // Persist stitch_project_id to DB
     if (prdId && projectId) { try { await updatePrd(prdId, { stitch_project_id: projectId } as any); } catch {} }
     if (!projectId) { clearInterval(keepalive); send("error", { message: "Failed to create Stitch project" }); res.end(); return; }
@@ -506,8 +510,9 @@ router.get("/prd/mockups/stream", async (req, res) => {
     send("start", { projectId, total: totalAll, remaining: prompts.length, resumed: skipCount > 0 });
 
     const allScreens: any[] = [];
-    const cacheDir = join(PATHS.setfarmDir, "stitch-cache", projectId);
-    mkdirSync(cacheDir, { recursive: true });
+    const cacheDir = selectedDesignCacheDirectoryV1(projectId) ?? join(PATHS.setfarmDir, "stitch-cache", projectId);
+    if (selectedDesignCacheRootV1() !== null) mkdirSync(cacheDir, { recursive: true, mode: 0o700 });
+    else mkdirSync(cacheDir, { recursive: true });
 
     for (let i = 0; i < prompts.length; i++) {
       const sp = prompts[i];
@@ -655,6 +660,7 @@ router.post('/prd/screens/:prdId/variant', async (req, res) => {
     if (!sourceScreen) { res.status(404).json({ error: 'Source screen not found' }); return; }
 
     const projectId = sourceScreen.projectId || '';
+    assertSelectedDesignIdsV1(projectId);
     if (!projectId) { res.status(400).json({ error: 'No Stitch projectId' }); return; }
 
     const prompt = variantPrompt || sourceScreen.prompt || `Create a variant of: ${sourceScreen.name}`;
@@ -665,8 +671,9 @@ router.post('/prd/screens/:prdId/variant', async (req, res) => {
     if (!newScreen) { res.status(500).json({ error: 'Variant generation failed' }); return; }
 
     // Download to cache
-    const cacheDir = join(PATHS.setfarmDir, 'stitch-cache', projectId);
-    mkdirSync(cacheDir, { recursive: true });
+    const cacheDir = selectedDesignCacheDirectoryV1(projectId) ?? join(PATHS.setfarmDir, 'stitch-cache', projectId);
+    if (selectedDesignCacheRootV1() !== null) mkdirSync(cacheDir, { recursive: true, mode: 0o700 });
+    else mkdirSync(cacheDir, { recursive: true });
     if (newScreen.screenId && newScreen.status === 'done') {
       try {
         const downloaded = await downloadScreen(projectId, newScreen.screenId, cacheDir);
@@ -706,14 +713,16 @@ router.post('/prd/screens/:prdId/generate-missing', async (req, res) => {
   const { title, prompt, projectId } = req.body;
   if (!projectId || !title) { res.status(400).json({ error: 'projectId and title required' }); return; }
   try {
+    assertSelectedDesignIdsV1(projectId);
     const screen = await generateScreen(projectId, prompt || `Create a web page for: ${title}`, title);
     if (!screen || !screen.screenId) { res.json({ screen: null }); return; }
     screen.prompt = prompt;
     // Download to cache
     const { join } = await import('path');
     const { mkdirSync } = await import('fs');
-    const cacheDir = join(PATHS.setfarmDir, 'stitch-cache', projectId);
-    mkdirSync(cacheDir, { recursive: true });
+    const cacheDir = selectedDesignCacheDirectoryV1(projectId) ?? join(PATHS.setfarmDir, 'stitch-cache', projectId);
+    if (selectedDesignCacheRootV1() !== null) mkdirSync(cacheDir, { recursive: true, mode: 0o700 });
+    else mkdirSync(cacheDir, { recursive: true });
     try {
       const dl = await downloadScreen(projectId, screen.screenId, cacheDir);
       if (dl) {
@@ -794,6 +803,11 @@ router.post('/prd/estimate', async (req, res) => {
 
 // POST /prd/start-run - Start pipeline with design files.
 router.post('/prd/start-run', async (req, res) => {
+  if (freshMissionControlSelectedV1()) {
+    try { res.json(await startFreshPrdWorkflowV1(req.body)); }
+    catch (error) { res.status(503).json(freshPrdStartFailureV1(error)); }
+    return; // The legacy detached/latest-row route never handles a selected request.
+  }
   try {
     const { prdId, projectName, workflow } = req.body;
     if (!prdId) { res.status(400).json({ error: 'prdId required' }); return; }
@@ -877,8 +891,13 @@ router.post('/prd/start-run', async (req, res) => {
     // Fire-and-forget: spawn setfarm, don't wait for stdout (avoids timeout)
     const { spawn } = await import('child_process');
     const userBin = config.cliPath;
-    const child = spawn('setfarm', ['workflow', 'run', wf, '@' + tmpTask], {
-      env: { ...process.env, DB_BACKEND: "postgres", SETFARM_PG_URL: process.env.SETFARM_PG_URL || process.env.DATABASE_URL || "", PATH: `${userBin}:/usr/local/bin:/usr/bin:/bin:${process.env.PATH || ''}` },
+    const legacyEnvironment = { ...process.env, DB_BACKEND: "postgres", SETFARM_PG_URL: process.env.SETFARM_PG_URL || process.env.DATABASE_URL || "", PATH: `${userBin}:/usr/local/bin:/usr/bin:/bin:${process.env.PATH || ''}` };
+    const selected = freshSetfarmCliInvocationV1('setfarm',['workflow','run',wf,'@'+tmpTask],legacyEnvironment);
+    // The locator is authority for fresh children. Do not introduce an empty
+    // PG URL that conflicts with its captured real private runtime credential.
+    if (selected && selected.env.SETFARM_PG_URL === '') delete selected.env.SETFARM_PG_URL;
+    const child = spawn(selected?.file ?? 'setfarm', selected ? [...selected.args] : ['workflow', 'run', wf, '@' + tmpTask], {
+      env: selected?.env ?? legacyEnvironment,
       detached: true,
       stdio: 'ignore',
     });

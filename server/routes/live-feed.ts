@@ -1,3 +1,4 @@
+import { freshMissionControlSelectedV1, assertPreprovisionedFreshMissionControlStoreV1, assertFreshMissionControlRuntimeV1 } from '../services/fresh-installation-runtime.js';
 import { Router } from 'express';
 // import Database from 'better-sqlite3'; // Phase 7: SQLite removed
 import { readdirSync, statSync, readFileSync } from 'fs';
@@ -559,6 +560,9 @@ async function pgVerifyRestrictedLiveFeedReadOnlyV1(): Promise<void> {
 
 let pgReady = false;
 async function ensurePgReady(): Promise<void> {
+  if (freshMissionControlSelectedV1()) {
+    assertPreprovisionedFreshMissionControlStoreV1(); return;
+  }
   if (pgReady) return;
   const mode = process.env.MC_TASK6A_RESTRICTED_LIVE_FEED_VERIFY_V1;
   if (mode === '1') await pgVerifyRestrictedLiveFeedReadOnlyV1();
@@ -604,6 +608,7 @@ if (!restrictedLiveFeed) {
   // Cleanup events older than 30 days (runs once on ordinary startup).
   ensurePgReady().then(async () => {
     try {
+      assertFreshMissionControlRuntimeV1();
       await pgSql`DELETE FROM public.live_events WHERE ts < NOW() - INTERVAL '30 days'`;
     } catch {}
   }).catch(() => {});
@@ -611,6 +616,7 @@ if (!restrictedLiveFeed) {
   // Background scanner — keeps DB populated even when no client is viewing live feed.
   setInterval(async () => {
     try {
+      assertFreshMissionControlRuntimeV1();
       const events = scanSessions();
       await persistEvents(events);
     } catch (err: any) {

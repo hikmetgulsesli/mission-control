@@ -1,3 +1,4 @@
+import { freshMissionControlSelectedV1 } from '../services/fresh-installation-runtime.js';
 import { Router } from "express";
 import {
   existsSync,
@@ -47,13 +48,13 @@ const TASK6A_PROJECT_START_NO_SPAWN = "MC_TASK6A_PROJECT_START_NO_SPAWN";
 const PROJECTS_FILE = (config as any).projectsJson || join(import.meta.dirname, "../../projects.json");
 const BUNDLED_PROJECTS_FILE = join(import.meta.dirname || __dirname, "../../projects.json");
 const DISABLED_DIR = join(PATHS.setfarmDir, "..", "disabled-services");
-const DELETED_FILE = join(import.meta.dirname || __dirname, "../../deleted-projects.json");
+const DELETED_FILE = config.deletedProjectsJson;
 const LOCAL_RUNNER_DIR = join(PATHS.setfarmDir, "..", "local-project-runners");
 const LOCAL_RUNNER_PORT_START = 3507;
 const LOCAL_RUNNER_PORT_END = 5999;
 const projectsRepository = new ProjectsJsonRepository({
   filePath: PROJECTS_FILE,
-  fallbackPath: BUNDLED_PROJECTS_FILE,
+  ...(!freshMissionControlSelectedV1() ? { fallbackPath:BUNDLED_PROJECTS_FILE } : {}),
 });
 const canonicalV3ObservationBatcher = new CanonicalV3DeploymentObservationBatcher({
   snapshotReader: setfarmOperationalSnapshotClient,
