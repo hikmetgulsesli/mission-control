@@ -40,7 +40,7 @@ export function Agents() {
     return () => { cancelled = true; clearInterval(interval); };
   }, [agents]);
 
-  if (error && !agents) return <div className="page-loading">Kullanılamıyor: {error}</div>;
+  if (error && !agents) return <div className="page-loading">Unavailable: {error}</div>;
   if (loading || sessionsLoading) return <div className="page-loading">Loading agents...</div>;
 
   const handleChat = (agent: Agent) => {

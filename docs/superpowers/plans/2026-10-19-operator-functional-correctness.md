@@ -15,6 +15,7 @@
 - Root alone stages, commits, pushes and delivers. Only one implementation worker at a time.
 - No provider calls, live state mutation or service restart for unit/UI fixtures.
 - Preserve failed/cancelled records, all runtime/secret/admission guards and current DB authority.
+- Preserve the existing English source contract and English UI copy. Turkish labels in the approved design are semantic concepts; use matching English product labels and assertions. No source-language guard changes/escapes/localization bypass.
 - Unknown is explicit, not numeric zero. HTTP health, six preflight passes and partial tests never mean full8 GO.
 - Read the spec and the matching A/B section of `/Users/setrox/ai/setrox/logs/2026-10-19-ui-implementation/mc-upgrade-plan-input.md` before implementation.
 - Run source checks/build in the isolated writer only; Root checkpoints and independently reviews each task before the next.
@@ -92,9 +93,11 @@ assert.match(html, /kullanılan|used/i); // total minus os.freemem, not pressure
 
 ### Task 5: Shared agent identity and honest empty usage
 
-**Files:** Modify `server/shared/agents.ts`, `src/lib/constants.ts`, `server/routes/{agents,performance,costs}.ts`, `src/pages/{Agents,Chat,Costs,Performance}.tsx`, `src/components/AgentCard.tsx`; create `server/services/agent-identity.ts`, its tests and `tests/performance-empty-render.test.tsx`.
+**Files:** Modify `server/shared/agents.ts`, `src/lib/{constants,types,api}.ts`, `server/routes/{agents,performance,costs}.ts`, `src/pages/{Agents,Chat,Costs,Performance}.tsx`, `src/components/AgentCard.tsx`; create `server/services/agent-identity.ts`, its tests and `tests/performance-empty-render.test.tsx`.
 
 The costs route currently turns absent/ENOENT totals into zero; add availability/source metadata at that actual HTTP boundary so all consumers can distinguish missing from measured zero. Preserve compatible numeric fields where required, but never present unknown as measured; behavioral HTTP coverage belongs in the task tests.
+
+Root review refinement: align shared `Agent`, `Costs` and API token-row response types with the implemented nullable HTTP fields and optional `ModelIdentity`; public TypeScript types must not claim missing values are numbers.
 
 **Interfaces:** Existing safe static roster is shared/re-exported, all14agents retained. `resolveAgentModelIdentity` returns spec `ModelIdentity` with raw IDs and provenance; agents/performance consume the same resolver. Preserve existing arrays/fields compatibly; add source/status metadata rather than converting missing costs to real0.
 

@@ -1,4 +1,4 @@
-import type { OverviewData, Agent, Session, CronJob, Workflow, Run, SystemMetrics, DockerContainer, CostData, Task, ProjectData, TaskCreateData } from './types';
+import type { OverviewData, Agent, Session, CronJob, Workflow, Run, SystemMetrics, DockerContainer, CostData, PerformanceData, Task, ProjectData, TaskCreateData } from './types';
 import {
   parseOperationalSnapshotResponse,
   type OperationalSnapshotFetchResult,
@@ -407,7 +407,7 @@ export const api = {
   },
   importRules: (data: any) => fetchApi<any>('/api/rules/import', { method: 'POST', headers: CT_JSON, body: JSON.stringify(data) }),
   // Performance
-  performance: () => fetchApi<any>('/api/performance'),
+  performance: () => fetchApi<PerformanceData>('/api/performance'),
   modelLimits: () => fetchApi<any[]>('/api/model-limits'),
   quota: () => fetchApi<any>('/api/quota'),
   // Scrape

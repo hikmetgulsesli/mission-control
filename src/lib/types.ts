@@ -1,4 +1,5 @@
 import type { SetfarmOperationalActiveRunStatusV1 } from "../../server/shared/setfarm-operational-active-run-status-v1.js";
+import type { ModelIdentity } from '../../server/shared/agents.js';
 
 export interface Agent {
   id: string;
@@ -6,6 +7,7 @@ export interface Agent {
   identityName: string;
   identityEmoji: string;
   model: string;
+  modelIdentity?: ModelIdentity;
   workspace: string;
   bindings: number;
   isDefault: boolean;
@@ -73,16 +75,51 @@ export interface Run {
   updatedAt?: string;
 }
 
+export type UsageAvailability = 'available' | 'unknown';
+
+export interface CostTokenRow {
+  model: string;
+  calls?: number | null;
+  input?: string | number | null;
+  output?: string | number | null;
+  cacheRead?: string | number | null;
+  totalTokens?: string | number | null;
+  cost?: number | null;
+}
+
 export interface CostData {
-  totalToday: number;
-  totalAllTime: number;
-  projectedMonthly: number;
+  totalToday: number | null;
+  totalAllTime: number | null;
+  projectedMonthly: number | null;
   breakdownAllTime: { model: string; cost: number }[];
   breakdownToday: { model: string; cost: number }[];
-  subagentCostAllTime: number;
-  subagentCostToday: number;
-  tokenUsage: Record<string, number>;
-  tokenUsageToday: Record<string, number>;
+  subagentCostAllTime: number | null;
+  subagentCostToday: number | null;
+  tokenUsage: CostTokenRow[];
+  tokenUsageToday: CostTokenRow[];
+  costStatus: Record<'totalToday' | 'totalAllTime' | 'projectedMonthly' | 'subagentCostAllTime' | 'subagentCostToday', UsageAvailability>;
+  usageSource: 'dashboard_data';
+}
+
+export interface PerformanceAgentStat {
+  id: string;
+  model: string;
+  modelIdentity?: ModelIdentity;
+  sessionCount: number;
+  totalTokens: number | null;
+  lastActive: number | null;
+}
+
+export interface PerformanceData {
+  agents: Record<string, PerformanceAgentStat>;
+  modelCosts: Record<string, number>;
+  modelCostsToday: Record<string, number>;
+  modelTokens: Record<string, { calls: number | null; totalTokens: string | number | null; cost: number | null }>;
+  totalCostToday: number | null;
+  totalCostAllTime: number | null;
+  sessionsStatus: UsageAvailability;
+  costStatus: {today: UsageAvailability; allTime: UsageAvailability};
+  usageSource: 'dashboard_data';
 }
 
 export interface OverviewData {

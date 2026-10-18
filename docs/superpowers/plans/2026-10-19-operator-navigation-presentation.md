@@ -13,6 +13,7 @@
 ## Global Constraints
 
 - Root alone stages, commits, pushes and delivers. Only one implementation worker at a time.
+- Preserve existing English source/UI copy; design Turkish terms are conceptual English equivalents, never guard exceptions.
 - Preserve every technical destination, bookmarks, Office state, shell and all eight RunDetail tabs.
 - Sans body15px; ordinary controls14–16px; mono only code/log/IDs; no blanket font-size !important rule.
 - No provider calls, live state mutation or service restart for unit/UI fixtures.
@@ -35,7 +36,7 @@ assert.ok(NAVIGATION_ITEMS.some(x => x.href === '/agents'));
 ```
 
 - [ ] Run `node --import tsx --test tests/navigation.test.ts tests/navigation-render.test.tsx`; capture RED.
-- [ ] Implement standalone Özet and groups Çalışmalar(`/setfarm`,`/setfarm/active`,`/live`), Projeler(`/projects`,`/prd`), Sistem(`/ops`,`/controls`,`/changelog`,explicit3333dashboard), Araçlar(`/office`,`/chat`,`/agents`,`/files`,`/scrape`,`/rules`,`/workflows`,`/tasks`,Shell), Kullanım(`/costs`,`/performance`); preserve `/perf` alias/contextual run URLs. Use button aria-expanded/focus and search input labels. Favorites persist safely with invalid/unknown-ID filtering. D/P case-insensitive; preserve0–9/R/L, skip inputs/select/contenteditable, IME and Ctrl/Meta/Alt. Escape closes shell and open menu. Office remains mounted/visible according to current semantics.
+- [ ] Implement standalone Overview and groups Work(`/setfarm`,`/setfarm/active`,`/live`), Projects(`/projects`,`/prd`), System(`/ops`,`/controls`,`/changelog`,explicit3333dashboard), Tools(`/office`,`/chat`,`/agents`,`/files`,`/scrape`,`/rules`,`/workflows`,`/tasks`,Shell), Usage(`/costs`,`/performance`); preserve `/perf` alias/contextual run URLs. Use button aria-expanded/focus and search input labels. Favorites persist safely with invalid/unknown-ID filtering. D/P case-insensitive; preserve0–9/R/L, skip inputs/select/contenteditable, IME and Ctrl/Meta/Alt. Escape closes shell and open menu. Office remains mounted/visible according to current semantics.
 - [ ] Run focused tests; record actual SSR coverage and later browser checks needed. Root commits `feat(nav): group tools with search and favorites`.
 
 ### Task 2: Readability, restrained theme and responsive roster

@@ -3,41 +3,19 @@ import { api } from '../lib/api';
 import { CostChart } from '../components/CostChart';
 import { GlitchText } from '../components/GlitchText';
 
-interface TokenRow {
-  model: string;
-  calls: number;
-  input: string;
-  output: string;
-  cacheRead: string;
-  totalTokens: string;
-  cost: number | null;
-}
-
-interface CostDataRaw {
-  costStatus: Record<string,'available'|'unknown'>;
-  usageSource: string;
-  totalToday: number | null;
-  totalAllTime: number | null;
-  projectedMonthly: number | null;
-  subagentCostToday: number | null;
-  subagentCostAllTime: number | null;
-  breakdownAllTime: { model: string; cost: number }[];
-  breakdownToday: { model: string; cost: number }[];
-  tokenUsage: TokenRow[];
-  tokenUsageToday: TokenRow[];
-}
+import type { CostData, CostTokenRow } from '../lib/types';
 
 export function Costs() {
-  const { data, loading, error } = usePolling<CostDataRaw>(() => api.costs() as Promise<any>, 60000);
+  const { data, loading, error } = usePolling<CostData>(api.costs, 60000);
 
-  if (error && !data) return <div className="page-loading">Kullanılamıyor: {error}</div>;
+  if (error && !data) return <div className="page-loading">Unavailable: {error}</div>;
   if (loading || !data) return <div className="page-loading">Loading costs...</div>;
 
-  const tokenRows: TokenRow[] = Array.isArray(data.tokenUsage) ? data.tokenUsage : [];
-  const tokenRowsToday: TokenRow[] = Array.isArray(data.tokenUsageToday) ? data.tokenUsageToday : [];
+  const tokenRows: CostTokenRow[] = Array.isArray(data.tokenUsage) ? data.tokenUsage : [];
+  const tokenRowsToday: CostTokenRow[] = Array.isArray(data.tokenUsageToday) ? data.tokenUsageToday : [];
 
   const money = (value: number | null | undefined, status?: string, precision = 2) =>
-    typeof value === 'number' && Number.isFinite(value) && status !== 'unknown' ? `$${value.toFixed(precision)}` : 'Kullanılamıyor';
+    typeof value === 'number' && Number.isFinite(value) && status !== 'unknown' ? `$${value.toFixed(precision)}` : 'Unavailable';
 
   return (
     <div className="costs-page">
@@ -62,8 +40,8 @@ export function Costs() {
         </div>
       </div>
 
-      <p>Kaynak: {data.usageSource} · Bugün / tüm zamanlar</p>
-      {data.breakdownAllTime.length || data.breakdownToday.length ? <CostChart breakdownAllTime={data.breakdownAllTime} breakdownToday={data.breakdownToday} /> : <p>Henüz veri yok</p>}
+      <p>Source: {data.usageSource} · Today / all time</p>
+      {data.breakdownAllTime.length || data.breakdownToday.length ? <CostChart breakdownAllTime={data.breakdownAllTime} breakdownToday={data.breakdownToday} /> : <p>No data yet</p>}
 
       <h3 className="section-title">TOKEN USAGE (ALL TIME)</h3>
       <div className="token-table-wrapper">

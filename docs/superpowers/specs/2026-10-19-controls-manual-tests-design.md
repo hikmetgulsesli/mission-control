@@ -45,3 +45,7 @@ Exercise all preserved routes plus Controls at390/768/1440, all eight run tabs, 
 ## Verification and delivery
 
 Meaningful production-boundary RED/GREEN before behavior changes, source-owned temp-file/ephemeral HTTP/fake-effect tests, isolated PG for persistence changes, independent task/branch review and clean stock builds precede rollout. Tests include concurrency/restart/crash windows, unknown ownership, selector drift, exact cancellation, unchanged suite budgets, report corruption/unsafe trees and read-only inventory invariance. Root separately proves real selected preflight/full8 after causal fixes; source/UI fixture success is not workflow GO. New instance/ACL effects use existing bounded authority audit and no old catalog repair.
+
+## Source language integration ruling
+
+The existing English source guard and English UI language remain binding. Turkish operator terms in design prose denote concepts; actual product labels and behavioral assertions use clear English equivalents. Do not add guard exceptions, escaped copy or hidden string catalogs. This resolves the actual combined-build language refusal without weakening compiler/prompt/source guards.

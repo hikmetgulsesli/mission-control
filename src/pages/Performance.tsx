@@ -4,30 +4,9 @@ import { GlitchText } from '../components/GlitchText';
 import { AGENT_MAP } from '../lib/constants';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts';
 import { formatDistanceToNow } from 'date-fns';
-import type { ModelIdentity } from '../../server/shared/agents.js';
+import type { PerformanceData } from '../lib/types';
 
 const COLORS = ['#00ff41', '#ff6600', '#00ffff', '#8844ff', '#ff0040', '#ffff00', '#00ff88', '#ff44aa', '#44aaff', '#ff8800'];
-
-interface AgentStat {
-  id: string;
-  model: string;
-  modelIdentity?: ModelIdentity;
-  sessionCount: number;
-  totalTokens: number | null;
-  lastActive: number | null;
-}
-
-interface PerformanceData {
-  agents: Record<string, AgentStat>;
-  modelCosts: Record<string, number>;
-  modelCostsToday: Record<string, number>;
-  modelTokens: Record<string, { calls: number; totalTokens: string; cost: number }>;
-  totalCostToday: number | null;
-  totalCostAllTime: number | null;
-  sessionsStatus: 'available' | 'unknown';
-  costStatus: {today:'available'|'unknown';allTime:'available'|'unknown'};
-  usageSource: string;
-}
 
 function fetchPerformance() {
   return api.performance();
@@ -36,7 +15,7 @@ function fetchPerformance() {
 export function Performance() {
   const { data, loading, error } = usePolling<PerformanceData>(fetchPerformance, 30000);
 
-  if (error && !data) return <div className="page-loading">Kullanılamıyor: {error}</div>;
+  if (error && !data) return <div className="page-loading">Unavailable: {error}</div>;
   if (loading || !data) return <div className="page-loading">Loading performance...</div>;
 
   const agentList = Object.values(data.agents).sort((a, b) => b.sessionCount - a.sessionCount);
@@ -67,20 +46,20 @@ export function Performance() {
       <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "4px", padding: "12px", marginBottom: "12px", display: "flex", alignItems: "center", gap: "12px" }}>
         <span style={{ fontSize: "18px" }}>📈</span>
         <div>
-          <div style={{ fontSize: "11px", color: "var(--neon-cyan)", fontFamily: "var(--font)", fontWeight: 700, letterSpacing: "1px" }}>HAFTALIK TREND</div>
+          <div style={{ fontSize: "11px", color: "var(--neon-cyan)", fontFamily: "var(--font)", fontWeight: 700, letterSpacing: "1px" }}>WEEKLY TREND</div>
           <div style={{ fontSize: "11px", color: "var(--text-dim)", fontFamily: "var(--font)", marginTop: "2px" }} id="trendNote">
-            Henüz veri yok · Son 7 gün · Kaynak: {data.usageSource} · Haftalık zaman serisi mevcut değil
+            No data yet · Last 7 days · Source: {data.usageSource} · Weekly time series unavailable
           </div>
         </div>
       </div>
 
       <div className="stat-cards">
         <div className="stat-card stat-card--green">
-          <div className="stat-card__value">{data.costStatus?.today === 'available' && data.totalCostToday !== null ? `$${data.totalCostToday.toFixed(2)}` : 'Kullanılamıyor'}</div>
+          <div className="stat-card__value">{data.costStatus?.today === 'available' && data.totalCostToday !== null ? `$${data.totalCostToday.toFixed(2)}` : 'Unavailable'}</div>
           <div className="stat-card__label">COST TODAY</div>
         </div>
         <div className="stat-card stat-card--orange">
-          <div className="stat-card__value">{data.costStatus?.allTime === 'available' && data.totalCostAllTime !== null ? `$${data.totalCostAllTime.toFixed(2)}` : 'Kullanılamıyor'}</div>
+          <div className="stat-card__value">{data.costStatus?.allTime === 'available' && data.totalCostAllTime !== null ? `$${data.totalCostAllTime.toFixed(2)}` : 'Unavailable'}</div>
           <div className="stat-card__label">COST ALL TIME</div>
         </div>
         <div className="stat-card stat-card--cyan">
@@ -88,7 +67,7 @@ export function Performance() {
           <div className="stat-card__label">AGENTS</div>
         </div>
         <div className="stat-card">
-          <div className="stat-card__value">{data.sessionsStatus === 'available' ? agentList.reduce((s, a) => s + a.sessionCount, 0) : 'Kullanılamıyor'}</div>
+          <div className="stat-card__value">{data.sessionsStatus === 'available' ? agentList.reduce((s, a) => s + a.sessionCount, 0) : 'Unavailable'}</div>
           <div className="stat-card__label">TOTAL SESSIONS</div>
         </div>
       </div>
@@ -96,7 +75,7 @@ export function Performance() {
       <div className="perf-charts">
         <div className="panel">
           <h3 className="panel__title">SESSIONS PER AGENT</h3>
-          {data.sessionsStatus !== 'available' ? <p>Kullanılamıyor</p> : sessionChartData.every(row => row.sessions === 0) ? <p>Henüz oturum yok · 0</p> : <ResponsiveContainer width="100%" height={300}>
+          {data.sessionsStatus !== 'available' ? <p>Unavailable</p> : sessionChartData.every(row => row.sessions === 0) ? <p>No sessions yet · 0</p> : <ResponsiveContainer width="100%" height={300}>
             <BarChart data={sessionChartData} margin={{ top: 10, right: 10, left: 0, bottom: 40 }}>
               <XAxis dataKey="name" angle={-35} textAnchor="end" tick={{ fill: '#666680', fontSize: 10 }} />
               <YAxis tick={{ fill: '#666680', fontSize: 10 }} />
@@ -115,7 +94,7 @@ export function Performance() {
 
         <div className="panel">
           <h3 className="panel__title">COST PER MODEL</h3>
-          {costChartData.length === 0 ? <p>Henüz veri yok · Kaynak: {data.usageSource}</p> : <ResponsiveContainer width="100%" height={300}>
+          {costChartData.length === 0 ? <p>No data yet · Source: {data.usageSource}</p> : <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie
                 data={costChartData}
@@ -159,8 +138,8 @@ export function Performance() {
                 <tr key={a.id}>
                   <td className="token-table__model">{meta?.emoji} {meta?.name || a.id}</td>
                   <td>{a.modelIdentity?.rawModelId ?? a.model} <small>({a.modelIdentity?.provenance ?? 'unknown'}){a.modelIdentity?.rawProviderId ? ` · ${a.modelIdentity.rawProviderId}` : ''}</small></td>
-                  <td>{data.sessionsStatus === 'available' ? a.sessionCount : 'Kullanılamıyor'}</td>
-                  <td>{data.sessionsStatus === 'available' && a.totalTokens !== null ? a.totalTokens.toLocaleString() : 'Kullanılamıyor'}</td>
+                  <td>{data.sessionsStatus === 'available' ? a.sessionCount : 'Unavailable'}</td>
+                  <td>{data.sessionsStatus === 'available' && a.totalTokens !== null ? a.totalTokens.toLocaleString() : 'Unavailable'}</td>
                   <td style={{ color: 'var(--text-dim)', fontSize: 11 }}>
                     {a.lastActive ? formatDistanceToNow(a.lastActive, { addSuffix: true }) : 'never'}
                   </td>

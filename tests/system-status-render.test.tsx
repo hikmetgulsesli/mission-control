@@ -27,9 +27,9 @@ function fixture(): SystemMetrics { return {
 test('real panel and status bar render unknown values without fake zero or NaN', () => {
   const metrics = fixture(); const StatusBar = statusBar(metrics);
   const html = renderToStaticMarkup(<><SystemMetricsPanel metrics={metrics}/><StatusBar/></>);
-  assert.match(html,/Bilinmiyor|unknown/i); assert.doesNotMatch(html,/NaN|null|undefined|0%|0GB/);
-  assert.match(html,/node:os/); assert.match(html,/total.*freemem/); assert.match(html,/kullanılan|used/i);
-  assert.doesNotMatch(html,/pressure|basınç/i);
+  assert.match(html,/unknown/i); assert.doesNotMatch(html,/NaN|null|undefined|0%|0GB/);
+  assert.match(html,/node:os/); assert.match(html,/total.*freemem/); assert.match(html,/used/i);
+  assert.doesNotMatch(html,/pressure/i);
 });
 
 test('APFS capacity drives the visible disk percent and bar, preserving true CPU zero', () => {

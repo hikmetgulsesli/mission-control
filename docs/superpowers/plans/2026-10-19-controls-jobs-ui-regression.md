@@ -12,6 +12,8 @@
 
 ## Global Constraints
 
+- Existing English source/UI language remains binding; Turkish conceptual design labels use clear English product equivalents. Do not change or evade the source-language guard.
+
 - Only `activation_preflight`, `convergence_full8`, `ui_regression` exist. Launch body is exactly `{kind,idempotencyKey,expectedSelectionHash}`; cancel body is exactly `{idempotencyKey,expectedRevision}` for validated opaque `jobId`. No path/argv/model/env/token/suite/budget inputs or query credentials.
 - Existing MC authentication remains. Every Controls mutation additionally checks actual listening `Server.address()` is IPv4 `127.0.0.1:3080`, exact peer/local loopback socket, single exact Host `127.0.0.1:3080`, single exact Origin `http://127.0.0.1:3080`, JSON content type, bounded strict body and current selection identity. Normalize only `::ffff:127.0.0.1` for socket peer/local; reject absent/foreign Origin, forwarded-header impostors, wildcard listener, cross-site Sec-Fetch-Site, GET/OPTIONS dispatch. Do not change listener, credentials or global auth.
 - Actual activation has six unique IDs `migration_shape`, `migration_attestation`, `database`, `artifact_capacity`, `activity`, `protocol_activation`. Convergence's eight preflight checks are separate from the eight product cases. Full8 uses selected `evals/suites/product-convergence-codex-v1.json`, v3, one repetition, root limit 3, `runMs=21600000`, `pollMs=15000`; show 48-hour maximum planned case budget plus collection overhead, not a completion promise.
@@ -185,9 +187,9 @@ test('partial full8 shows actual rows and unstarted cases', () => {
   const ui = {availability:{state:'unconfigured',code:'UI_REPORT_UNCONFIGURED'},report:null} as const;
   const html = renderToStaticMarkup(<TestEvidence evaluation={evaluation} ui={ui} receipt={null}/>);
   assert.equal((html.match(/data-testid="control-case-row"/g) ?? []).length,8);
-  assert.equal((html.match(/Başlatılmadı/g) ?? []).length,6);
-  assert.match(html,/Nitelendirilmedi|Uygun değil/);
-  assert.match(renderToStaticMarkup(<ManualTestRequirements kind="convergence_full8"/>),/48 saat/);
+  assert.equal((html.match(/Not started/g) ?? []).length,6);
+  assert.match(html,/Unqualified|Not qualified/);
+  assert.match(renderToStaticMarkup(<ManualTestRequirements kind="convergence_full8"/>),/48 hours/);
 });
 test('six activation checks and unavailable reason remain visible', () => {
   const activation = {availability:{state:'available',code:null},report:{
@@ -202,9 +204,9 @@ test('six activation checks and unavailable reason remain visible', () => {
 });
 ```
 
-Add SSR cases for canonical “Neden bekliyor?” from codes; advisory/fail/blocking checks; distinct eight convergence preflight vs eight case labels; current case and owned run IDs; completed/planned counts; completed with missing gate unqualified; planned/partial/no-go/historical incompatible reports; each `availability.state` `unconfigured`/`missing`/`invalid`/`unsafe` reason; null unknown metric distinct from real zero; cancelling shown as requested until terminal. Task 3's real Playwright fixture proves refresh, confirmation, lost POST response with same idempotency key, reload/reconnect and cancel through the actual page. Do not render selectors, private paths, raw logs or tokens.
+Add SSR cases for canonical “Why is it waiting?” from codes; advisory/fail/blocking checks; distinct eight convergence preflight vs eight case labels; current case and owned run IDs; completed/planned counts; completed with missing gate unqualified; planned/partial/no-go/historical incompatible reports; each `availability.state` `unconfigured`/`missing`/`invalid`/`unsafe` reason; null unknown metric distinct from real zero; cancelling shown as requested until terminal. Task 3's real Playwright fixture proves refresh, confirmation, lost POST response with same idempotency key, reload/reconnect and cancel through the actual page. Do not render selectors, private paths, raw logs or tokens.
 - [ ] **Step 2: Run RED:** `node --import tsx --test tests/controls-render.test.tsx` must fail for absent page/API methods. Current `npm test` glob does not include `.tsx`; invoke this file explicitly.
-- [ ] **Step 3: Implement safe typed client and page.** Parse versioned DTO, use current auth header plumbing, set `Cache-Control:no-store` on server responses and client fetch cache mode; confirm selected kind and visible budget before POST. Render evidence/qualification from source DTO, not counts; show `başarısız`, `engellendi`, `iptal istendi`, `sahiplik belirsiz` accurately. Keep last selected job key until terminal or explicit new action. Mount `/controls` in `src/App.tsx` and consume the approved `NAVIGATION_ITEMS` `/controls` entry in `src/lib/navigation.ts` through the existing grouped `TabNav`; preserve all existing routes and mobile focus. Refresh only reads; no refresh-side start.
+- [ ] **Step 3: Implement safe typed client and page.** Parse versioned DTO, use current auth header plumbing, set `Cache-Control:no-store` on server responses and client fetch cache mode; confirm selected kind and visible budget before POST. Render evidence/qualification from source DTO, not counts; show `failed`, `blocked`, `cancellation requested`, `ownership unknown` accurately. Keep last selected job key until terminal or explicit new action. Mount `/controls` in `src/App.tsx` and consume the approved `NAVIGATION_ITEMS` `/controls` entry in `src/lib/navigation.ts` through the existing grouped `TabNav`; preserve all existing routes and mobile focus. Refresh only reads; no refresh-side start.
 - [ ] **Step 4: Run GREEN** TSX test and existing navigation/route tests, then `npm run build` on the reviewed combined MC branch. Root compares selected source/build values shown by UI to actual loaded service, not checkout HEAD.
 
 ### Task 3: Isolated source-owned all-page UI regression and retained screenshots

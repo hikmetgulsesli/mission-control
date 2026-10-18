@@ -89,11 +89,11 @@ export function Rules() {
       setCapabilityError(null);
     } catch (error) {
       setCapabilities(null);
-      setCapabilityError(`Yazma yetenekleri alınamadı: ${rulesErrorMessage(error)}`);
+      setCapabilityError(`Could not load write capabilities: ${rulesErrorMessage(error)}`);
     }
   }, []);
   useEffect(() => { void load(); void loadCapabilities(); }, [load, loadCapabilities]);
-  const capabilityReason = capabilityError || capabilities?.reason || (!capabilities ? 'Yazma yetenekleri doğrulanıyor' : '');
+  const capabilityReason = capabilityError || capabilities?.reason || (!capabilities ? 'Checking write capabilities' : '');
 
   const getRulesForStage = (stageId: string) => {
     return rules.filter(r => r.applies_to === stageId || r.applies_to === 'all');
@@ -187,7 +187,7 @@ export function Rules() {
         const draft = { name: file.name, text: await file.text() };
         setImportDraft(draft);
         await submitImport(draft);
-      } catch { setActionError('Seçilen dosya okunamadı'); }
+      } catch { setActionError('Could not read the selected file'); }
     };
     input.click();
   };
@@ -197,10 +197,10 @@ export function Rules() {
   if (!hasLoaded && loadError) return (
     <div style={{ padding: 24 }}>
       <h1>Rules Engine</h1>
-      <p role="alert">Kurallar yüklenemedi: {loadError}</p>
+      <p role="alert">Could not load rules: {loadError}</p>
       {actionError && <p role="alert">{actionError}</p>}
       <button className="btn" onClick={handleExport}>EXPORT</button>
-      <button className="btn" onClick={() => { void load(); void loadCapabilities(); }}>Tekrar dene</button>
+      <button className="btn" onClick={() => { void load(); void loadCapabilities(); }}>Retry</button>
     </div>
   );
 
@@ -223,17 +223,17 @@ export function Rules() {
         </div>
       </div>
 
-      {capabilityReason && <p role="status">Yazma işlemleri kullanılamıyor: {capabilityReason}
-        {capabilityError && <button className="btn" onClick={() => { void loadCapabilities(); }}>Tekrar dene</button>}
+      {capabilityReason && <p role="status">Write operations unavailable: {capabilityReason}
+        {capabilityError && <button className="btn" onClick={() => { void loadCapabilities(); }}>Retry</button>}
       </p>}
-      {loadError && <p role="alert">Kurallar yenilenemedi; son yüklenen veriler gösteriliyor. {loadError}
-        <button className="btn" onClick={() => { void load(); }}>Tekrar dene</button>
+      {loadError && <p role="alert">Could not refresh rules; showing the last loaded data. {loadError}
+        <button className="btn" onClick={() => { void load(); }}>Retry</button>
       </p>}
       {actionError && <p role="alert">{actionError}</p>}
       {importDraft && <div role="group" aria-label="Import draft">
-        <p>Seçilen dosya: {importDraft.name}</p>
-        <button className="btn" disabled={busy || !capabilities?.import} onClick={() => { void submitImport(importDraft); }}>İçe aktarmayı tekrar dene</button>
-        <button className="btn" disabled={busy} onClick={() => { setImportDraft(null); setActionError(null); }}>Vazgeç</button>
+        <p>Selected file: {importDraft.name}</p>
+        <button className="btn" disabled={busy || !capabilities?.import} onClick={() => { void submitImport(importDraft); }}>Retry import</button>
+        <button className="btn" disabled={busy} onClick={() => { setImportDraft(null); setActionError(null); }}>Cancel</button>
       </div>}
 
       {/* Pipeline Stage Selector */}
@@ -515,7 +515,7 @@ export function Rules() {
       <ConfirmDialog
         open={!!deleteConfirmId}
         title="Delete Rule"
-        message={`Are you sure you want to delete this rule?${deleteError ? ` ${deleteError}` : ''}${busy ? ' İşlem sürüyor…' : ''}`}
+        message={`Are you sure you want to delete this rule?${deleteError ? ` ${deleteError}` : ''}${busy ? ' Operation in progress…' : ''}`}
         confirmLabel="Delete"
         onConfirm={handleDeleteConfirmed}
         onCancel={() => { if (!busy) setDeleteConfirmId(null); }}
