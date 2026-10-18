@@ -103,7 +103,7 @@ export async function createStitchProject(title: string): Promise<string> {
 export async function generateScreen(projectId: string, prompt: string, title: string, device = 'DESKTOP'): Promise<StitchScreen | null> {
   assertSelectedDesignIdsV1(projectId);
   try {
-    const output = await runStitch(['generate-screen-safe', projectId, prompt, title, device, 'GEMINI_3_PRO']);
+    const output = await runStitch(['generate-screen-safe', projectId, prompt, title, device, 'GEMINI_3_8_FLASH']);
     let screen: StitchScreen | null = null;
     try {
       const data = JSON.parse(output);

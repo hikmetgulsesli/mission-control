@@ -38,6 +38,65 @@ async function listed(output: string, selected = true) {
   try { return await component(f.base, output, selected).listScreens('abc123'); }
   finally { f.dispose(); }
 }
+
+// Keep real argument construction, script selection and response handling while
+// replacing only child execution. Importing the service loads local credentials.
+function execComponent(base: string, output: string | Error, selected: boolean) {
+  const p = ports(base, { selected });
+  const text = fs.readFileSync(new URL('../server/services/stitch-integration.ts', import.meta.url), 'utf8');
+  assert.ok(Buffer.byteLength(text) < 32768);
+  const tree = ts.createSourceFile('stitch.ts', text, ts.ScriptTarget.Latest, true);
+  const names = ['generateScreen', 'runStitch', 'getStitchScript', 'validateStitchId'];
+  const declarations = tree.statements.filter(ts.isFunctionDeclaration)
+    .filter(node => node.name && names.includes(node.name.text));
+  assert.equal(declarations.length, names.length);
+  const constantNames = ['SAFE_ID_RE', 'STITCH_SCRIPT', 'STITCH_SCRIPT_ALT'];
+  const constants = tree.statements.filter(ts.isVariableStatement).filter(node => node.declarationList.declarations
+    .some(item => ts.isIdentifier(item.name) && constantNames.includes(item.name.text)));
+  assert.equal(constants.length, constantNames.length);
+  const body = [...constants, ...declarations].map(node => node.getText(tree)).join('\n')
+    .replace(/\bexport\s+(?=(?:async\s+)?function\b)/g, '');
+  const js = ts.transpileModule(body, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const script = path.join(p.paths.setfarmRepoDir, 'scripts', 'stitch-api.mjs');
+  fs.mkdirSync(path.dirname(script), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(script, '// Test-owned script-selection fixture; never executed.\n', { mode: 0o600 });
+  const calls: { command: string; argv: string[] }[] = [];
+  const bindings = { ...p.bindings, PATHS: p.paths, freshMissionControlSelectedV1: () => selected,
+    join: path.join, existsSync: fs.existsSync, process: { env: {} }, homedir: () => path.join(base, 'fixture-home'),
+    console: { error() {}, warn() {} }, execFileAsync: async (command: string, argv: string[]) => {
+      calls.push({ command, argv: [...argv] });
+      if (output instanceof Error) throw output;
+      return { stdout: output, stderr: '' };
+    } };
+  const generateScreen = new Function(...Object.keys(bindings), js + '\nreturn generateScreen;')(...Object.values(bindings));
+  return { generateScreen, calls, script };
+}
+
+for (const selected of [true, false]) {
+  for (const device of [undefined, 'MOBILE']) {
+    test(`${selected ? 'selected' : 'legacy'} generation sends the supported model and ${device ?? 'default DESKTOP'} device to child execution`, async () => {
+      const f = fixture();
+      try {
+        const c = execComponent(f.base, JSON.stringify({ screens: [{ screenId: 'def-456', title: 'Provider Home', width: 1440, height: 900 }] }), selected);
+        const result = await c.generateScreen('abc123', 'Create a home page', 'Home', device);
+        assert.deepEqual(c.calls, [{ command: 'node', argv: [c.script, 'generate-screen-safe', 'abc123',
+          'Create a home page', 'Home', device ?? 'DESKTOP', 'GEMINI_3_8_FLASH'] }]);
+        assert.deepEqual(result, { screenId: 'def-456', title: 'Provider Home', htmlUrl: null, screenshotUrl: null,
+          localHtml: null, width: 1440, height: 900, status: 'done' });
+      } finally { f.dispose(); }
+    });
+  }
+
+  test(`${selected ? 'selected' : 'legacy'} child rejection remains a failed generation without a screen DTO`, async () => {
+    const f = fixture();
+    try {
+      const c = execComponent(f.base, new Error('Provider rejected generation'), selected);
+      assert.equal(await c.generateScreen('abc123', 'Create a home page', 'Home'), null);
+      assert.equal(c.calls.length, 1);
+    } finally { f.dispose(); }
+  });
+}
+
 const invalidIds: unknown[] = ['../escape', 'abc123/..', '', 'xyz', 'valid_name', 'a'.repeat(129), null, 0, 123, {}, []];
 
 test('selected generateScreen rejects every malformed/missing/nonstr/unsupported JSON screen ID before returning a DTO', async () => {
