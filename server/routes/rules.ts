@@ -2,23 +2,88 @@ import { Router } from "express";
 import { randomUUID } from "crypto";
 import { config } from "../config.js";
 import { sql } from "../utils/pg.js";
+import { freshMissionControlPathsV1 } from "../services/fresh-installation-runtime.js";
 
+interface RuleCapabilities {
+  create: boolean;
+  update: boolean;
+  delete: boolean;
+  import: boolean;
+  toggle: boolean;
+  reason: string | null;
+}
+
+interface RulesRouterOptions {
+  setfarmUrl?: string;
+  fetch?: typeof fetch;
+  selectedFresh?: () => boolean;
+  timeoutMs?: number;
+}
+
+class RulesProxyError extends Error {
+  constructor(public status: number, message: string, public code: string) { super(message); }
+}
+
+// Only public, bounded service messages cross the proxy. Raw HTML, stack traces,
+// private paths, credential-bearing diagnostics and arbitrary JSON fields do not.
+function publicRuleMessage(value: unknown, fallback: string): string {
+  if (typeof value !== 'string' || !value.trim() || /[<>\r\n]|(?:\/\S+|[A-Za-z]:\\)|(?:token|password|secret|authorization)\s*[:=]|Bearer\s/i.test(value)) return fallback;
+  return value.replace(/[\x00-\x1f\x7f]/g, '').slice(0, 300);
+}
+
+export function createRulesRouter(options: RulesRouterOptions = {}) {
 const router = Router();
 const USE_PG = false; // Rules come from workflow fragments via :3333, not PG
+const setfarmUrl = options.setfarmUrl ?? config.setfarmUrl;
+const upstreamFetch = options.fetch ?? fetch;
+const selectedFresh = options.selectedFresh ?? (() => freshMissionControlPathsV1() !== null);
+const capabilities = (): RuleCapabilities => {
+  const supported = !selectedFresh();
+  return { create: supported, update: supported, delete: supported, import: supported, toggle: supported,
+    reason: supported ? null : 'FRESH_RULES_NOT_WIRED' };
+};
+
+router.get('/rules/capabilities', (_req, res) => {
+  try { res.json(capabilities()); }
+  catch { res.status(503).json({ error: 'Rules capabilities unavailable', code: 'RULES_CAPABILITIES_UNAVAILABLE' }); }
+});
+router.use('/rules', (req, res, next) => {
+  if (!['POST', 'PUT', 'DELETE'].includes(req.method)) return next();
+  try {
+    const action = req.method === 'DELETE' ? 'delete' : req.method === 'POST'
+      ? (req.path === '/import' ? 'import' : 'create') : req.path.endsWith('/toggle') ? 'toggle' : 'update';
+    const current = capabilities();
+    if (!current[action]) return res.status(503).json({ error: current.reason, code: 'NOT_WIRED' });
+    next();
+  } catch { res.status(503).json({ error: 'Rules capabilities unavailable', code: 'RULES_CAPABILITIES_UNAVAILABLE' }); }
+});
 
 async function proxy(url: string, opts?: RequestInit) {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 10_000);
+  const timer = setTimeout(() => ctrl.abort(), options.timeoutMs ?? 10_000);
   try {
-    const res = await fetch(url, { ...opts, signal: ctrl.signal });
-    if (url.includes('/export') && res.ok) {
-      const data = await res.json();
-      return data;
+    const response = await upstreamFetch(url, { ...opts, signal: ctrl.signal });
+    let data;
+    try { data = await response.json(); }
+    catch (error) {
+      if (ctrl.signal.aborted) throw error;
+      throw new RulesProxyError(response.ok ? 502 : response.status, 'Rules service returned an invalid response', 'RULES_INVALID_RESPONSE');
     }
-    return res.json();
-  } finally {
-    clearTimeout(timer);
-  }
+    if (!response.ok) {
+      throw new RulesProxyError(response.status,
+        publicRuleMessage(data?.error ?? data?.message, `Rules service request failed (HTTP ${response.status})`),
+        typeof data?.code === 'string' && /^[A-Z0-9_]{1,80}$/.test(data.code) ? data.code : 'RULES_UPSTREAM_ERROR');
+    }
+    return { status: response.status, data };
+  } catch (error) {
+    if (ctrl.signal.aborted) throw new RulesProxyError(504, 'Rules service timed out', 'RULES_UPSTREAM_TIMEOUT');
+    if (error instanceof RulesProxyError) throw error;
+    throw new RulesProxyError(502, 'Rules service unavailable', 'RULES_UPSTREAM_UNAVAILABLE');
+  } finally { clearTimeout(timer); }
+}
+function failure(res: import('express').Response, error: unknown) {
+  if (error instanceof RulesProxyError) return res.status(error.status).json({ error: error.message, code: error.code });
+  return res.status(500).json({ error: 'Rules request failed', code: 'RULES_REQUEST_FAILED' });
 }
 
 // GET /api/rules
@@ -58,10 +123,10 @@ router.get("/rules", async (_req, res) => {
     if (_req.query.source) params.set("source", String(_req.query.source));
     if (_req.query.search) params.set("search", String(_req.query.search));
     const qs = params.toString();
-    const data = await proxy(`${config.setfarmUrl}/api/rules${qs ? '?' + qs : ''}`);
-    res.json(data);
+    const { status, data } = await proxy(`${setfarmUrl}/api/rules${qs ? '?' + qs : ''}`);
+    res.status(status).json(data);
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    failure(res, e);
   }
 });
 
@@ -76,14 +141,14 @@ router.post("/rules", async (req, res) => {
         RETURNING *`;
       return res.json(rows[0]);
     }
-    const data = await proxy(`${config.setfarmUrl}/api/rules`, {
+    const { status, data } = await proxy(`${setfarmUrl}/api/rules`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req.body),
     });
-    res.json(data);
+    res.status(status).json(data);
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    failure(res, e);
   }
 });
 
@@ -95,11 +160,11 @@ router.get("/rules/export", async (_req, res) => {
       res.setHeader("Content-Disposition", 'attachment; filename="setfarm-rules.json"');
       return res.json(rows);
     }
-    const data = await proxy(`${config.setfarmUrl}/api/rules/export`);
+    const { status, data } = await proxy(`${setfarmUrl}/api/rules/export`);
     res.setHeader("Content-Disposition", 'attachment; filename="setfarm-rules.json"');
-    res.json(data);
+    res.status(status).json(data);
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    failure(res, e);
   }
 });
 
@@ -118,14 +183,14 @@ router.post("/rules/import", async (req, res) => {
       }
       return res.json({ imported });
     }
-    const data = await proxy(`${config.setfarmUrl}/api/rules/import`, {
+    const { status, data } = await proxy(`${setfarmUrl}/api/rules/import`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req.body),
     });
-    res.json(data);
+    res.status(status).json(data);
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    failure(res, e);
   }
 });
 
@@ -137,10 +202,10 @@ router.put("/rules/:id/toggle", async (req, res) => {
       if (rows.length === 0) return res.status(404).json({ error: 'Rule not found' });
       return res.json(rows[0]);
     }
-    const data = await proxy(`${config.setfarmUrl}/api/rules/${req.params.id}/toggle`, { method: "PUT" });
-    res.json(data);
+    const { status, data } = await proxy(`${setfarmUrl}/api/rules/${req.params.id}/toggle`, { method: "PUT" });
+    res.status(status).json(data);
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    failure(res, e);
   }
 });
 
@@ -163,14 +228,14 @@ router.put("/rules/:id", async (req, res) => {
       if (rows.length === 0) return res.status(404).json({ error: 'Rule not found' });
       return res.json(rows[0]);
     }
-    const data = await proxy(`${config.setfarmUrl}/api/rules/${req.params.id}`, {
+    const { status, data } = await proxy(`${setfarmUrl}/api/rules/${req.params.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(req.body),
     });
-    res.json(data);
+    res.status(status).json(data);
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    failure(res, e);
   }
 });
 
@@ -181,11 +246,14 @@ router.delete("/rules/:id", async (req, res) => {
       await sql`DELETE FROM rules WHERE id = ${req.params.id}`;
       return res.json({ ok: true });
     }
-    const data = await proxy(`${config.setfarmUrl}/api/rules/${req.params.id}`, { method: "DELETE" });
-    res.json(data);
+    const { status, data } = await proxy(`${setfarmUrl}/api/rules/${req.params.id}`, { method: "DELETE" });
+    res.status(status).json(data);
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    failure(res, e);
   }
 });
 
-export default router;
+return router;
+}
+
+export default createRulesRouter();

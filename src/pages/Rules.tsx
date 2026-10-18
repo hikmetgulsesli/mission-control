@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { loadRules, rulesRequest, rulesErrorMessage, type RuleCapabilities } from '../lib/rules-api';
 
 interface Rule {
   id: string;
@@ -59,15 +60,40 @@ export function Rules() {
   const [stackFilter, setStackFilter] = useState('');
   const [modal, setModal] = useState<{ open: boolean; rule?: Rule }>({ open: false });
 
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [capabilities, setCapabilities] = useState<RuleCapabilities | null>(null);
+  const [capabilityError, setCapabilityError] = useState<string | null>(null);
+  const [importDraft, setImportDraft] = useState<{ name: string; text: string } | null>(null);
+
   const load = useCallback(async () => {
     try {
-      const res = await fetch('/api/rules');
-      setRules(await res.json());
-    } catch {}
-    setLoading(false);
+      const data = await loadRules<Rule>();
+      setRules(data);
+      setHasLoaded(true);
+      setLoadError(null);
+    } catch (error) { setLoadError(rulesErrorMessage(error)); }
+    finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  const loadCapabilities = useCallback(async () => {
+    try {
+      const data = await rulesRequest<RuleCapabilities>('/api/rules/capabilities');
+      if (!data || !['create', 'update', 'delete', 'import', 'toggle'].every(key => typeof data[key as keyof RuleCapabilities] === 'boolean')
+        || !(data.reason === null || typeof data.reason === 'string')) throw new Error('Invalid capabilities');
+      setCapabilities(data);
+      setCapabilityError(null);
+    } catch (error) {
+      setCapabilities(null);
+      setCapabilityError(`Yazma yetenekleri alınamadı: ${rulesErrorMessage(error)}`);
+    }
+  }, []);
+  useEffect(() => { void load(); void loadCapabilities(); }, [load, loadCapabilities]);
+  const capabilityReason = capabilityError || capabilities?.reason || (!capabilities ? 'Yazma yetenekleri doğrulanıyor' : '');
 
   const getRulesForStage = (stageId: string) => {
     return rules.filter(r => r.applies_to === stageId || r.applies_to === 'all');
@@ -90,49 +116,93 @@ export function Rules() {
   };
 
   const handleDeleteConfirmed = async () => {
-    if (!deleteConfirmId) return;
-    await fetch(`/api/rules/${deleteConfirmId}`, { method: 'DELETE' });
-    setDeleteConfirmId(null);
-    load();
+    if (!deleteConfirmId || busy) return;
+    setBusy(true);
+    setDeleteError(null);
+    try {
+      await rulesRequest(`/api/rules/${encodeURIComponent(deleteConfirmId)}`, { method: 'DELETE' });
+      setDeleteConfirmId(null);
+      await load();
+    } catch (error) { setDeleteError(rulesErrorMessage(error)); }
+    finally { setBusy(false); }
   };
 
-  const handleSave = async (data: any, id?: string) => {
-    await fetch(id ? `/api/rules/${id}` : '/api/rules', {
-      method: id ? 'PUT' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    setModal({ open: false });
-    load();
+  const handleSave = async (data: unknown, id?: string) => {
+    if (busy) return;
+    setBusy(true);
+    setSaveError(null);
+    try {
+      await rulesRequest(id ? `/api/rules/${encodeURIComponent(id)}` : '/api/rules', {
+        method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+      });
+      setModal({ open: false });
+      await load();
+    } catch (error) { setSaveError(rulesErrorMessage(error)); }
+    finally { setBusy(false); }
+  };
+
+  const handleToggle = async (id: string) => {
+    if (busy) return;
+    setBusy(true);
+    setActionError(null);
+    try {
+      await rulesRequest(`/api/rules/${encodeURIComponent(id)}/toggle`, { method: 'PUT' });
+      await load();
+    } catch (error) { setActionError(rulesErrorMessage(error)); }
+    finally { setBusy(false); }
   };
 
   const handleExport = async () => {
-    const res = await fetch('/api/rules/export');
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = 'setfarm-rules.json'; a.click();
-    URL.revokeObjectURL(url);
+    setActionError(null);
+    try {
+      const data = await rulesRequest('/api/rules/export');
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url; a.download = 'setfarm-rules.json'; a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) { setActionError(rulesErrorMessage(error)); }
+  };
+
+  const submitImport = async (draft: { name: string; text: string }) => {
+    if (busy) return;
+    setBusy(true);
+    setActionError(null);
+    try {
+      await rulesRequest('/api/rules/import', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: draft.text,
+      });
+      setImportDraft(null);
+      await load();
+    } catch (error) { setActionError(rulesErrorMessage(error)); }
+    finally { setBusy(false); }
   };
 
   const handleImport = () => {
     const input = document.createElement('input');
     input.type = 'file'; input.accept = '.json';
-    input.onchange = async (e: any) => {
-      const file = e.target.files?.[0];
+    input.onchange = async () => {
+      const file = input.files?.[0];
       if (!file) return;
-      const text = await file.text();
-      const res = await fetch('/api/rules/import', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: text,
-      });
-      const result = await res.json();
-      alert(`Import: ${result.imported || 0} eklendi, ${result.updated || 0} guncellendi`);
-      load();
+      try {
+        const draft = { name: file.name, text: await file.text() };
+        setImportDraft(draft);
+        await submitImport(draft);
+      } catch { setActionError('Seçilen dosya okunamadı'); }
     };
     input.click();
   };
 
   if (loading) return <div className="page-loading">Loading rules...</div>;
+
+  if (!hasLoaded && loadError) return (
+    <div style={{ padding: 24 }}>
+      <h1>Rules Engine</h1>
+      <p role="alert">Kurallar yüklenemedi: {loadError}</p>
+      {actionError && <p role="alert">{actionError}</p>}
+      <button className="btn" onClick={handleExport}>EXPORT</button>
+      <button className="btn" onClick={() => { void load(); void loadCapabilities(); }}>Tekrar dene</button>
+    </div>
+  );
 
   return (
     <div style={{ padding: '20px 24px', maxWidth: 1400, margin: '0 auto' }}>
@@ -147,11 +217,24 @@ export function Rules() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn" onClick={handleImport}>IMPORT</button>
+          <button className="btn" disabled={!capabilities?.import || busy} title={capabilityReason} onClick={handleImport}>IMPORT</button>
           <button className="btn" onClick={handleExport}>EXPORT</button>
-          <button className="btn btn--primary" onClick={() => setModal({ open: true })}>+ NEW RULE</button>
+          <button className="btn btn--primary" disabled={!capabilities?.create || busy} title={capabilityReason} onClick={() => { setSaveError(null); setModal({ open: true }); }}>+ NEW RULE</button>
         </div>
       </div>
+
+      {capabilityReason && <p role="status">Yazma işlemleri kullanılamıyor: {capabilityReason}
+        {capabilityError && <button className="btn" onClick={() => { void loadCapabilities(); }}>Tekrar dene</button>}
+      </p>}
+      {loadError && <p role="alert">Kurallar yenilenemedi; son yüklenen veriler gösteriliyor. {loadError}
+        <button className="btn" onClick={() => { void load(); }}>Tekrar dene</button>
+      </p>}
+      {actionError && <p role="alert">{actionError}</p>}
+      {importDraft && <div role="group" aria-label="Import draft">
+        <p>Seçilen dosya: {importDraft.name}</p>
+        <button className="btn" disabled={busy || !capabilities?.import} onClick={() => { void submitImport(importDraft); }}>İçe aktarmayı tekrar dene</button>
+        <button className="btn" disabled={busy} onClick={() => { setImportDraft(null); setActionError(null); }}>Vazgeç</button>
+      </div>}
 
       {/* Pipeline Stage Selector */}
       <div style={{
@@ -383,9 +466,14 @@ export function Rules() {
                 {!r.readonly && (
                   <div style={{ display: 'flex', gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                     <button className="btn" style={{ padding: '1px 6px', fontSize: 9 }}
-                      onClick={() => setModal({ open: true, rule: r })}>EDIT</button>
+                      disabled={!capabilities?.update || busy} title={capabilityReason}
+                      onClick={() => { setSaveError(null); setModal({ open: true, rule: r }); }}>EDIT</button>
+                    <button className="btn" style={{ padding: '1px 6px', fontSize: 9 }}
+                      disabled={!capabilities?.toggle || busy} title={capabilityReason}
+                      onClick={() => { void handleToggle(r.id); }}>{r.enabled === false ? 'ENABLE' : 'DISABLE'}</button>
                     <button className="btn btn--danger" style={{ padding: '1px 6px', fontSize: 9 }}
-                      onClick={() => setDeleteConfirmId(r.id)}>DEL</button>
+                      disabled={!capabilities?.delete || busy} title={capabilityReason}
+                      onClick={() => { setDeleteError(null); setDeleteConfirmId(r.id); }}>DEL</button>
                   </div>
                 )}
               </div>
@@ -427,13 +515,13 @@ export function Rules() {
       <ConfirmDialog
         open={!!deleteConfirmId}
         title="Delete Rule"
-        message="Are you sure you want to delete this rule?"
+        message={`Are you sure you want to delete this rule?${deleteError ? ` ${deleteError}` : ''}${busy ? ' İşlem sürüyor…' : ''}`}
         confirmLabel="Delete"
         onConfirm={handleDeleteConfirmed}
-        onCancel={() => setDeleteConfirmId(null)}
+        onCancel={() => { if (!busy) setDeleteConfirmId(null); }}
       />
 
-      {modal.open && <RuleModal rule={modal.rule} onSave={handleSave} onClose={() => setModal({ open: false })} />}
+      {modal.open && <RuleModal rule={modal.rule} error={saveError} busy={busy} canSave={!!(modal.rule ? capabilities?.update : capabilities?.create)} onSave={handleSave} onClose={() => { if (!busy) setModal({ open: false }); }} />}
     </div>
   );
 }
@@ -444,7 +532,7 @@ const selectStyle: React.CSSProperties = {
   fontFamily: 'var(--font)', outline: 'none', cursor: 'pointer',
 };
 
-function RuleModal({ rule, onSave, onClose }: { rule?: Rule; onSave: (data: any, id?: string) => void; onClose: () => void }) {
+function RuleModal({ rule, onSave, onClose, error, busy, canSave }: { rule?: Rule; error: string | null; busy: boolean; canSave: boolean; onSave: (data: unknown, id?: string) => void; onClose: () => void }) {
   const [title, setTitle] = useState(rule?.title || '');
   const [content, setContent] = useState(rule?.content || '');
   const [category, setCategory] = useState(rule?.category || 'general');
@@ -454,7 +542,7 @@ function RuleModal({ rule, onSave, onClose }: { rule?: Rule; onSave: (data: any,
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !content.trim()) return;
+    if (busy || !canSave || !title.trim() || !content.trim()) return;
     onSave({ title, content, category, project_type: projectType, severity, applies_to: appliesTo, enabled: true }, rule?.id);
   };
 
@@ -475,7 +563,7 @@ function RuleModal({ rule, onSave, onClose }: { rule?: Rule; onSave: (data: any,
       position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
     }}>
-      <form onSubmit={handleSubmit} style={{
+      <form role="dialog" aria-modal="true" aria-label={rule ? 'Edit Rule' : 'New Rule'} onSubmit={handleSubmit} style={{
         background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8,
         padding: 24, width: 560, maxHeight: '85vh', overflowY: 'auto',
         boxShadow: '0 0 40px rgba(0,0,0,0.5)',
@@ -483,6 +571,7 @@ function RuleModal({ rule, onSave, onClose }: { rule?: Rule; onSave: (data: any,
         <h3 style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--neon-orange)', margin: '0 0 20px', fontFamily: 'var(--font)' }}>
           {rule ? 'Edit Rule' : 'New Rule'}
         </h3>
+        {error && <p role="alert">{error}</p>}
         <div style={{ marginBottom: 14 }}>
           <label style={lbl}>Title</label>
           <input value={title} onChange={e => setTitle(e.target.value)} style={fld} placeholder="Rule title..." />
@@ -510,8 +599,8 @@ function RuleModal({ rule, onSave, onClose }: { rule?: Rule; onSave: (data: any,
             </select></div>
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button type="button" className="btn" onClick={onClose}>CANCEL</button>
-          <button type="submit" className="btn btn--primary">SAVE</button>
+          <button type="button" className="btn" disabled={busy} onClick={onClose}>CANCEL</button>
+          <button type="submit" className="btn btn--primary" disabled={busy || !canSave}>{busy ? 'SAVING…' : 'SAVE'}</button>
         </div>
       </form>
     </div>
