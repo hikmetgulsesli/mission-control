@@ -111,6 +111,7 @@ export function service(base: string, options: Options = {}) {
     'downloadScreen', 'generateMockupsFromPrd', 'deleteScreenFromCache', 'regenerateScreen', 'prepareDesignFilesForRepo'];
   const body = constants + '\n' + declarations('server/services/stitch-integration.ts', names);
   const bindings = { ...p.bindings, PATHS: p.paths, join: path.join, existsSync: fs.existsSync, mkdirSync: fs.mkdirSync,
+    freshMissionControlSelectedV1: () => p.freshMissionControlPathsV1() !== null,
     console: { error() {}, log() {} }, setTimeout: (fn: () => void) => { fn(); return 1; },
     runStitch: async (args: string[]) => {
       calls.push(args[0]!);

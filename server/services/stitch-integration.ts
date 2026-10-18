@@ -25,6 +25,21 @@ function validateStitchId(value: string, name: string): string {
 
 // Extract projectId from stitch-api.mjs output (JSON first, regex fallback)
 function parseProjectId(output: string): string {
+  if (freshMissionControlSelectedV1()) {
+    let projectId: unknown = '';
+    let parsedJSON = false;
+    try {
+      const data = JSON.parse(output);
+      parsedJSON = true;
+      projectId = data?.projectId || data?.project_id || '';
+    } catch { /* only malformed JSON enables selected fallback */ }
+    if (!parsedJSON) {
+      const match = output.match(/\bproject(?:[_\s]*id)?(?:\s*:\s*|\s+)(?:"([^"]*)"(?=\s|$)|'([^']*)'(?=\s|$)|([^\s]+))/i);
+      projectId = match?.[1] ?? match?.[2] ?? match?.[3] ?? '';
+    }
+    assertSelectedDesignIdsV1(projectId);
+    return validateStitchId(projectId as string, 'projectId');
+  }
   try {
     const data = JSON.parse(output);
     if (data.projectId) return String(data.projectId);
