@@ -1,4 +1,5 @@
 import { assertSelectedDesignIdsV1, selectedDesignCacheRootV1, selectedDesignCacheDirectoryV1, selectedDesignArtifactFileV1, selectedDesignRepositoryV1, selectedDesignRepositoryPathV1 } from './fresh-design-artifact-paths-v1.js';
+import { freshMissionControlSelectedV1 } from './fresh-installation-runtime.js';
 import { execFile as execFileCb } from 'child_process';
 import { promisify } from 'util';
 import { homedir } from 'os';
@@ -88,11 +89,12 @@ export async function generateScreen(projectId: string, prompt: string, title: s
   assertSelectedDesignIdsV1(projectId);
   try {
     const output = await runStitch(['generate-screen-safe', projectId, prompt, title, device, 'GEMINI_3_PRO']);
+    let screen: StitchScreen | null = null;
     try {
       const data = JSON.parse(output);
       if (data.screens?.[0]) {
         const s = data.screens[0];
-        return {
+        screen = {
           screenId: s.screenId || s.id || '',
           title: s.title || title,
           htmlUrl: s.htmlUrl || null,
@@ -102,17 +104,26 @@ export async function generateScreen(projectId: string, prompt: string, title: s
           height: s.height,
           status: 'done',
         };
-      }
-      if (data.skipped) {
-        return { screenId: data.existingScreenId || '', title, htmlUrl: null, screenshotUrl: null, localHtml: null, status: 'skipped' };
+      } else if (data.skipped) {
+        screen = { screenId: data.existingScreenId || '', title, htmlUrl: null, screenshotUrl: null, localHtml: null, status: 'skipped' };
       }
     } catch {
-      const screenIdMatch = output.match(/screen[_\s]*(?:id)?[:\s]*["']?([a-f0-9]+)["']?/i);
-      if (screenIdMatch) {
-        return { screenId: screenIdMatch[1], title, htmlUrl: null, screenshotUrl: null, localHtml: null, status: 'done' };
+      const selected = freshMissionControlSelectedV1();
+      const screenIdMatch = selected
+        ? output.match(/\bscreen(?:[_\s]*id)?(?:\s*:\s*|\s+)(?:"([^"]*)"(?=\s|$)|'([^']*)'(?=\s|$)|([^\s]+))/i)
+        : output.match(/screen[_\s]*(?:id)?[:\s]*["']?([a-f0-9]+)["']?/i);
+      const screenId = selected
+        ? screenIdMatch?.[1] ?? screenIdMatch?.[2] ?? screenIdMatch?.[3]
+        : screenIdMatch?.[1];
+      if (screenId !== undefined) {
+        screen = { screenId, title, htmlUrl: null, screenshotUrl: null, localHtml: null, status: 'done' };
       }
     }
-    return null;
+    if (screen) {
+      assertSelectedDesignIdsV1(projectId, [screen.screenId]);
+      if (freshMissionControlSelectedV1()) validateStitchId(screen.screenId, 'screenId');
+    }
+    return screen;
   } catch (err: any) {
     console.error('[STITCH] generateScreen error:', err.message);
     return null;
@@ -125,8 +136,12 @@ export async function listScreens(projectId: string): Promise<StitchScreen[]> {
     const output = await runStitch(['list-screens', projectId]);
     const data = JSON.parse(output);
     const screens = Array.isArray(data) ? data : data.screens || [];
-    return screens.map((s: any) => ({
-      screenId: s.id || s.screenId || s.screen_id || '',
+    return screens.map((s: any) => {
+      const screenId = s.id || s.screenId || s.screen_id || '';
+      assertSelectedDesignIdsV1(projectId, [screenId]);
+      if (freshMissionControlSelectedV1()) validateStitchId(screenId, 'screenId');
+      return {
+      screenId,
       title: s.title || 'Untitled',
       htmlUrl: s.htmlCode?.downloadUrl || s.html_code?.download_url || null,
       screenshotUrl: s.screenshot?.downloadUrl || s.screenshot?.download_url || null,
@@ -134,7 +149,8 @@ export async function listScreens(projectId: string): Promise<StitchScreen[]> {
       width: s.width,
       height: s.height,
       status: 'done',
-    }));
+    };
+    });
   } catch (err: any) {
     console.error('[STITCH] listScreens error:', err.message);
     return [];
