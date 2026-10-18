@@ -107,3 +107,23 @@ assert.match(rendered, /Henüz veri yok/);
 - [ ] Run actual selected tests and capture RED.
 - [ ] Share metadata without client secret/config imports. Distinguish configured from observed models. Remove placeholder weekly trend promises/fake series. Preserve editing/chat/activity/live actions and true measured zero.
 - [ ] Run focused tests and build/type checks. Root commits `fix(agents): expose shared identity provenance` and obtains whole-plan review before integration.
+
+### Task 6: Exact cron identity for reversible toggles
+
+**Files:** Modify `server/routes/cron.ts`; create `server/routes/cron.test.ts`. Preserve current Ops error/toast behavior unless an actual regression requires its narrow change.
+
+**Interfaces:** Existing GET `/api/cron` and POST `/api/cron/:id/toggle` retained. Route passes the validated selected job UUID to the existing bounded CLI adapter; job names remain display text. A small injected route factory permits actual Express tests without gateway/config/CLI side effects.
+
+**Causal evidence:** During approved cleanup Root independently verified three actual jobs with the same `test/agent` name and distinct UUIDs; `openclaw cron disable --help` requires `<id>`, while current route sends `job.name`. These are literal old test fixtures matching Setfarm `tests/gateway-api-model.test.ts`. Root disabled exactly those three through their IDs and preserved all records/other five jobs, receipt `/Users/setrox/ai/setrox/logs/2026-10-19-ui-implementation/gateway-cron-disable-receipt.original.json`. Do not repeat live cleanup or create a job in this task.
+
+- [ ] Add actual HTTP/fake CLI tests: duplicate names with distinct IDs, enabled and disabled cases, unknown/invalid ID, CLI refusal. Capture RED where selected job name is sent instead of its ID.
+
+```ts
+assert.deepEqual(calls[0], ['openclaw', ['cron', 'disable', selectedId]]);
+assert.equal(calls.length, 1);
+assert.equal(unknownResponse.status, 404);
+```
+
+- [ ] Run `node --import tsx --test server/routes/cron.test.ts`; preserve RED.
+- [ ] Pass only the matched job ID to enable/disable. Validate current job record and safe bounded input, preserve existing selected CLI/runtime fence and cache invalidation; CLI failure cannot return success or flip displayed state. Never toggle all same-name jobs, write jobs.json directly or enable a missing job.
+- [ ] Run focused test, include failure/success in later browser fixture, and Root commits `fix(cron): toggle the exact selected job` before final whole-plan review.
