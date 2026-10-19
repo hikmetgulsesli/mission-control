@@ -2317,7 +2317,7 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
   height: 20px;
   border-radius: 3px;
   cursor: pointer;
-  font-size: 10px;
+  font-size: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -6956,7 +6956,7 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
   border: none;
   color: #666;
   cursor: pointer;
-  font-size: 0.7rem;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.1em;
   transition: all 0.2s;
