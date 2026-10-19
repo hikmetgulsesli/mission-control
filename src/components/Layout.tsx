@@ -13,7 +13,7 @@ export function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
   const isOffice = location.pathname === '/office';
-  useDataSync();
+  useDataSync(location.pathname);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {

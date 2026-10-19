@@ -1,3 +1,5 @@
+import { dataSyncMessage } from '../lib/data-sync';
+import { refreshDataSync } from '../hooks/useDataSync';
 import { useState, useEffect } from 'react';
 import { useAppStore } from '../store/appStore';
 import { api } from '../lib/api';
@@ -7,7 +9,7 @@ import { GlitchText } from '../components/GlitchText';
 export function Workflows() {
   const workflows = useAppStore(s => s.workflows);
   const runs = useAppStore(s => s.runs);
-  const initialLoading = useAppStore(s => s.initialLoading);
+  const sync = useAppStore(s => s.sync);
   const [showModal, setShowModal] = useState(false);
   const [selectedWf, setSelectedWf] = useState('');
   const [task, setTask] = useState('');
@@ -32,7 +34,7 @@ export function Workflows() {
       setError(null);
       setShowModal(false);
       setTask('');
-      api.runs().then(data => useAppStore.setState({ runs: data })).catch(() => {});
+      void refreshDataSync('runs');
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -40,20 +42,19 @@ export function Workflows() {
     }
   };
 
-  if (initialLoading) return <div className="page-loading">Loading workflows...</div>;
-
-  const allRuns = runs || [];
-
   return (
     <div className="workflows-page">
       <div className="workflows-page__header">
         <GlitchText text="WORKFLOWS" tag="h2" />
-        <button className="btn btn--primary" onClick={() => setShowModal(true)}>
+        <button className="btn btn--primary" disabled={workflows === null} onClick={() => setShowModal(true)}>
           + START RUN
         </button>
       </div>
 
-      <WorkflowKanban workflows={workflows || []} runs={allRuns} />
+      <p role="status">Workflows: {dataSyncMessage(sync?.workflows)} · Runs: {dataSyncMessage(sync?.runs)}</p>
+      {workflows !== null && runs !== null
+        ? <WorkflowKanban workflows={workflows} runs={runs} />
+        : <p role="status">Workflow board unavailable until both collections are observed.</p>}
 
       {showModal && (
         <div className="modal-backdrop" onClick={() => setShowModal(false)}>

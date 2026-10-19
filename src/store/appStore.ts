@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { initialDataSyncState, type DataSyncState } from '../lib/data-sync';
 import type { OverviewData, SystemMetrics, Agent, Workflow, Run, Session } from '../lib/types';
 
 export interface AppStore {
@@ -17,6 +18,7 @@ export interface AppStore {
   runs: Run[] | null;
   sessions: Session[] | null;
   initialLoading: boolean;
+  sync: DataSyncState;
 }
 
 export const useAppStore = create<AppStore>(() => ({
@@ -31,4 +33,5 @@ export const useAppStore = create<AppStore>(() => ({
   runs: null,
   sessions: null,
   initialLoading: true,
+  sync: initialDataSyncState(),
 }));

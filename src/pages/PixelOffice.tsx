@@ -1,3 +1,4 @@
+import { dataSyncMessage, initialDataSyncState, type DataSyncMetadata } from '../lib/data-sync';
 import { useEffect, useRef, useState } from 'react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
@@ -42,6 +43,20 @@ export function PixelOffice({ visible }: Props) {
   const engineRef = useRef<PixelOfficeEngine | null>(null);
   const prevStatesRef = useRef<Map<string, 'working' | 'idle'>>(new Map());
   const [error, setError] = useState<string | null>(null);
+  const [documentVisible, setDocumentVisible] = useState(() => typeof document === 'undefined' || document.visibilityState === 'visible');
+  const [statusSync, setStatusSync] = useState<DataSyncMetadata>(() => initialDataSyncState().overview);
+  const active = visible && documentVisible;
+  useEffect(() => {
+    const update = () => {
+      const nextVisible = document.visibilityState === 'visible';
+      // Stop immediately; React's effect cleanup can follow the visibility event.
+      if (!nextVisible) engineRef.current?.stop();
+      setDocumentVisible(nextVisible);
+    };
+    document.addEventListener('visibilitychange', update);
+    update();
+    return () => document.removeEventListener('visibilitychange', update);
+  }, []);
   const [chatOverlay, setChatOverlay] = useState<{ agent: string; text: string } | null>(null);
   const [agentStates, setAgentStates] = useState<OfficeAgentState[]>([]);
   const [recentEvents, setRecentEvents] = useState<{ agent: string; text: string; time: number }[]>([]);
@@ -53,7 +68,6 @@ export function PixelOffice({ visible }: Props) {
     if (!canvasRef.current) return;
     const engine = new PixelOfficeEngine(canvasRef.current);
     engineRef.current = engine;
-    engine.start();
     return () => {
       engine.destroy();
       engineRef.current = null;
@@ -64,23 +78,34 @@ export function PixelOffice({ visible }: Props) {
   useEffect(() => {
     const engine = engineRef.current;
     if (!engine) return;
-    if (visible) {
+    if (active) {
       engine.start();
     } else {
       engine.stop();
     }
-  }, [visible]);
+    return () => engine.stop();
+  }, [active]);
 
-  // Poll office status (only when visible), using setInterval instead of while loop
+  // Only the current visible HTTP generation may update retained Office data.
   useEffect(() => {
-    if (!visible) return;
-
+    if (!active) {
+      setStatusSync(meta => ({ ...meta, ownership: visible ? 'paused' : 'unselected', stale: true, inFlight: false }));
+      return;
+    }
     let mounted = true;
+    let inFlight = false;
+    setStatusSync(meta => ({ ...meta, ownership: 'active', stale: true }));
 
     async function poll() {
+      if (!mounted || document.visibilityState !== 'visible') return;
+      setStatusSync(meta => meta.observedAt !== null && Date.now() - meta.observedAt >= 10_000 ? { ...meta, stale: true } : meta);
+      if (inFlight) return;
+      inFlight = true;
+      setStatusSync(meta => ({ ...meta, lastAttemptAt: Date.now(), inFlight: true }));
       try {
         const data = await api.officeStatus();
-        if (!mounted || !data?.agents) return;
+        if (!mounted) return;
+        if (!Array.isArray(data?.agents)) throw new Error('FETCH_FAILED');
 
         const agents = data.agents as OfficeAgentState[];
         setAgentStates(agents);
@@ -106,15 +131,28 @@ export function PixelOffice({ visible }: Props) {
 
         engineRef.current?.updateAgentStates(agents);
         setError(null);
-      } catch (err: any) {
-        if (mounted) setError(err.message || 'Failed to fetch office status');
+        setStatusSync(meta => ({ ...meta, observedAt: Date.now(), errorAt: null, errorCode: null, stale: false, inFlight: false }));
+      } catch {
+        if (mounted) {
+          setError('Office status unavailable (FETCH_FAILED)');
+          setStatusSync(meta => ({ ...meta, errorAt: Date.now(), errorCode: 'FETCH_FAILED', stale: true, inFlight: false }));
+        }
+      } finally {
+        inFlight = false;
       }
     }
 
     poll();
     const id = setInterval(poll, 5000);
     return () => { mounted = false; clearInterval(id); };
-  }, [visible]);
+  }, [active, visible]);
+
+  // A receipt expires at twice Office's cadence even when the next request hangs.
+  useEffect(() => {
+    if (!active || statusSync.observedAt === null) return;
+    const id = setTimeout(() => setStatusSync(meta => ({ ...meta, stale: true })), Math.max(0, 10_000 - (Date.now() - statusSync.observedAt)));
+    return () => clearTimeout(id);
+  }, [active, statusSync.observedAt]);
 
   // Process WS events -> chat bubbles + activity feed
   useEffect(() => {
@@ -186,9 +224,10 @@ export function PixelOffice({ visible }: Props) {
         </div>
       )}
 
+      <p role="status">Office: {dataSyncMessage(statusSync)}</p>
       <div className="office-info">
         <div className="office-info__col">
-          <h4 className="office-info__title">WORKING ({workingAgents.length})</h4>
+          <h4 className="office-info__title">WORKING ({statusSync.observedAt === null ? 'unknown' : workingAgents.length})</h4>
           {workingAgents.map(a => {
             const meta = AGENT_MAP[a.id];
             return (
@@ -199,11 +238,11 @@ export function PixelOffice({ visible }: Props) {
               </div>
             );
           })}
-          {workingAgents.length === 0 && <div className="office-info__empty">All idle</div>}
+          {workingAgents.length === 0 && <div className="office-info__empty">{statusSync.observedAt === null ? 'Status unknown' : 'All idle'}</div>}
         </div>
 
         <div className="office-info__col">
-          <h4 className="office-info__title">IDLE ({idleAgents.length})</h4>
+          <h4 className="office-info__title">IDLE ({statusSync.observedAt === null ? 'unknown' : idleAgents.length})</h4>
           {idleAgents.map(a => {
             const meta = AGENT_MAP[a.id];
             return (

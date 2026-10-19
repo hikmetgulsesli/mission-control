@@ -1,44 +1,43 @@
 import { useEffect, useRef } from 'react';
 import { useAppStore } from '../store/appStore';
 import { api } from '../lib/api';
+import { createDataSync, type DataSyncKey, type DataSyncOwner } from '../lib/data-sync';
 
-const KEYS = [
-  'overview', 'system', 'agents', 'pipeline',
-  'activity', 'wfAgents', 'alerts', 'workflows',
-  'runs', 'sessions',
-] as const;
+const FETCHERS = {
+  overview: api.overview, system: api.system, agents: api.agents, pipeline: api.setfarmPipeline,
+  activity: api.setfarmActivity, wfAgents: api.setfarmAgents, alerts: api.setfarmAlerts,
+  workflows: api.workflows, runs: api.runs, sessions: api.sessions,
+};
+type Values = { [K in DataSyncKey]: Awaited<ReturnType<typeof FETCHERS[K]>> };
+let activeOwner: DataSyncOwner<Values> | null = null;
 
-const FETCHERS = [
-  api.overview, api.system, api.agents, api.setfarmPipeline,
-  api.setfarmActivity, api.setfarmAgents, api.setfarmAlerts, api.workflows,
-  api.runs, api.sessions,
-];
+/** Mutations share the polling owner's epoch; old polls cannot resurrect old data. */
+export async function refreshDataSync(key: DataSyncKey) {
+  await activeOwner?.refresh(key);
+}
+export function acceptDataSync<K extends DataSyncKey>(key: K, value: Values[K]) {
+  activeOwner?.accept(key, value);
+}
 
-export function useDataSync(intervalMs = 15_000) {
-  const firstRef = useRef(true);
-
+export function useDataSync(pathname: string, intervalMs = 15_000) {
+  const pathRef = useRef(pathname);
+  pathRef.current = pathname;
+  const ownerRef = useRef<DataSyncOwner<Values> | null>(null);
   useEffect(() => {
-    let mounted = true;
-
-    async function poll() {
-      const results = await Promise.allSettled(FETCHERS.map(fn => fn()));
-      if (!mounted) return;
-
-      const update: Record<string, any> = {};
-      results.forEach((r, i) => {
-        if (r.status === 'fulfilled') update[KEYS[i]] = r.value;
-      });
-
-      if (firstRef.current) {
-        update.initialLoading = false;
-        firstRef.current = false;
-      }
-
-      useAppStore.setState(update);
-    }
-
-    poll();
-    const id = setInterval(poll, intervalMs);
-    return () => { mounted = false; clearInterval(id); };
+    const owner = createDataSync<Values>({ fetchers: FETCHERS, intervalMs, initialSync: useAppStore.getState().sync, onUpdate: patch => useAppStore.setState(patch) });
+    ownerRef.current = owner;
+    activeOwner = owner;
+    const visibility = () => owner.setContext(pathRef.current, document.visibilityState === 'visible');
+    document.addEventListener('visibilitychange', visibility);
+    visibility();
+    return () => {
+      document.removeEventListener('visibilitychange', visibility);
+      owner.dispose();
+      ownerRef.current = null;
+      if (activeOwner === owner) activeOwner = null;
+    };
   }, [intervalMs]);
+  useEffect(() => {
+    ownerRef.current?.setContext(pathname, document.visibilityState === 'visible');
+  }, [pathname]);
 }

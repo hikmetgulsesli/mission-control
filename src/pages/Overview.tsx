@@ -1,3 +1,4 @@
+import { dataSyncMessage } from '../lib/data-sync';
 import { api } from "../lib/api";
 import { usePolling } from '../hooks/usePolling';
 import { useAppStore } from '../store/appStore';
@@ -229,15 +230,16 @@ function AgentSummaryPanel({ agents }: { agents: AgentSummary[] }) {
 
 export function Overview() {
   const data = useAppStore(s => s.overview);
-  const initialLoading = useAppStore(s => s.initialLoading);
+  const sync = useAppStore(s => s.sync?.overview);
 
-  if (initialLoading || !data) {
-    return <div className="page-loading">Loading overview...</div>;
+  if (!data) {
+    return <div className="page-loading" role="status">Overview: {dataSyncMessage(sync)}{sync?.observedAt != null ? ' · No overview payload' : ''}</div>;
   }
 
   return (
     <div className="overview">
       <GlitchText text="SYSTEM OVERVIEW" tag="h2" />
+      <p role="status">Overview: {dataSyncMessage(sync)}</p>
 
       <div className="stat-cards">
         <div className="stat-card">
