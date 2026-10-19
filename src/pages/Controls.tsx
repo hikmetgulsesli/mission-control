@@ -65,10 +65,11 @@ export function Controls() {
 
   useEffect(() => {
     alive.current = true;
+    session.activate();
     const controller = new AbortController();
     void refresh(controller.signal);
-    return () => { alive.current = false; controller.abort(); };
-  }, [refresh]);
+    return () => { alive.current = false; session.dispose(); controller.abort(); };
+  }, [refresh,session]);
   useEffect(() => {
     if (!selectedId || receipt?.jobId === selectedId && isControlReceiptTerminalV1(receipt)) return;
     let active = true;

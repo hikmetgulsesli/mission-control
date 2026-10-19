@@ -68,3 +68,53 @@ test('late accepted POST retains request mapping but never overrides newer user-
   session.acceptReceipt(receipt(jobB,'completed','2026-10-19T00:00:02.000Z'));
   assert.deepEqual(session.pending,pending);
 });
+
+test('old unmounted launch cannot replace or clear a newer exact pending request across sessions', async () => {
+  const store=storage();
+  const keyA='00000000-0000-4000-8000-000000000003';
+  const keyB='00000000-0000-4000-8000-000000000004';
+  let finishA!: (value:{receipt:ControlJobReceiptV1;replay:boolean})=>void;
+  const sessionA=new ControlJobSessionV1(store,()=>new Promise(resolve=>{finishA=resolve;}),null,()=>keyA);
+  sessionA.setSelection(a);sessionA.confirm();
+  const delayedA=sessionA.launch();
+  assert.equal(sessionA.pending?.idempotencyKey,keyA);
+  sessionA.dispose();
+
+  const sessionB=new ControlJobSessionV1(store,async request=>{
+    assert.equal(request.idempotencyKey,keyB);
+    return {receipt:receipt(jobB,'running'),replay:false};
+  },null,()=>keyB);
+  sessionB.prepareNew();
+  sessionB.setSelection(a);sessionB.confirm();
+  await sessionB.launch();
+  assert.equal(sessionB.pending?.idempotencyKey,keyB);
+  assert.equal(sessionB.pendingJobId,jobB);
+
+  finishA({receipt:receipt(jobA,'completed','2026-10-19T00:00:02.000Z'),replay:false});
+  const acceptedA=await delayedA;
+  assert.equal(acceptedA.reveal,false);
+  const sessionC=new ControlJobSessionV1(store,async()=>{throw new Error('read-only');},jobB);
+  assert.equal(sessionC.pending?.idempotencyKey,keyB);
+  assert.equal(sessionC.pendingJobId,jobB);
+  sessionA.acceptReceipt(receipt(jobA,'completed','2026-10-19T00:00:02.000Z'));
+  sessionC.acceptReceipt(receipt(jobA,'completed','2026-10-19T00:00:02.000Z'));
+  assert.equal(new ControlJobSessionV1(store,async()=>{throw new Error('read-only');},null).pending?.idempotencyKey,keyB);
+  sessionC.acceptReceipt(receipt(jobB,'completed','2026-10-19T00:00:03.000Z'));
+  assert.equal(new ControlJobSessionV1(store,async()=>{throw new Error('read-only');},null).pending,null);
+});
+
+test('reconstruction refuses mapping with same kind and selection but another key', async () => {
+  const store=storage();
+  const keyA='00000000-0000-4000-8000-000000000003';
+  const sessionA=new ControlJobSessionV1(store,async()=>({receipt:receipt(jobA,'running'),replay:false}),null,()=>keyA);
+  sessionA.setSelection(a);sessionA.confirm();await sessionA.launch();
+  const staleMapping=store.map.get('mission-control.controls.pending-job.v1');
+  const sessionB=new ControlJobSessionV1(store,async()=>({receipt:receipt(jobB,'running'),replay:false}),null,()=>jobB);
+  sessionB.prepareNew();sessionB.setSelection(a);sessionB.confirm();await sessionB.launch();
+  store.map.set('mission-control.controls.pending-job.v1',staleMapping!);
+  const reconstructed=new ControlJobSessionV1(store,async()=>{throw new Error('read-only');},null);
+  assert.equal(reconstructed.pending?.idempotencyKey,jobB);
+  assert.equal(reconstructed.pendingJobId,null);
+  reconstructed.acceptReceipt(receipt(jobA,'completed','2026-10-19T00:00:02.000Z'));
+  assert.equal(reconstructed.pending?.idempotencyKey,jobB);
+});
