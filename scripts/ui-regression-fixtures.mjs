@@ -12,7 +12,7 @@ const SOURCE = 'a'.repeat(40), BUILD = 'b'.repeat(64), SELECTION = 'c'.repeat(64
 const VIEWPORTS = [390, 768, 1440].map(width => ({ width, height: 900 }));
 const ROUTES = ['/', '/office', '/setfarm', '/setfarm/active', `/setfarm/runs/${LEGACY}`, `/setfarm/runs/${V3}`, '/agents', '/chat', '/ops', '/costs', '/performance', '/projects', '/files', '/scrape', '/rules', '/live', '/workflows', '/tasks', '/prd', '/controls'];
 const TABS = ['Execution', 'Pipeline', 'Run Contract', 'Supervisor', 'Telemetry', 'Agent Chat', 'Files', 'Stories'];
-const BEHAVIORS = ['office.persist', 'navigation.perf-redirect', 'navigation.d-p', 'navigation.input-guard', 'navigation.textarea-guard', 'navigation.select-guard', 'navigation.contenteditable-guard', 'navigation.ime-guard', 'navigation.modifier-guard', 'navigation.search-favorite', 'navigation.mobile-focus', 'agents.grid-panel', 'prd.clone-a101', 'prd.delayed-history-edit', 'prd.stale-history-preserves-draft', 'prd.new-history-race', 'prd.navigation-history-race', 'rules.draft-503', 'rules.delete-confirmation-503', 'metrics.zero-unknown', 'controls.distinct-check-groups', 'controls.provenance', 'controls.kind-confirmation', 'controls.hash-confirmation', 'controls.lost-response-reload-idempotency', 'controls.cancel-owned-settlement', 'controls.crossmount-delayed-a-new-b', 'controls.unknown-retention'];
+const BEHAVIORS = ['office.persist', 'navigation.perf-redirect', 'navigation.d-p', 'navigation.input-guard', 'navigation.textarea-guard', 'navigation.select-guard', 'navigation.contenteditable-guard', 'navigation.ime-guard', 'navigation.modifier-guard', 'navigation.search-favorite', 'navigation.mobile-focus', 'agents.grid-panel', 'prd.clone-a101', 'prd.delayed-history-edit', 'prd.stale-history-preserves-draft', 'prd.new-history-race', 'prd.navigation-history-race', 'rules.draft-503', 'rules.delete-confirmation-503', 'metrics.zero-unknown', 'controls.distinct-check-groups', 'controls.provenance', 'controls.kind-confirmation', 'controls.hash-confirmation', 'controls.lost-response-reload-idempotency', 'controls.cancel-owned-settlement', 'controls.crossmount-delayed-a-new-b', 'controls.unknown-retention', 'projects.populated-card-containment'];
 const routeId = r => r === '/' ? 'home' : r.slice(1).replaceAll('/', '-');
 const ASSERTIONS = VIEWPORTS.flatMap(v => ROUTES.flatMap(r => ['loaded', 'overflow', 'fonts', 'console-network'].map(s => `page.${routeId(r)}.${v.width}.${s}`))).concat(VIEWPORTS.flatMap(v => [LEGACY, V3].flatMap(id => TABS.map(tab => `run.${id}.${v.width}.${tab.toLowerCase().replaceAll(' ', '-')}`))), BEHAVIORS);
 const AGENTS = Array.from({ length: 14 }, (_, i) => ({ id: 'fixture-agent-' + (i + 1), name: 'Fixture agent ' + (i + 1), identityName: 'Fixture agent ' + (i + 1), identityEmoji: '🤖', model: 'fixture-local', workspace: '/fixture', bindings: 0, isDefault: i === 0 }));
@@ -66,7 +66,18 @@ const CONVERGENCE_PREFLIGHT_CHECKS = [
     ['execution_profile', 'EVAL_EXECUTION_PROFILE_PINNED'],
     ['result_store', 'EVAL_RESULT_STORES_READY'],
 ].map(([id, code]) => ({ id, status: 'pass', code }));
-const DATA = { controls: { activationChecks: ACTIVATION_CHECKS, convergencePreflightChecks: CONVERGENCE_PREFLIGHT_CHECKS }, agents: AGENTS, avatars: AVATARS, metrics: METRICS, runs: RUNS, planning: PLANNING, runDetails: RUN_DETAILS, pipeline: PIPELINE, alerts: ALERTS, quota: QUOTA, fixedGets: FIXED_GETS, rule: RULE, history: HISTORY, trending: [{ name: 'A101', description: 'A101 shopping application', developer: 'Fixture', category: 'Shopping' }] };
+// Simulated UI projections only; these rows carry no runtime/deployment authority.
+const POPULATED_PROJECTS = [
+    { id: 'fixture-project-running', name: 'Run #1', emoji: '🏗️', description: 'Populated layout fixture: running legacy project', type: 'web', category: 'setfarm',
+        ports: {}, domain: '', repo: '', stack: ['setfarm'], service: '', createdBy: 'setfarm-run', createdAt: AT, runNumber: 1, features: [], tasks: [],
+        status: 'building', execution: { schema: 'mission-control.project-execution.v1', state: 'running', active: true, runId: LEGACY, runStatus: 'running', protocol: 'legacy', source: 'setfarm_postgres_run', reasonCode: 'PROJECT_RUN_BOUND' },
+        runtime: { state: 'unknown', checkedAt: null, reasonCode: 'PROJECT_RUNTIME_LEGACY_SERVICE_STATUS_UNKNOWN' }, receipt: null },
+    { id: 'fixture-project-completed', name: 'Completed project', emoji: '✅', description: 'Populated layout fixture: completed project and separate runtime observation', type: 'web', category: 'setfarm',
+        ports: {}, domain: '', repo: '/fixture/completed-project', stack: ['setfarm'], service: '', createdBy: 'setfarm-workflow', createdAt: AT, runNumber: 2, features: [], tasks: [],
+        status: 'completed', execution: { schema: 'mission-control.project-execution.v1', state: 'terminal', active: false, runId: V3, runStatus: 'completed', protocol: 'v3', source: 'setfarm_postgres_run', reasonCode: 'PROJECT_RUN_TERMINAL' },
+        runtime: { state: 'inactive', checkedAt: null, reasonCode: 'V3_DEPLOYMENT_OBSERVED_INACTIVE' }, receipt: { status: 'active', serviceStatus: 'active', projectionHash: 'a'.repeat(64), projectRecordHash: 'b'.repeat(64) } },
+];
+const DATA = { populatedProjects: POPULATED_PROJECTS, controls: { activationChecks: ACTIVATION_CHECKS, convergencePreflightChecks: CONVERGENCE_PREFLIGHT_CHECKS }, agents: AGENTS, avatars: AVATARS, metrics: METRICS, runs: RUNS, planning: PLANNING, runDetails: RUN_DETAILS, pipeline: PIPELINE, alerts: ALERTS, quota: QUOTA, fixedGets: FIXED_GETS, rule: RULE, history: HISTORY, trending: [{ name: 'A101', description: 'A101 shopping application', developer: 'Fixture', category: 'Shopping' }] };
 export const UI_REGRESSION_FIXTURE_V1 = Object.freeze({ fixtureVersion: 'ui-regression-owned-v1', fixtureHash: uiHashV1(uiCanonicalV1({ data: DATA, routes: ROUTES, viewports: VIEWPORTS, tabs: TABS, assertionIds: ASSERTIONS })), assertionIds: Object.freeze(ASSERTIONS) });
 const assert = (condition, code = 'UI_ASSERTION_FAILED') => {
     if (!condition)
@@ -156,7 +167,7 @@ function evidence(variant = 'planned') {
     return { schema: 'mission-control.controls-evidence-envelope.v1', selectionHash: SELECTION, evidence: current, history: [{ id: '1'.repeat(64), sourceSha: '2'.repeat(40), evidence: { activation: { ...activation, report: { ...activation.report, compatibility: 'historical' } }, evaluation: { availability: { state: 'available', code: null }, report: { ...report, compatibility: 'historical', qualification: 'historical' } } } }] };
 }
 function receipt(id, body) { return { schema: 'mission-control.control-job.v1', jobId: id, kind: body.kind, revision: 1, selectionHash: body.expectedSelectionHash, sourceSha: SOURCE, mcSourceSha: SOURCE, mcBuildHash: BUILD, suiteHash: body.kind === 'convergence_full8' ? 'f'.repeat(64) : null, state: 'running', requestedAt: AT, startedAt: AT, updatedAt: AT, finishedAt: null, phase: 'running', code: null, currentCaseId: null, ownedRunId: null, completedCases: 1, plannedCases: body.kind === 'convergence_full8' ? 8 : body.kind === 'ui_regression' ? ASSERTIONS.length : 6, reportRefs: {}, cancelRequested: false }; }
-function createFixtureState() { return { unexpected: [], activeAssertion: null, browserRequests: [], browserResponses: [], requestFailures: [], intentionalFaults: [], jobs: new Map(), launches: new Map(), launchBodies: [], evidence: evidence(), history: HISTORY, holdHistory: null, holdLaunch: null, loseNextLaunch: false, cancelSettled: false, requests: [], pendingResponses: new Set() }; }
+function createFixtureState() { return { populatedProjects: false, unexpected: [], activeAssertion: null, browserRequests: [], browserResponses: [], requestFailures: [], intentionalFaults: [], jobs: new Map(), launches: new Map(), launchBodies: [], evidence: evidence(), history: HISTORY, holdHistory: null, holdLaunch: null, loseNextLaunch: false, cancelSettled: false, requests: [], pendingResponses: new Set() }; }
 async function fixtureResponse(state, method, url, body, rawTarget) {
     const p = url.pathname;
     state.requests.push({ method, path: p });
@@ -216,7 +227,9 @@ async function fixtureResponse(state, method, url, body, rawTarget) {
             return { path: '/fixture', parent: null, entries: [], files: [] };
         if (p === '/api/scrape/trending')
             return DATA.trending;
-        if (['/api/sessions', '/api/cron', '/api/workflows', '/api/projects', '/api/tasks', '/api/approvals', '/api/setfarm/activity', '/api/setfarm/agents', '/api/setfarm/agent-feed', '/api/system/docker', '/api/model-limits', '/api/live-feed', '/api/scrape/history', '/api/prd/templates'].includes(p))
+        if (p === '/api/projects')
+            return state.populatedProjects === true && state.activeAssertion === 'projects.populated-card-containment' ? POPULATED_PROJECTS : [];
+        if (['/api/sessions', '/api/cron', '/api/workflows', '/api/tasks', '/api/approvals', '/api/setfarm/activity', '/api/setfarm/agents', '/api/setfarm/agent-feed', '/api/system/docker', '/api/model-limits', '/api/live-feed', '/api/scrape/history', '/api/prd/templates'].includes(p))
             return [];
         const run = /^\/api\/(?:setfarm\/)?runs\/([^/]+)\/(.+)$/.exec(p);
         if (run && [LEGACY, V3].includes(run[1])) {
@@ -705,7 +718,7 @@ async function runCatalog({ browser, state, store, measured, control, schemas })
             await open(1440);
             for (const id of BEHAVIORS) {
                 currentRoute = '/';
-                await check(id, async () => { await behavior(id, { page, context, state, loaded, open, getPage: () => page, capture: () => capture('behavior-' + id, new URL(page.url()).pathname) }); await noErrors(); await capture('behavior-' + id, new URL(page.url()).pathname); });
+                await check(id, async () => { await behavior(id, { page, context, state, loaded, open, getPage: () => page, noErrors, assertOverflow: id === 'projects.populated-card-containment' ? assertOverflow : undefined, capture: () => capture('behavior-' + id + (id === 'projects.populated-card-containment' ? '-' + viewport.width : ''), new URL(page.url()).pathname) }); await noErrors(); await capture('behavior-' + id + (id === 'projects.populated-card-containment' ? '-' + viewport.width : ''), new URL(page.url()).pathname); });
             }
         }
         if (!stopped && !cancellation()) {
@@ -787,7 +800,65 @@ async function until(predicate, code) {
         await delay(10);
     }
 }
-async function behavior(id, { page, context, state, loaded, capture }) {
+async function behavior(id, { page, context, state, loaded, capture, open, getPage, noErrors, assertOverflow }) {
+    if (id === 'projects.populated-card-containment') {
+        const expected = POPULATED_PROJECTS.map(project => [project.name, 'PROJECT ' + project.status.toUpperCase(),
+            'EXECUTION ' + project.execution.state.toUpperCase(), 'RUNTIME ' + project.runtime.state.toUpperCase(),
+            'RECEIPT ' + (project.receipt?.serviceStatus.toUpperCase() ?? 'NONE')]);
+        state.populatedProjects = true;
+        try {
+            for (const viewport of VIEWPORTS) {
+                await open(viewport.width);
+                const current = getPage();
+                await loaded('/projects');
+                await current.waitForFunction(expected => {
+                    const visible = element => { const box = element.getBoundingClientRect(), style = getComputedStyle(element);
+                        return box.width > 0 && box.height > 0 && style.display !== 'none' && style.visibility !== 'hidden'; };
+                    const cards = [...document.querySelectorAll('.projects-grid > .project-card')];
+                    return cards.length === expected.length && expected.every(labels => {
+                        const matched = cards.filter(card => card.querySelector('.project-card__name')?.textContent.trim() === labels[0]);
+                        if (matched.length !== 1 || !visible(matched[0])) return false;
+                        const statuses = [...matched[0].querySelectorAll('.project-card__status,.project-card__live-health')];
+                        return statuses.length === 4 && statuses.every((element, index) => visible(element) && element.textContent.trim() === labels[index + 1]);
+                    });
+                }, expected);
+                const geometry = await current.evaluate(expected => {
+                    const failures = [];
+                    const reject = (index, kind) => { if (failures.length < 8) failures.push({ index, kind }); };
+                    const visible = element => { const box = element.getBoundingClientRect(), style = getComputedStyle(element);
+                        return box.width > 0 && box.height > 0 && style.display !== 'none' && style.visibility !== 'hidden'; };
+                    const cards = [...document.querySelectorAll('.projects-grid > .project-card')];
+                    if (cards.length !== expected.length) reject(-1, 'card-count');
+                    expected.forEach((labels, index) => {
+                        const matched = cards.filter(card => card.querySelector('.project-card__name')?.textContent.trim() === labels[0]);
+                        if (matched.length !== 1) { reject(index, 'identity'); return; }
+                        const card = matched[0], rect = card.getBoundingClientRect(), style = getComputedStyle(card);
+                        const px = value => Number.parseFloat(value) || 0;
+                        const left = rect.left + card.clientLeft + px(style.paddingLeft), right = rect.left + card.clientLeft + card.clientWidth - px(style.paddingRight);
+                        const top = rect.top + card.clientTop + px(style.paddingTop), bottom = rect.top + card.clientTop + card.clientHeight - px(style.paddingBottom);
+                        const headers = [...card.querySelectorAll('.project-card__header')], names = [...card.querySelectorAll('.project-card__name')];
+                        const statuses = [...card.querySelectorAll('.project-card__status,.project-card__live-health')];
+                        if (!visible(card) || headers.length !== 1 || names.length !== 1 || statuses.length !== 4) { reject(index, 'structure'); return; }
+                        if (!statuses.every((element, i) => element.textContent.trim() === labels[i + 1])) reject(index, 'labels');
+                        const elements = new Set([headers[0], names[0], ...headers[0].children, ...statuses,
+                            ...card.querySelectorAll('button,input,select,textarea,a,[role="button"]')]);
+                        for (const element of elements) {
+                            const box = element.getBoundingClientRect();
+                            if (!visible(element)) reject(index, 'hidden-or-empty');
+                            if (box.left < left - 1 || box.right > right + 1 || box.top < top - 1 || box.bottom > bottom + 1) reject(index, 'card-bounds');
+                            if (element.scrollWidth > element.clientWidth + 1 || element.scrollHeight > element.clientHeight + 1) reject(index, 'clipped-content');
+                        }
+                    });
+                    return failures;
+                }, expected);
+                assert(geometry.length === 0, 'UI_PROJECT_CARD_CONTAINMENT ' + JSON.stringify(geometry));
+                await assertOverflow();
+                await noErrors();
+                await capture();
+            }
+        } finally { state.populatedProjects = false; }
+        return;
+    }
     if (id === 'office.persist') {
         await loaded('/office');
         const canvas = page.locator('.pixel-office__canvas');

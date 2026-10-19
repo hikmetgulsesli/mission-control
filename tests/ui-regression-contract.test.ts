@@ -204,7 +204,7 @@ test('intentional fixture diagnostics pair one exact named request and reject mi
 test('Controls HTTP fixture carries six activation and eight convergence preflight checks as distinct strict projections', async (t) => {
     const f = workspace();
     const { createUiRegressionFixtureSessionV1, UI_REGRESSION_FIXTURE_V1 } = await load();
-    assert.equal(UI_REGRESSION_FIXTURE_V1.assertionIds.length, 316);
+    assert.equal(UI_REGRESSION_FIXTURE_V1.assertionIds.length, 317);
     assert.equal(UI_REGRESSION_FIXTURE_V1.assertionIds.filter(id => id === 'controls.distinct-check-groups').length, 1);
     const { parseControlEvidenceEnvelopeV1 } = await import('../src/lib/control-evidence.ts');
     const sf = new URL('../../setfarm-dashboard-cutover-controller-20261007-v1/src/', import.meta.url);
@@ -517,9 +517,11 @@ test('review fix3 fourteen deterministic avatar assets are served only at exact 
     const f = workspace();
     const { createUiRegressionFixtureSessionV1, UI_REGRESSION_FIXTURE_V1 } = await load();
     assert.equal(UI_REGRESSION_FIXTURE_V1.fixtureVersion, 'ui-regression-owned-v1');
-    assert.equal(UI_REGRESSION_FIXTURE_V1.fixtureHash, 'b662bf27e6ab9479a47986c4cc35c5cd9a23e301f695f5cb142c0e15712e3aa4');
-    assert.equal(UI_REGRESSION_FIXTURE_V1.assertionIds.length, 316);
-    assert.equal(createHash('sha256').update(JSON.stringify(UI_REGRESSION_FIXTURE_V1.assertionIds)).digest('hex'), '4ded731c52c60105daa60639aa64683b68d1d3f22e9c3e685bb794b67e8ba88d');
+    assert.equal(UI_REGRESSION_FIXTURE_V1.fixtureHash, 'a4cabf5f40111a12145171e23a06b96cea0f048d94c77d91496553b594ee35b3');
+    assert.equal(UI_REGRESSION_FIXTURE_V1.assertionIds.length, 317);
+    assert.equal(createHash('sha256').update(JSON.stringify(UI_REGRESSION_FIXTURE_V1.assertionIds)).digest('hex'), '201a110075b92305395b7fadd550f39cf8c9356cda8f9c28dee4a9be05b61fe8');
+    assert.equal(createHash('sha256').update(JSON.stringify(UI_REGRESSION_FIXTURE_V1.assertionIds.slice(0, 316))).digest('hex'), '4ded731c52c60105daa60639aa64683b68d1d3f22e9c3e685bb794b67e8ba88d');
+    assert.equal(UI_REGRESSION_FIXTURE_V1.assertionIds.at(-1), 'projects.populated-card-containment');
     const { request } = await import('node:http');
     const get = (target: string, method = 'GET') => new Promise<{ status: number; type: string; body: Buffer }>((resolve, reject) => {
         const req = request({ host: '127.0.0.1', port: 13082, path: target, method, agent: false }, res => {
@@ -1439,5 +1441,141 @@ test('final Controls captures frame unique owned progress only after positive ev
         const error = await run().then(() => null, (error: Error) => error);
         if (scenario === 'framed') { assert.equal(error, null); assert.deepEqual(events, ['final-evidence', 'scroll', 'noErrors', 'capture']); }
         else { assert.ok(error); assert.ok(!events.includes('capture')); assert.ok(!events.includes('noErrors')); assert.deepEqual(events, scenario === 'final-evidence-refused' ? ['final-evidence'] : ['final-evidence', 'scroll']); }
+    });
+});
+
+async function populatedProjectSource() {
+    const ts = await import('typescript'), { runInNewContext } = await import('node:vm');
+    const source = readFileSync(new URL('../scripts/ui-regression-fixtures.mjs', import.meta.url), 'utf8');
+    const tree = ts.createSourceFile('fixture.mjs', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const functions = ['behavior', 'fixtureResponse'].map(name => {
+        const found = tree.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === name); assert.equal(found.length, 1); return found[0].getText(tree);
+    });
+    const constants = tree.statements.filter(ts.isVariableStatement).flatMap(n => [...n.declarationList.declarations])
+        .filter(n => ts.isIdentifier(n.name) && ['AT', 'LEGACY', 'V3', 'VIEWPORTS', 'POPULATED_PROJECTS', 'FIXED_GETS'].includes(n.name.text));
+    const callbacks: any[] = [];
+    const visit = (n: any) => { if (ts.isArrowFunction(n) && n.getText(tree).startsWith('async () => { await behavior(id,')) callbacks.push(n); ts.forEachChild(n, visit); };
+    visit(tree); assert.equal(callbacks.length, 1);
+    const bindings: any = { assert, URL };
+    const actual = runInNewContext(constants.map(n => 'const ' + n.getText(tree) + ';').join('\n') + '\n' + functions.join('\n') + '\n({behavior,fixtureResponse})', bindings);
+    const captures: any[] = [];
+    const findCapture = (n: any) => { if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.name.text === 'capture') captures.push(n); ts.forEachChild(n, findCapture); };
+    findCapture(tree); assert.equal(captures.length, 1);
+    return { ...actual, callback: callbacks[0].getText(tree), capture: captures[0].getText(tree), runInNewContext };
+}
+const populatedProjectLabels = [
+    ['Run #1', 'PROJECT BUILDING', 'EXECUTION RUNNING', 'RUNTIME UNKNOWN', 'RECEIPT NONE'],
+    ['Completed project', 'PROJECT COMPLETED', 'EXECUTION TERMINAL', 'RUNTIME INACTIVE', 'RECEIPT ACTIVE'],
+];
+
+test('populated Projects fixed HTTP scenario preserves empty default and exposes two complete distinct status DTOs only while selected', async () => {
+    const { fixtureResponse } = await populatedProjectSource();
+    const state: any = { populatedProjects: false, activeAssertion: 'projects.populated-card-containment', requests: [], unexpected: [] };
+    const { request } = await import('node:http');
+    const server = createServer(async (req, res) => {
+        try {
+            const value = await fixtureResponse(state, req.method, new URL(req.url!, 'http://127.0.0.1:13082'), null, req.url);
+            res.writeHead(value?.__fixtureStatus ?? 200, { 'Content-Type': 'application/json' }).end(JSON.stringify(value));
+        } catch (e) { res.writeHead(500).end(); }
+    });
+    const sockets = new Set<any>(); server.on('connection', socket => { sockets.add(socket); socket.once('close', () => sockets.delete(socket)); });
+    const get = (target: string, method = 'GET') => new Promise<any>((resolve, reject) => {
+        let ended = false, closed = false, value: any;
+        const req = request({ host: '127.0.0.1', port: 13082, path: target, method, agent: false }, res => {
+            const parts: Buffer[] = []; res.on('data', b => parts.push(b)); res.once('error', reject);
+            res.once('end', () => { ended = true; value = { status: res.statusCode, body: JSON.parse(Buffer.concat(parts).toString()) }; if (closed) resolve(value); });
+        });
+        req.once('error', reject); req.once('close', () => { closed = true; if (ended) resolve(value); }); req.end();
+    });
+    await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(13082, '127.0.0.1', resolve); });
+    try {
+        assert.deepEqual((await get('/api/projects')).body, []);
+        state.populatedProjects = true; const rows = (await get('/api/projects')).body;
+        assert.equal(rows.length, 2); assert.deepEqual(rows.map((p: any) => p.name), populatedProjectLabels.map(r => r[0]));
+        // Run only the actual pure projection closure, never the backend router/config import graph.
+        const ts = await import('typescript'), { runInNewContext } = await import('node:vm');
+        const producerText = readFileSync(new URL('../server/routes/projects.ts', import.meta.url), 'utf8');
+        const producerTree = ts.createSourceFile('projects.ts', producerText, ts.ScriptTarget.Latest, true);
+        const declarations = ['isCanonicalV3Project', 'executionTerminalPublicStatus', 'catalogTerminalPublicStatus', 'toProjectApiProjection'].map(name => {
+            const found = producerTree.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === name); assert.equal(found.length, 1); return found[0].getText(producerTree).replace(/^export /, '');
+        });
+        const hashes = producerTree.statements.filter(ts.isVariableStatement).flatMap(n => [...n.declarationList.declarations]).filter(n => n.name.getText(producerTree) === 'LOWERCASE_SHA256');
+        assert.equal(hashes.length, 1);
+        const { isSetfarmOperationalActiveRunStatusV1 } = await import('../server/shared/setfarm-operational-active-run-status-v1.ts');
+        const producer = runInNewContext(ts.transpileModule('const ' + hashes[0].getText(producerTree) + ';\n' + declarations.join('\n'), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText + '\ntoProjectApiProjection', { isSetfarmOperationalActiveRunStatusV1 });
+        const persisted = { ...rows[1], productCompilerProtocol: 'v3', createdBy: 'setfarm-v3-terminal-projector', status: 'active', serviceStatus: 'active',
+            canonicalProjectionHash: rows[1].receipt.projectionHash, canonicalProjectRecordHash: rows[1].receipt.projectRecordHash,
+            observedServiceStatus: 'inactive', observedServiceCheckedAt: null, observedServiceReasonCode: rows[1].runtime.reasonCode };
+        const projected = producer(persisted, rows[1].execution);
+        assert.equal(projected.status, 'completed'); assert.equal(projected.execution.runStatus, 'completed');
+        assert.deepEqual(rows[1].receipt, JSON.parse(JSON.stringify(projected.receipt)), 'receipt status follows actual persisted active receipt, independently of completed execution');
+        assert.throws(() => producer({ ...persisted, status: 'completed' }, rows[1].execution), /PROJECT_API_CANONICAL_RECEIPT_INVALID/);
+        const { projectRuntimePresentation } = await import('../src/lib/project-health.ts');
+        const React = await import('react'), { renderToStaticMarkup } = await import('react-dom/server');
+        const { ProjectCard } = await import('../src/components/projects/ProjectCard.tsx');
+        for (const [i, row] of rows.entries()) {
+            assert.equal(row.execution.schema, 'mission-control.project-execution.v1');
+            assert.deepEqual([row.name, 'PROJECT ' + row.status.toUpperCase(), 'EXECUTION ' + row.execution.state.toUpperCase(), 'RUNTIME ' + projectRuntimePresentation(row).label, 'RECEIPT ' + (row.receipt?.serviceStatus.toUpperCase() ?? 'NONE')], populatedProjectLabels[i]);
+            assert.ok(row.id && row.createdAt && row.description && Array.isArray(row.stack));
+            const html = renderToStaticMarkup(React.createElement(ProjectCard, { project: row, selected: false, toggling: false, actionsDisabled: false,
+                onSelect() {}, onToggle() {}, onExport() {}, onDelete() {} }));
+            for (const label of populatedProjectLabels[i]) assert.ok(html.includes(label), label + ' is actual component content, not computed layout proof');
+        }
+        state.activeAssertion = 'unrelated'; assert.deepEqual((await get('/api/projects')).body, []);
+        state.activeAssertion = 'projects.populated-card-containment'; state.populatedProjects = false; assert.deepEqual((await get('/api/projects')).body, []);
+        assert.equal((await get('/api/projects', 'POST')).status, 403); assert.equal((await get('/api/projects/unreviewed')).status, 403);
+    } finally {
+        const closing = [...sockets].map(socket => new Promise<void>(resolve => socket.once('close', resolve)));
+        const closed = new Promise<void>((resolve, reject) => server.close(e => e ? reject(e) : resolve()));
+        for (const socket of sockets) socket.destroy(); await Promise.all([closed, ...closing]); assert.equal(sockets.size, 0);
+    }
+});
+
+test('populated Projects actual behavior checks card-local geometry at all widths and cannot capture failed or missing content', async (t) => {
+    const source = await populatedProjectSource();
+    for (const scenario of ['fit', 'badge-escape', 'zero-name', 'clipped-name', 'missing-label', 'duplicate-card', 'wrong-label', 'hidden-label', 'outside-control', 'console', 'overflow', 'late-badge', 'late-console']) await t.test(scenario, async () => {
+        const events: string[] = []; const state: any = { populatedProjects: false }, report = { screenshots: [] as any[] };
+        let width = 1440;
+        const element = (text: string, left: number, top: number, w: number, h = 25): any => ({ textContent: text, clientWidth: w, scrollWidth: w, clientHeight: h, scrollHeight: h, clientLeft: 0, clientTop: 0,
+            getBoundingClientRect: () => ({ left, right: left + w, top, bottom: top + h, width: w, height: h }), getAttribute: () => '', hidden: false });
+        const document = () => {
+            const cards = populatedProjectLabels.map((labels, i) => {
+                const left = 20, top = 20 + i * 260, cardWidth = width === 1440 ? 443 : width - 40;
+                const card = element('', left, top, cardWidth, 240), header = element('', left + 12, top + 12, cardWidth - 24, 165);
+                const name = element(labels[0], left + 12, top + 12, scenario === 'zero-name' && i === 0 ? 0 : 180);
+                if (scenario === 'clipped-name' && i === 0) name.scrollWidth = 300;
+                const statuses = labels.slice(1).map((label, j) => element(label, (scenario === 'badge-escape' || scenario === 'late-badge' && width === 768) && i === 0 && j === 3 ? left + cardWidth + 2 : left + 12, top + 45 + j * 28, 230));
+                if (scenario === 'wrong-label' && i === 0) statuses[1].textContent = 'EXECUTION UNKNOWN';
+                if (scenario === 'hidden-label' && i === 0) statuses[2].hidden = true;
+                if (scenario === 'missing-label' && i === 0) statuses.pop();
+                const button = element('EXPORT', scenario === 'outside-control' && i === 0 ? left + cardWidth : left + 12, top + 200, 90);
+                header.children = [name, ...statuses];
+                card.querySelectorAll = (selector: string) => selector === '.project-card__header' ? [header] : selector === '.project-card__name' ? [name]
+                    : selector === '.project-card__status,.project-card__live-health' ? statuses : [button];
+                card.querySelector = (selector: string) => card.querySelectorAll(selector)[0] ?? null;
+                return card;
+            });
+            return { querySelectorAll: () => scenario === 'duplicate-card' ? [...cards, cards[0]] : cards };
+        };
+        const evaluate = (fn: Function, arg: any) => source.runInNewContext('(' + fn.toString() + ')(arg)', { document: document(), arg,
+            getComputedStyle: (e: any) => ({ display: e.hidden ? 'none' : 'block', visibility: 'visible', paddingLeft: '12px', paddingRight: '12px', paddingTop: '12px', paddingBottom: '12px' }) });
+        const page = { url: () => 'http://127.0.0.1:13082/projects', waitForFunction: async (fn: Function, arg: any) => { events.push('ready:' + width); assert.ok(evaluate(fn, arg), 'mounted positive content'); },
+            evaluate: async (fn: Function, arg: any) => { events.push('geometry:' + width); return evaluate(fn, arg); },
+            screenshot: async () => { events.push('capture:' + width); return Buffer.from('simulated PNG ' + width); } };
+        const bindings: any = { behavior: source.behavior, id: 'projects.populated-card-containment', page, context: {}, state, URL,
+            loaded: async (route: string) => { assert.equal(route, '/projects'); assert.equal(state.populatedProjects, true); events.push('load:' + width); },
+            open: async (value: number) => { if (events.length) assert.ok(events.at(-1)?.startsWith('capture:')); width = value; bindings.viewport = { width, height: 900 }; events.push('open:' + width); },
+            getPage: () => page, viewport: { width, height: 900 },
+            assertOverflow: async () => { events.push('overflow:' + width); if (scenario === 'overflow') throw Error('overflow'); },
+            noErrors: async () => { events.push('errors:' + width); if (scenario === 'console' || scenario === 'late-console' && width === 768) throw Error('console'); },
+            cancellation: () => false, report, currentRoute: '/projects', store: { png: (b: Buffer) => createHash('sha256').update(b).digest('hex') } };
+        const run = source.runInNewContext('const ' + source.capture + '; (' + source.callback + ')', bindings);
+        const error = await run().then(() => null, (e: Error) => e);
+        assert.equal(state.populatedProjects, false, 'fixture state restored on every exit');
+        if (scenario === 'fit') {
+            assert.equal(error, null); assert.deepEqual(JSON.parse(JSON.stringify(report.screenshots)), [390, 768, 1440].map(width => ({ captureId: 'behavior-projects.populated-card-containment-' + width, route: '/projects', viewport: { width, height: 900 }, sha256: createHash('sha256').update('simulated PNG ' + width).digest('hex') })));
+            assert.equal(events.filter(e => e.startsWith('capture:')).length, 3, 'actual capture deduplicates final automatic capture');
+            for (const w of [390, 768, 1440]) assert.ok(events.indexOf('geometry:' + w) < events.indexOf('overflow:' + w) && events.indexOf('overflow:' + w) < events.indexOf('errors:' + w) && events.indexOf('errors:' + w) < events.indexOf('capture:' + w));
+        } else { assert.ok(error, scenario); assert.equal(report.screenshots.length, scenario.startsWith('late-') ? 1 : 0); assert.equal(events.filter(e => e.startsWith('open:')).length, scenario.startsWith('late-') ? 2 : 1); }
     });
 });
