@@ -4902,6 +4902,7 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
 }
 .af-contract__summary {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
@@ -4912,6 +4913,8 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
 }
 .af-contract__summary-main {
   display: flex;
+  flex: 1 1 160px;
+  max-width: 100%;
   flex-direction: column;
   gap: 3px;
   min-width: 0;
@@ -4919,9 +4922,8 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
 .af-contract__summary-main strong {
   color: var(--text);
   font-size: 14px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .af-contract__summary-main span:last-child {
   color: var(--text-dim);
@@ -4935,6 +4937,8 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
 }
 .af-contract__metrics {
   display: flex;
+  flex: 1 1 180px;
+  max-width: 100%;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 6px;
@@ -5745,6 +5749,20 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
 }
 .af-contract__story--deferred {
   opacity: 0.74;
+}
+@media (max-width: 768px) {
+  .af-contract__story {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .af-contract__item-label,
+  .af-contract__item-evidence,
+  .af-contract__story-title,
+  .af-contract__story-meta {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    overflow: visible;
+    text-overflow: clip;
+  }
 }
 .af-step__retry-btn {
   position: absolute;
