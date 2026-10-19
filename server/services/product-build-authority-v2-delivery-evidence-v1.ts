@@ -5,7 +5,7 @@ import { basename, dirname, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 
-import { hashCanonicalJson } from "./setfarm-operational-snapshot.js";
+import { hashCanonicalJson } from "./setfarm-canonical-json-v1.js";
 
 const execFile = promisify(execFileCallback);
 

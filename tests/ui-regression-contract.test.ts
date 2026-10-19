@@ -1,0 +1,273 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { createServer } from 'node:http';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, realpathSync, rmSync, readdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { createHash } from 'node:crypto';
+const load = () => import('../scripts/ui-regression-fixtures.mjs');
+function workspace() {
+    const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'ui-fixture-contract-')));
+    const build = path.join(root, 'build');
+    mkdirSync(build);
+    mkdirSync(path.join(build, 'dist'));
+    mkdirSync(path.join(build, 'dist-server'));
+    writeFileSync(path.join(build, 'dist', 'index.html'), '<html><body><div id="root">Source component fixture</div></body></html>');
+    const h = createHash('sha256').update('mission-control.internal-production-build-content.v1\0');
+    for (const f of ['dist/index.html']) {
+        const b = readFileSync(path.join(build, f));
+        h.update(f + '\0' + b.length + '\0').update(b).update('\0');
+    }
+    writeFileSync(path.join(build, 'dist-server', 'internal-production-build-identity.v1.json'), JSON.stringify({ schema: 'mission-control.internal-production-build-identity.v1', sourceSha: 'a'.repeat(40), treeHash: 'b'.repeat(40), buildHash: h.digest('hex') }));
+    const temp = path.join(root, 'private');
+    mkdirSync(temp, { mode: 0o700 });
+    return { root, buildDir: build, tempRoot: temp };
+}
+test('occupied fixture port refuses before browser effects and leaves unrelated listener owned by test intact', async () => {
+    const f = workspace();
+    const occupied = createServer((_, res) => res.end('owner'));
+    await new Promise<void>((resolve, reject) => { occupied.once('error', reject); occupied.listen(13082, '127.0.0.1', resolve); });
+    try {
+        const { runUiRegressionV1 } = await load();
+        await assert.rejects(runUiRegressionV1({ ...f, browser: { newContext() { throw Error('browser must not run'); } } }), /UI_FIXTURE_PORT_OCCUPIED/);
+        assert.equal(occupied.listening, true);
+        assert.equal(await (await fetch('http://127.0.0.1:13082/')).text(), 'owner');
+    }
+    finally {
+        await new Promise<void>((resolve, reject) => occupied.close(e => e ? reject(e) : resolve()));
+        rmSync(f.root, { recursive: true, force: true });
+    }
+});
+test('fixture server exposes fixed data only, rejects unknown GET and provider mutations, and awaits exact owned close', async () => {
+    const f = workspace();
+    const { createUiRegressionFixtureSessionV1 } = await load();
+    let session;
+    try {
+        session = await createUiRegressionFixtureSessionV1(f);
+        assert.equal((await (await fetch('http://127.0.0.1:13082/api/agents')).json()).length, 14);
+        assert.equal((await fetch('http://127.0.0.1:13082/api/not-reviewed')).status, 403);
+        assert.equal((await fetch('http://127.0.0.1:13082/api/prd/generate', { method: 'POST' })).status, 403);
+        assert.equal(session.unexpectedRequests.length, 2);
+    }
+    finally {
+        if (session)
+            await session.close();
+        rmSync(f.root, { recursive: true, force: true });
+    }
+});
+test('a failing injected browser retains actual failed assertion report and completed PNG before owned server closure', async () => {
+    const f = workspace();
+    const { runUiRegressionV1 } = await load();
+    let closed = false;
+    const page = { on() { }, setDefaultTimeout() { }, goto: async () => { throw Error('fixture navigation failure'); }, screenshot: async () => Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0]), url: () => 'http://127.0.0.1:13082/', close: async () => { } };
+    const browser = { newContext: async () => ({ route: async () => { }, routeWebSocket: async () => { }, addInitScript: async () => { }, on() { }, newPage: async () => page, close: async () => { closed = true; } }) };
+    try {
+        const result = await runUiRegressionV1({ ...f, browser });
+        assert.equal(result.report.outcome, 'fail');
+        assert.equal(result.report.assertions[0].status, 'fail');
+        assert.equal(result.report.screenshots.length, 1);
+        assert.ok(closed);
+        const report = JSON.parse(readFileSync(path.join(f.tempRoot, 'artifacts', result.reportHash + '.json'), 'utf8'));
+        assert.equal(report.outcome, 'fail');
+        assert.ok(readdirSync(path.join(f.tempRoot, 'artifacts')).some(x => x.endsWith('.png')));
+    }
+    finally {
+        rmSync(f.root, { recursive: true, force: true });
+    }
+});
+test('tampered built static assets refuse before taking fixture listener ownership', async () => {
+    const f = workspace();
+    try {
+        const { createUiRegressionFixtureSessionV1 } = await load();
+        writeFileSync(path.join(f.buildDir, 'dist', 'index.html'), 'changed');
+        await assert.rejects(createUiRegressionFixtureSessionV1(f), /UI_BUILD_IDENTITY_INVALID/);
+    }
+    finally {
+        rmSync(f.root, { recursive: true, force: true });
+    }
+});
+test('fixed entry refuses alternate argv and source bootstrap before any fixture effect', async () => {
+    const { parseUiInvocationV1, assertUiCompiledSelfV1 } = await import('../scripts/ui-regression.mjs');
+    assert.deepEqual(parseUiInvocationV1(['--standalone']), { mode: 'standalone', scenario: 'pass' });
+    assert.deepEqual(parseUiInvocationV1(['--standalone-owned-cancel']), { mode: 'standalone', scenario: 'owned_cancel' });
+    for (const argv of [[], ['--standalone', '/tmp'], ['--job-id', 'bad'], ['--standalone-assertion-failure', '--job-id', '018d819f-0a78-7d38-bb1f-0195b029ddaf'], ['--browser', 'chrome']])
+        assert.throws(() => parseUiInvocationV1(argv));
+    assert.throws(() => assertUiCompiledSelfV1(new URL('../scripts/ui-regression.mjs', import.meta.url).href), /UI_COMPILED_SELF_REQUIRED/);
+});
+test('simulated original UI channel latches cancellation while ACK is outstanding and rejects changed binding ACK', async () => {
+    const { EventEmitter } = await import('node:events');
+    const { createUiWorkerChannelV1 } = await import('../scripts/ui-regression.mjs');
+    const sf = new URL('../../setfarm-dashboard-cutover-controller-20261007-v1/src/', import.meta.url);
+    const channel = await import(new URL('execution/schemas/manual-control-worker-channel-v1.ts', sf).href);
+    const schemas = await import(new URL('execution/schemas/manual-control-job-v1.ts', sf).href);
+    const jobId = '018d819f-0a78-7d38-bb1f-0195b029ddaf', nonce = 'n'.repeat(64), hash = (s: string) => createHash('sha256').update(s).digest('hex');
+    const owner = { pid: 42, processStartedAt: '2026-10-19T10:00:00.000Z', processGroupId: 42, source: 'observed_os', executable: '/node', script: '/mc/dist-server/scripts/ui-regression.mjs', commandHash: '1'.repeat(64) };
+    const receipt = { schema: 'mission-control.control-job.v1', jobId, kind: 'ui_regression', revision: 1, selectionHash: 'a'.repeat(64), sourceSha: 'b'.repeat(40), mcSourceSha: 'c'.repeat(40), mcBuildHash: 'd'.repeat(64), suiteHash: null, state: 'accepted', requestedAt: '2026-10-19T10:00:00.000Z', startedAt: null, updatedAt: '2026-10-19T10:00:00.000Z', finishedAt: null, phase: 'starting', code: null, currentCaseId: null, ownedRunId: null, completedCases: 0, plannedCases: 313, reportRefs: {}, cancelRequested: false };
+    const intent = { schema: 'mission-control.control-intent.v1', receipt, installationDir: '/installation', releaseDir: '/release', nonceDigest: hash(nonce), fixedSuiteRelativePath: null };
+    const target = new EventEmitter() as any;
+    target.connected = true;
+    const sent: any[] = [];
+    target.send = (frame: any, callback: Function) => { sent.push(frame); callback(); };
+    const intentHash = 'e'.repeat(64), binding = { jobId, channelId: '018d819f-0a78-7d38-bb1f-0195b029ddae', intentHash, kind: 'ui_regression' };
+    const worker = createUiWorkerChannelV1({ intent, intentHash, owner, channel, schemas, target });
+    const sign = (sequence: number, body: any) => channel.signWorkerChannelFrameV1({ binding, direction: 'broker_to_worker', sequence, body, nonce });
+    target.emit('message', sign(1, { type: 'custody', custody: { schema: 'mission-control.control-custody.v1', jobId, selectionHash: receipt.selectionHash, sourceSha: receipt.sourceSha, mcBuildHash: receipt.mcBuildHash, nonce } }));
+    await worker.ready();
+    const pending = worker.send({ type: 'ui_ready', owner, fixtureVersion: 'v1', fixtureHash: 'f'.repeat(64), plannedAssertions: 313 });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(sent.length, 1);
+    target.emit('message', sign(2, { type: 'cancel', requestId: jobId, acceptedReceiptRevision: 2 }));
+    assert.equal(worker.cancellationRequested(), true);
+    target.emit('message', sign(3, { type: 'ack', workerSequence: 1, workerFrameHash: channel.hashWorkerChannelFrameV1(sent[0]), receiptRevision: 3, receipt: { ...receipt, revision: 3, state: 'cancelling', cancelRequested: true, selectionHash: '9'.repeat(64) } }));
+    await assert.rejects(pending, /CONTROL_CHANNEL_INVALID/);
+    assert.equal(worker.available(), false);
+    worker.close();
+});
+test('fixture cancellation stops future assertion scheduling and retains an incomplete immutable report', async () => {
+    const f = workspace();
+    try {
+        const { runUiRegressionV1 } = await load();
+        const result = await runUiRegressionV1({ ...f, browser: { newContext() { throw Error('must not create context after cancel'); } }, control: { cancellationRequested: () => true } });
+        assert.equal(result.report.outcome, 'incomplete');
+        assert.equal(result.report.assertions.length, 0);
+        assert.ok(result.report.finishedAt);
+        assert.equal(JSON.parse(readFileSync(path.join(f.tempRoot, 'artifacts', result.reportHash + '.json'), 'utf8')).outcome, 'incomplete');
+    }
+    finally {
+        rmSync(f.root, { recursive: true, force: true });
+    }
+});
+test('private API launches replay the original accepted fixture job and cancellation stays nonterminal until owned settlement', async () => {
+    const f = workspace();
+    const { createUiRegressionFixtureSessionV1 } = await load();
+    let session;
+    try {
+        session = await createUiRegressionFixtureSessionV1(f);
+        const body = { kind: 'ui_regression', idempotencyKey: '018d819f-0a78-7d38-bb1f-0195b029ddad', expectedSelectionHash: 'c'.repeat(64) };
+        const post = () => fetch('http://127.0.0.1:13082/api/controls/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
+        const a = await post(), b = await post();
+        assert.equal(a.replay, false);
+        assert.equal(b.replay, true);
+        assert.equal(a.receipt.jobId, b.receipt.jobId);
+        assert.equal((await (await fetch('http://127.0.0.1:13082/api/controls/jobs')).json()).jobs.length, 1);
+        const c = await (await fetch('http://127.0.0.1:13082/api/controls/jobs/' + a.receipt.jobId + '/cancel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idempotencyKey: '018d819f-0a78-7d38-bb1f-0195b029ddac', expectedRevision: 1 }) })).json();
+        assert.equal(c.receipt.state, 'cancelling');
+        assert.equal(c.receipt.finishedAt, null);
+    }
+    finally {
+        if (session)
+            await session.close();
+        rmSync(f.root, { recursive: true, force: true });
+    }
+});
+test('loaded build capture imports without credential config, selected runtime or database graph', async () => {
+    const { spawnSync } = await import('node:child_process');
+    const moduleUrl = new URL('../server/services/product-build-authority-v2-delivery-evidence-v1.ts', import.meta.url).href;
+    const script = `import {registerHooks} from 'node:module';registerHooks({resolve(specifier,context,next){const r=next(specifier,context);if(/\\/(config|fresh-installation-runtime)\\.(?:js|ts)$/.test(r.url)||/\\/postgres\\//.test(r.url))throw Error('UI_BOOTSTRAP_EFFECTFUL_IMPORT');return r;}});const m=await import(${JSON.stringify(moduleUrl)});if(typeof m.productBuildAuthorityV2LoadedBuildStartupStateV1!=='function')throw Error('missing capture');`;
+    const result = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script], { encoding: 'utf8', timeout: 10000, env: { PATH: '/opt/homebrew/bin:/usr/bin:/bin', TSX_DISABLE_CACHE: '1' }, stdio: ['ignore', 'pipe', 'pipe'] });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.signal, null);
+});
+test('extracted canonical JSON preserves key order, Unicode, negative zero and rejection semantics', async () => {
+    const { canonicalJsonStringify, hashCanonicalJson, SnapshotValidationError } = await import('../server/services/setfarm-canonical-json-v1.js');
+    assert.equal(canonicalJsonStringify({ z: -0, a: ['é', true, null, { b: 1, a: 2 }] }), '{"a":["é",true,null,{"a":2,"b":1}],"z":0}');
+    assert.equal(hashCanonicalJson({ b: 2, a: 1 }), '43258cff783fe7036d8a43033f830adfc60ec037382473548ac742b888292777');
+    for (const value of [undefined, NaN, Infinity, () => { }, 1n])
+        assert.throws(() => canonicalJsonStringify(value), SnapshotValidationError);
+});
+test('intentional fixture diagnostics pair one exact named request and reject mismatches or extra errors', async () => {
+    const { reconcileUiFixtureDiagnosticsV1 } = await load();
+    const identity = { assertionId: 'controls.lost-response-reload-idempotency', requestIdentity: 'request-42', method: 'POST', url: 'http://127.0.0.1:13082/api/controls/jobs', bodyHash: 'a'.repeat(64) };
+    const fault = { ...identity, kind: 'lost_response', idempotencyKey: '018d819f-0a78-7d38-bb1f-0195b029ddad', acceptedJobId: '018d819f-0a78-7d38-bb1f-0195b029ddaf' };
+    const error = { kind: 'console', text: 'Failed to load resource: net::ERR_EMPTY_RESPONSE', url: identity.url, assertionId: identity.assertionId };
+    const event = { ...identity, kind: 'requestfailed', errorText: 'net::ERR_EMPTY_RESPONSE' };
+    const input = { assertionId: identity.assertionId, errors: [error], requestFailures: [event], faults: [fault] };
+    assert.equal(reconcileUiFixtureDiagnosticsV1(input).length, 1);
+    for (const changes of [
+        { errors: [error, error] }, { requestFailures: [event, event] }, { faults: [] }, { errors: [] }, { requestFailures: [] },
+        { assertionId: 'controls.unknown-retention' },
+        { errors: [{ ...error, kind: 'pageerror' }] }, { errors: [{ ...error, text: 'Failed to load resource: net::ERR_FAILED' }] },
+        { errors: [{ ...error, url: identity.url + '/other' }] },
+        { requestFailures: [{ ...event, requestIdentity: 'request-43' }] },
+        { requestFailures: [{ ...event, bodyHash: 'b'.repeat(64) }] },
+        { requestFailures: [{ ...event, method: 'GET' }] },
+        { requestFailures: [{ ...event, errorText: 'net::ERR_ABORTED' }] },
+        { faults: [{ ...fault, acceptedJobId: null }] },
+    ])
+        assert.throws(() => reconcileUiFixtureDiagnosticsV1({ ...input, ...changes }), /UI_BROWSER_ERRORS/);
+    const rules = { assertionId: 'rules.draft-503', requestIdentity: 'request-43', method: 'POST', url: 'http://127.0.0.1:13082/api/rules', bodyHash: 'c'.repeat(64), kind: 'rules_503' };
+    const ruleInput = { assertionId: rules.assertionId, faults: [rules], errors: [{ kind: 'console', text: 'Failed to load resource: the server responded with a status of 503 (Service Unavailable)', url: rules.url, assertionId: rules.assertionId }], requestFailures: [{ ...rules, kind: 'response', status: 503 }] };
+    assert.equal(reconcileUiFixtureDiagnosticsV1(ruleInput).length, 1);
+    assert.throws(() => reconcileUiFixtureDiagnosticsV1({ ...ruleInput, requestFailures: [{ ...rules, kind: 'response', status: 500 }] }), /UI_BROWSER_ERRORS/);
+    assert.throws(() => reconcileUiFixtureDiagnosticsV1({ ...ruleInput, faults: [rules, rules] }), /UI_BROWSER_ERRORS/);
+});
+test('Controls HTTP fixture carries six activation and eight convergence preflight checks as distinct strict projections', async (t) => {
+    const f = workspace();
+    const { createUiRegressionFixtureSessionV1, UI_REGRESSION_FIXTURE_V1 } = await load();
+    assert.equal(UI_REGRESSION_FIXTURE_V1.assertionIds.length, 316);
+    assert.equal(UI_REGRESSION_FIXTURE_V1.assertionIds.filter(id => id === 'controls.distinct-check-groups').length, 1);
+    const { parseControlEvidenceEnvelopeV1 } = await import('../src/lib/control-evidence.ts');
+    const sf = new URL('../../setfarm-dashboard-cutover-controller-20261007-v1/src/', import.meta.url);
+    const { ControlEvidenceProjectionV1Schema } = await import(new URL('execution/schemas/manual-control-job-v1.ts', sf).href);
+    const { PreflightCheckV1Schema } = await import(new URL('execution/schemas/activation-preflight-report-v1.ts', sf).href);
+    const { ConvergencePreflightCheckIdV1Schema } = await import(new URL('evals/result-schema.ts', sf).href);
+    let session;
+    try {
+        session = await createUiRegressionFixtureSessionV1(f);
+        // This server has a new original owner; do not reuse another test's pooled socket.
+        const { get } = await import('node:http');
+        const raw: any = await new Promise((resolve, reject) => {
+            const request = get('http://127.0.0.1:13082/api/controls/evidence', { agent: false }, response => {
+                const parts: Buffer[] = [];
+                response.on('data', part => parts.push(part));
+                response.once('error', reject);
+                response.once('end', () => {
+                    try {
+                        assert.equal(response.statusCode, 200);
+                        resolve(JSON.parse(Buffer.concat(parts).toString('utf8')));
+                    } catch (error) { reject(error); }
+                });
+            });
+            request.once('error', reject);
+        });
+        const parsed = parseControlEvidenceEnvelopeV1(raw);
+        ControlEvidenceProjectionV1Schema.parse({ activation: raw.evidence.activation, evaluation: raw.evidence.evaluation });
+        ControlEvidenceProjectionV1Schema.parse(raw.history[0].evidence);
+        await t.test('convergence has exactly its eight Source IDs separate from planned case rows', () => {
+            const report = parsed.evidence.evaluation.report!;
+            assert.deepEqual(report.preflightChecks.map(row => row.id), ConvergencePreflightCheckIdV1Schema.options);
+            assert.equal(new Set(report.preflightChecks.map(row => row.id)).size, 8);
+            assert.equal(report.cases.length, 8);
+            assert.equal(new Set(report.cases.map(row => row.caseId)).size, 8);
+            assert.ok(report.cases.every(row => row.evidenceState === 'not_started' && row.runId === null && row.resultHash === null && row.passed === null && row.disposition === null));
+            assert.ok(report.preflightChecks.every(row => row.status === 'pass' && row.code.startsWith('EVAL_') && !report.cases.some(c => c.caseId === row.id)));
+            assert.equal(report.executionMode, 'preflight');
+            assert.equal(report.resultStatus, 'planned');
+            assert.equal(report.qualification, 'unqualified');
+            assert.equal(report.completedCases, 0);
+        });
+        await t.test('activation has exactly its six Source checks with strict current and historical shape', () => {
+            const activation = parsed.evidence.activation.report;
+            assert.ok(activation);
+            assert.deepEqual(activation.checks.map(row => row.id), PreflightCheckV1Schema.shape.id.options);
+            for (const row of activation.checks) {
+                PreflightCheckV1Schema.parse(row);
+                assert.equal(row.blocking, row.status === 'fail');
+                assert.equal(row.status, 'pass');
+            }
+            assert.equal(activation.compatibility, 'current');
+            assert.equal(activation.protocol, 'shadow');
+            assert.equal(parsed.history[0].evidence.activation.report?.compatibility, 'historical');
+            assert.deepEqual(parsed.history[0].evidence.activation.report?.checks, activation.checks);
+            const foreign = structuredClone(raw);
+            foreign.evidence.activation.report.checks[0].authority = 'invented';
+            assert.throws(() => parseControlEvidenceEnvelopeV1(foreign), /CONTROL_RESPONSE_INVALID/);
+            assert.throws(() => ControlEvidenceProjectionV1Schema.parse({ activation: foreign.evidence.activation, evaluation: foreign.evidence.evaluation }));
+        });
+    }
+    finally {
+        if (session)
+            await session.close();
+        rmSync(f.root, { recursive: true, force: true });
+    }
+});
