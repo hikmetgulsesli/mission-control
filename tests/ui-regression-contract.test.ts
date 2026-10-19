@@ -829,3 +829,42 @@ test('PRD history HTTP fixture preserves explicit unscored producer nulls', asyn
         rmSync(f.root, { recursive: true, force: true });
     }
 });
+
+// Source-function component test: DOM focus and Playwright effects are simulated;
+// the private behavior body and its page.evaluate callback execute unchanged in VM.
+test('navigation shortcut setup blurs focused elements without clicking provider refresh', async (t) => {
+    const ts = await import('typescript');
+    const { runInNewContext } = await import('node:vm');
+    const source = readFileSync(new URL('../scripts/ui-regression-fixtures.mjs', import.meta.url), 'utf8');
+    const parsed = ts.createSourceFile('ui-regression-fixtures.mjs', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const declarations = parsed.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === 'behavior');
+    assert.equal(declarations.length, 1);
+    const behavior = runInNewContext('(' + declarations[0].getText(parsed) + ')', { assert, ORIGIN: 'http://127.0.0.1:13082' });
+    for (const scenario of ['focused-button', 'already-body', 'refused-blur', 'non-html-focus']) await t.test(scenario, async () => {
+        const events: string[] = [], posts: string[] = [];
+        let clicks = 0, blurs = 0;
+        const document: any = {};
+        class HTMLElement {
+            blur() { blurs++; events.push('blur'); if (scenario !== 'refused-blur') document.activeElement = document.body; }
+        }
+        document.body = new HTMLElement();
+        document.activeElement = scenario === 'already-body' ? document.body : scenario === 'non-html-focus' ? {} : new HTMLElement();
+        const page = {
+            locator: (selector: string) => ({ click: async () => { assert.equal(selector, 'body'); clicks++; posts.push('/api/kimi-quota/refresh'); document.activeElement = document.body; } }),
+            evaluate: async (callback: Function) => runInNewContext('(' + callback.toString() + ')()', { document, HTMLElement }),
+            keyboard: { press: async (key: string) => { assert.equal(document.activeElement, document.body, 'keys require observed body focus'); events.push('key:' + key); } },
+            waitForURL: async (url: string) => { events.push('url:' + new URL(url).pathname); },
+        };
+        const run = () => behavior('navigation.d-p', { page, loaded: async (route: string) => { events.push('loaded:' + route); } });
+        if (['refused-blur', 'non-html-focus'].includes(scenario)) {
+            await assert.rejects(run(), /UI_NAVIGATION_FOCUS_NOT_BODY/);
+            assert.deepEqual(events.filter(e => e.startsWith('key:') || e.startsWith('url:')), []);
+        } else {
+            await run();
+            assert.deepEqual(events, ['loaded:/', 'blur', 'key:d', 'url:/setfarm/active', 'key:p', 'url:/prd']);
+        }
+        assert.equal(blurs, scenario === 'non-html-focus' ? 0 : 1);
+        assert.equal(clicks, 0);
+        assert.deepEqual(posts, []);
+    });
+});

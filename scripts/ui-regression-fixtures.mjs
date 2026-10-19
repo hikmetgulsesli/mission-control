@@ -722,7 +722,11 @@ async function behavior(id, { page, context, state, loaded, capture }) {
     }
     if (id === 'navigation.d-p') {
         await loaded('/');
-        await page.locator('body').click({ position: { x: 5, y: 5 } });
+        assert(await page.evaluate(() => {
+            if (document.activeElement instanceof HTMLElement)
+                document.activeElement.blur();
+            return document.activeElement === document.body;
+        }), 'UI_NAVIGATION_FOCUS_NOT_BODY');
         await page.keyboard.press('d');
         await page.waitForURL(ORIGIN + '/setfarm/active');
         await page.keyboard.press('p');
