@@ -623,6 +623,7 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
 /* Run detail tabs */
 .rd-tabs {
   display: flex; gap: 2px; margin-bottom: 16px;
+  overflow-x: auto;
   border-bottom: 1px solid var(--border); padding-bottom: 0;
 }
 .rd-tab {
@@ -1463,7 +1464,6 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
   .rd-chat-layout { flex-direction: column; }
   .rd-chat-sidebar { width: 100%; flex-direction: row; overflow-x: auto; gap: 4px; }
   .rd-agent-btn { min-width: 100px; }
-  .rd-tabs { overflow-x: auto; }
   .rd-tab { white-space: nowrap; padding: 6px 10px; font-size: 14px; }
   .rd-pipe-step { padding: 8px 10px; }
   .rd-pipe-icon { width: 24px; height: 24px; font-size: 10px; }
