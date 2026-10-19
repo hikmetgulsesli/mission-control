@@ -205,7 +205,7 @@ export function Rules() {
   );
 
   return (
-    <div style={{ padding: '20px 24px', maxWidth: 1400, margin: '0 auto' }}>
+    <div className="rules-page" style={{ padding: '20px 24px', maxWidth: 1400, margin: '0 auto' }}>
       {/* Header */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <div>
@@ -216,7 +216,7 @@ export function Rules() {
             {rules.length} rules &middot; {rules.filter(r => r.readonly).length} system &middot; {rules.filter(r => !r.readonly).length} custom
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="rules__actions" style={{ display: 'flex', gap: 8 }}>
           <button className="btn" disabled={!capabilities?.import || busy} title={capabilityReason} onClick={handleImport}>IMPORT</button>
           <button className="btn" onClick={handleExport}>EXPORT</button>
           <button className="btn btn--primary" disabled={!capabilities?.create || busy} title={capabilityReason} onClick={() => { setSaveError(null); setModal({ open: true }); }}>+ NEW RULE</button>
@@ -237,7 +237,7 @@ export function Rules() {
       </div>}
 
       {/* Pipeline Stage Selector */}
-      <div style={{
+      <div className="rules__stages" style={{
         display: 'flex', gap: 0, marginBottom: 20,
         background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8,
         overflowX: 'auto',
@@ -321,7 +321,7 @@ export function Rules() {
           <span style={{ fontSize: 14, color: 'var(--text-dim)', fontFamily: 'var(--font)' }}>
             {filtered.length} active rules &middot; {filtered.filter(r => r.applies_to === 'all').length} global
           </span>
-          <div style={{ marginLeft: 'auto', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          <div className="rules__filters" style={{ marginLeft: 'auto', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             <input
               type="text" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)}
               style={{
@@ -353,13 +353,13 @@ export function Rules() {
 
       {/* Filters when no stage selected */}
       {!activeStage && (
-        <div style={{
+        <div className="rules__filters" style={{
           display: 'flex', gap: 10, marginBottom: 14, padding: '8px 14px',
           background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 6,
         }}>
           <input type="text" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} aria-label="Search rules"
             style={{
-              flex: 1, minWidth: 160, padding: '6px 10px', fontSize: 14,
+              flex: '1 1 160px', minWidth: 0, padding: '6px 10px', fontSize: 14,
               background: 'var(--bg-input)', color: 'var(--text-primary)',
               border: '1px solid var(--border)', borderRadius: 4,
               fontFamily: 'var(--font)', outlineOffset: 3,

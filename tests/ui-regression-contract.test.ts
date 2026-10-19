@@ -675,3 +675,88 @@ test('review fix4 real fixture responses satisfy mounted pipeline and exact read
         rmSync(f.root, { recursive: true, force: true });
     }
 });
+
+// Simulated DOM geometry only. The engine's actual page.evaluate callback makes the decision.
+function responsiveGeometry(scenario: string) {
+    const nodes: any[] = [];
+    function element(tag: string, className: string, left: number, width: number, parent: any = null, style: any = {}) {
+        const e: any = { tagName: tag.toUpperCase(), className, parentElement: parent, children: [], clientLeft: 0, clientWidth: width, scrollWidth: width,
+            style: { display: 'block', visibility: 'visible', overflowX: 'visible', ...style },
+            getBoundingClientRect: () => ({ left, right: left + width, width, top: 0, bottom: 30, height: 30 }),
+            getAttribute: (name: string) => name === 'class' ? className : null,
+            matches: (selector: string) => selector.split(',').some(part => { const s = part.trim(); return s.startsWith('.') ? className.split(' ').includes(s.slice(1)) : s.toUpperCase() === e.tagName; }),
+            contains: (other: any) => { for (let n = other; n; n = n.parentElement) if (n === e) return true; return false; },
+            querySelectorAll: (selector: string) => nodes.filter(n => n !== e && e.contains(n) && n.matches(selector)),
+        };
+        nodes.push(e); parent?.children.push(e); return e;
+    }
+    const root = element('html', '', 0, 390), main = element('main', 'layout__content', 0, 390, root, { overflowX: 'auto' });
+    const page = element('div', 'projects-page', 8, 374, main);
+    if (scenario === 'document-overflow') root.scrollWidth = 500;
+    if (scenario === 'main-overflow') main.scrollWidth = 600;
+    if (scenario === 'hidden-header') {
+        const header = element('div', 'af-page__header', 8, 374, page, { overflowX: 'hidden' }); header.scrollWidth = 650;
+    }
+    if (scenario === 'offscreen-control') element('button', 'action', 360, 100, page);
+    if (scenario === 'clipped-ancestor') {
+        const clip = element('div', 'panel', 8, 100, page, { overflowX: 'hidden' }); element('button', 'action', 80, 100, clip);
+    }
+    if (['bounded-table', 'bounded-tabs', 'overwide-wrapper', 'arbitrary-auto', 'hidden-scroller'].includes(scenario)) {
+        const name = scenario === 'arbitrary-auto' ? 'not-reviewed' : scenario === 'bounded-tabs' ? 'rd-tabs' : 'cron-table';
+        const wrapper = element('div', name, 8, scenario === 'overwide-wrapper' ? 500 : 374, page, { overflowX: scenario === 'hidden-scroller' ? 'hidden' : 'auto' });
+        wrapper.scrollWidth = 900;
+        element('button', 'internal-control', 600, 100, wrapper);
+    }
+    if (scenario === 'wrapped-fit') {
+        const header = element('div', 'projects-page__header', 8, 374, page);
+        element('button', 'action', 8, 160, header); element('button', 'action', 190, 160, header);
+    }
+    if (scenario === 'bounded-diagnostics') for (let i = 0; i < 20; i++) element('button', 'x'.repeat(160), 400 + i, 30, page);
+    return { window: { innerWidth: 390 }, document: { documentElement: root, querySelector: (selector: string) => scenario === 'missing-main' ? null : nodes.find(n => n.matches(selector)) ?? null }, getComputedStyle: (e: any) => e.style };
+}
+test('responsive overflow assertion checks real evaluator against simulated main clipping and bounded internal scroll geometry', async (t) => {
+    const { runInNewContext } = await import('node:vm');
+    const cases: [string, 'pass' | 'fail'][] = [
+        ['document-overflow', 'fail'], ['main-overflow', 'fail'], ['hidden-header', 'fail'], ['offscreen-control', 'fail'],
+        ['clipped-ancestor', 'fail'], ['wrapped-fit', 'pass'], ['bounded-table', 'pass'], ['bounded-tabs', 'pass'],
+        ['overwide-wrapper', 'fail'], ['arbitrary-auto', 'fail'], ['hidden-scroller', 'fail'], ['missing-main', 'fail'], ['bounded-diagnostics', 'fail'],
+    ];
+    for (const [scenario, expected] of cases) await t.test(scenario, async () => {
+        const f = workspace();
+        const { runUiRegressionV1 } = await load();
+        let stop = false, closed = false, evaluations = 0;
+        const geometry = responsiveGeometry(scenario);
+        const page = { on() { }, setDefaultTimeout() { }, goto: async () => {},
+            locator: () => ({ waitFor: async () => {}, innerText: async () => 'Fixture content sufficiently long to finish the existing loaded assertion.' }),
+            evaluate: async (callback: Function) => { evaluations++; return runInNewContext('(' + callback.toString() + ')()', geometry); },
+            screenshot: async () => Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0]), url: () => 'http://127.0.0.1:13082/', close: async () => {},
+        };
+        const browser = { newContext: async () => ({ route: async () => {}, routeWebSocket: async () => {}, addInitScript: async () => {}, on() {}, newPage: async () => page, close: async () => { closed = true; } }) };
+        try {
+            const result = await runUiRegressionV1({ ...f, browser, control: { cancellationRequested: () => stop, onAssertionBoundary: async ({ id, edge }: any) => { if (id === 'page.home.390.overflow' && edge === 'after') stop = true; } } });
+            assert.equal(evaluations, 1);
+            assert.equal(result.report.assertions.length, 2);
+            assert.equal(result.report.assertions[0].status, 'pass');
+            assert.equal(result.report.assertions[1].id, 'page.home.390.overflow');
+            assert.equal(result.report.assertions[1].status, expected);
+            assert.equal(closed, true);
+            if (expected === 'fail') {
+                const diagnostic = JSON.parse(readFileSync(path.join(f.tempRoot, 'artifacts', result.diagnosticHashes[0] + '.json'), 'utf8'));
+                assert.match(diagnostic.message, /^UI_HORIZONTAL_OVERFLOW /);
+                const details = JSON.parse(diagnostic.message.slice('UI_HORIZONTAL_OVERFLOW '.length));
+                assert.ok(details.count > 0);
+                assert.ok(details.samples.length > 0 && details.samples.length <= 8);
+                for (const sample of details.samples) {
+                    assert.ok(sample.tag.length <= 20 && sample.className.length <= 80);
+                    assert.deepEqual(Object.keys(sample).sort(), ['className', 'clientWidth', 'kind', 'left', 'right', 'scrollWidth', 'tag']);
+                    for (const key of ['left', 'right', 'clientWidth', 'scrollWidth']) assert.equal(typeof sample[key], 'number');
+                }
+                if (scenario === 'bounded-diagnostics') {
+                    assert.equal(details.samples.length, 8);
+                    assert.ok(details.count >= 20);
+                    assert.ok(diagnostic.message.length < 4096);
+                }
+            }
+        } finally { rmSync(f.root, { recursive: true, force: true }); }
+    });
+});

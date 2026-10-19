@@ -2748,6 +2748,9 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
 
 .projects-sort {
   display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
   align-items: center;
   gap: 6px;
   margin-bottom: 12px;
@@ -3311,11 +3314,13 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
 .af-page__header {
   margin-bottom: 16px;
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
 }
-.af-page__header-left { flex-shrink: 0; }
+.af-page__header > * { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.af-page__header-left { flex: 1 1 20rem; min-width: 0; max-width: 100%; }
 .af-page__subtitle {
   font-size: 14px;
   color: var(--text-dim);
@@ -3495,6 +3500,7 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
   overflow: hidden;
 }
 .af-bottom__col {
+  min-width: 0;
   background: var(--bg-card);
   border: 1px dashed var(--border);
   border-radius: 4px;
@@ -5809,12 +5815,18 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
 /* ── Projects Page Updates ── */
 .projects-page__header {
   display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-width: 0;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 12px;
 }
 .projects-page__actions {
   display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
   gap: 8px;
 }
 .project-card__actions {
@@ -9733,6 +9745,8 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
 
 .oe-unavailable {
   margin: 14px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .oe-unavailable b { display: block; margin-bottom: 5px; }
@@ -9924,3 +9938,10 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
   .oe-header { align-items: flex-start; flex-direction: column; }
   .oe-header > strong { max-width: 100%; }
 }
+
+/* Rules controls wrap within their page; the stage strip owns its internal scroll. */
+.rules-page { min-width: 0; }
+.rules__actions, .rules__filters { flex-wrap: wrap; min-width: 0; max-width: 100%; }
+.rules__filters input { flex: 1 1 160px; min-width: 0; max-width: 100%; }
+.rules__filters select { min-width: 0; max-width: 100%; }
+.rules__stages { min-width: 0; max-width: 100%; }

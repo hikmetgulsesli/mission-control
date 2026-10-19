@@ -514,7 +514,87 @@ async function runCatalog({ browser, state, store, measured, control, schemas })
                 currentRoute = route;
                 const prefix = `page.${routeId(route)}.${v.width}`;
                 await check(prefix + '.loaded', () => loaded(route), `${routeId(route)}-${v.width}`);
-                await check(prefix + '.overflow', async () => assert(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), 'UI_HORIZONTAL_OVERFLOW'));
+                await check(prefix + '.overflow', async () => {
+                    const overflow = await page.evaluate(() => {
+                        const tolerance = 1, samples = [];
+                        let count = 0;
+                        const add = (kind, element) => {
+                            count++;
+                            if (samples.length >= 8)
+                                return;
+                            const rect = element.getBoundingClientRect();
+                            const number = value => Number.isFinite(value) ? Math.round(value * 100) / 100 : 0;
+                            samples.push({ kind, tag: element.tagName.toLowerCase().slice(0, 20), className: (element.getAttribute('class') ?? '').slice(0, 80), left: number(rect.left), right: number(rect.right), clientWidth: number(element.clientWidth), scrollWidth: number(element.scrollWidth) });
+                        };
+                        const root = document.documentElement;
+                        if (root.scrollWidth > window.innerWidth + tolerance)
+                            add('document-width', root);
+                        const main = document.querySelector('.layout__content');
+                        if (!main) {
+                            add('missing-main', root);
+                            return { count, samples };
+                        }
+                        const visible = element => {
+                            const rect = element.getBoundingClientRect(), style = getComputedStyle(element);
+                            return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+                        };
+                        if (!visible(main)) {
+                            add('hidden-main', main);
+                            return { count, samples };
+                        }
+                        const mainRect = main.getBoundingClientRect();
+                        const mainLeft = Math.max(0, mainRect.left + main.clientLeft), mainRight = Math.min(window.innerWidth, mainRect.left + main.clientLeft + main.clientWidth);
+                        if (mainRect.left < -tolerance || mainRect.right > window.innerWidth + tolerance)
+                            add('main-bounds', main);
+                        if (main.scrollWidth > main.clientWidth + tolerance)
+                            add('main-content', main);
+                        const scrollSelectors = '.cron-table,.token-table-wrapper,.token-table,.rd-tabs,.rd-chat-sidebar,.chat-sidebar,.af-pipeline__steps,.af-inline-plan__tabs,.rules__stages';
+                        const scrollers = new Set(Array.from(main.querySelectorAll(scrollSelectors)).filter(element => visible(element) && ['auto', 'scroll'].includes(getComputedStyle(element).overflowX)));
+                        const bounds = element => {
+                            let rect = element.getBoundingClientRect();
+                            for (let parent = element.parentElement; parent && parent !== main; parent = parent.parentElement) {
+                                const style = getComputedStyle(parent);
+                                if (scrollers.has(parent)) {
+                                    // The content can scroll; its original bounded wrapper cannot escape.
+                                    rect = parent.getBoundingClientRect();
+                                }
+                                else if (['hidden', 'clip', 'auto', 'scroll'].includes(style.overflowX)) {
+                                    const clip = parent.getBoundingClientRect(), left = clip.left + parent.clientLeft, right = left + parent.clientWidth;
+                                    if (rect.left < left - tolerance || rect.right > right + tolerance)
+                                        add('ancestor-clip', element);
+                                }
+                            }
+                            if (rect.left < mainLeft - tolerance || rect.right > mainRight + tolerance)
+                                add('horizontal-bounds', element);
+                        };
+                        for (const pageRoot of main.children) {
+                            if (!visible(pageRoot))
+                                continue;
+                            bounds(pageRoot);
+                            if (pageRoot.scrollWidth > pageRoot.clientWidth + tolerance && !scrollers.has(pageRoot))
+                                add('page-content', pageRoot);
+                        }
+                        for (const scroller of scrollers)
+                            bounds(scroller);
+                        const critical = new Set(main.querySelectorAll('.af-page__header,.projects-page__header,.projects-page__actions,.projects-sort,.rules__actions,.rules__filters,.oe-unavailable,.pixel-office__canvas-wrap'));
+                        for (const header of main.querySelectorAll('.af-page__header'))
+                            for (const child of header.children)
+                                critical.add(child);
+                        for (const element of critical) {
+                            if (!visible(element))
+                                continue;
+                            bounds(element);
+                            // The canvas bitmap has its own bounded rendering coordinates.
+                            if (!element.matches('.pixel-office__canvas-wrap') && element.scrollWidth > element.clientWidth + tolerance)
+                                add('critical-content', element);
+                        }
+                        for (const element of main.querySelectorAll('button,input,select,textarea,a,[role="button"]'))
+                            if (visible(element))
+                                bounds(element);
+                        return { count, samples };
+                    });
+                    assert(overflow.count === 0, 'UI_HORIZONTAL_OVERFLOW ' + JSON.stringify(overflow));
+                });
                 await check(prefix + '.fonts', async () => assert(await page.evaluate(() => Array.from(document.querySelectorAll('p,button,input,select,textarea,li,td,dd,label')).filter(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(e).visibility !== 'hidden'; }).every(e => parseFloat(getComputedStyle(e).fontSize) >= 12)), 'UI_UNREADABLE_FONT'));
                 await check(prefix + '.console-network', async () => { await noErrors(); assert(!await page.evaluate(() => window.__uiUnexpectedServiceWorker), 'UI_SERVICE_WORKER_DENIED'); });
             }
