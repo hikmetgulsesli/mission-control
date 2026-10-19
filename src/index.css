@@ -330,7 +330,8 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
 .agent-card__role { font-size: 14px; color: var(--text-dim); }
 .agent-card__status-text { font-size: 14px; color: var(--text-dim); text-transform: uppercase; }
 
-.agent-card__header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.agent-card__header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 10px; }
+.agent-card__header > div { min-width: 0; max-width: 100%; }
 .agent-card__details { display: flex; flex-direction: column; gap: 6px; }
 .agent-card__detail { display: flex; justify-content: space-between; font-size: 14px; overflow: hidden; gap: 4px; }
 .agent-card__detail > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
