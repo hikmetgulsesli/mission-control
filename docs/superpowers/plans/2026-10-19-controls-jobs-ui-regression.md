@@ -50,6 +50,7 @@ import type { Browser } from 'playwright';
 export type SelectedControlRuntimeV1 = Readonly<{
   installationDir:string; releaseDir:string; selectionHash:string;
   sourceSha:string; releaseSha:string; suiteHash:string;
+  caseIds:readonly string[]; // captured ordered eight-case catalog, never HTTP input
   mcSourceSha:string; mcBuildHash:string;
   workerPath:string; controlsRoot:string;
 }>;
