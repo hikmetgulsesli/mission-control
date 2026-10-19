@@ -378,10 +378,21 @@ test('review I3 cancellation floor rejects stale receipts while valid outstandin
     await t.test('next ACK must advance accepted cancellation floor', async () => {
         const h = await simulatedReviewChannel();
         try {
-            const p = await h.ready();
+            let p = await h.ready();
+            h.ack(p.frame);
+            await p.promise;
+            assert.equal(h.receipt().revision, 2);
             h.cancel(3);
-            h.ack(p.frame, { revision: 2 });
+            assert.equal(h.worker.available(), true, 'valid cancellation must leave the channel available');
+            p = await h.begin({ type: 'ui_cancel_observed', requestId: h.receipt().jobId, effective: 'latched' });
+            let settled = false;
+            void p.promise.then(() => { settled = true; }, () => { settled = true; });
+            await new Promise(resolve => setImmediate(resolve));
+            assert.equal(settled, false);
+            assert.equal(h.worker.available(), true, 'valid cancellation must leave the ACK pending');
+            h.ack(p.frame, { revision: 3 });
             await assert.rejects(p.promise, /CONTROL_CHANNEL_INVALID/);
+            assert.equal(h.worker.available(), false);
         }
         finally {
             h.worker.close();

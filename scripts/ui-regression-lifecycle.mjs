@@ -142,14 +142,15 @@ export function parseUiMetadataSnapshotV1(raw) {
     const lines = raw.slice(0, -1).split('\n');
     if (!lines.length || lines.length > 32768)
         fail('UI_OS_OBSERVATION_INVALID');
-    const seen = new Set(), rx = new RegExp('^\\s*(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+' + DATE + ' *$');
+    const seen = new Set(), rx = new RegExp('^\\s*(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(0|[1-9]\\d*|-[1-9]\\d*)\\s+' + DATE + ' *$');
     return lines.map(line => {
         const m = rx.exec(line);
         if (!m)
             fail('UI_OS_OBSERVATION_INVALID');
-        const [pid, ppid, pgid, uid] = m.slice(1, 5).map(Number);
-        if (![pid, ppid, pgid, uid].every(Number.isSafeInteger) || seen.has(pid))
+        const [pid, ppid, pgid, presentedUid] = m.slice(1, 5).map(Number);
+        if (![pid, ppid, pgid, presentedUid].every(Number.isSafeInteger) || presentedUid < -2147483648 || presentedUid > 4294967295 || seen.has(pid))
             fail('UI_OS_OBSERVATION_INVALID');
+        const uid = presentedUid < 0 ? presentedUid + 4294967296 : presentedUid;
         seen.add(pid);
         return { pid, ppid, pgid, uid, startedAt: parseTime(m[5]) };
     });

@@ -185,6 +185,8 @@ async function simulatedReviewNative(options: {
     descriptorDrift?: boolean;
     chunks?: string[];
     declarationDuringClose?: string;
+    nativeUid?: string;
+    foreignMetadataRow?: string;
 } = {}) {
     const { EventEmitter } = await import('node:events');
     const { PassThrough } = await import('node:stream');
@@ -219,10 +221,10 @@ async function simulatedReviewNative(options: {
             child.stderr.write(chunks.shift()); },
         ps: async (args: string[]) => {
             if (args.includes('-A'))
-                return ` ${process.pid} 1 100 ${process.getuid!()} Mon Oct 19 10:00:00 2026    \n` + (alive ? ` ${pid} ${process.pid} ${pid} ${process.getuid!()} Mon Oct 19 10:00:00 2026    \n` : '');
+                return ` ${process.pid} 1 100 ${process.getuid!()} Mon Oct 19 10:00:00 2026    \n` + (options.foreignMetadataRow ?? '') + (alive ? ` ${pid} ${process.pid} ${pid} ${options.nativeUid ?? process.getuid!()} Mon Oct 19 10:00:00 2026    \n` : '');
             if (args.at(-1) === 'comm=')
                 return executable + '\n';
-            return ` ${pid} ${process.pid} ${process.getuid!()} Mon Oct 19 10:00:00 2026 ${pid} ${executable} ${argv.join(' ')}\n`;
+            return ` ${pid} ${process.pid} ${options.nativeUid ?? process.getuid!()} Mon Oct 19 10:00:00 2026 ${pid} ${executable} ${argv.join(' ')}\n`;
         },
         spawn: (_file: string, args: string[]) => { calls.push('spawn'); argv = args; alive = true; child = new EventEmitter(); child.pid = pid; child.stdout = new PassThrough(); child.stderr = new PassThrough(); queueMicrotask(() => { if (chunks.length)
             child.stderr.write(chunks.shift()); }); return child; },
@@ -308,4 +310,45 @@ test('review I5 endpoint violation during original shutdown cannot publish settl
     finally {
         h.dispose();
     }
+});
+
+test('review fix2 exact macOS nobody UID row is retained with canonical unsigned32 UID', async () => {
+    const { parseUiMetadataSnapshotV1 } = await load();
+    const raw = '  335     1   335    -2 Mon Sep 21 09:36:04 2026    \n';
+    assert.deepEqual(parseUiMetadataSnapshotV1(raw), [{ pid: 335, ppid: 1, pgid: 335, uid: 4294967294, startedAt: '2026-09-21T09:36:04.000Z' }]);
+    const other = '    1     0     1     0 Mon Sep 21 09:35:56 2026    \n';
+    assert.deepEqual(parseUiMetadataSnapshotV1(other + raw).map(row => [row.pid, row.uid]), [[1, 0], [335, 4294967294]]);
+});
+test('review fix2 UID normalization accepts only canonical signed32 or unsigned32 presentations', async () => {
+    const { parseUiMetadataSnapshotV1 } = await load();
+    const row = (value: string) => ` 335 1 335 ${value} Mon Sep 21 09:36:04 2026    \n`;
+    for (const [raw, expected] of [['0', 0], ['2147483647', 2147483647], ['2147483648', 2147483648], ['4294967295', 4294967295], ['-1', 4294967295], ['-2147483648', 2147483648]] as const)
+        assert.equal(parseUiMetadataSnapshotV1(row(raw))[0].uid, expected);
+    for (const invalid of ['4294967296', '-2147483649', '-4294966795', '9007199254740992', '-9007199254740992', '+501', '+0', '-0', '00', '0501', '-01', '--2', '-+2', '1e3', '0x1f5', 'nobody', '- 2', ''])
+        assert.throws(() => parseUiMetadataSnapshotV1(row(invalid)), /UI_OS_OBSERVATION_INVALID/, invalid);
+});
+test('review fix2 foreign UID remains in complete census and cannot become the original native owner', async (t) => {
+    const foreignMetadataRow = '  335     1   335    -2 Mon Sep 21 09:36:04 2026    \n';
+    await t.test('unrelated foreign row stays in raw census hash through positive simulated closure', async () => {
+        const h = await simulatedReviewNative({ foreignMetadataRow });
+        try {
+            await h.lifecycle.launch();
+            const cleanup = await h.lifecycle.close();
+            assert.equal(cleanup.browser, 'closed');
+            const settled = JSON.parse(readFileSync(path.join(h.root, 'children', cleanup.children[0].spawnId + '.settled.json'), 'utf8'));
+            const raw = ` ${process.pid} 1 100 ${process.getuid!()} Mon Oct 19 10:00:00 2026    \n` + foreignMetadataRow;
+            assert.ok(settled.emptyCensuses.every((census: any) => census.metadataHash === createHash('sha256').update(raw).digest('hex')));
+            assert.ok(settled.cohort.every((member: any) => member.owner.pid !== 335));
+        } finally { h.dispose(); }
+    });
+    for (const nativeUid of ['4294967294', '-2']) await t.test('foreign native UID ' + nativeUid + ' refuses custody', async () => {
+        const h = await simulatedReviewNative({ nativeUid });
+        try {
+            await assert.rejects(h.lifecycle.launch(), /UI_CUSTODY_UNKNOWN|UI_OS_OBSERVATION_INVALID/);
+            await assert.rejects(h.lifecycle.close(), /UI_CLEANUP_UNKNOWN/);
+            assert.ok(!h.calls.includes('connect'));
+            const { readdirSync } = await import('node:fs');
+            assert.ok(!readdirSync(path.join(h.root, 'children')).some(name => /\.(observed|settled|closed)\.json$/.test(name)));
+        } finally { h.dispose(); }
+    });
 });
