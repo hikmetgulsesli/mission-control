@@ -46,8 +46,8 @@ export function Performance() {
       <div style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "4px", padding: "12px", marginBottom: "12px", display: "flex", alignItems: "center", gap: "12px" }}>
         <span style={{ fontSize: "18px" }}>📈</span>
         <div>
-          <div style={{ fontSize: "11px", color: "var(--neon-cyan)", fontFamily: "var(--font)", fontWeight: 700, letterSpacing: "1px" }}>WEEKLY TREND</div>
-          <div style={{ fontSize: "11px", color: "var(--text-dim)", fontFamily: "var(--font)", marginTop: "2px" }} id="trendNote">
+          <div style={{ fontSize: "14px", color: "var(--neon-cyan)", fontFamily: "var(--font)", fontWeight: 700, letterSpacing: "1px" }}>WEEKLY TREND</div>
+          <div style={{ fontSize: "14px", color: "var(--text-dim)", fontFamily: "var(--font)", marginTop: "2px" }} id="trendNote">
             No data yet · Last 7 days · Source: {data.usageSource} · Weekly time series unavailable
           </div>
         </div>
@@ -77,10 +77,10 @@ export function Performance() {
           <h3 className="panel__title">SESSIONS PER AGENT</h3>
           {data.sessionsStatus !== 'available' ? <p>Unavailable</p> : sessionChartData.every(row => row.sessions === 0) ? <p>No sessions yet · 0</p> : <ResponsiveContainer width="100%" height={300}>
             <BarChart data={sessionChartData} margin={{ top: 10, right: 10, left: 0, bottom: 40 }}>
-              <XAxis dataKey="name" angle={-35} textAnchor="end" tick={{ fill: '#666680', fontSize: 10 }} />
-              <YAxis tick={{ fill: '#666680', fontSize: 10 }} />
+              <XAxis dataKey="name" angle={-35} textAnchor="end" tick={{ fill: 'var(--text-dim)', fontSize: 14 }} />
+              <YAxis tick={{ fill: 'var(--text-dim)', fontSize: 14 }} />
               <Tooltip
-                contentStyle={{ background: '#12121f', border: '1px solid #1e1e3a', borderRadius: 4, fontSize: 11, fontFamily: 'JetBrains Mono' }}
+                contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 4, fontSize: 14, fontFamily: 'var(--font-body)' }}
                 labelStyle={{ color: '#00ffff' }}
               />
               <Bar dataKey="sessions" radius={[4, 4, 0, 0]}>
@@ -112,7 +112,7 @@ export function Performance() {
                 ))}
               </Pie>
               <Tooltip
-                contentStyle={{ background: '#12121f', border: '1px solid #1e1e3a', borderRadius: 4, fontSize: 11, fontFamily: 'JetBrains Mono' }}
+                contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 4, fontSize: 14, fontFamily: 'var(--font-body)' }}
               />
             </PieChart>
           </ResponsiveContainer>}
@@ -140,7 +140,7 @@ export function Performance() {
                   <td>{a.modelIdentity?.rawModelId ?? a.model} <small>({a.modelIdentity?.provenance ?? 'unknown'}){a.modelIdentity?.rawProviderId ? ` · ${a.modelIdentity.rawProviderId}` : ''}</small></td>
                   <td>{data.sessionsStatus === 'available' ? a.sessionCount : 'Unavailable'}</td>
                   <td>{data.sessionsStatus === 'available' && a.totalTokens !== null ? a.totalTokens.toLocaleString() : 'Unavailable'}</td>
-                  <td style={{ color: 'var(--text-dim)', fontSize: 11 }}>
+                  <td style={{ color: 'var(--text-dim)', fontSize: 14 }}>
                     {a.lastActive ? formatDistanceToNow(a.lastActive, { addSuffix: true }) : 'never'}
                   </td>
                 </tr>

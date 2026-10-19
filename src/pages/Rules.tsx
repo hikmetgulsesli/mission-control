@@ -207,12 +207,12 @@ export function Rules() {
   return (
     <div style={{ padding: '20px 24px', maxWidth: 1400, margin: '0 auto' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <div>
           <h1 style={{ fontSize: 14, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--neon-orange)', margin: 0, fontFamily: 'var(--font)' }}>
             Rules Engine
           </h1>
-          <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2, fontFamily: 'var(--font)' }}>
+          <div style={{ fontSize: 14, color: 'var(--text-dim)', marginTop: 2, fontFamily: 'var(--font)' }}>
             {rules.length} rules &middot; {rules.filter(r => r.readonly).length} system &middot; {rules.filter(r => !r.readonly).length} custom
           </div>
         </div>
@@ -240,14 +240,14 @@ export function Rules() {
       <div style={{
         display: 'flex', gap: 0, marginBottom: 20,
         background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 8,
-        overflow: 'hidden',
+        overflowX: 'auto',
       }}>
         {/* ALL button */}
         <button
           onClick={() => setActiveStage(null)}
           style={{
             flex: 'none', padding: '14px 20px', border: 'none', cursor: 'pointer',
-            fontFamily: 'var(--font)', fontSize: 11, fontWeight: 700,
+            fontFamily: 'var(--font)', fontSize: 14, fontWeight: 700,
             textTransform: 'uppercase', letterSpacing: '0.08em',
             background: activeStage === null ? 'rgba(255,255,255,0.08)' : 'transparent',
             color: activeStage === null ? 'var(--text-primary)' : 'var(--text-dim)',
@@ -266,7 +266,7 @@ export function Rules() {
               key={stage.id}
               onClick={() => setActiveStage(isActive ? null : stage.id)}
               style={{
-                flex: 1, padding: '12px 16px', border: 'none', cursor: 'pointer',
+                flex: '1 0 180px', padding: '12px 16px', border: 'none', cursor: 'pointer',
                 fontFamily: 'var(--font)', position: 'relative',
                 background: isActive ? `${stage.color}15` : 'transparent',
                 borderBottom: isActive ? `2px solid ${stage.color}` : '2px solid transparent',
@@ -276,27 +276,27 @@ export function Rules() {
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 13, color: isActive ? stage.color : 'var(--text-dim)' }}>{stage.icon}</span>
+                <span style={{ fontSize: 14, color: isActive ? stage.color : 'var(--text-dim)' }}>{stage.icon}</span>
                 <span style={{
-                  fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
+                  fontSize: 14, fontWeight: 700, letterSpacing: '0.08em',
                   color: isActive ? stage.color : 'var(--text-dim)',
                   textTransform: 'uppercase',
                 }}>{stage.label}</span>
                 <span style={{
-                  fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 3,
+                  fontSize: 14, fontWeight: 700, padding: '1px 6px', borderRadius: 3,
                   background: isActive ? `${stage.color}25` : 'rgba(255,255,255,0.05)',
                   color: isActive ? stage.color : 'var(--text-dim)',
                 }}>{count}</span>
               </div>
               <div style={{
-                fontSize: 9, color: 'var(--text-dim)', opacity: isActive ? 1 : 0.6,
+                fontSize: 14, color: 'var(--text-dim)',
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%',
               }}>{stage.desc}</div>
               {/* Arrow connector */}
               {i < STAGES.length - 1 && (
                 <div style={{
                   position: 'absolute', right: -7, top: '50%', transform: 'translateY(-50%)',
-                  color: 'var(--border)', fontSize: 12, zIndex: 1,
+                  color: 'var(--border)', fontSize: 14, zIndex: 1,
                 }}>&rsaquo;</div>
               )}
             </button>
@@ -307,42 +307,42 @@ export function Rules() {
       {/* Active stage info banner */}
       {activeStage && (
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14,
+          display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, marginBottom: 14,
           padding: '8px 14px', borderRadius: 6,
           background: `${STAGES.find(s => s.id === activeStage)!.color}10`,
           border: `1px solid ${STAGES.find(s => s.id === activeStage)!.color}30`,
         }}>
           <span style={{
-            fontSize: 11, fontWeight: 700, color: STAGES.find(s => s.id === activeStage)!.color,
+            fontSize: 14, fontWeight: 700, color: STAGES.find(s => s.id === activeStage)!.color,
             fontFamily: 'var(--font)', textTransform: 'uppercase', letterSpacing: '0.08em',
           }}>
             {STAGES.find(s => s.id === activeStage)!.icon} {activeStage} stage
           </span>
-          <span style={{ fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--font)' }}>
+          <span style={{ fontSize: 14, color: 'var(--text-dim)', fontFamily: 'var(--font)' }}>
             {filtered.length} active rules &middot; {filtered.filter(r => r.applies_to === 'all').length} global
           </span>
-          <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+          <div style={{ marginLeft: 'auto', display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             <input
               type="text" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)}
               style={{
-                padding: '4px 10px', fontSize: 11, width: 160,
+                padding: '4px 10px', fontSize: 14, width: 160,
                 background: 'var(--bg-input)', color: 'var(--text-primary)',
                 border: '1px solid var(--border)', borderRadius: 4,
-                fontFamily: 'var(--font)', outline: 'none',
+                fontFamily: 'var(--font)', outlineOffset: 3,
               }}
             />
             <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} aria-label="Filter by project type" style={{
-              padding: '4px 8px', fontSize: 11, background: 'var(--bg-input)',
+              padding: '4px 8px', fontSize: 14, background: 'var(--bg-input)',
               color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 4,
-              fontFamily: 'var(--font)', outline: 'none', cursor: 'pointer',
+              fontFamily: 'var(--font)', outlineOffset: 3, cursor: 'pointer',
             }}>
               <option value="">All Types</option>
               {PROJECT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
             <select value={stackFilter} onChange={e => setStackFilter(e.target.value)} aria-label="Filter by stack pack" style={{
-              padding: '4px 8px', fontSize: 11, background: 'var(--bg-input)',
+              padding: '4px 8px', fontSize: 14, background: 'var(--bg-input)',
               color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 4,
-              fontFamily: 'var(--font)', outline: 'none', cursor: 'pointer',
+              fontFamily: 'var(--font)', outlineOffset: 3, cursor: 'pointer',
             }}>
               <option value="">All Stacks</option>
               {STACK_PACKS.map(t => <option key={t} value={t}>{t}</option>)}
@@ -359,10 +359,10 @@ export function Rules() {
         }}>
           <input type="text" placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} aria-label="Search rules"
             style={{
-              flex: 1, minWidth: 160, padding: '6px 10px', fontSize: 11,
+              flex: 1, minWidth: 160, padding: '6px 10px', fontSize: 14,
               background: 'var(--bg-input)', color: 'var(--text-primary)',
               border: '1px solid var(--border)', borderRadius: 4,
-              fontFamily: 'var(--font)', outline: 'none',
+              fontFamily: 'var(--font)', outlineOffset: 3,
             }}
           />
           <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} aria-label="Filter by project type" style={selectStyle}>
@@ -390,18 +390,18 @@ export function Rules() {
               opacity: r.enabled === false ? 0.35 : 1, transition: 'all 0.15s',
             }}>
               <div role="button" tabIndex={0} onClick={() => toggle(r.id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(r.id); } }} style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+                display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, padding: '8px 12px',
                 cursor: 'pointer', userSelect: 'none',
               }}>
                 <span style={{
-                  color: 'var(--text-dim)', fontSize: 8, transition: 'transform 0.15s',
+                  color: 'var(--text-dim)', fontSize: 12, transition: 'transform 0.15s',
                   transform: isExpanded ? 'rotate(90deg)' : 'none',
                   fontFamily: 'var(--font)', width: 8, flexShrink: 0,
                 }}>&#9654;</span>
 
                 {/* Category */}
                 <span style={{
-                  fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 2,
+                  fontSize: 14, fontWeight: 700, padding: '1px 6px', borderRadius: 2,
                   background: `${catColor}20`, color: catColor,
                   fontFamily: 'var(--font)', textTransform: 'uppercase', flexShrink: 0,
                   minWidth: 28, textAlign: 'center',
@@ -409,7 +409,7 @@ export function Rules() {
 
                 {/* Source */}
                 <span style={{
-                  fontSize: 8, fontWeight: 700, padding: '1px 5px', borderRadius: 2,
+                  fontSize: 14, fontWeight: 700, padding: '1px 5px', borderRadius: 2,
                   background: r.readonly ? 'rgba(0,255,255,0.08)' : 'rgba(0,255,65,0.08)',
                   color: r.readonly ? 'rgba(0,255,255,0.7)' : 'rgba(0,255,65,0.7)',
                   fontFamily: 'var(--font)', textTransform: 'uppercase', flexShrink: 0,
@@ -418,7 +418,7 @@ export function Rules() {
                 {/* Global indicator */}
                 {isGlobal && activeStage && (
                   <span style={{
-                    fontSize: 8, padding: '1px 5px', borderRadius: 2,
+                    fontSize: 14, padding: '1px 5px', borderRadius: 2,
                     background: 'rgba(255,102,0,0.1)', color: 'rgba(255,102,0,0.7)',
                     fontFamily: 'var(--font)', fontWeight: 600,
                   }}>ALL</span>
@@ -427,7 +427,7 @@ export function Rules() {
                 {/* Project type */}
                 {r.project_type !== 'general' && (
                   <span style={{
-                    fontSize: 8, padding: '1px 5px', borderRadius: 2,
+                    fontSize: 14, padding: '1px 5px', borderRadius: 2,
                     background: 'rgba(136,68,255,0.1)', color: 'rgba(136,68,255,0.7)',
                     fontFamily: 'var(--font)', fontWeight: 600, textTransform: 'uppercase',
                   }}>{r.project_type}</span>
@@ -435,7 +435,7 @@ export function Rules() {
 
                 {Array.isArray(r.stack_pack_ids) && r.stack_pack_ids.length > 0 && (
                   <span style={{
-                    fontSize: 8, padding: '1px 5px', borderRadius: 2,
+                    fontSize: 14, padding: '1px 5px', borderRadius: 2,
                     background: 'rgba(16,185,129,0.1)', color: 'rgba(16,185,129,0.8)',
                     fontFamily: 'var(--font)', fontWeight: 600, textTransform: 'uppercase',
                   }}>{r.stack_pack_ids.length === 1 ? r.stack_pack_ids[0] : `${r.stack_pack_ids.length} stacks`}</span>
@@ -443,20 +443,20 @@ export function Rules() {
 
                 {/* Title */}
                 <span style={{
-                  flex: 1, fontSize: 12, color: 'var(--text-primary)',
+                  flex: '1 1 180px', fontSize: 14, color: 'var(--text-primary)',
                   fontFamily: 'var(--font)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                 }}>{r.title}</span>
 
                 {/* Severity pill */}
                 <span style={{
-                  fontSize: 9, color: r.severity === 'mandatory' ? 'rgba(239,68,68,0.7)' : 'var(--text-dim)',
+                  fontSize: 14, color: r.severity === 'mandatory' ? 'rgba(239,68,68,0.7)' : 'var(--text-dim)',
                   fontFamily: 'var(--font)', flexShrink: 0,
                 }}>{r.severity === 'mandatory' ? '\u25CF' : '\u25CB'} {r.severity}</span>
 
                 {/* Stage pill (when showing all) */}
                 {!activeStage && (
                   <span style={{
-                    fontSize: 9, padding: '1px 6px', borderRadius: 2,
+                    fontSize: 14, padding: '1px 6px', borderRadius: 2,
                     background: 'rgba(255,255,255,0.04)', color: 'var(--text-dim)',
                     fontFamily: 'var(--font)', flexShrink: 0,
                   }}>{r.applies_to}</span>
@@ -465,13 +465,13 @@ export function Rules() {
                 {/* Custom actions */}
                 {!r.readonly && (
                   <div style={{ display: 'flex', gap: 4, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                    <button className="btn" style={{ padding: '1px 6px', fontSize: 9 }}
+                    <button className="btn" style={{ padding: '1px 6px', fontSize: 14 }}
                       disabled={!capabilities?.update || busy} title={capabilityReason}
                       onClick={() => { setSaveError(null); setModal({ open: true, rule: r }); }}>EDIT</button>
-                    <button className="btn" style={{ padding: '1px 6px', fontSize: 9 }}
+                    <button className="btn" style={{ padding: '1px 6px', fontSize: 14 }}
                       disabled={!capabilities?.toggle || busy} title={capabilityReason}
                       onClick={() => { void handleToggle(r.id); }}>{r.enabled === false ? 'ENABLE' : 'DISABLE'}</button>
-                    <button className="btn btn--danger" style={{ padding: '1px 6px', fontSize: 9 }}
+                    <button className="btn btn--danger" style={{ padding: '1px 6px', fontSize: 14 }}
                       disabled={!capabilities?.delete || busy} title={capabilityReason}
                       onClick={() => { setDeleteError(null); setDeleteConfirmId(r.id); }}>DEL</button>
                   </div>
@@ -481,7 +481,7 @@ export function Rules() {
               {isExpanded && (
                 <div style={{ padding: '0 12px 10px 32px', borderTop: '1px solid var(--border)' }}>
                   {r.source_file && (
-                    <div style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'var(--font)', marginTop: 8, marginBottom: 6 }}>
+                    <div style={{ fontSize: 13, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', overflowWrap: 'anywhere', marginTop: 8, marginBottom: 6 }}>
                       <span style={{ color: 'var(--neon-cyan)' }}>FILE:</span> {r.source_file}
                       {' '}&middot;{' '}
                       <span style={{ color: 'var(--neon-cyan)' }}>STAGE:</span> {r.applies_to}
@@ -492,8 +492,8 @@ export function Rules() {
                     </div>
                   )}
                   <pre style={{
-                    fontSize: 11, lineHeight: 1.5, color: 'var(--text-dim)',
-                    fontFamily: 'var(--font)', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+                    fontSize: 13, lineHeight: 1.5, color: 'var(--text-dim)',
+                    fontFamily: 'var(--font-mono)', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
                     maxHeight: 350, overflowY: 'auto', margin: 0,
                     padding: 10, background: 'var(--bg-primary)', borderRadius: 4,
                     border: '1px solid var(--border)',
@@ -506,7 +506,7 @@ export function Rules() {
       </div>
 
       {filtered.length === 0 && (
-        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)', fontSize: 12, fontFamily: 'var(--font)' }}>
+        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-dim)', fontSize: 14, fontFamily: 'var(--font)' }}>
           No rules found
         </div>
       )}
@@ -527,9 +527,9 @@ export function Rules() {
 }
 
 const selectStyle: React.CSSProperties = {
-  padding: '6px 10px', fontSize: 11, background: 'var(--bg-input)',
+  padding: '6px 10px', fontSize: 14, background: 'var(--bg-input)',
   color: 'var(--text-primary)', border: '1px solid var(--border)', borderRadius: 4,
-  fontFamily: 'var(--font)', outline: 'none', cursor: 'pointer',
+  fontFamily: 'var(--font)', outlineOffset: 3, cursor: 'pointer',
 };
 
 function RuleModal({ rule, onSave, onClose, error, busy, canSave }: { rule?: Rule; error: string | null; busy: boolean; canSave: boolean; onSave: (data: unknown, id?: string) => void; onClose: () => void }) {
@@ -547,13 +547,13 @@ function RuleModal({ rule, onSave, onClose, error, busy, canSave }: { rule?: Rul
   };
 
   const fld: React.CSSProperties = {
-    width: '100%', padding: '8px 10px', fontSize: 12,
+    width: '100%', padding: '8px 10px', fontSize: 14,
     background: 'var(--bg-input)', color: 'var(--text-primary)',
     border: '1px solid var(--border)', borderRadius: 4,
-    fontFamily: 'var(--font)', outline: 'none', boxSizing: 'border-box',
+    fontFamily: 'var(--font)', outlineOffset: 3, boxSizing: 'border-box',
   };
   const lbl: React.CSSProperties = {
-    fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em',
+    fontSize: 14, textTransform: 'uppercase', letterSpacing: '0.08em',
     color: 'var(--text-dim)', fontWeight: 600, marginBottom: 4,
     fontFamily: 'var(--font)', display: 'block',
   };
@@ -568,7 +568,7 @@ function RuleModal({ rule, onSave, onClose, error, busy, canSave }: { rule?: Rul
         padding: 24, width: 560, maxHeight: '85vh', overflowY: 'auto',
         boxShadow: '0 0 40px rgba(0,0,0,0.5)',
       }}>
-        <h3 style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--neon-orange)', margin: '0 0 20px', fontFamily: 'var(--font)' }}>
+        <h3 style={{ fontSize: 14, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--neon-orange)', margin: '0 0 20px', fontFamily: 'var(--font)' }}>
           {rule ? 'Edit Rule' : 'New Rule'}
         </h3>
         {error && <p role="alert">{error}</p>}

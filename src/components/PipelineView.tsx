@@ -424,7 +424,7 @@ const RunCardInline = memo(function RunCardInline({
               </div>
               <span className="af-pipeline__progress-text">
                 {run.storyProgress.completed}/{run.storyProgress.total} stories ({progressPct}%)
-                <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.7 }}>
+                <span style={{ marginLeft: 8, fontSize: 14, color: 'var(--text-dim)' }}>
                   {sp.verified > 0 && <span style={{ color: "#22c55e" }}>{sp.verified} verified </span>}
                   {sp.done > 0 && <span style={{ color: "#3b82f6" }}>{sp.done} done </span>}
                   {sp.running > 0 && <span style={{ color: "#f59e0b" }}>{sp.running} running </span>}

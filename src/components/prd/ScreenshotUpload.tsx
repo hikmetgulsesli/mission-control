@@ -91,7 +91,7 @@ export function ScreenshotUpload({ onUpload, loading, visionAnalysis }: Screensh
         onClick={() => !loading && inputRef.current?.click()}
       >
         {loading ? (
-          <span style={{ color: 'var(--neon-cyan)', fontSize: 13 }}>Analyzing...</span>
+          <span style={{ color: 'var(--neon-cyan)', fontSize: 14 }}>Analyzing...</span>
         ) : preview ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <img
@@ -105,17 +105,17 @@ export function ScreenshotUpload({ onUpload, loading, visionAnalysis }: Screensh
                 objectFit: 'cover',
               }}
             />
-            <span style={{ color: 'var(--text-dim)', fontSize: 12 }}>
+            <span style={{ color: 'var(--text-dim)', fontSize: 14 }}>
               Click or drop to upload a new image
             </span>
           </div>
         ) : (
           <div>
             <div style={{ fontSize: 28, marginBottom: 6, opacity: 0.5 }}>&#128247;</div>
-            <div style={{ color: 'var(--text-dim)', fontSize: 13 }}>
+            <div style={{ color: 'var(--text-dim)', fontSize: 14 }}>
               Drop an image here or click
             </div>
-            <div style={{ color: 'var(--text-dim)', fontSize: 11, marginTop: 4, opacity: 0.6 }}>
+            <div style={{ color: 'var(--text-dim)', fontSize: 14, marginTop: 4 }}>
               PNG, JPG, WebP
             </div>
           </div>
@@ -142,14 +142,14 @@ export function ScreenshotUpload({ onUpload, loading, visionAnalysis }: Screensh
             marginTop: 4,
           }}
         >
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--neon-cyan)', marginBottom: 8, letterSpacing: 1 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--neon-cyan)', marginBottom: 8, letterSpacing: 1 }}>
             VISION ANALYSIS
           </div>
 
           {/* Color swatches */}
           {colorEntries.length > 0 && (
             <div style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 4 }}>Renkler</div>
+              <div style={{ fontSize: 14, color: 'var(--text-dim)', marginBottom: 4 }}>Renkler</div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {colorEntries.map(([name, hex]) => (
                   <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -163,7 +163,7 @@ export function ScreenshotUpload({ onUpload, loading, visionAnalysis }: Screensh
                       }}
                       title={`${name}: ${hex}`}
                     />
-                    <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>{hex}</span>
+                    <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)' }}>{hex}</span>
                   </div>
                 ))}
               </div>
@@ -173,8 +173,8 @@ export function ScreenshotUpload({ onUpload, loading, visionAnalysis }: Screensh
           {/* Typography */}
           {visionAnalysis.typography && (
             <div style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 2 }}>Tipografi</div>
-              <div style={{ fontSize: 12, color: 'var(--text-secondary, #ccc)' }}>
+              <div style={{ fontSize: 14, color: 'var(--text-dim)', marginBottom: 2 }}>Tipografi</div>
+              <div style={{ fontSize: 14, color: 'var(--text-secondary, #ccc)' }}>
                 {visionAnalysis.typography.headingFont && <span>Heading: {visionAnalysis.typography.headingFont} </span>}
                 {visionAnalysis.typography.bodyFont && <span>| Body: {visionAnalysis.typography.bodyFont}</span>}
               </div>
@@ -184,13 +184,13 @@ export function ScreenshotUpload({ onUpload, loading, visionAnalysis }: Screensh
           {/* Components */}
           {visionAnalysis.components && visionAnalysis.components.length > 0 && (
             <div style={{ marginBottom: 8 }}>
-              <div style={{ fontSize: 11, color: 'var(--text-dim)', marginBottom: 4 }}>Komponentler</div>
+              <div style={{ fontSize: 14, color: 'var(--text-dim)', marginBottom: 4 }}>Komponentler</div>
               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                 {visionAnalysis.components.slice(0, 12).map((c, i) => (
                   <span
                     key={i}
                     style={{
-                      fontSize: 10,
+                      fontSize: 14,
                       padding: '2px 6px',
                       borderRadius: 4,
                       background: 'rgba(0, 255, 255, 0.08)',
@@ -207,7 +207,7 @@ export function ScreenshotUpload({ onUpload, loading, visionAnalysis }: Screensh
 
           {/* Layout & Style */}
           {(visionAnalysis.layout || visionAnalysis.style || visionAnalysis.spacing) && (
-            <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+            <div style={{ fontSize: 14, color: 'var(--text-dim)' }}>
               {visionAnalysis.layout && <div>Layout: {visionAnalysis.layout}</div>}
               {visionAnalysis.style && <div>Stil: {visionAnalysis.style}</div>}
               {visionAnalysis.spacing && <div>Spacing: {visionAnalysis.spacing}</div>}
@@ -216,7 +216,7 @@ export function ScreenshotUpload({ onUpload, loading, visionAnalysis }: Screensh
 
           {/* Suggested Title */}
           {visionAnalysis.suggestedTitle && (
-            <div style={{ fontSize: 11, color: 'var(--neon-green, #00ff41)', marginTop: 6 }}>
+            <div style={{ fontSize: 14, color: 'var(--neon-green, #00ff41)', marginTop: 6 }}>
               Onerilen baslik: {visionAnalysis.suggestedTitle}
             </div>
           )}

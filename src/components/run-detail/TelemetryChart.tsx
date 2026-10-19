@@ -42,17 +42,17 @@ export function TelemetryChart({ runId }: { runId: string }) {
     return () => { cancelled = true; };
   }, [runId]);
 
-  if (loading || data && data.runId !== null && data.runId !== runId) return <div style={{ padding: 16, color: 'var(--text-dim)', fontSize: 13 }}>Loading telemetry...</div>;
+  if (loading || data && data.runId !== null && data.runId !== runId) return <div style={{ padding: 16, color: 'var(--text-dim)', fontSize: 14 }}>Loading telemetry...</div>;
   return <TelemetryResult result={data ?? { status: 'unavailable', runId, reason: 'invalid_response' }} />;
 }
 
 export function TelemetryResult({ result }: { result: TelemetryResultData }) {
   if (result.status === 'unavailable') {
-    return <div role="status" style={{ padding: 16, color: '#ff4444', fontSize: 13 }}>Telemetry unavailable ({result.reason})</div>;
+    return <div role="status" style={{ padding: 16, color: '#ff4444', fontSize: 14 }}>Telemetry unavailable ({result.reason})</div>;
   }
-  const notice = <p role="status" style={{ color: 'var(--text-dim)', fontSize: 12 }}>Precise transition history unavailable. Analysis covers historical execution duration only.</p>;
+  const notice = <p role="status" style={{ color: 'var(--text-dim)', fontSize: 14 }}>Precise transition history unavailable. Analysis covers historical execution duration only.</p>;
   const steps = result.steps;
-  if (steps.length === 0) return <div style={{ padding: 16 }}>{notice}<div style={{ color: 'var(--text-dim)', fontSize: 13 }}>No telemetry data</div></div>;
+  if (steps.length === 0) return <div style={{ padding: 16 }}>{notice}<div style={{ color: 'var(--text-dim)', fontSize: 14 }}>No telemetry data</div></div>;
 
   const chartData = steps
     .filter(s => s.duration_ms !== null)
@@ -66,7 +66,7 @@ export function TelemetryResult({ result }: { result: TelemetryResultData }) {
     }));
 
   if (chartData.length === 0) {
-    return <div style={{ padding: 16 }}>{notice}<div style={{ color: 'var(--text-dim)', fontSize: 13 }}>No completed steps yet</div></div>;
+    return <div style={{ padding: 16 }}>{notice}<div style={{ color: 'var(--text-dim)', fontSize: 14 }}>No completed steps yet</div></div>;
   }
 
   const totalMs = chartData.reduce((sum, d) => sum + d.duration, 0);
@@ -87,10 +87,10 @@ export function TelemetryResult({ result }: { result: TelemetryResultData }) {
         alignItems: 'center',
         marginBottom: 12,
       }}>
-        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--neon-cyan)', letterSpacing: 1 }}>
+        <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--neon-cyan)', letterSpacing: 1 }}>
           PIPELINE TELEMETRY
         </span>
-        <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+        <span style={{ fontSize: 14, color: 'var(--text-dim)' }}>
           Total: {formatDuration(totalMs)}
         </span>
       </div>
@@ -99,22 +99,22 @@ export function TelemetryResult({ result }: { result: TelemetryResultData }) {
         <BarChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
           <XAxis
             dataKey="name"
-            tick={{ fill: 'var(--text-dim)', fontSize: 10 }}
+            tick={{ fill: 'var(--text-dim)', fontSize: 14 }}
             axisLine={{ stroke: 'var(--border)' }}
             tickLine={false}
           />
           <YAxis
-            tick={{ fill: 'var(--text-dim)', fontSize: 10 }}
+            tick={{ fill: 'var(--text-dim)', fontSize: 14 }}
             axisLine={{ stroke: 'var(--border)' }}
             tickLine={false}
             tickFormatter={(v: number) => v < 1000 ? `${v}ms` : `${(v / 1000).toFixed(0)}s`}
           />
           <Tooltip
             contentStyle={{
-              background: '#1a1a2e',
+              background: 'var(--bg-card)',
               border: '1px solid var(--border)',
               borderRadius: 6,
-              fontSize: 12,
+              fontSize: 14,
             }}
             formatter={(value: number, _name: string, props: any) => {
               const entry = props.payload;
@@ -139,7 +139,7 @@ export function TelemetryResult({ result }: { result: TelemetryResultData }) {
       </ResponsiveContainer>
 
       {/* Legend */}
-      <div style={{ display: 'flex', gap: 16, marginTop: 8, fontSize: 11, color: 'var(--text-dim)' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginTop: 8, fontSize: 14, color: 'var(--text-dim)' }}>
         <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#00ff41', marginRight: 4 }} />Done</span>
         <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#ff0040', marginRight: 4 }} />Failed</span>
         <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 2, background: '#3b82f6', marginRight: 4 }} />Running</span>
@@ -154,7 +154,7 @@ export function TelemetryResult({ result }: { result: TelemetryResultData }) {
           background: 'rgba(245, 158, 11, 0.08)',
           border: '1px solid rgba(245, 158, 11, 0.3)',
           borderRadius: 6,
-          fontSize: 12,
+          fontSize: 14,
         }}>
           <span style={{ color: '#f59e0b', fontWeight: 600 }}>Bottleneck:</span>{' '}
           <span style={{ color: 'var(--text-dim)' }}>

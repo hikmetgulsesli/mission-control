@@ -137,7 +137,7 @@ export const AgentCard = React.memo(function AgentCard({ agent, sessions = [], c
           <div className="agent-card__role">{agent.role || meta?.role || 'Agent'}</div>
         </div>
         <span className={`status-dot ${isActive ? 'status-dot--online' : 'status-dot--idle'}`} />
-        <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginRight: '8px' }}>
+        <span style={{ fontSize: '14px', color: 'var(--text-muted)', marginRight: '8px' }}>
           {isActive ? 'busy' : 'idle'}
         </span>
         {onActivity && (

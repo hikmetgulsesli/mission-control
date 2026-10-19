@@ -31,7 +31,7 @@ const CustomLabel = ({ cx, cy, midAngle, outerRadius, model, cost }: any) => {
   const x = cx + radius * Math.cos(-midAngle * RADIAN);
   const y = cy + radius * Math.sin(-midAngle * RADIAN);
   return (
-    <text x={x} y={y} fill="#e0e0e0" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={11}>
+    <text x={x} y={y} fill="#e0e0e0" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={14}>
       {shortModel(model)} ${cost.toFixed(1)}
     </text>
   );
@@ -68,12 +68,12 @@ export function CostChart({ breakdownAllTime, breakdownToday }: Props) {
               ))}
             </Pie>
             <Tooltip
-              contentStyle={{ background: '#12121f', border: '1px solid #1e1e3a', color: '#e0e0e0', borderRadius: 4, fontSize: 12 }}
+              contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: '#e0e0e0', borderRadius: 4, fontSize: 14 }}
               formatter={(val: number) => [`$${val.toFixed(2)}`, 'Cost']}
               labelFormatter={(name: string) => shortModel(name)}
             />
             <Legend
-              formatter={(value: string) => <span style={{ color: '#c0c0c0', fontSize: 11 }}>{shortModel(value)}</span>}
+              formatter={(value: string) => <span style={{ color: '#c0c0c0', fontSize: 14 }}>{shortModel(value)}</span>}
             />
           </PieChart>
         </ResponsiveContainer>
@@ -84,17 +84,17 @@ export function CostChart({ breakdownAllTime, breakdownToday }: Props) {
           <BarChart data={barData} layout="vertical" margin={{ left: 10, right: 20 }}>
             <XAxis
               type="number"
-              tick={{ fill: '#666680', fontSize: 11 }}
+              tick={{ fill: 'var(--text-dim)', fontSize: 14 }}
               tickFormatter={(v: number) => `$${v.toFixed(0)}`}
             />
             <YAxis
               type="category"
               dataKey="shortName"
-              tick={{ fill: '#e0e0e0', fontSize: 11 }}
+              tick={{ fill: '#e0e0e0', fontSize: 14 }}
               width={80}
             />
             <Tooltip
-              contentStyle={{ background: '#12121f', border: '1px solid #1e1e3a', color: '#e0e0e0', borderRadius: 4, fontSize: 12 }}
+              contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', color: '#e0e0e0', borderRadius: 4, fontSize: 14 }}
               formatter={(val: number) => [`$${val.toFixed(2)}`, 'Cost']}
               labelFormatter={(name: string) => name}
             />

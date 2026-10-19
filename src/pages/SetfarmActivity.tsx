@@ -105,12 +105,12 @@ export function SetfarmActivity() {
             placeholder="Search project or task..."
             value={filterSearch}
             onChange={e => setFilterSearch(e.target.value)}
-            style={{ flex: 1, minWidth: "150px", background: "var(--bg-card)", border: "1px solid var(--border)", color: "var(--text-primary)", padding: "4px 8px", fontSize: "11px", fontFamily: "var(--font)" }}
+            style={{ flex: 1, minWidth: "150px", background: "var(--bg-card)", border: "1px solid var(--border)", color: "var(--text-primary)", padding: "4px 8px", fontSize: "14px", fontFamily: "var(--font)" }}
           />
           <select
             value={filterStatus}
             onChange={e => setFilterStatus(e.target.value)}
-            style={{ background: "var(--bg-card)", border: "1px solid var(--border)", color: "var(--text-primary)", padding: "4px 8px", fontSize: "11px", fontFamily: "var(--font)" }}
+            style={{ background: "var(--bg-card)", border: "1px solid var(--border)", color: "var(--text-primary)", padding: "4px 8px", fontSize: "14px", fontFamily: "var(--font)" }}
           >
             <option value="">All statuses</option>
             <option value="running">Running</option>

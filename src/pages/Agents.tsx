@@ -89,7 +89,7 @@ export function Agents() {
     <div className="agents-page">
       <GlitchText text="AGENT ROSTER" tag="h2" />
 
-      <div className={`agents-page__layout ${liveAgent ? 'agents-page__layout--with-panel' : ''}`}>
+      <div className="agents-page__layout">
         <div className="agents-page__grid">
           <div className="agent-grid agent-grid--full">
             {(agents || []).map((agent) => {

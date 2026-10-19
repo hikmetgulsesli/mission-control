@@ -3,7 +3,6 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { StatusBar } from './StatusBar';
 import { KimiQuotaBanner } from './KimiQuotaBanner';
 import { TabNav } from './TabNav';
-import { ScanlineOverlay } from './ScanlineOverlay';
 import { TerminalDrawer } from './TerminalDrawer';
 import { PixelOffice } from '../pages/PixelOffice';
 import { useDataSync } from '../hooks/useDataSync';
@@ -38,7 +37,6 @@ export function Layout() {
 
   return (
     <div className="layout">
-      <ScanlineOverlay />
       <KimiQuotaBanner />
       <StatusBar />
       <TabNav onShellToggle={() => setShellOpen(o => !o)} shellOpen={shellOpen} />

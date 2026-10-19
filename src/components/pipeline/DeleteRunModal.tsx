@@ -39,7 +39,7 @@ export const DeleteRunModal = React.memo(function DeleteRunModal({
     <div className="modal-backdrop" onClick={() => !loading && onClose()}>
       <div className="modal modal--delete" onClick={e => e.stopPropagation()}>
         <h3 style={{ color: "#f85149", margin: "0 0 12px" }}>Delete Run #{modal.runNumber}</h3>
-        <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.6)", margin: "0 0 8px" }}>
+        <p style={{ fontSize: "14px", color: "rgba(255,255,255,0.6)", margin: "0 0 8px" }}>
           {modal.task.length > 120 ? modal.task.slice(0, 120) + "..." : modal.task}
         </p>
 
@@ -52,14 +52,14 @@ export const DeleteRunModal = React.memo(function DeleteRunModal({
                 <div key={step.id} style={{
                   display: "flex", alignItems: "center", gap: "8px", padding: "5px 8px",
                   background: visibleStatus === "done" ? "rgba(63, 185, 80, 0.08)" : visibleStatus === "fail" ? "rgba(248, 81, 73, 0.08)" : "rgba(255,255,255,0.03)",
-                  borderRadius: "5px", fontSize: "12px", transition: "all 0.3s ease",
+                  borderRadius: "5px", fontSize: "14px", transition: "all 0.3s ease",
                   borderLeft: `3px solid ${visibleStatus === "done" ? "#3fb950" : visibleStatus === "fail" ? "#f85149" : "#30363d"}`
                 }}>
                   <span style={{ fontSize: "14px", width: "18px", textAlign: "center", flexShrink: 0 }}>
                     {visibleStatus === "done" ? "\u2705" : visibleStatus === "fail" ? "\u274C" : "\u2B1C"}
                   </span>
                   <span style={{ color: "#e6edf3", fontWeight: 500 }}>{step.label}</span>
-                  {step.detail && <span style={{ color: "#484f58", fontSize: "10px", marginLeft: "auto", fontFamily: "monospace" }}>{step.detail}</span>}
+                  {step.detail && <span style={{ color: "var(--text-dim)", fontSize: "13px", marginLeft: "auto", fontFamily: "var(--font-mono)", overflowWrap: "anywhere" }}>{step.detail}</span>}
                 </div>
               );
             })}
@@ -68,7 +68,7 @@ export const DeleteRunModal = React.memo(function DeleteRunModal({
 
         {!result && (
           <>
-            <p style={{ fontSize: "12px", margin: "0 0 8px" }}>
+            <p style={{ fontSize: "14px", margin: "0 0 8px" }}>
               Type the run number to delete: <strong style={{ color: "#f85149" }}>#{modal.runNumber}</strong>
             </p>
             <input
@@ -79,14 +79,14 @@ export const DeleteRunModal = React.memo(function DeleteRunModal({
               onChange={e => onInputChange(e.target.value)}
               autoFocus
             />
-            <label style={{ display: "flex", alignItems: "center", gap: "6px", margin: "10px 0", fontSize: "12px", cursor: "pointer" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "6px", margin: "10px 0", fontSize: "14px", cursor: "pointer" }}>
               <input type="checkbox" checked={cleanup} onChange={e => onCleanupChange(e.target.checked)} />
               <span>Also delete the project (service, files, GitHub, tunnel)</span>
             </label>
           </>
         )}
         {result?.error && (
-          <div style={{ padding: "8px", background: "rgba(248, 81, 73, 0.1)", borderRadius: "6px", fontSize: "12px", color: "#f85149", margin: "8px 0" }}>
+          <div style={{ padding: "8px", background: "rgba(248, 81, 73, 0.1)", borderRadius: "6px", fontSize: "14px", color: "#f85149", margin: "8px 0" }}>
             Error: {result.error}
           </div>
         )}

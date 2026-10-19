@@ -28,11 +28,11 @@ export function ErrorCard({ category, message, suggestion, severity, stepId }: E
       }}
     >
       {/* Top row: severity badge + category pill */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <span style={{ fontSize: 8, color: 'var(--text-dim)', letterSpacing: 0.7 }}>LEGACY DIAGNOSTIC</span>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <span style={{ fontSize: 14, color: 'var(--text-dim)', letterSpacing: 0.7 }}>LEGACY DIAGNOSTIC</span>
         <span
           style={{
-            fontSize: 10,
+            fontSize: 14,
             fontWeight: 700,
             letterSpacing: 1,
             padding: '2px 8px',
@@ -46,7 +46,7 @@ export function ErrorCard({ category, message, suggestion, severity, stepId }: E
         </span>
         <span
           style={{
-            fontSize: 10,
+            fontSize: 14,
             padding: '2px 8px',
             borderRadius: 4,
             background: 'rgba(136, 136, 136, 0.15)',
@@ -57,7 +57,7 @@ export function ErrorCard({ category, message, suggestion, severity, stepId }: E
         >
           {category}
         </span>
-        <span style={{ fontSize: 10, color: 'var(--text-dim)', marginLeft: 'auto' }}>
+        <span style={{ fontSize: 13, fontFamily: 'var(--font-mono)', color: 'var(--text-dim)', marginLeft: 'auto' }}>
           {stepId}
         </span>
       </div>
@@ -66,7 +66,7 @@ export function ErrorCard({ category, message, suggestion, severity, stepId }: E
       <details open={!isLong}>
         <summary
           style={{
-            fontSize: 12,
+            fontSize: 14,
             color: '#eee',
             cursor: isLong ? 'pointer' : 'default',
             lineHeight: 1.5,
@@ -77,7 +77,7 @@ export function ErrorCard({ category, message, suggestion, severity, stepId }: E
         </summary>
         {isLong && (
           <pre style={{
-            fontSize: 11,
+            fontSize: 13,
             color: '#ccc',
             whiteSpace: 'pre-wrap',
             wordBreak: 'break-word',
@@ -96,7 +96,7 @@ export function ErrorCard({ category, message, suggestion, severity, stepId }: E
       {/* Suggestion */}
       {suggestion && (
         <div style={{
-          fontSize: 11,
+          fontSize: 14,
           color: 'var(--text-dim)',
           marginTop: 8,
           paddingLeft: 8,
