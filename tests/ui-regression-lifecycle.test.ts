@@ -172,3 +172,140 @@ test('simulated native cleanup never publishes closed for reused PID, escaped co
         }
     }
 });
+test('review I1 exact retained macOS date padding is accepted without accepting tabs or trailing tokens', async () => {
+    const { parseUiMetadataSnapshotV1 } = await load();
+    const raw = '    1     0     1     0 Mon Sep 21 09:35:56 2026    \n';
+    assert.deepEqual(parseUiMetadataSnapshotV1(raw), [{ pid: 1, ppid: 0, pgid: 1, uid: 0, startedAt: '2026-09-21T09:35:56.000Z' }]);
+    for (const bad of [raw.replace('2026    ', '2026\t'), raw.replace('2026    ', '2026 x'), raw.slice(0, -1), raw + raw])
+        assert.throws(() => parseUiMetadataSnapshotV1(bad), /UI_OS_OBSERVATION_INVALID/);
+});
+async function simulatedReviewNative(options: {
+    publication?: string;
+    cancelAfterIntent?: boolean;
+    descriptorDrift?: boolean;
+    chunks?: string[];
+    declarationDuringClose?: string;
+} = {}) {
+    const { EventEmitter } = await import('node:events');
+    const { PassThrough } = await import('node:stream');
+    const { createUiNativeLifecycleV1, createUiArtifactStoreV1 } = await load();
+    const { UiWorkerLifecycleRecordV1Schema } = await import('../server/services/control-ui-worker-protocol.js');
+    const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'ui-review-native-')));
+    const store = createUiArtifactStoreV1(root), calls: string[] = [], executable = realpathSync(process.execPath), pid = 23456;
+    let now = 1792404000000, alive = false, cancelled = false, child: any, argv: string[] = [];
+    const endpoint = 'ws://127.0.0.1:49152/devtools/browser/abc-123';
+    const chunks = [...(options.chunks ?? ['DevTools listening on ' + endpoint + '\n'])];
+    const browser = new EventEmitter() as any;
+    browser.contexts = () => [];
+    browser.isConnected = () => alive;
+    browser.newBrowserCDPSession = async () => ({ send: async () => { calls.push('Browser.close'); if (options.declarationDuringClose)
+            child.stderr.write(options.declarationDuringClose); alive = false; child.emit('exit', 0, null); child.emit('close', 0, null); browser.emit('disconnected'); } });
+    browser.close = async () => { calls.push('client.close'); };
+    const lifecycle = createUiNativeLifecycleV1({ store: { ...store, record(name: string, value: any) {
+                calls.push(name.split('/').at(-1)!.slice(37));
+                const leaf = name.endsWith('.intent.json') ? 'intent' : name.endsWith('.not-started.json') ? 'not-started' : 'other';
+                if (options.publication === leaf + '-before')
+                    throw Error('simulated before write failure');
+                const hash = store.record(name, value);
+                if (options.publication === leaf + '-after')
+                    throw Error('simulated uncertain fsync acknowledgement');
+                if (leaf === 'intent' && options.cancelAfterIntent)
+                    cancelled = true;
+                return hash;
+            } }, jobId: '018d819f-0a78-7d38-bb1f-0195b029ddaf', intentHash: 'a'.repeat(64), ownerHash: 'b'.repeat(64), owner: { pid: process.pid, processGroupId: 100 }, cancellationRequested: () => cancelled, recordSchema: UiWorkerLifecycleRecordV1Schema,
+        descriptor: { executable, executableHash: 'c'.repeat(64), playwrightVersion: '1.60.0', browsersJsonHash: 'd'.repeat(64), family: 'chromium-headless-shell', check() { if (options.descriptorDrift)
+                throw Error('simulated descriptor drift'); } } }, {
+        clock: () => now, sleep: async (ms: number) => { now += ms; if (chunks.length && child)
+            child.stderr.write(chunks.shift()); },
+        ps: async (args: string[]) => {
+            if (args.includes('-A'))
+                return ` ${process.pid} 1 100 ${process.getuid!()} Mon Oct 19 10:00:00 2026    \n` + (alive ? ` ${pid} ${process.pid} ${pid} ${process.getuid!()} Mon Oct 19 10:00:00 2026    \n` : '');
+            if (args.at(-1) === 'comm=')
+                return executable + '\n';
+            return ` ${pid} ${process.pid} ${process.getuid!()} Mon Oct 19 10:00:00 2026 ${pid} ${executable} ${argv.join(' ')}\n`;
+        },
+        spawn: (_file: string, args: string[]) => { calls.push('spawn'); argv = args; alive = true; child = new EventEmitter(); child.pid = pid; child.stdout = new PassThrough(); child.stderr = new PassThrough(); queueMicrotask(() => { if (chunks.length)
+            child.stderr.write(chunks.shift()); }); return child; },
+        connectOverCDP: async (url: string) => { assert.equal(url, endpoint); assert.equal(chunks.length, 0, 'connect only after complete endpoint newline'); calls.push('connect'); return browser; },
+    });
+    return { lifecycle, root, calls, stderr: (value: string) => child.stderr.write(value), dispose() { rmSync(root, { recursive: true, force: true }); } };
+}
+test('review I2 publication uncertainty cannot produce definite never-invoked cleanup', async (t) => {
+    for (const publication of ['intent-before', 'intent-after', 'not-started-before', 'not-started-after'])
+        await t.test(publication, async () => {
+            const h = await simulatedReviewNative({ publication, cancelAfterIntent: true });
+            try {
+                await assert.rejects(h.lifecycle.launch());
+                await assert.rejects(h.lifecycle.close(), /UI_CLEANUP_UNKNOWN/);
+                assert.ok(!h.calls.includes('spawn'));
+                const { readdirSync } = await import('node:fs');
+                const leaves = readdirSync(path.join(h.root, 'children'));
+                if (publication !== 'intent-before')
+                    assert.ok(leaves.some(name => name.endsWith('.intent.json')));
+                assert.ok(!leaves.some(name => name.endsWith('.closed.json')));
+            }
+            finally {
+                h.dispose();
+            }
+        });
+    await t.test('descriptor refusal after committed intent publishes original never-invoked disposition', async () => {
+        const h = await simulatedReviewNative({ descriptorDrift: true });
+        try {
+            await assert.rejects(h.lifecycle.launch(), /descriptor drift/);
+            const cleanup = await h.lifecycle.close();
+            assert.equal(cleanup.browser, 'not_started');
+            assert.equal(cleanup.children.length, 1);
+            const leaf = JSON.parse(readFileSync(path.join(h.root, 'children', cleanup.children[0].spawnId + '.not-started.json'), 'utf8'));
+            assert.equal(leaf.disposition, 'never_invoked');
+            assert.ok(!h.calls.includes('spawn'));
+        }
+        finally {
+            h.dispose();
+        }
+    });
+});
+test('review I5 fragmented original stderr waits through prefix URL and newline before connecting', async () => {
+    const h = await simulatedReviewNative({ chunks: ['DevTools listening', ' on ws://127.0.0.1:', '49152/devtools/browser/abc-123', '\n'] });
+    try {
+        await h.lifecycle.launch();
+        assert.equal(h.calls.filter(call => call === 'connect').length, 1);
+        const cleanup = await h.lifecycle.close();
+        assert.equal(cleanup.browser, 'closed');
+        const settled = JSON.parse(readFileSync(path.join(h.root, 'children', cleanup.children[0].spawnId + '.settled.json'), 'utf8'));
+        const exactPaddedMetadata = ` ${process.pid} 1 100 ${process.getuid!()} Mon Oct 19 10:00:00 2026    \n`;
+        assert.ok(settled.emptyCensuses.every((row: any) => row.metadataHash === createHash('sha256').update(exactPaddedMetadata).digest('hex')));
+    }
+    finally {
+        h.dispose();
+    }
+});
+test('review I5 later duplicate or foreign endpoint declaration prevents definite settlement', async (t) => {
+    for (const line of ['DevTools listening on ws://127.0.0.1:49152/devtools/browser/abc-123\n', 'DevTools listening on ws://localhost:49153/devtools/browser/other\n'])
+        await t.test(line.trim(), async () => {
+            const h = await simulatedReviewNative();
+            try {
+                await h.lifecycle.launch();
+                h.stderr(line);
+                await assert.rejects(h.lifecycle.census());
+                await assert.rejects(h.lifecycle.close(), /UI_CLEANUP_UNKNOWN/);
+                const { readdirSync } = await import('node:fs');
+                assert.ok(!readdirSync(path.join(h.root, 'children')).some(name => name.endsWith('.closed.json')));
+            }
+            finally {
+                h.dispose();
+            }
+        });
+});
+test('review I5 endpoint violation during original shutdown cannot publish settlement', async () => {
+    const h = await simulatedReviewNative({ declarationDuringClose: 'DevTools listening on ws://localhost:49153/devtools/browser/late\n' });
+    try {
+        await h.lifecycle.launch();
+        await assert.rejects(h.lifecycle.close(), /UI_CLEANUP_UNKNOWN/);
+        const { readdirSync } = await import('node:fs');
+        assert.ok(!readdirSync(path.join(h.root, 'children')).some(name => /\.(settled|closed)\.json$/.test(name)));
+        assert.ok(h.calls.includes('Browser.close'));
+    }
+    finally {
+        h.dispose();
+    }
+});

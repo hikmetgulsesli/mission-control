@@ -225,7 +225,10 @@ test('Controls HTTP fixture carries six activation and eight convergence preflig
                     try {
                         assert.equal(response.statusCode, 200);
                         resolve(JSON.parse(Buffer.concat(parts).toString('utf8')));
-                    } catch (error) { reject(error); }
+                    }
+                    catch (error) {
+                        reject(error);
+                    }
                 });
             });
             request.once('error', reject);
@@ -270,4 +273,231 @@ test('Controls HTTP fixture carries six activation and eight convergence preflig
             await session.close();
         rmSync(f.root, { recursive: true, force: true });
     }
+});
+async function simulatedReviewChannel() {
+    const { EventEmitter } = await import('node:events');
+    const { createUiWorkerChannelV1 } = await import('../scripts/ui-regression.mjs');
+    const sf = new URL('../../setfarm-dashboard-cutover-controller-20261007-v1/src/', import.meta.url);
+    const channel = await import(new URL('execution/schemas/manual-control-worker-channel-v1.ts', sf).href);
+    const schemas = await import(new URL('execution/schemas/manual-control-job-v1.ts', sf).href);
+    const jobId = '018d819f-0a78-7d38-bb1f-0195b029ddaf', nonce = 'n'.repeat(64), at = '2026-10-19T10:00:00.000Z';
+    const owner = { pid: 42, processStartedAt: at, processGroupId: 42, source: 'observed_os', executable: '/node', script: '/mc/dist-server/scripts/ui-regression.mjs', commandHash: '1'.repeat(64) };
+    let receipt: any = { schema: 'mission-control.control-job.v1', jobId, kind: 'ui_regression', revision: 1, selectionHash: 'a'.repeat(64), sourceSha: 'b'.repeat(40), mcSourceSha: 'c'.repeat(40), mcBuildHash: 'd'.repeat(64), suiteHash: null, state: 'accepted', requestedAt: at, startedAt: null, updatedAt: at, finishedAt: null, phase: 'starting', code: null, currentCaseId: null, ownedRunId: null, completedCases: 0, plannedCases: 316, reportRefs: {}, cancelRequested: false };
+    const intent = { schema: 'mission-control.control-intent.v1', receipt, installationDir: '/installation', releaseDir: '/release', nonceDigest: createHash('sha256').update(nonce).digest('hex'), fixedSuiteRelativePath: null };
+    const target = new EventEmitter() as any, frames: any[] = [];
+    target.connected = true;
+    target.send = (frame: any, done: Function) => { frames.push(frame); done(); };
+    const binding = { jobId, channelId: '018d819f-0a78-7d38-bb1f-0195b029ddae', intentHash: 'e'.repeat(64), kind: 'ui_regression' };
+    const worker = createUiWorkerChannelV1({ intent, intentHash: binding.intentHash, owner, channel, schemas, target });
+    let brokerSequence = 0;
+    const deliver = (body: any) => target.emit('message', channel.signWorkerChannelFrameV1({ binding, direction: 'broker_to_worker', sequence: ++brokerSequence, body, nonce }));
+    deliver({ type: 'custody', custody: { schema: 'mission-control.control-custody.v1', jobId, selectionHash: receipt.selectionHash, sourceSha: receipt.sourceSha, mcBuildHash: receipt.mcBuildHash, nonce } });
+    await worker.ready();
+    async function begin(body: any) { const promise = worker.send(body); promise.catch(() => { }); await new Promise(resolve => setImmediate(resolve)); return { promise, frame: frames.at(-1) }; }
+    function ack(frame: any, patch: any = {}) {
+        const sent = frame.body;
+        let change: any = {};
+        if (sent.type === 'ui_ready')
+            change = { state: receipt.cancelRequested ? 'cancelling' : 'starting', phase: 'starting', plannedCases: sent.plannedAssertions };
+        if (sent.type === 'ui_progress')
+            change = { state: receipt.cancelRequested ? 'cancelling' : 'running', phase: sent.phase, code: sent.code, completedCases: sent.completedAssertions, startedAt: receipt.startedAt ?? (sent.phase === 'running' ? at : null), reportRefs: {} };
+        if (sent.type === 'ui_cancel_observed')
+            change = { code: sent.effective === 'after_boundary' ? 'CONTROL_CANCEL_TOO_LATE' : 'CONTROL_CANCEL_REQUESTED' };
+        if (sent.type === 'ui_final')
+            change = { state: sent.outcome, phase: 'closed', code: sent.code, completedCases: sent.completedAssertions, finishedAt: at, reportRefs: { uiReportHash: sent.uiReportHash }, currentCaseId: null, ownedRunId: null };
+        receipt = { ...receipt, ...change, revision: receipt.revision + 1, updatedAt: at, ...patch };
+        deliver({ type: 'ack', workerSequence: frame.sequence, workerFrameHash: channel.hashWorkerChannelFrameV1(frame), receiptRevision: receipt.revision, receipt });
+        return receipt;
+    }
+    function cancel(revision = receipt.revision + 1) { receipt = { ...receipt, revision, state: 'cancelling', cancelRequested: true, code: 'CONTROL_CANCEL_REQUESTED' }; deliver({ type: 'cancel', requestId: jobId, acceptedReceiptRevision: revision }); }
+    const ready = () => begin({ type: 'ui_ready', owner, fixtureVersion: 'ui-regression-owned-v1', fixtureHash: 'f'.repeat(64), plannedAssertions: 316 });
+    const progress = () => begin({ type: 'ui_progress', phase: 'running', completedAssertions: 1, plannedAssertions: 316, code: null });
+    const final = () => begin({ type: 'ui_final', uiReportHash: '2'.repeat(64), cleanupHash: '3'.repeat(64), ownedCleanup: 'confirmed', outcome: 'completed', code: null, completedAssertions: 1, plannedAssertions: 316 });
+    return { worker, begin, ack, cancel, cancelNotice: (acceptedReceiptRevision: number) => deliver({ type: 'cancel', requestId: jobId, acceptedReceiptRevision }), ready, progress, final, receipt: () => receipt };
+}
+test('review I3 valid-MAC ACKs must match exact UI event receipt semantics and ordered time facts', async (t) => {
+    const cases: [
+        string,
+        string,
+        any
+    ][] = [
+        ['ready-state', 'ready', { state: 'running' }], ['ready-count', 'ready', { completedCases: 1 }], ['ready-code', 'ready', { code: 'WRONG_CODE' }], ['ready-start', 'ready', { startedAt: '2026-10-19T10:00:00.000Z' }],
+        ['progress-phase', 'progress', { phase: 'cleanup' }], ['progress-code', 'progress', { code: 'WRONG_CODE' }], ['progress-count', 'progress', { completedCases: 2 }], ['progress-state', 'progress', { state: 'ownership_unknown' }],
+        ['progress-missing-start', 'progress', { startedAt: null }], ['progress-case', 'progress', { currentCaseId: 'foreign-case' }], ['progress-run', 'progress', { ownedRunId: 'foreign-run' }],
+        ['revision-jump', 'progress', { revision: 9 }], ['updated-before-request', 'progress', { updatedAt: '2026-10-19T09:00:00.000Z' }], ['start-after-update', 'progress', { startedAt: '2026-10-19T11:00:00.000Z' }],
+        ['final-phase', 'final', { phase: 'running' }], ['final-code', 'final', { code: 'WRONG_CODE' }], ['final-extra-ref', 'final', { reportRefs: { uiReportHash: '2'.repeat(64), resultHash: '4'.repeat(64) } }], ['final-time', 'final', { finishedAt: '2026-10-19T09:00:00.000Z' }], ['final-changed-start', 'final', { startedAt: null }],
+        ['cancel-count', 'cancel', { completedCases: 2 }], ['cancel-phase', 'cancel', { phase: 'cleanup' }], ['cancel-code', 'cancel', { code: null }], ['cancel-state', 'cancel', { state: 'running' }],
+    ];
+    for (const [name, stage, patch] of cases)
+        await t.test(name, async () => {
+            const h = await simulatedReviewChannel();
+            try {
+                let p = await h.ready();
+                if (stage === 'ready') {
+                    h.ack(p.frame, patch);
+                    await assert.rejects(p.promise, /CONTROL_CHANNEL_INVALID/);
+                    return;
+                }
+                h.ack(p.frame);
+                await p.promise;
+                p = await h.progress();
+                if (stage === 'progress') {
+                    h.ack(p.frame, patch);
+                    await assert.rejects(p.promise, /CONTROL_CHANNEL_INVALID/);
+                    return;
+                }
+                h.ack(p.frame);
+                await p.promise;
+                if (stage === 'final')
+                    p = await h.final();
+                else {
+                    h.cancel();
+                    p = await h.begin({ type: 'ui_cancel_observed', requestId: h.receipt().jobId, effective: 'latched' });
+                }
+                h.ack(p.frame, patch);
+                await assert.rejects(p.promise, /CONTROL_CHANNEL_INVALID/);
+                assert.equal(h.worker.available(), false);
+            }
+            finally {
+                h.worker.close();
+            }
+        });
+});
+test('review I3 cancellation floor rejects stale receipts while valid outstanding ACK and late-boundary mapping settle', async (t) => {
+    await t.test('accepted cancellation revision must advance prior receipt', async () => {
+        const h = await simulatedReviewChannel();
+        try {
+            const p = await h.ready();
+            h.cancel(1);
+            await assert.rejects(p.promise, /CONTROL_CHANNEL_INVALID/);
+        }
+        finally {
+            h.worker.close();
+        }
+    });
+    await t.test('next ACK must advance accepted cancellation floor', async () => {
+        const h = await simulatedReviewChannel();
+        try {
+            const p = await h.ready();
+            h.cancel(3);
+            h.ack(p.frame, { revision: 2 });
+            await assert.rejects(p.promise, /CONTROL_CHANNEL_INVALID/);
+        }
+        finally {
+            h.worker.close();
+        }
+    });
+    for (const late of [false, true])
+        await t.test(late ? 'late boundary preserves completion decision' : 'cancel while running ACK outstanding is latched', async () => {
+            const h = await simulatedReviewChannel();
+            try {
+                let p = await h.ready();
+                h.ack(p.frame);
+                await p.promise;
+                p = await h.progress();
+                if (late)
+                    assert.equal(h.worker.decideFinal(), false);
+                h.cancel();
+                h.ack(p.frame);
+                await p.promise;
+                assert.equal(h.worker.cancellationRequested(), !late);
+                p = await h.begin({ type: 'ui_cancel_observed', requestId: h.receipt().jobId, effective: late ? 'after_boundary' : 'latched' });
+                h.ack(p.frame);
+                await p.promise;
+                assert.equal(h.receipt().code, late ? 'CONTROL_CANCEL_TOO_LATE' : 'CONTROL_CANCEL_REQUESTED');
+                if (late) {
+                    p = await h.final();
+                    h.ack(p.frame);
+                    await p.promise;
+                    assert.equal(h.receipt().state, 'completed');
+                }
+            }
+            finally {
+                h.worker.close();
+            }
+        });
+});
+test('review I4 late build drift retains strict accumulated candidate and PNG manifest before owned context closure', async () => {
+    const f = workspace();
+    const { runUiRegressionV1 } = await load();
+    const schemas = await import('../server/services/control-ui-worker-protocol.js');
+    let stop = false, contextCloseAttempted = false, candidateSeenAtClose = false;
+    const page = { on() { }, setDefaultTimeout() { }, goto: async () => { }, url: () => 'http://127.0.0.1:13082/', locator: () => ({ waitFor: async () => { }, innerText: async () => 'A complete first fixture page with enough visible content for the actual loaded assertion.' }), screenshot: async () => Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0]) };
+    const browser = { newContext: async () => ({ route: async () => { }, routeWebSocket: async () => { }, addInitScript: async () => { }, on() { }, newPage: async () => page, close: async () => {
+                contextCloseAttempted = true;
+                const reports = readdirSync(path.join(f.tempRoot, 'artifacts')).filter(name => name.endsWith('.json')).map(name => JSON.parse(readFileSync(path.join(f.tempRoot, 'artifacts', name), 'utf8'))).filter(value => value.schema === 'mission-control.ui-regression.v1');
+                candidateSeenAtClose = reports.some(report => report.assertions.length === 1 && report.screenshots.length === 1);
+            } }) };
+    try {
+        const result = await runUiRegressionV1({ ...f, browser, schemas, control: { cancellationRequested: () => stop, onProgress: async () => { writeFileSync(path.join(f.buildDir, 'dist/index.html'), 'late measured content drift'); stop = true; } } });
+        assert.equal(contextCloseAttempted, true);
+        assert.equal(candidateSeenAtClose, true);
+        assert.equal(result.integrity, 'failed');
+        assert.equal(result.report.outcome, 'incomplete');
+        assert.deepEqual(result.report.assertions, [{ id: 'page.home.390.loaded', status: 'pass', code: null }]);
+        assert.equal(result.report.screenshots.length, 1);
+        const stored = schemas.UiRegressionReportV1Schema.parse(JSON.parse(readFileSync(path.join(f.tempRoot, 'artifacts', result.reportHash + '.json'), 'utf8')));
+        assert.deepEqual(stored, result.report);
+        assert.equal(createHash('sha256').update(readFileSync(path.join(f.tempRoot, 'artifacts', stored.screenshots[0].sha256 + '.png'))).digest('hex'), stored.screenshots[0].sha256);
+        assert.ok(result.diagnosticHashes.length);
+        const diagnostic = JSON.parse(readFileSync(path.join(f.tempRoot, 'artifacts', result.diagnosticHashes[0] + '.json'), 'utf8'));
+        assert.equal(diagnostic.code, 'UI_REPORT_INTEGRITY_FAILED');
+        const originalCandidate = schemas.UiRegressionReportV1Schema.parse(JSON.parse(readFileSync(path.join(f.tempRoot, 'artifacts', diagnostic.candidateReportHash + '.json'), 'utf8')));
+        assert.deepEqual(originalCandidate.assertions, result.report.assertions);
+        assert.deepEqual(originalCandidate.screenshots, result.report.screenshots);
+    }
+    finally {
+        rmSync(f.root, { recursive: true, force: true });
+    }
+});
+test('review I3 actual broker pre-ready cancellation ACK precedes its matching older cancellation notice', async (t) => {
+    await t.test('ready ACK revision3 latches cancellation before accepted revision2 notice, then exact cancel ACK4', async () => {
+        const h = await simulatedReviewChannel();
+        try {
+            const ready = await h.ready();
+            // control-jobs.ts: cancel stores rev2 while !s.ready; ready commits rev3, sends ACK, then sends cancel rev2.
+            h.ack(ready.frame, { revision: 3, cancelRequested: true, state: 'cancelling', code: 'CONTROL_CANCEL_REQUESTED' });
+            await ready.promise;
+            assert.equal(h.worker.cancellationRequested(), true);
+            assert.equal(h.worker.available(), true);
+            h.cancelNotice(2);
+            assert.equal(h.worker.available(), true);
+            const observed = await h.begin({ type: 'ui_cancel_observed', requestId: h.receipt().jobId, effective: 'latched' });
+            h.ack(observed.frame);
+            await observed.promise;
+            assert.equal(h.receipt().revision, 4);
+            assert.equal(h.receipt().completedCases, 0);
+            assert.equal(h.receipt().startedAt, null);
+        }
+        finally {
+            h.worker.close();
+        }
+    });
+    for (const defect of ['notice-wrong-revision', 'ready-extra-gap', 'ready-wrong-code', 'ack-before-required-notice', 'duplicate-notice'])
+        await t.test(defect, async () => {
+            const h = await simulatedReviewChannel();
+            try {
+                const ready = await h.ready();
+                h.ack(ready.frame, { revision: defect === 'ready-extra-gap' ? 4 : 3, cancelRequested: true, state: 'cancelling', code: defect === 'ready-wrong-code' ? null : 'CONTROL_CANCEL_REQUESTED' });
+                if (defect.startsWith('ready-')) {
+                    await assert.rejects(ready.promise, /CONTROL_CHANNEL_INVALID/);
+                    return;
+                }
+                await ready.promise;
+                if (defect === 'ack-before-required-notice') {
+                    const progress = await h.progress();
+                    h.ack(progress.frame);
+                    await assert.rejects(progress.promise, /CONTROL_CHANNEL_INVALID/);
+                }
+                else {
+                    h.cancelNotice(defect === 'notice-wrong-revision' ? 1 : 2);
+                    if (defect === 'duplicate-notice')
+                        h.cancelNotice(2);
+                    assert.equal(h.worker.available(), false);
+                }
+            }
+            finally {
+                h.worker.close();
+            }
+        });
 });

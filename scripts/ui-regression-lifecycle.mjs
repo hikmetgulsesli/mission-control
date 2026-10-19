@@ -23,8 +23,11 @@ export function pinUiDirectoryV1(directory) {
     const initial = lstatSync(directory);
     if (!initial.isDirectory() || initial.isSymbolicLink() || initial.uid !== uid() || (initial.mode & 0o777) !== 0o700)
         fail('UI_PRIVATE_PATH_UNSAFE');
-    return () => { const now = lstatSync(directory); if (!now.isDirectory() || now.isSymbolicLink() || now.dev !== initial.dev || now.ino !== initial.ino || now.uid !== initial.uid || now.mode !== initial.mode || realpathSync(directory) !== directory)
-        fail('UI_PRIVATE_PATH_CHANGED'); };
+    return () => {
+        const now = lstatSync(directory);
+        if (!now.isDirectory() || now.isSymbolicLink() || now.dev !== initial.dev || now.ino !== initial.ino || now.uid !== initial.uid || now.mode !== initial.mode || realpathSync(directory) !== directory)
+            fail('UI_PRIVATE_PATH_CHANGED');
+    };
 }
 export function pinUiFileV1(file, max = 16777216, privateFile = false) {
     if (realpathSync(file) !== file)
@@ -37,29 +40,40 @@ export function pinUiFileV1(file, max = 16777216, privateFile = false) {
         const bytes = readFileSync(fd);
         if (stamp(fstatSync(fd)) !== stamp(before) || stamp(lstatSync(file)) !== stamp(before))
             fail('UI_FILE_CHANGED');
-        return Object.freeze({ bytes, hash: uiHashV1(bytes), check() { if (realpathSync(file) !== file || stamp(lstatSync(file)) !== stamp(before))
-                fail('UI_FILE_CHANGED'); } });
+        return Object.freeze({ bytes, hash: uiHashV1(bytes), check() {
+                if (realpathSync(file) !== file || stamp(lstatSync(file)) !== stamp(before))
+                    fail('UI_FILE_CHANGED');
+            } });
     }
     finally {
         closeSync(fd);
     }
 }
-function syncDir(directory) { const fd = openSync(directory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW); try {
-    fsyncSync(fd);
+function syncDir(directory) {
+    const fd = openSync(directory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+    try {
+        fsyncSync(fd);
+    }
+    finally {
+        closeSync(fd);
+    }
 }
-finally {
-    closeSync(fd);
-} }
 export function createUiArtifactStoreV1(root) {
     const rootPin = pinUiDirectoryV1(root);
-    const sub = name => { const target = path.join(root, name); rootPin(); try {
-        mkdirSync(target, { mode: 0o700 });
-        syncDir(root);
-    }
-    catch (error) {
-        if (error.code !== 'EEXIST')
-            throw error;
-    } const check = pinUiDirectoryV1(target); return { target, check }; };
+    const sub = name => {
+        const target = path.join(root, name);
+        rootPin();
+        try {
+            mkdirSync(target, { mode: 0o700 });
+            syncDir(root);
+        }
+        catch (error) {
+            if (error.code !== 'EEXIST')
+                throw error;
+        }
+        const check = pinUiDirectoryV1(target);
+        return { target, check };
+    };
     const artifacts = sub('artifacts'), children = sub('children');
     const publish = (file, bytes, cap, repeat = false) => {
         rootPin();
@@ -96,10 +110,16 @@ export function createUiArtifactStoreV1(root) {
     };
     return Object.freeze({ root,
         json(value) { const bytes = uiBytesV1(value); return publish(path.join(artifacts.target, uiHashV1(bytes) + '.json'), bytes, 1048576, true); },
-        png(bytes) { if (!Buffer.isBuffer(bytes) || !bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])))
-            fail('UI_SCREENSHOT_INVALID'); return publish(path.join(artifacts.target, uiHashV1(bytes) + '.png'), bytes, 16777216, true); },
-        record(name, value) { if (!/^(?:owner\.json|standalone-intent\.json|final-decision\.json|children\/[a-f0-9-]{36}\.(?:intent|observed|settled|closed|not-started)\.json)$/.test(name))
-            fail('UI_RECORD_NAME_INVALID'); return publish(path.join(root, name), uiBytesV1(value), name.endsWith('.settled.json') ? 1048576 : 16384); },
+        png(bytes) {
+            if (!Buffer.isBuffer(bytes) || !bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])))
+                fail('UI_SCREENSHOT_INVALID');
+            return publish(path.join(artifacts.target, uiHashV1(bytes) + '.png'), bytes, 16777216, true);
+        },
+        record(name, value) {
+            if (!/^(?:owner\.json|standalone-intent\.json|final-decision\.json|children\/[a-f0-9-]{36}\.(?:intent|observed|settled|closed|not-started)\.json)$/.test(name))
+                fail('UI_RECORD_NAME_INVALID');
+            return publish(path.join(root, name), uiBytesV1(value), name.endsWith('.settled.json') ? 1048576 : 16384);
+        },
         verify() { rootPin(); artifacts.check(); children.check(); },
     });
 }
@@ -110,18 +130,29 @@ export function cleanUiChildEnvironmentV1({ home, tmp }) {
 }
 const PS_ENV = Object.freeze({ PATH: '/usr/bin:/bin:/usr/sbin:/sbin', LANG: 'C', LC_ALL: 'C', TZ: 'UTC' });
 const DATE = '(\\w{3} \\w{3} +\\d{1,2} \\d{2}:\\d{2}:\\d{2} \\d{4})';
-function parseTime(raw) { const value = new Date(raw + ' UTC'); if (!Number.isFinite(value.getTime()))
-    fail('UI_OS_OBSERVATION_INVALID'); return value.toISOString(); }
+function parseTime(raw) {
+    const value = new Date(raw + ' UTC');
+    if (!Number.isFinite(value.getTime()))
+        fail('UI_OS_OBSERVATION_INVALID');
+    return value.toISOString();
+}
 export function parseUiMetadataSnapshotV1(raw) {
     if (typeof raw !== 'string' || !raw.endsWith('\n') || Buffer.byteLength(raw) > 4194304)
         fail('UI_OS_OBSERVATION_INVALID');
     const lines = raw.slice(0, -1).split('\n');
     if (!lines.length || lines.length > 32768)
         fail('UI_OS_OBSERVATION_INVALID');
-    const seen = new Set(), rx = new RegExp('^\\s*(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+' + DATE + '$');
-    return lines.map(line => { const m = rx.exec(line); if (!m)
-        fail('UI_OS_OBSERVATION_INVALID'); const [pid, ppid, pgid, uid] = m.slice(1, 5).map(Number); if (![pid, ppid, pgid, uid].every(Number.isSafeInteger) || seen.has(pid))
-        fail('UI_OS_OBSERVATION_INVALID'); seen.add(pid); return { pid, ppid, pgid, uid, startedAt: parseTime(m[5]) }; });
+    const seen = new Set(), rx = new RegExp('^\\s*(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+' + DATE + ' *$');
+    return lines.map(line => {
+        const m = rx.exec(line);
+        if (!m)
+            fail('UI_OS_OBSERVATION_INVALID');
+        const [pid, ppid, pgid, uid] = m.slice(1, 5).map(Number);
+        if (![pid, ppid, pgid, uid].every(Number.isSafeInteger) || seen.has(pid))
+            fail('UI_OS_OBSERVATION_INVALID');
+        seen.add(pid);
+        return { pid, ppid, pgid, uid, startedAt: parseTime(m[5]) };
+    });
 }
 export function parseUiCdpEndpointV1(stderr) {
     if (typeof stderr !== 'string' || Buffer.byteLength(stderr) > 1048576 || stderr.split('\n').length > 8192)
@@ -140,17 +171,25 @@ async function ps(args) {
     return await new Promise((resolve, reject) => {
         let stdout = '', stderr = '', fault, exit = false, timer;
         child.on('error', error => { fault = error; });
-        child.stdout.on('data', chunk => { if (Buffer.byteLength(stdout) + chunk.length > 4194304)
+        child.stdout.on('data', chunk => {
+            if (Buffer.byteLength(stdout) + chunk.length > 4194304)
+                fault = new Error('UI_OS_OBSERVATION_INVALID');
+            else
+                stdout += chunk;
+        });
+        child.stderr.on('data', chunk => {
+            if (stderr.length < 4096)
+                stderr += chunk;
             fault = new Error('UI_OS_OBSERVATION_INVALID');
-        else
-            stdout += chunk; });
-        child.stderr.on('data', chunk => { if (stderr.length < 4096)
-            stderr += chunk; fault = new Error('UI_OS_OBSERVATION_INVALID'); });
+        });
         child.once('exit', (code, signal) => { exit = code === 0 && signal === null; });
-        child.once('close', () => { clearTimeout(timer); if (fault || !exit || stderr)
-            reject(new Error('UI_OS_OBSERVATION_INVALID'));
-        else
-            resolve(stdout); });
+        child.once('close', () => {
+            clearTimeout(timer);
+            if (fault || !exit || stderr)
+                reject(new Error('UI_OS_OBSERVATION_INVALID'));
+            else
+                resolve(stdout);
+        });
         timer = setTimeout(() => { fault = new Error('UI_OS_OBSERVATION_INVALID'); child.kill('SIGKILL'); }, 2000);
     });
 }
@@ -187,18 +226,20 @@ export function resolveUiNativeDescriptorV1() {
     const executable = path.join(cache, UI_NATIVE_DESCRIPTOR_V1.cacheRelative), bundle = path.dirname(executable), pins = [];
     if (realpathSync(bundle) !== bundle)
         fail('UI_BROWSER_UNAVAILABLE');
-    const visit = directory => { for (const item of readdirSync(directory, { withFileTypes: true })) {
-        const file = path.join(directory, item.name);
-        if (item.isDirectory()) {
-            if (realpathSync(file) !== file || (lstatSync(file).mode & 0o022))
+    const visit = directory => {
+        for (const item of readdirSync(directory, { withFileTypes: true })) {
+            const file = path.join(directory, item.name);
+            if (item.isDirectory()) {
+                if (realpathSync(file) !== file || (lstatSync(file).mode & 0o022))
+                    fail('UI_BROWSER_UNAVAILABLE');
+                visit(file);
+            }
+            else if (item.isFile())
+                pins.push(pinUiFileV1(file, 536870912));
+            else
                 fail('UI_BROWSER_UNAVAILABLE');
-            visit(file);
         }
-        else if (item.isFile())
-            pins.push(pinUiFileV1(file, 536870912));
-        else
-            fail('UI_BROWSER_UNAVAILABLE');
-    } };
+    };
     visit(bundle);
     const executablePin = pinUiFileV1(executable, 536870912);
     if (!(lstatSync(executable).mode & 0o100))
@@ -213,7 +254,8 @@ export function createUiNativeLifecycleV1(input, effects = {}) {
     const readPs = effects.ps ?? ps, launchProcess = effects.spawn ?? spawn;
     const connect = effects.connectOverCDP ?? (async (url) => { const { chromium } = await import('playwright-core'); return chromium.connectOverCDP(url, { timeout: 10000 }); });
     const descriptor = input.descriptor ?? resolveUiNativeDescriptorV1();
-    let attempted = false, invoked = false, child, browser, spawnId, launchIntentHash, observedHash, rootOwner;
+    let attempted = false, invoked = false, durableIntent = false, durableNeverInvoked = false, publicationUncertain = false, child, browser, spawnId, launchIntentHash, observedHash, rootOwner;
+    let endpoint = null, endpointFault = false, stderrOffset = 0;
     let rootExit, exitObserved = false, closeObserved = false, streamFault = false, stdout = '', stderr = '', unknown = false, transportClosed = false;
     let resolveExit, resolveClose;
     const exitPromise = new Promise(resolve => { resolveExit = resolve; }), closePromise = new Promise(resolve => { resolveClose = resolve; });
@@ -221,8 +263,40 @@ export function createUiNativeLifecycleV1(input, effects = {}) {
     let initialContexts = new Set();
     const base = { jobId, intentHash };
     const record = (name, value) => {
-        const parsed = input.recordSchema ? input.recordSchema.parse(value) : value;
-        return store.record(name, parsed);
+        try {
+            const parsed = input.recordSchema ? input.recordSchema.parse(value) : value;
+            return store.record(name, parsed);
+        }
+        catch (error) {
+            publicationUncertain = true;
+            unknown = true;
+            throw error;
+        }
+    };
+    const neverInvoked = () => {
+        if (invoked || !durableIntent || publicationUncertain || durableNeverInvoked)
+            fail('UI_CLEANUP_UNKNOWN');
+        record(`children/${spawnId}.not-started.json`, { schema: 'mission-control.ui-worker-child-not-started.v1', ...base, spawnId, launchIntentHash, disposition: 'never_invoked' });
+        durableNeverInvoked = true;
+    };
+    const inspectEndpointLines = () => {
+        let end;
+        while ((end = stderr.indexOf('\n', stderrOffset)) !== -1) {
+            const line = stderr.slice(stderrOffset, end);
+            stderrOffset = end + 1;
+            if (!line.includes('DevTools listening'))
+                continue;
+            try {
+                const observed = parseUiCdpEndpointV1(line + '\n');
+                if (endpoint !== null)
+                    fail('UI_CDP_INVALID');
+                endpoint = observed;
+            }
+            catch {
+                endpointFault = true;
+                unknown = true;
+            }
+        }
     };
     const snapshot = async () => { const raw = await readPs(['-ww', '-A', '-o', 'pid=', '-o', 'ppid=', '-o', 'pgid=', '-o', 'uid=', '-o', 'lstart=']); return { rows: parseUiMetadataSnapshotV1(raw), capturedAt: new Date(clock()).toISOString(), metadataHash: uiHashV1(raw) }; };
     const native = p => ({ kind: 'native_browser', pid: p.pid, processStartedAt: p.startedAt, processGroupId: p.pgid, source: 'observed_os', executable: p.executable, commandHash: uiHashV1(p.rawArgs) });
@@ -291,25 +365,40 @@ export function createUiNativeLifecycleV1(input, effects = {}) {
             }
             const argv = Object.freeze(['--headless', '--user-data-dir=' + directories.profile, '--no-first-run', '--no-default-browser-check', '--disable-background-networking', '--disable-extensions', '--disable-component-update', '--disable-sync', '--metrics-recording-only', '--disable-default-apps', '--disable-features=MediaRouter,OptimizationHints,Translate', '--use-mock-keychain', '--password-store=basic', '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0', 'about:blank']);
             spawnId = randomUUID();
-            launchIntentHash = record(`children/${spawnId}.intent.json`, { schema: 'mission-control.ui-worker-child-intent.v1', ...base, ownerHash, spawnId, kind: 'chromium', family: 'chromium-headless-shell', expectedExecutable: descriptor.executable, executableHash: descriptor.executableHash, playwrightVersion: descriptor.playwrightVersion, browsersJsonHash: descriptor.browsersJsonHash, launchArgsHash: uiHashV1(uiCanonicalV1(argv)) });
-            if (cancellationRequested()) {
-                record(`children/${spawnId}.not-started.json`, { schema: 'mission-control.ui-worker-child-not-started.v1', ...base, spawnId, launchIntentHash, disposition: 'never_invoked' });
-                return null;
+            try {
+                launchIntentHash = record(`children/${spawnId}.intent.json`, { schema: 'mission-control.ui-worker-child-intent.v1', ...base, ownerHash, spawnId, kind: 'chromium', family: 'chromium-headless-shell', expectedExecutable: descriptor.executable, executableHash: descriptor.executableHash, playwrightVersion: descriptor.playwrightVersion, browsersJsonHash: descriptor.browsersJsonHash, launchArgsHash: uiHashV1(uiCanonicalV1(argv)) });
+                durableIntent = true;
+                if (cancellationRequested()) {
+                    neverInvoked();
+                    return null;
+                }
+                descriptor.check();
             }
-            descriptor.check();
+            catch (error) {
+                if (durableIntent && !publicationUncertain && !durableNeverInvoked)
+                    neverInvoked();
+                throw error;
+            }
             invoked = true;
             try {
                 child = launchProcess(descriptor.executable, argv, { detached: true, shell: false, cwd: directories.home, env: cleanUiChildEnvironmentV1({ home: directories.home, tmp: directories.tmp }), stdio: ['ignore', 'pipe', 'pipe'] });
                 child.on('error', () => { unknown = true; });
                 child.once('exit', (code, signal) => { rootExit = { code, signal }; exitObserved = true; resolveExit(); });
                 child.once('close', () => { closeObserved = true; resolveClose(); });
-                const capture = stream => chunk => { if (Buffer.byteLength(stdout) + Buffer.byteLength(stderr) + chunk.length > 1048576 || stderr.split('\n').length > 8192) {
-                    streamFault = true;
-                    return;
-                } if (stream === 'out')
-                    stdout += chunk;
-                else
-                    stderr += chunk; };
+                const capture = stream => chunk => {
+                    if (Buffer.byteLength(stdout) + Buffer.byteLength(stderr) + chunk.length > 1048576 || stderr.split('\n').length > 8192) {
+                        streamFault = true;
+                        return;
+                    }
+                    if (stream === 'out')
+                        stdout += chunk;
+                    else {
+                        stderr += chunk;
+                        if (stderr.split('\n').length > 8192)
+                            streamFault = true;
+                        inspectEndpointLines();
+                    }
+                };
                 child.stdout.on('data', capture('out'));
                 child.stderr.on('data', capture('err'));
                 if (!Number.isSafeInteger(child.pid) || child.pid <= 0)
@@ -322,11 +411,10 @@ export function createUiNativeLifecycleV1(input, effects = {}) {
                 observedHash = record(`children/${spawnId}.observed.json`, { schema: 'mission-control.ui-worker-child-observed.v1', ...base, spawnId, launchIntentHash, owner: rootOwner, parentPid: p.ppid });
                 await inspect();
                 const deadline = clock() + 10000;
-                while (!stderr.includes('DevTools listening') && clock() < deadline && !exitObserved && !streamFault)
+                while (endpoint === null && clock() < deadline && !exitObserved && !streamFault && !endpointFault)
                     await sleep(10);
-                if (streamFault || exitObserved)
+                if (streamFault || endpointFault || exitObserved || endpoint === null)
                     fail('UI_CDP_INVALID');
-                const endpoint = parseUiCdpEndpointV1(stderr);
                 browser = await connect(endpoint);
                 initialContexts = new Set(browser.contexts());
                 browser.once('disconnected', () => { transportClosed = true; });
@@ -338,18 +426,25 @@ export function createUiNativeLifecycleV1(input, effects = {}) {
                 throw error;
             }
         },
-        async census() { try {
-            if (streamFault)
-                fail('UI_BROWSER_OUTPUT_OVERFLOW');
-            return await inspect();
-        }
-        catch (error) {
-            unknown = true;
-            throw error;
-        } },
+        async census() {
+            try {
+                if (streamFault)
+                    fail('UI_BROWSER_OUTPUT_OVERFLOW');
+                if (endpointFault)
+                    fail('UI_CDP_INVALID');
+                return await inspect();
+            }
+            catch (error) {
+                unknown = true;
+                throw error;
+            }
+        },
         async close() {
-            if (!invoked)
+            if (!invoked) {
+                if (publicationUncertain || (spawnId && (!durableIntent || !durableNeverInvoked)))
+                    fail('UI_CLEANUP_UNKNOWN');
                 return { browser: 'not_started', children: spawnId ? [{ spawnId, owner: null, state: 'not_started' }] : [] };
+            }
             const deadline = clock() + 30000;
             try {
                 if (!child || !rootOwner || !observedHash || !browser)
@@ -370,7 +465,7 @@ export function createUiNativeLifecycleV1(input, effects = {}) {
                 await bounded(Promise.all([exitPromise, closePromise]), deadline);
                 if (!browser.isConnected())
                     transportClosed = true;
-                if (!exitObserved || !closeObserved || !transportClosed || streamFault || unknown)
+                if (!exitObserved || !closeObserved || !transportClosed || streamFault || endpointFault || stderr.slice(stderrOffset).includes('DevTools listening') || unknown)
                     fail('UI_CLEANUP_UNKNOWN');
                 const empty = [];
                 while (empty.length < 2) {
@@ -387,6 +482,8 @@ export function createUiNativeLifecycleV1(input, effects = {}) {
                     if (empty.length === 1)
                         await sleep(100);
                 }
+                if (streamFault || endpointFault || publicationUncertain || unknown)
+                    fail('UI_CLEANUP_UNKNOWN');
                 const settlementHash = record(`children/${spawnId}.settled.json`, { schema: 'mission-control.ui-worker-child-settled.v1', ...base, spawnId, observedHash, method: 'owned-child-process-group-v1', rootExit, rootExitObserved: true, rootCloseObserved: true, transport: 'closed', cohort: [...cohort.values()].sort((a, b) => a.owner.pid - b.owner.pid || a.owner.processStartedAt.localeCompare(b.owner.processStartedAt) || a.owner.commandHash.localeCompare(b.owner.commandHash)), emptyCensuses: empty });
                 record(`children/${spawnId}.closed.json`, { schema: 'mission-control.ui-worker-child-closed.v1', ...base, spawnId, observedHash, settlementHash, close: 'confirmed' });
                 return { browser: 'closed', children: [{ spawnId, owner: rootOwner, state: 'closed' }] };

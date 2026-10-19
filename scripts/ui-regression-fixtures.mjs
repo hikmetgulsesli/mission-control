@@ -384,8 +384,20 @@ async function installFences(context, state, measured, errors) {
 async function runCatalog({ browser, state, store, measured, control, schemas }) {
     const report = { schema: 'mission-control.ui-regression.v1', mcSourceSha: measured.identity.sourceSha, mcBuildHash: measured.identity.buildHash, fixtureVersion: UI_REGRESSION_FIXTURE_V1.fixtureVersion, fixtureHash: UI_REGRESSION_FIXTURE_V1.fixtureHash, startedAt: new Date().toISOString(), finishedAt: null, outcome: 'incomplete', assertions: [], screenshots: [] };
     const diagnostics = [];
-    let context, page, currentRoute = '/', viewport = VIEWPORTS[0], errors = [], stopped = false;
+    let context, page, candidate, currentRoute = '/', viewport = VIEWPORTS[0], errors = [], stopped = false, integrity = 'verified';
     const cancellation = () => control?.cancellationRequested?.() ?? false;
+    const retainCandidate = () => {
+        try {
+            const snapshot = { ...report, finishedAt: new Date().toISOString() };
+            const parsed = schemas ? schemas.UiRegressionReportV1Schema.parse(snapshot) : structuredClone(snapshot);
+            const reportHash = store.json(parsed);
+            candidate = { report: parsed, reportHash };
+        }
+        catch (error) {
+            integrity = 'failed';
+            throw error;
+        }
+    };
     const capture = async (id, route = currentRoute) => {
         if (cancellation() || report.screenshots.some(s => s.captureId === id))
             return;
@@ -441,8 +453,10 @@ async function runCatalog({ browser, state, store, measured, control, schemas })
         return !stopped;
     };
     const open = async (width) => {
-        if (context)
+        if (context) {
+            retainCandidate();
             await closeFixtureContext(context);
+        }
         viewport = { width, height: 900 };
         errors = [];
         state.browserRequests = [];
@@ -514,20 +528,57 @@ async function runCatalog({ browser, state, store, measured, control, schemas })
             report.outcome = 'incomplete';
     }
     finally {
-        report.finishedAt = new Date().toISOString();
-        measured.check();
+        if (cancellation())
+            report.outcome = 'incomplete';
+        let publicationError, closeFailed = false;
+        // Preserve the actual accumulated assertion/PNG manifest before late pins or cleanup.
+        try {
+            retainCandidate();
+        }
+        catch (error) {
+            integrity = 'failed';
+            publicationError = error;
+        }
+        try {
+            measured.check();
+        }
+        catch {
+            integrity = 'failed';
+        }
         if (context)
             try {
                 await closeFixtureContext(context);
             }
             catch {
-                report.outcome = 'incomplete';
+                closeFailed = true;
             }
+        try {
+            measured.check();
+        }
+        catch {
+            integrity = 'failed';
+        }
+        if (integrity === 'failed' || closeFailed || cancellation()) {
+            report.outcome = 'incomplete';
+            if (integrity === 'failed' || closeFailed)
+                try {
+                    diagnostics.push(store.json({ schema: 'mission-control.ui-finalization-diagnostic.v1', code: integrity === 'failed' ? 'UI_REPORT_INTEGRITY_FAILED' : 'UI_CONTEXT_CLOSE_UNKNOWN', candidateReportHash: candidate?.reportHash ?? null }));
+                }
+                catch {
+                    integrity = 'failed';
+                }
+            try {
+                retainCandidate();
+            }
+            catch (error) {
+                integrity = 'failed';
+                publicationError = error;
+            }
+        }
+        if (!candidate)
+            throw publicationError ?? Error('UI_CANDIDATE_UNAVAILABLE');
     }
-    if (cancellation())
-        report.outcome = 'incomplete';
-    const parsed = schemas ? schemas.UiRegressionReportV1Schema.parse(report) : report;
-    return { report: parsed, reportHash: store.json(parsed), diagnosticHashes: diagnostics };
+    return { ...candidate, integrity, diagnosticHashes: diagnostics };
 }
 async function navigate(page, href) {
     await page.getByRole('button', { name: 'Search & favorites', exact: true }).click();
