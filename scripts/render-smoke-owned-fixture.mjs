@@ -92,7 +92,7 @@ function setup(value) {
     requireValue(pg.process.ppid === value.owner.pid && pg.process.uid === value.owner.uid && value.resourceRoot.uid === value.owner.uid
         && pg.data.path === path.join(value.resourceRoot.path, 'postgres-data') && pg.socket.path === path.join(value.resourceRoot.path, 'postgres-socket')
         && pg.data.uid === value.owner.uid && pg.socket.uid === value.owner.uid
-        && pg.process.executable === '/Users/setrox/ai/setrox/.task4-toolchain-v1/Cellar/postgresql@17/17.10/bin/postgres'
+        && pg.process.executable === path.join(TASK4_PG_BIN, 'postgres')
         && pg.process.executableHash === '38c50336c63ae8b73b799a8c0ebc4f948e311eee882a633c8286d1ca4110b502', 'TASK4_BINDING_REFUSED');
 }
 function ready(value) {
@@ -783,7 +783,9 @@ function captureTask4SourceInputsV1(source, kind) {
 }
 
 const TASK4_MC_ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const TASK4_NODE = '/Users/setrox/ai/setrox/.task4-toolchain-v1/Cellar/node/26.4.0/bin/node';
+const TASK4_TOOLCHAIN_ROOT = path.join(path.dirname(path.dirname(TASK4_MC_ROOT)), '.task4-toolchain-v1');
+const TASK4_NODE = path.join(TASK4_TOOLCHAIN_ROOT, 'Cellar/node/26.4.0/bin/node');
+const TASK4_PG_BIN = path.join(TASK4_TOOLCHAIN_ROOT, 'Cellar/postgresql@17/17.10/bin');
 const TASK4_NODE_HASH = '59cd4fb59cf5bc239f43d5db8c0cd8c23c22db79419612b92da3b7cf34de8553';
 async function task4RuntimeModulesV1(root) {
     // Call only after full Source and build measurement; these fixed compiled modules have no selected configuration imports.
@@ -1808,7 +1810,7 @@ async function createTask4PortGuardV1(context, state, role) {
 }
 
 function createTask4PostmasterV1(context, state, recipe) {
-    const executable = '/Users/setrox/ai/setrox/.task4-toolchain-v1/Cellar/postgresql@17/17.10/bin/postgres';
+    const executable = path.join(TASK4_PG_BIN, 'postgres');
     const logfile = path.join(state.root.value.path, 'postgres.stderr.log');
     const logfd = fs.openSync(logfile, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW, 0o600);
     let child = null, original = null, owner = null, settled = null, unknown = false;
@@ -1916,7 +1918,7 @@ function task4PinnedPgV1() {
         pg_ctl: 'ba12d9fbe4492e3ab0e8bcedd53e3a0da8163fd8c2cef340dfaf619af0e132c5', psql: 'bb4ef660720948d242d8c4e32450ae5607241510dc8f06cf685048e4c493447d' };
     const result = {};
     for (const [name, expected] of Object.entries(fixed)) {
-        const locator = '/Users/setrox/ai/setrox/.task4-toolchain-v1/Cellar/postgresql@17/17.10/bin/' + name;
+        const locator = path.join(TASK4_PG_BIN, name);
         requireValue(task4FileSnapshotV1(locator, 536870912, 'installed').hash === expected, 'TASK4_SOURCE_DRIFT'); result[name] = locator;
     }
     return result;
