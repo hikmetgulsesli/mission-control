@@ -7276,7 +7276,7 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
   }
-  .cron-table { min-width: 500px; }
+  .cron-table table { min-width: 500px; }
 
   /* Glitch text smaller */
   .glitch { font-size: 1.2em; }
