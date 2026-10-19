@@ -73,6 +73,11 @@ export type ControlEvidenceResponseV1 = ControlEvidenceProjectionV1 & Readonly<{
       viewport:{width:number;height:number}; sha256:string}[];
   }};
 }>;
+export type ControlEvidenceEnvelopeV1 = Readonly<{
+  schema:'mission-control.controls-evidence-envelope.v1'; selectionHash:string|null;
+  evidence:ControlEvidenceResponseV1;
+  history:readonly Readonly<{id:string;sourceSha:string;evidence:ControlEvidenceProjectionV1}>[];
+}>;
 type ManualWorkerEventsV1 = Readonly<{
   onFrame(frame:unknown):Promise<void>;
   onUnavailable(reason:'disconnect'|'exit'|'error'|'overflow'):Promise<void>;
@@ -275,3 +280,5 @@ Follow the paired spec Accepted private worker channel/journal and exact paired 
 - [ ] Implement an explicit allowlist child environment and exclusive owned HOME/data/PG/mock/egress/CLI fixtures using existing supported setup. Never default to live5432/3080/3333/18789 or ambient credentials/selected installation. Refuse occupied resources, record exact owned lifecycle, retain failures and clean only positively owned test resources. Root supplies current protected owned-test input if needed. No helper/profile/role/runtime guard bypass.
 - [ ] Preserve exact ordered six routes and13081, compiled parser and actual MC-proxied sealed V3 packet for exact fixed run. Seed actual private run rows and source-valid200 snapshots; if exact404 behavior must be fixed, report evidence and Root expands Map before edit. Do not broaden expected failures silently or substitute13082 fake API results.
 - [ ] Run focused tests, Root stock build, then actual existing `npm run render:smoke` within proven owned isolation. Capture source/build/HTTP/DB/network/child/screenshot results and failure cleanup. This is built-server integration evidence, not live or selected runtime qualification. Independent review before delivery.
+
+Root evidence-envelope ruling: GET evidence and getControlsEvidence() return strict ControlEvidenceEnvelopeV1, not an expanded ControlEvidenceResponseV1. Selection metadata comes from captured unchanged composition, history max50 explicit validated SF index records, jobs separate. Preserve frozen receipt/mutation/SF DTOs; null selection refuses launch. This fixes a concrete initial-launch/history integration gap within existing mapped files before page implementation.
