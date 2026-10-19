@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { usePolling } from '../hooks/usePolling';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { api } from '../lib/api';
+import { AGENT_MAP } from '../lib/constants';
 import { ChatPanel } from '../components/ChatPanel';
 import { ChatSidebar } from '../components/ChatSidebar';
 import { LiveProgressPanel } from '../components/LiveProgressPanel';
@@ -22,7 +23,7 @@ export function Chat() {
   }, [searchParams]);
 
   const selectedAgentData = (agents || []).find((a) => a.id === selectedAgent);
-  const agentName = selectedAgentData?.identityName || selectedAgentData?.name || selectedAgent;
+  const agentName = selectedAgentData?.identityName || selectedAgentData?.name || AGENT_MAP[selectedAgent]?.name || selectedAgent;
 
   return (
     <div className="chat-page">

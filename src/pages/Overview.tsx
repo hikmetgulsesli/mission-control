@@ -1,3 +1,4 @@
+import { dataSyncMessage } from '../lib/data-sync';
 import { api } from "../lib/api";
 import { usePolling } from '../hooks/usePolling';
 import { useAppStore } from '../store/appStore';
@@ -24,7 +25,7 @@ function CronStatus({ crons }: { crons: CronStatusItem[] }) {
         ].map(h => (
           <div key={h.label} style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "4px", padding: "8px 12px", display: "flex", alignItems: "center", gap: "8px" }}>
             <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: h.color, display: "inline-block" }} />
-            <span style={{ fontSize: "11px", color: "var(--text-primary)", fontFamily: "var(--font)" }}>{h.label}</span>
+            <span style={{ fontSize: "14px", color: "var(--text-primary)", fontFamily: "var(--font)" }}>{h.label}</span>
           </div>
         ))}
       </div>
@@ -229,15 +230,16 @@ function AgentSummaryPanel({ agents }: { agents: AgentSummary[] }) {
 
 export function Overview() {
   const data = useAppStore(s => s.overview);
-  const initialLoading = useAppStore(s => s.initialLoading);
+  const sync = useAppStore(s => s.sync?.overview);
 
-  if (initialLoading || !data) {
-    return <div className="page-loading">Loading overview...</div>;
+  if (!data) {
+    return <div className="page-loading" role="status">Overview: {dataSyncMessage(sync)}{sync?.observedAt != null ? ' · No overview payload' : ''}</div>;
   }
 
   return (
     <div className="overview">
       <GlitchText text="SYSTEM OVERVIEW" tag="h2" />
+      <p role="status">Overview: {dataSyncMessage(sync)}</p>
 
       <div className="stat-cards">
         <div className="stat-card">

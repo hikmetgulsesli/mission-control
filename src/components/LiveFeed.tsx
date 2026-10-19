@@ -432,7 +432,7 @@ export function LiveFeed() {
             <span
               className="lf-row__category"
               style={{
-                fontSize: 9,
+                fontSize: 14,
                 padding: '1px 5px',
                 borderRadius: 3,
                 background: catDef.color + '18',

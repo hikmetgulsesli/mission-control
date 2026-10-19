@@ -7,30 +7,28 @@ interface WsMessage {
   [key: string]: any;
 }
 
-export function useWebSocket() {
+export function useWebSocket(enabled = true) {
   const [messages, setMessages] = useState<WsMessage[]>([]);
   const [connected, setConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const closedIntentionally = useRef(false);
-
   useEffect(() => {
-    closedIntentionally.current = false;
+    let disposed = false;
+    let ownedSocket: WebSocket | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    setConnected(false);
+    if (!enabled) return;
 
     function connect() {
-      if (closedIntentionally.current) return;
-
+      if (disposed) return;
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const token = (document.querySelector('meta[name="mc-token"]') as HTMLMetaElement)?.content || '';
-      const wsUrl = `${protocol}//${window.location.host}/ws${token ? '?token=' + encodeURIComponent(token) : ''}`;
-      const ws = new WebSocket(wsUrl);
+      const ws = new WebSocket(`${protocol}//${window.location.host}/ws${token ? '?token=' + encodeURIComponent(token) : ''}`);
+      ownedSocket = ws;
       wsRef.current = ws;
-
-      ws.onopen = () => {
-        setConnected(true);
-      };
-
+      const current = () => !disposed && ownedSocket === ws && wsRef.current === ws;
+      ws.onopen = () => { if (current()) setConnected(true); };
       ws.onmessage = (ev) => {
+        if (!current()) return;
         try {
           const msg = JSON.parse(ev.data);
           setMessages(prev => [...prev.slice(-MAX_MESSAGES), msg]);
@@ -38,38 +36,40 @@ export function useWebSocket() {
           console.warn('[WS] Failed to parse message:', e);
         }
       };
-
       ws.onclose = () => {
+        if (!current()) return;
         setConnected(false);
         wsRef.current = null;
-        if (!closedIntentionally.current) {
-          reconnectTimer.current = setTimeout(connect, 3000);
-        }
+        reconnectTimer = setTimeout(() => {
+          if (disposed || ownedSocket !== ws || wsRef.current !== null) return;
+          reconnectTimer = undefined;
+          connect();
+        }, 3000);
       };
-
-      ws.onerror = () => {
-        ws.close();
-      };
+      ws.onerror = () => { if (current()) ws.close(); };
     }
 
     connect();
-
     return () => {
-      closedIntentionally.current = true;
-      clearTimeout(reconnectTimer.current);
-      if (wsRef.current) {
-        wsRef.current.onclose = null; // prevent reconnect on cleanup
-        wsRef.current.close();
-        wsRef.current = null;
+      disposed = true;
+      clearTimeout(reconnectTimer);
+      if (ownedSocket) {
+        ownedSocket.onopen = null;
+        ownedSocket.onmessage = null;
+        ownedSocket.onclose = null;
+        ownedSocket.onerror = null;
+        if (wsRef.current === ownedSocket) wsRef.current = null;
+        ownedSocket.close();
       }
+      setConnected(false);
     };
-  }, []);
+  }, [enabled]);
 
   const send = useCallback((msg: any) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    if (enabled && wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(msg));
     }
-  }, []);
+  }, [enabled]);
 
   const clearMessages = useCallback(() => setMessages([]), []);
 

@@ -1,3 +1,6 @@
+import { createControlsRouterV1 } from './routes/controls.js';
+import { prepareFreshMissionControlControlsV1, freshMissionControlControlsV1 } from './services/fresh-installation-runtime.js';
+import type { AddressInfo } from 'node:net';
 import { selectedDesignCacheRootV1 } from './services/fresh-design-artifact-paths-v1.js';
 import { assertFreshMissionControlRuntimeV1, closeFreshMissionControlRuntimeV1 } from './services/fresh-installation-runtime.js';
 import express from 'express';
@@ -160,6 +163,8 @@ const productBuildAuthorityV2DeliveryEvidenceRateLimitExact: express.RequestHand
 };
 
 const app = express();
+let controlsListenerAddress:AddressInfo|null=null;
+await prepareFreshMissionControlControlsV1();
 // Unselected calls are a no-op. A selected process cannot serve later requests
 // after close or configuration/record drift, including filesystem-only routes.
 app.use((_req, res, next) => {
@@ -170,7 +175,8 @@ const parseJsonBody = express.json({ limit: "2mb" });
 const jsonBodyParser: express.RequestHandler = (req, res, next) => {
   const rawPathname = rawRequestPathname(req.originalUrl);
   if (rawPathname === PRODUCT_BUILD_AUTHORITY_V2_LOADED_BUILD_FULL_PATH
-    || rawPathname === PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_FULL_PATH) {
+    || rawPathname === PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_FULL_PATH
+    || rawPathname === '/api/controls' || rawPathname.startsWith('/api/controls/')) {
     next();
     return;
   }
@@ -194,7 +200,7 @@ app.use(helmet({
 
 // Health check endpoint (before auth)
 app.get('/api/health', async (_req, res) => {
-  const checks: Record<string, { status: string; detail?: string }> = {};
+  const checks: Record<string, { status: string; detail?: string; volume?: Awaited<ReturnType<typeof readWorkingVolumeDiskHealth>>['volume']; source?: string; semantics?: string; observedAt?: string }> = {};
 
   // 1. Gateway check. Gateway is optional in local Mission Control development;
   // server deployments can attach it for live chat/agent control.
@@ -220,8 +226,11 @@ app.get('/api/health', async (_req, res) => {
   try {
     const total = os.totalmem();
     const used = total - os.freemem();
-    const pct = total > 0 ? Math.round((used / total) * 100) : 0;
-    checks.memory = { status: pct < 90 ? 'up' : 'warning', detail: `${pct}%` };
+    const valid = Number.isFinite(total) && total > 0 && Number.isFinite(used) && used >= 0 && used <= total;
+    const pct = valid ? Math.round((used / total) * 100) : null;
+    checks.memory = { status: pct === null ? 'unknown' : pct < 90 ? 'up' : 'warning',
+      ...(pct === null ? {} : { detail: `${pct}% used (total−os.freemem)` }),
+      source: 'node:os', semantics: 'total-os.freemem', observedAt: new Date().toISOString() };
   } catch { checks.memory = { status: 'unknown' }; }
 
   const requiredUp = Object.entries(checks)
@@ -276,6 +285,9 @@ app.use('/api', rateLimit({
 app.use('/api/terminal', rateLimit({ windowMs: 60000, max: 20 }));
 app.use('/api/files/write', rateLimit({ windowMs: 60000, max: 30 }));
 app.use('/api/files/delete', rateLimit({ windowMs: 60000, max: 10 }));
+
+// Controls keeps its own strict 2 KiB parser after the existing auth/source gates.
+app.use('/api',createControlsRouterV1({jobs:freshMissionControlControlsV1,actualAddress:()=>controlsListenerAddress}));
 
 // API routes
 app.use('/api', overviewRouter);
@@ -377,6 +389,8 @@ const v3ProjectTransferOwner = new SingleFlightBackgroundIntervalOwner({
 
 assertFreshMissionControlRuntimeV1();
 server.listen(config.port, config.host, () => {
+  const actual=server.address();
+  controlsListenerAddress=actual&&typeof actual!=='string'?Object.freeze({...actual}):null;
   assertFreshMissionControlRuntimeV1();
   const displayHost = config.host === '0.0.0.0' ? 'localhost' : config.host;
   const displayUrl = config.publicOrigin || `http://${displayHost}:${config.port}`;
@@ -397,6 +411,7 @@ function shutdown(signal: string) {
   if (shutdownStarted) return;
   shutdownStarted = true;
   console.log(`[${signal}] Shutting down gracefully...`);
+  controlsListenerAddress=null;
   const serverClosed = new Promise<void>((resolve) => {
     server.close(() => {
       console.log('Server closed');

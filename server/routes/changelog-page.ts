@@ -5,12 +5,13 @@ import { promisify } from 'node:util';
 import path from 'node:path';
 import { marked } from 'marked';
 import { PATHS } from '../config.js';
+import { readMissionControlIdentity, resolveMissionControlRoot } from '../services/mission-control-identity.js';
 
 const execAsync = promisify(exec);
 const router = Router();
 
 const SETFARM_REPO = PATHS.setfarmRepoDir;
-const MC_REPO = process.env.MC_REPO_DIR || path.join(PATHS.projectsDir, 'mission-control');
+const MC_REPO = resolveMissionControlRoot(undefined, process.env.MC_REPO_DIR);
 
 // Standalone HTML page for changelog — no React, no CSS refresh issues
 // Visit directly: https://ai.setrox.com.tr/changelog
@@ -44,17 +45,10 @@ router.get('/changelog', async (_req, res) => {
 
     // Build info
     let setfarmCommit = '?';
-    let mcCommit = '?';
-    let mcVersion = '?';
+    const mcIdentity = await readMissionControlIdentity();
     try {
       const raw = JSON.parse(await readFile(path.join(SETFARM_REPO, 'dist/BUILD_INFO.json'), 'utf-8'));
       setfarmCommit = (raw.sha || raw.commit || '?').slice(0, 8);
-    } catch {}
-    try {
-      const pkg = JSON.parse(await readFile(path.join(MC_REPO, 'package.json'), 'utf-8'));
-      mcVersion = pkg.version || '?';
-      const { stdout } = await execAsync('git rev-parse --short HEAD', { cwd: MC_REPO, timeout: 2000 });
-      mcCommit = stdout.trim();
     } catch {}
 
     const setfarmHtml = setfarmMd ? marked.parse(setfarmMd) : '<p>CHANGELOG.md not found.</p>';
@@ -195,7 +189,9 @@ body {
     </div>
     <div class="vcard">
       <div class="label">Mission Control</div>
-      <div class="val">v${mcVersion} · ${mcCommit}</div>
+      <div class="val">${escapeHtml(mcIdentity.version ?? 'unavailable')} (checkout version)</div>
+      <div class="sub">Loaded build: ${escapeHtml(mcIdentity.loadedBuild.sourceSha?.slice(0, 8) ?? 'unavailable')}</div>
+      <div class="sub">Checkout: ${escapeHtml(mcIdentity.checkout.commit?.slice(0, 8) ?? 'unavailable')}</div>
     </div>
   </div>
 

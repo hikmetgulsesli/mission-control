@@ -12,8 +12,10 @@ interface Commit {
 
 interface ChangelogData {
   commits: Commit[];
-  setfarm: { commit: string; branch: string; builtAt: string } | null;
-  mc: { version: string; commit: string; builtAt: string } | null;
+  setfarm: { commit: string | null; branch: string | null; builtAt: string | null } | null;
+  mc: { version: string | null; commit: string | null; builtAt: null;
+    checkout: {status: 'available' | 'unavailable'; commit: string | null};
+    loadedBuild: {status: 'available' | 'unavailable'; sourceSha: string | null} } | null;
   setfarmChangelog: string | null;
   mcChangelog: string | null;
   generatedAt: string;
@@ -122,13 +124,14 @@ export function ChangelogModal({ open, onClose }: Props) {
               <div className="version-card">
                 <div className="version-card__title">SETFARM</div>
                 <div className="version-card__commit">{String(data.setfarm.commit).slice(0, 8)}</div>
-                <div className="version-card__branch">{data.setfarm.branch || 'main'}</div>
+                <div className="version-card__branch">{data.setfarm.branch || 'unavailable'}</div>
               </div>
             )}
-            {data.mc?.commit && (
+            {data.mc && (
               <div className="version-card">
                 <div className="version-card__title">MISSION CONTROL</div>
-                <div className="version-card__commit">v{data.mc.version || '?'} · {String(data.mc.commit).slice(0, 8)}</div>
+                <div className="version-card__commit">Loaded build: {data.mc.loadedBuild.sourceSha?.slice(0, 8) ?? 'unavailable'}</div>
+                <div className="version-card__branch">Checkout version: {data.mc.version ?? 'unavailable'} · Checkout: {data.mc.checkout.commit?.slice(0, 8) ?? 'unavailable'}</div>
               </div>
             )}
           </div>

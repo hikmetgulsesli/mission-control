@@ -1,4 +1,5 @@
-import { createHash } from "node:crypto";
+import { SnapshotValidationError, hashCanonicalJson } from "./setfarm-canonical-json-v1.js";
+export { hashCanonicalJson } from "./setfarm-canonical-json-v1.js";
 
 import { config } from "../config.js";
 import {
@@ -842,25 +843,6 @@ const IMPLEMENTATION_IGNORED_PATH_MAX_BYTES = 128 * 1024;
 const IMPLEMENTATION_IGNORED_PATH_MAX_ITEM_LENGTH = 2_000;
 const JSON_POINTER = /^\/(?:[^~/]|~[01])*(?:\/(?:[^~/]|~[01])*)*$/;
 
-class SnapshotValidationError extends Error {}
-
-function canonicalJsonStringify(value: unknown): string {
-  if (value === null || typeof value === "boolean" || typeof value === "string") return JSON.stringify(value);
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new SnapshotValidationError("canonical JSON requires finite numbers");
-    return Object.is(value, -0) ? "0" : JSON.stringify(value);
-  }
-  if (Array.isArray(value)) return `[${value.map(canonicalJsonStringify).join(",")}]`;
-  if (typeof value === "object") {
-    const record = value as Record<string, unknown>;
-    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonicalJsonStringify(record[key])}`).join(",")}}`;
-  }
-  throw new SnapshotValidationError("unsupported canonical JSON value");
-}
-
-export function hashCanonicalJson(value: unknown): string {
-  return createHash("sha256").update(canonicalJsonStringify(value), "utf8").digest("hex");
-}
 
 function fail(path: string, message: string): never {
   throw new SnapshotValidationError(`${path}: ${message}`);

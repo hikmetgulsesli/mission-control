@@ -61,7 +61,7 @@ export function PrdEditor({ content, editMode, onChange, previousContent }: PrdE
             className={"btn btn--tiny" + (showDiff ? " btn--primary" : "")}
             onClick={() => setShowDiff(!showDiff)}
           >{showDiff ? 'HIDE DIFF' : 'SHOW DIFF'}</button>
-          <span style={{ fontSize: '10px', color: 'var(--neon-green)', fontFamily: 'var(--font)' }}>
+          <span style={{ fontSize: '14px', color: 'var(--neon-green)', fontFamily: 'var(--font)' }}>
             Newly added sections are highlighted in green
           </span>
         </div>

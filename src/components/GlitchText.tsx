@@ -5,7 +5,7 @@ interface GlitchTextProps {
 
 export function GlitchText({ text, tag: Tag = 'h1' }: GlitchTextProps) {
   return (
-    <Tag className="glitch" data-text={text}>
+    <Tag className="glitch">
       {text}
     </Tag>
   );

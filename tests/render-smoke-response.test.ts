@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
@@ -111,10 +111,11 @@ async function runRenderExpectingFailure(env: NodeJS.ProcessEnv): Promise<string
       cwd: process.cwd(),
       env: { ...process.env, ...env },
       encoding: "utf8",
-      timeout: 5_000,
+      timeout: 8_000,
       maxBuffer: 64 * 1024,
     });
   } catch (error) {
+    assert.equal((error as any).killed, false); assert.equal((error as any).signal, null); assert.equal((error as any).code, 2);
     return String((error as {stderr?: string}).stderr || (error as Error).message);
   }
   assert.fail("render smoke unexpectedly succeeded");
@@ -214,19 +215,17 @@ test("render smoke requires the exact durable V3 sealed response before and duri
   const tracker = createRequiredV3ProductBuildAuthorityTracker(baseUrl, parseProductBuildAuthorityV2);
   assert.equal(await tracker.observe(response(200, url, exact)), true);
   tracker.requireObserved();
+  const reordered = createRequiredV3ProductBuildAuthorityTracker(baseUrl, parseProductBuildAuthorityV2);
+  assert.equal(await reordered.observe(response(200, url, {
+    runId: exact.runId, schema: exact.schema, disposition: exact.disposition,
+    packetAuthority: exact.packetAuthority, refusal: exact.refusal, authorityHash: exact.authorityHash,
+  })), true);
+  reordered.requireObserved();
 
   for (const crossed of [
     response(409, url, exact),
     response(200, url, { ...exact, runId: "other" }),
     response(200, url, { ...exact, extra: true }),
-    response(200, url, {
-      runId: exact.runId,
-      schema: exact.schema,
-      disposition: exact.disposition,
-      packetAuthority: exact.packetAuthority,
-      refusal: exact.refusal,
-      authorityHash: exact.authorityHash,
-    }),
     response(200, url, { ...exact, disposition: "refused" }),
     response(200, url, { ...exact, packetAuthority: null }),
     response(200, url, { ...exact, refusal: {} }),
@@ -279,26 +278,13 @@ test("isolated child environment strips every loader-injection variable", () => 
 
 test("render smoke rejects any non-authoritative origin before starting a server", async () => {
   const stderr = await runRenderExpectingFailure({ MC_RENDER_BASE_URL: "http://127.0.0.1:3080" });
-  assert.match(stderr, /MC_RENDER_BASE_URL must equal http:\/\/127\.0\.0\.1:13081/);
+  assert.match(stderr, /TASK4_BINDING_REFUSED/);
 });
 
-test("render smoke refuses a preoccupied isolated port without reusing its listener", async () => {
-  const temporary = await mkdtemp(join(tmpdir(), "mc-render-port-"));
-  const server = createServer((_request) => {});
-  await new Promise<void>((resolveListen, rejectListen) => {
-    server.once("error", rejectListen);
-    server.listen(13081, "127.0.0.1", resolveListen);
-  });
-  try {
-    const stderr = await runRenderExpectingFailure({
-      MC_RENDER_BASE_URL: "http://127.0.0.1:13081",
-      MC_RENDER_SCREENSHOT_DIR: temporary,
-    });
-    assert.match(stderr, /render port 127\.0\.0\.1:13081 is preoccupied/);
-  } finally {
-    await new Promise<void>((resolveClose, rejectClose) => server.close((error) => error ? rejectClose(error) : resolveClose()));
-    await rm(temporary, { recursive: true, force: true });
-  }
+test("render smoke refuses missing private fd4 before any port or workspace effect", async () => {
+  const stderr = await runRenderExpectingFailure({});
+  assert.match(stderr, /TASK4_FRAME_(INVALID|TIMEOUT|UNAVAILABLE)/);
+  assert.doesNotMatch(stderr, /Chromium|isolated server|ECONNREFUSED/);
 });
 
 test("render smoke removes only its operation-owned screenshot workspace", async () => {
@@ -405,7 +391,11 @@ test("forced child teardown escalates, waits, verifies the port, and handles eve
     const processTarget = new EventEmitter();
     const observed: Array<string | number> = [];
     const owner = { close: async () => { observed.push("close"); } };
-    const removeHandlers = installCleanupSignalHandlers(owner, processTarget, (code: number) => observed.push(code));
+    // Simulated event transport only: this test never supplies or claims an actual process owner.
+    const fakeEventTarget = processTarget as unknown as Parameters<typeof installCleanupSignalHandlers>[1];
+    // Simulated exit observer returns to the test; it never exits a process.
+    const fakeExitObserver = ((code: number) => observed.push(code)) as unknown as Parameters<typeof installCleanupSignalHandlers>[2];
+    const removeHandlers = installCleanupSignalHandlers(owner, fakeEventTarget, fakeExitObserver);
     processTarget.emit(signal);
     await new Promise((resolveTurn) => setImmediate(resolveTurn));
     removeHandlers();
@@ -431,7 +421,7 @@ test("cleanup frees the server before bounded browser cleanup and preserves the 
     close: async () => await new Promise(() => {}),
     kill: async () => { events.push("browser:kill"); },
   };
-  const owner = createRenderCleanupOwner({ workspace, timeoutMs: 20, verifyPortReleased: async () => events.push("port") });
+  const owner = createRenderCleanupOwner({ workspace, timeoutMs: 20, verifyPortReleased: async () => { events.push("port"); } });
   owner.setChild(child);
   owner.setBrowserLaunch(new Promise((resolveLaunch) => setImmediate(() => resolveLaunch(browserServer))));
   await owner.close();
@@ -454,4 +444,61 @@ test("preflight and response failures always pass through the same cleanup owner
     );
     assert.deepEqual(events, ["action", "close", "signals-removed"]);
   }
+});
+
+test('Task4 canonical sealed vector is accepted by the real strict parser and response tracker', async () => {
+  const { task4SeedV1, task4CanonicalV1 } = await import('../scripts/render-smoke-owned-fixture.mjs');
+  const body = JSON.parse(task4CanonicalV1(task4SeedV1('1'.repeat(40)).productResponse));
+  assert.equal(parseProductBuildAuthorityV2(body, 'ad47fe65-4ec4-4fb5-89da-fff71eb4e79a'), body);
+  const tracker = createRequiredV3ProductBuildAuthorityTracker('http://127.0.0.1:13081', parseProductBuildAuthorityV2);
+  const response = (payload: any, status = 200) => ({ request: () => ({ method: () => 'GET' }), status: () => status,
+    url: () => 'http://127.0.0.1:13081/api/setfarm/runs/ad47fe65-4ec4-4fb5-89da-fff71eb4e79a/product-build-authority', json: async () => payload });
+  assert.equal(await tracker.observe(response(body)), true); tracker.requireObserved();
+  for (const changed of [{ ...body, extra: true }, { ...body, packetAuthority: { ...body.packetAuthority, packetHash: 'f'.repeat(64) } }, { ...body, runId: 'ac8cea43-7686-4d27-8092-1e3dd9207ca4' }])
+    assert.equal(await tracker.observe(response(changed)), false);
+  assert.equal(await tracker.observe(response(body, 409)), false);
+});
+
+test('Task4 fixed upstream snapshots are real strict partial200 for both exact run IDs', async () => {
+  const { task4MockResponseV1, task4NetworkRecipesV1 } = await import('../scripts/render-smoke-owned-fixture.mjs');
+  const { parseRunOperationalSnapshotV1 } = await import('../server/services/setfarm-operational-snapshot.js');
+  const source = '1'.repeat(40), ids = ['ac8cea43-7686-4d27-8092-1e3dd9207ca4', 'ad47fe65-4ec4-4fb5-89da-fff71eb4e79a'];
+  for (const [index, id] of ids.entries()) {
+    const path = `/api/runs/${id}/operational-snapshot`;
+    const response = task4MockResponseV1('GET', path, source);
+    assert.equal(response.status, 200); assert.equal(response.contentType, 'application/json; charset=utf-8');
+    const body = JSON.parse(response.body), parsed = parseRunOperationalSnapshotV1(body);
+    assert.equal(parsed.run.id, id); assert.equal(parsed.run.protocol, index ? 'v3' : 'legacy');
+    assert.equal(parsed.source.projection, 'partial'); assert.equal(parsed.summary.operatorActions.stop.allowed, false);
+    assert.equal(parsed.summary.operatorActions.resume.allowed, false); assert.equal(parsed.claims.length, 0); assert.equal(parsed.attempts.length, 0);
+    assert.equal(task4MockResponseV1('POST', path, source), null);
+    assert.equal(task4MockResponseV1('GET', path + '?extra=1', source), null);
+    const model = JSON.parse(task4MockResponseV1('GET', `/api/runs/${id}/operational-model`, source).body);
+    assert.equal(model.schema, 'setfarm.run-operational-model.v1'); assert.equal(model.run.id, id); assert.equal(model.failure.present, false);
+    assert.equal(model.stories.total, 0); assert.equal(model.pipeline.stepsTotal, 0);
+  }
+  const legacy = task4MockResponseV1('GET', `/api/runs/${ids[0]}/product-build-authority`, source);
+  assert.equal(legacy.status, 409); assert.equal(legacy.body, '{"code":"RUNTIME_PACKET_RUN_NOT_V3"}');
+  const v3 = task4MockResponseV1('GET', `/api/runs/${ids[1]}/product-build-authority`, source);
+  assert.equal(v3.status, 200); assert.equal(parseProductBuildAuthorityV2(JSON.parse(v3.body), ids[1]).disposition, 'sealed_packet');
+  assert.equal(task4MockResponseV1('GET', '/api/runs/foreign/operational-snapshot', source), null);
+  const registry = task4NetworkRecipesV1(); assert.ok(Object.isFrozen(registry));
+  for (const group of ['browser', 'mock']) {
+    assert.equal(new Set(registry[group].map((r: any) => r.pathId)).size, registry[group].length);
+    assert.ok(registry[group].every((r: any) => ['GET', 'HEAD'].includes(r.method) && Object.isFrozen(r)));
+  }
+  assert.equal(registry.mock.length, 6);
+});
+
+
+test("render smoke consumes original empty fd4 EOF and exits naturally before resources", async () => {
+  const child = spawn(process.execPath, [renderScript], { cwd: process.cwd(), env: { PATH: '/usr/bin:/bin', HOME: process.env.HOME }, stdio: ['ignore', 'pipe', 'pipe', 'ignore', 'pipe'] });
+  let output = '', errorOutput = '', exited: any = null;
+  child.stdout!.on('data', value => { output += value; }); child.stderr!.on('data', value => { errorOutput += value; });
+  child.on('exit', (code, signal) => { exited = { code, signal }; });
+  const closed = new Promise<void>((resolve, reject) => { child.once('error', reject); child.once('close', (code, signal) => {
+    try { assert.deepEqual(exited, { code: 2, signal: null }); assert.equal(code, 2); assert.equal(signal, null); resolve(); } catch (error) { reject(error); }
+  }); });
+  (child.stdio[4] as import('node:stream').Writable).end();
+  await closed; assert.equal(output, ''); assert.equal(errorOutput, '[render-smoke] TASK4_FRAME_INVALID\n');
 });

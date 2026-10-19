@@ -7,7 +7,7 @@ const router = Router();
 
 router.get('/system', async (_req, res) => {
   try {
-    const metrics = await cached('system', 15000, getSystemMetrics);
+    const metrics = await getSystemMetrics();
     res.json(metrics);
   } catch (err: any) {
     res.status(500).json({ error: err.message });

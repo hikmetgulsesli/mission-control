@@ -1,0 +1,96 @@
+# Operator navigation and presentation Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Make every technical tool easy to find and every operator page readable.
+
+**Architecture:** One typed navigation registry drives groups, search, favorites, active state and shortcuts. Existing routes and canonical run components remain; presentation uses shared tokens plus targeted readability fixes. Polling ownership changes follow a consumer census.
+
+**Tech Stack:** Existing React/Router, TypeScript, CSS, Zustand, node:test/tsx and React SSR.
+
+**Spec:** `docs/superpowers/specs/2026-10-19-operator-workspace-design.md`
+
+## Global Constraints
+
+- Root alone stages, commits, pushes and delivers. Only one implementation worker per repository at a time; disjoint Setfarm and Mission Control work may proceed in parallel with frozen shared contracts and Root-serialized delivery.
+- Preserve existing English source/UI copy; design Turkish terms are conceptual English equivalents, never guard exceptions.
+- Preserve every technical destination, bookmarks, Office state, shell and all eight RunDetail tabs.
+- Sans body15px; ordinary controls14–16px; mono only code/log/IDs; no blanket font-size !important rule.
+- No provider calls, live state mutation or service restart for unit/UI fixtures.
+- Missing, stale and unknown evidence never become zero or success.
+
+---
+
+### Task 1: Registry, grouped navigation, search, favorites and shortcuts
+
+**Files:** Create `src/lib/navigation.ts`, `src/hooks/useNavigationPreferences.ts`, `tests/navigation.test.ts`, `tests/navigation-render.test.tsx`; modify `src/components/{TabNav,Layout}.tsx`, `src/index.css` navigation section only.
+
+**Interfaces:** `NavigationItem` has id,label,group,href,shortcut?,external?,action?; export `NAVIGATION_GROUPS`, `NAVIGATION_ITEMS`, `resolveNavigationShortcut(event)`, `isNavigationItemActive(item,pathname)`. `resolveNavigationShortcut` returns `{type:'navigate',href:string}|{type:'shell'}|null`. `useNavigationPreferences` returns known favorite IDs and toggle; versioned storage is UI preference only. Registry includes `/controls` before its separate page lands, but do not deliver a broken route; Root integrates only after Controls task.
+
+- [x] Add actual registry/shortcut/preference tests and SSR of real TabNav with MemoryRouter. Assert all retained URLs/groups/searchable labels, contextual run active state, Shell action and favorites filtering.
+
+```ts
+assert.equal(resolveNavigationShortcut({key:'D',target:null} as KeyboardEvent)?.type, 'navigate');
+assert.equal(resolveNavigationShortcut({key:'p',ctrlKey:true} as KeyboardEvent), null);
+assert.ok(NAVIGATION_ITEMS.some(x => x.href === '/agents'));
+```
+
+- [x] Run `node --import tsx --test tests/navigation.test.ts tests/navigation-render.test.tsx`; capture RED.
+- [x] Implement standalone Overview and groups Work(`/setfarm`,`/setfarm/active`,`/live`), Projects(`/projects`,`/prd`), System(`/ops`,`/controls`,`/changelog`,explicit3333dashboard), Tools(`/office`,`/chat`,`/agents`,`/files`,`/scrape`,`/rules`,`/workflows`,`/tasks`,Shell), Usage(`/costs`,`/performance`); preserve `/perf` alias/contextual run URLs. Use button aria-expanded/focus and search input labels. Favorites persist safely with invalid/unknown-ID filtering. D/P case-insensitive; preserve0–9/R/L, skip inputs/select/contenteditable, IME and Ctrl/Meta/Alt. Escape closes shell and open menu. Office remains mounted/visible according to current semantics.
+- [x] Run focused tests; record actual SSR coverage and later browser checks needed. Root commits `feat(nav): group tools with search and favorites`.
+
+### Task 2: Readability, restrained theme and responsive roster
+
+**Files:** Modify `src/index.css`, `src/components/{Layout,GlitchText}.tsx`, `src/pages/Agents.tsx`; targeted ordinary inline source files approved from the read-only census: `src/pages/{Rules,SetfarmActivity,Overview,Performance}.tsx`, `src/components/{CostChart,LiveFeed,PipelineView,AgentCard,KimiQuotaBanner}.tsx`, `src/components/run-detail/TelemetryChart.tsx`, `src/components/pipeline/{ErrorCard,DeleteRunModal}.tsx`, `src/components/prd/{PrdEditor,ScreenshotUpload}.tsx`. Census `.superpowers/sdd/2026-10-19-operator-navigation-presentation/task-2-census.md` records exact owning lines. Reconcile Task1 nav changes before edits. Create `tests/operator-theme-render.test.tsx` for meaningful actual component semantics if needed; avoid implementation-mirroring CSS snapshot tests.
+
+**Interfaces:** Preserve existing component props and semantic state colors. Shared `--font-body`/`--font-mono`, surfaces/text/border/accent tokens used by existing classes; no new UI dependency. Functional plan owns StatusBar metrics behavior; this task changes its styles only after that task is reviewed.
+
+- [ ] Record baseline actual render/browser evidence (audit screenshot paths), inspect ordinary8–12px inline sizes and mono usage, identify roster width defect. Any new behavior gets meaningful RED before implementation; reversible CSS edits need visual checks, no artificial failing test.
+- [ ] Set body sans15px, ordinary controls14–16px, readable muted contrast and calmer surfaces. Remove ScanlineOverlay mount; change GlitchText ordinary heading behavior once, preserving API/accessibility. Fix `.agents-page__grid` flex1/min-width0/width100%, preserve auto-fill columns, and keep the selected AgentLivePanel as its existing fixed modal overlay with readable narrow-width content; it is not an in-flow sidebar. Preserve log/code mono and PixelOffice artwork. Replace targeted tiny ordinary labels rather than blanket overrides.
+
+```css
+.agents-page__grid { flex: 1; min-width: 0; width: 100%; }
+body { font-family: var(--font-body); font-size: 15px; }
+code, pre { font-family: var(--font-mono); }
+```
+
+- [ ] Run `npm run build` after Root source commit if clean build identity requires it, and existing `npm run render:smoke`. Later isolated browser fixture verifies all routes/tabs at390/768/1440, no horizontal overflow, actual computed fonts, roster columns, selected modal behavior and focus. Preserve screenshots including failures. Root commits `style(ui): improve operator readability`.
+
+### Task 3: Visibility-aware polling with honest stale state
+
+**Files:** Census-approved exact FileMap: create `src/lib/data-sync.ts`, `tests/data-sync.test.ts`, `tests/data-sync-browser.test.ts`, `tests/fixtures/data-sync-browser.html`, `tests/fixtures/data-sync-browser.tsx`, `server/routes/workflows.test.ts`; modify `src/hooks/useDataSync.ts`, `src/store/appStore.ts`, `src/components/{Layout,StatusBar}.tsx`, `src/pages/{Overview,SetfarmActivity,Workflows,PixelOffice}.tsx`, `server/routes/workflows.ts`. Census `.superpowers/sdd/2026-10-19-operator-navigation-presentation/task-3-census.md` records actual consumers and owning lines. Reconcile reviewed Task2 before editing shared presentation files; no source writes concurrently inside MC.
+
+**Interfaces:** Preserve current store methods and canonical operational snapshot hook owner. Add observed/error/stale metadata without replacing retained data with zero. Use existing document visibility API and route-consumer groups; no second expensive run snapshot poller.
+
+- [ ] Enumerate every useDataSync endpoint/store consumer by route, and hidden PixelOffice effects; report mapping before deciding ownership. Preserve shared status/summary cadence15s unless actual need differs.
+- [ ] Write behavioral scheduler tests with injected timer/fetch/visibility for pause/resume, route-switch endpoint groups, old response ordering and partial errors; browser fixture checks actual hidden Office. Capture RED for changed behavior.
+
+```ts
+assert.equal(fetchCallsWhileHidden, 0);
+assert.equal(state.lastGoodData, previousData);
+assert.equal(state.stale, true);
+```
+
+- [ ] Implement bounded visibility/route gating and stale/error timestamps, ensuring resumed fetch and no lost consumers; unchanged operational snapshot owns its polling. No empty-array/zero fallback on failures.
+- [ ] Run actual covering tests, type/build checks and later UI fixture. Root commits `perf(ui): scope visible data polling` and obtains whole-plan review.
+
+## Task3 census rulings (Root, before implementation)
+
+- Scope shared-sync and Office HTTP/RAF only. Preserve page-local and canonical snapshot/product-build authority hooks; do not claim whole-app zero hidden requests. Shared overview/system/pipeline remain visible-global15s. Pipeline retains the actual legacy reconciliation GET dependency; no server reconciliation refactor. Work-only endpoints match `/setfarm`; workflows/runs match `/workflows` per census.
+- Preserve exact existing Office routing/visibility behavior, including its current trailing-slash distinction. For data-sync group matching only, normalize a trailing slash on `/setfarm/` and `/workflows/` to their React Router route matches; never broad-match child/unknown paths. Query/hash are not route ownership. Retain `/perf` alias and every URL.
+- Keep Office WebSocket/recent-event continuity. Gate only Office HTTP and animation on exact route-visible plus document-visible, retain mounted engine/data, and remove duplicate initial start in component orchestration. Do not alter shared useWebSocket or pixel artwork/engine without a new evidence-based FileMap ruling. This does not promise zero hidden WS work.
+- Per-endpoint metadata uses `lastAttemptAt`, `observedAt`, `errorAt`, `errorCode`, `inFlight`, `stale` and explicit active/paused/unselected ownership. `observedAt` means accepted HTTP payload receipt, never underlying source generation. Mark unobserved/failed/paused/unselected data stale; active data becomes stale at twice configured cadence (30s default). Resume keeps stale until current success. Preserve genuine successful empty collections and nullable absent values; never create []/0 on failure. UI error codes are fixed/sanitized. Preserve global initialLoading for compatibility while each consumer checks its actual required slices.
+- One production scheduler owns per-endpoint single-flight/generation fences and independent settlements; a hanging key cannot hold siblings. Route/visibility removal invalidates obsolete commits; visible resume fetches current keys once. Explicit successful activity clear and post-start pipeline/runs refresh must use the same fence, preventing an old poll from resurrecting prior values. No real mutation in tests.
+- Small causal root correction: actual cold/hard-expired Workflows load failure or malformed non-array result returns fixed HTTP503 instead of invented200[]. Preserve valid[] and existing30s generic cache/SWR behavior. Its cached background-refresh failure visibility and other upstream partial-source fallbacks remain limits, not solved by receipt timestamps. FileMap includes actual route+tests; do not alter generic cache or utils/setfarm.
+- The isolated actual hook/Layout/Office browser fixture is test-owned, network/API/WS denied except exact fake fixtures, no providers, DB, live3080/3333/18789 or smoke13081. It tests lifecycle/retention and relevant consumer states; it is not a substitute for the later full all-page13082 fixture or live verification. Root alone commits/builds; do not run the real-server render smoke before safe prerequisites are established.
+
+### Task 4: Screenshot-driven compact agent truth and readability
+
+**Cause:** Root visually inspected final Task3 actual consumer/Office captures. Work's compact agent cards still have parent opacity0.5 and show static catalog models without provenance despite the approved functional model-truth requirement. Healthy freshness copy also exposes unnecessary HTTP terminology. These are direct integration findings from the approved page audit, not new product scope.
+
+**Files:** Modify `src/components/AgentMiniGrid.tsx`, `src/index.css` only compact-agent owning rules, `src/lib/data-sync.ts` display-copy line only; create `tests/agent-mini-grid-model.test.tsx`; modify `tests/data-sync-browser.test.ts` only to add actual consumer assertions for readable compact cards/default provenance. Do not change scheduler behavior, registry definitions, activity classification, state/actions, server/runtime/API/vendor/dependencies or guards.
+
+- [ ] Write actual SSR component RED for runtime model/provider/provenance overriding static catalog metadata, explicit unknown/null identity, legacy raw model with unknown provenance, static-only fallback visibly identified as a default, and unknown observed IDs retained after14catalog entries. Reuse shared registry/type; no second model/provider inference or invented observation. Preserve all existing activity/session mappings and live-panel click behavior.
+- [ ] Render exact raw model/provider when supplied; distinguish observed/configured/static default/unknown. Explicit authoritative null stays unknown. Legacy model text without modelIdentity stays raw with unknown provenance. Static fallback is labelled; unknown observed IDs remain visible using their actual safe display identity instead of being dropped. No inferred provider from model prefixes.
+- [ ] Remove whole-card never-used opacity so names/model/status remain readable; preserve idle/activity semantics through existing badge/border. Retain technical mono and readable ordinary labels/wrapping. Change freshness display `Last HTTP receipt` to `Last received`, preserving exact HTTP-receipt semantics internally and all failure/stale/pause states.
+- [ ] Run focused actual SSR and nonemit/source/diff checks, then existing isolated actual consumer browser test with a NEW retained DATA_SYNC_CAPTURE_PHASE. Do not overwrite prior manifests/captures or claim all-page/browser/live completion. Root commits/builds and obtains task review before next source work.

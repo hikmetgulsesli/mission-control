@@ -22,6 +22,16 @@ export const AGENT_DEFINITIONS = {
 
 export type AgentId = keyof typeof AGENT_DEFINITIONS;
 
+/** Display metadata above is not evidence of a runtime model. */
+export interface ModelIdentity {
+  rawModelId: string | null;
+  rawProviderId: string | null;
+  provenance: 'observed_session' | 'configured' | 'static_fallback' | 'unknown';
+  observedModelId?: string | null;
+  configuredModelId?: string | null;
+  staticModelId?: string | null;
+}
+
 export const REAL_AGENT_IDS: AgentId[] = Object.keys(AGENT_DEFINITIONS) as AgentId[];
 
 /** Flat array format (same structure as frontend constants.ts AGENTS) */

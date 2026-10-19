@@ -6,7 +6,7 @@ import { createServer } from "node:net";
 import { promisify } from "node:util";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, resolve } from "node:path";
-import { chromium } from "playwright";
+import { runTask4EntryV1 } from "./render-smoke-owned-fixture.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, "..");
@@ -24,13 +24,8 @@ const EXACT_ROUTES = Object.freeze([
   `/setfarm/runs/${LEGACY_RUN_ID}`,
   `/setfarm/runs/${V3_RUN_ID}`,
 ]);
-const baseUrl = process.env.MC_RENDER_BASE_URL ?? REQUIRED_BASE_URL;
-const screenshotParent = resolve(rootDir, process.env.MC_RENDER_SCREENSHOT_DIR || "artifacts/render-smoke");
-const routes = (process.env.MC_RENDER_ROUTES ?? EXACT_ROUTES.join(",")).split(",");
-const expectText = (process.env.MC_RENDER_EXPECT_TEXT || "")
-  .split(",")
-  .map((item) => item.trim())
-  .filter(Boolean);
+const baseUrl = REQUIRED_BASE_URL;
+const expectText = [];
 
 function sleep(ms) {
   return new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
@@ -419,7 +414,7 @@ async function isExactV3ProductBuildAuthorityResponse(response, expectedBaseUrl,
   try {
     const body = await response.json();
     if (!isPlainObject(body)
-      || Object.keys(body).join("\0") !== "schema\0runId\0disposition\0packetAuthority\0refusal\0authorityHash") return false;
+      || Object.keys(body).sort().join("\0") !== "authorityHash\0disposition\0packetAuthority\0refusal\0runId\0schema") return false;
     const parsed = parseProductBuildAuthorityV2(body, V3_RUN_ID);
     return parsed === body
       && parsed.disposition === "sealed_packet"
@@ -517,93 +512,10 @@ async function assertRendered(page, route) {
   return state;
 }
 
-async function main() {
-  assertExactBaseUrl(baseUrl);
-  assertExactRenderRoutes(routes);
-  const screenshotWorkspace = await createRenderScreenshotWorkspace(screenshotParent);
-  const screenshotDir = screenshotWorkspace.directory;
-  const cleanupOwner = createRenderCleanupOwner({ workspace: screenshotWorkspace });
-  const removeSignalHandlers = installCleanupSignalHandlers(cleanupOwner);
-  const results = await runOwnedRenderLifecycle(cleanupOwner, async () => {
-    const renderedResults = [];
-    const child = await startIsolatedServer((value) => cleanupOwner.setChild(value));
-    await assertExactChildListener(child);
-    const parseProductBuildAuthorityV2 = await loadStrictProductBuildAuthorityV2Parser();
-    await preflightRequiredV3ProductBuildAuthority(parseProductBuildAuthorityV2);
-    const browserLaunch = chromium.launchServer({
-      headless: true,
-      handleSIGINT: false,
-      handleSIGTERM: false,
-      handleSIGHUP: false,
-      timeout: 4_000,
-    });
-    cleanupOwner.setBrowserLaunch(browserLaunch);
-    const browserServer = await browserLaunch;
-    cleanupOwner.setBrowserServer(browserServer);
-    const browser = await chromium.connect(browserServer.wsEndpoint());
-    for (const route of routes) {
-      await assertExactChildListener(child);
-      const page = await browser.newPage({ viewport: { width: 1440, height: 950 }, deviceScaleFactor: 1 });
-      cleanupOwner.addPage(page);
-      const messages = [];
-      const failures = [];
-      const responseChecks = [];
-      const v3Tracker = route === `/setfarm/runs/${V3_RUN_ID}`
-        ? createRequiredV3ProductBuildAuthorityTracker(baseUrl, parseProductBuildAuthorityV2)
-        : null;
-      page.on("console", (msg) => messages.push({ type: msg.type(), text: msg.text() }));
-      page.on("pageerror", (err) => messages.push({ type: "error", text: err.message }));
-      page.on("requestfailed", (request) => {
-        const url = request.url();
-        if (/favicon/i.test(url)) return;
-        failures.push({ kind: request.failure()?.errorText || "requestfailed", url });
-      });
-      page.on("response", (response) => {
-        const status = response.status();
-        const url = response.url();
-        if (v3Tracker && url === `${baseUrl}${V3_PRODUCT_BUILD_AUTHORITY_PATH}`) {
-          responseChecks.push((async () => {
-            if (await v3Tracker.observe(response)) return;
-            failures.push({ status, url });
-          })());
-        }
-        if (status >= 400 && !/favicon/i.test(url)) {
-          responseChecks.push((async () => {
-            if (await isExpectedTypedRenderResponse(response, baseUrl, route)) return;
-            failures.push({ status, url });
-          })());
-        }
-      });
-      const target = `${baseUrl}${route.startsWith("/") ? route : `/${route}`}`;
-      await page.goto(target, { waitUntil: "domcontentloaded", timeout: 15_000 });
-      const state = await assertRendered(page, route);
-      await Promise.all(responseChecks);
-      if (v3Tracker) v3Tracker.requireObserved();
-      assertNoFailedRequests(route, failures);
-      assertNoFatalConsole(route, messages);
-      const screenshotPath = resolve(screenshotDir, `${safeName(route)}.png`);
-      await page.screenshot({ path: screenshotPath, fullPage: true });
-      renderedResults.push({
-        route,
-        title: state.title,
-        textLength: state.textLength,
-        visibleElements: state.visibleElements,
-        screenshot: screenshotPath,
-      });
-      if (!(await settleWithin(() => page.close(), 5_000))) throw new Error(`${route} page close timed out`);
-      cleanupOwner.removePage(page);
-    }
-    return renderedResults;
-  }, removeSignalHandlers);
-  console.log(JSON.stringify({ ok: true, baseUrl, routes: results }, null, 2));
-}
-
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
-  main().catch((err) => {
-    console.error(`[render-smoke] ${err?.message || err}`);
-    if (/Executable doesn't exist|browserType.launch/i.test(String(err?.message || err))) {
-      console.error("[render-smoke] Install Chromium once with: npx playwright install chromium");
-    }
-    process.exit(1);
+  runTask4EntryV1().catch((error) => {
+    const code = /^TASK4_[A-Z_]+$/.test(error?.message ?? "") ? error.message : "TASK4_INTEGRITY_FAILED";
+    process.stderr.write(`[render-smoke] ${code}\n`);
+    process.exitCode = 2;
   });
 }

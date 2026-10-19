@@ -1,4 +1,4 @@
-import type { OverviewData, Agent, Session, CronJob, Workflow, Run, SystemMetrics, DockerContainer, CostData, Task, ProjectData, TaskCreateData } from './types';
+import type { OverviewData, Agent, Session, CronJob, Workflow, Run, SystemMetrics, DockerContainer, CostData, PerformanceData, Task, ProjectData, TaskCreateData } from './types';
 import {
   parseOperationalSnapshotResponse,
   type OperationalSnapshotFetchResult,
@@ -7,9 +7,36 @@ import {
   parseProductBuildAuthorityResponse,
   type ProductBuildAuthorityState,
 } from './product-build-authority';
+import { parseControlEvidenceEnvelopeV1, parseControlJobReceiptV1, parsePendingControlLaunchV1 } from './control-evidence';
+import type { ControlJobReceiptV1, PendingControlLaunchV1 } from './control-evidence';
 
 const BASE = '';
-const AUTH_TOKEN = (document.querySelector('meta[name="mc-token"]') as HTMLMetaElement)?.content || '';
+const AUTH_TOKEN = (typeof document === 'undefined' ? '' : (document.querySelector('meta[name="mc-token"]') as HTMLMetaElement)?.content) || '';
+
+async function controlRequest(path: string, init: RequestInit = {}): Promise<unknown> {
+  const response = await fetch(`${BASE}/api/controls${path}`, { ...init, cache: 'no-store', headers: { ...(AUTH_TOKEN ? { 'X-MC-Token': AUTH_TOKEN } : {}), ...(init.headers as Record<string,string> || {}) } });
+  if (!response.ok) {
+    let code = `CONTROL_HTTP_${response.status}`;
+    try { const body = await response.json(); if (body && typeof body.error === 'string' && /^[A-Z0-9_]{1,100}$/.test(body.error)) code = body.error; } catch { /* HTTP code remains visible */ }
+    throw new Error(code);
+  }
+  try { return await response.json(); } catch { throw new Error('CONTROL_RESPONSE_INVALID'); }
+}
+function controlReceiptWrapper(value: unknown): { receipt: ControlJobReceiptV1; replay: boolean } {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).sort().join('|') !== 'receipt|replay' || typeof (value as { replay?: unknown }).replay !== 'boolean') throw new Error('CONTROL_RESPONSE_INVALID');
+  return { receipt: parseControlJobReceiptV1((value as { receipt: unknown }).receipt), replay: (value as { replay: boolean }).replay };
+}
+function controlJobId(value: string): string { if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(value)) throw new Error('CONTROL_JOB_ID_INVALID'); return value; }
+export const controlsApi = {
+  evidence: async () => parseControlEvidenceEnvelopeV1(await controlRequest('/evidence')),
+  jobs: async () => { const value = await controlRequest('/jobs'); if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).join('|') !== 'jobs' || !Array.isArray((value as { jobs: unknown }).jobs) || (value as { jobs: unknown[] }).jobs.length > 50) throw new Error('CONTROL_RESPONSE_INVALID'); return (value as { jobs: unknown[] }).jobs.map(parseControlJobReceiptV1); },
+  job: async (jobId: string) => { const value = await controlRequest(`/jobs/${controlJobId(jobId)}`); if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).join('|') !== 'receipt') throw new Error('CONTROL_RESPONSE_INVALID'); return parseControlJobReceiptV1((value as { receipt: unknown }).receipt); },
+  launch: async (pending: PendingControlLaunchV1) => { const body = parsePendingControlLaunchV1(pending); return controlReceiptWrapper(await controlRequest('/jobs', { method: 'POST', headers: CT_JSON, body: JSON.stringify(body) })); },
+  cancel: async (jobId: string, request: { idempotencyKey: string; expectedRevision: number }) => {
+    if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(request.idempotencyKey) || !Number.isSafeInteger(request.expectedRevision) || request.expectedRevision < 0) throw new Error('CONTROL_REQUEST_INVALID');
+    return controlReceiptWrapper(await controlRequest(`/jobs/${controlJobId(jobId)}/cancel`, { method: 'POST', headers: CT_JSON, body: JSON.stringify({ idempotencyKey: request.idempotencyKey, expectedRevision: request.expectedRevision }) }));
+  },
+};
 
 export type TelemetryUnavailableReason = 'invalid_run_id' | 'sql' | 'http' | 'network'
   | 'invalid_json' | 'invalid_response' | 'run_id_mismatch';
@@ -407,7 +434,7 @@ export const api = {
   },
   importRules: (data: any) => fetchApi<any>('/api/rules/import', { method: 'POST', headers: CT_JSON, body: JSON.stringify(data) }),
   // Performance
-  performance: () => fetchApi<any>('/api/performance'),
+  performance: () => fetchApi<PerformanceData>('/api/performance'),
   modelLimits: () => fetchApi<any[]>('/api/model-limits'),
   quota: () => fetchApi<any>('/api/quota'),
   // Scrape

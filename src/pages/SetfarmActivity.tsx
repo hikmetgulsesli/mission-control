@@ -1,3 +1,5 @@
+import { dataSyncMessage, type DataSyncKey } from "../lib/data-sync";
+import { acceptDataSync, refreshDataSync } from "../hooks/useDataSync";
 import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppStore } from "../store/appStore";
@@ -16,7 +18,7 @@ export function SetfarmActivity() {
   const [filterStatus, setFilterStatus] = useState("");
   const [filterSearch, setFilterSearch] = useState("");
   const { toast } = useToast();
-  const initialLoading = useAppStore(s => s.initialLoading);
+  const sync = useAppStore(s => s.sync);
   const agents = useAppStore(s => s.agents);
   const pipeline = useAppStore(s => s.pipeline);
   const activity = useAppStore(s => s.activity);
@@ -67,7 +69,7 @@ export function SetfarmActivity() {
       action: async () => {
         try {
           await api.clearActivity();
-          useAppStore.setState({ activity: [] });
+          acceptDataSync("activity", []);
           toast("Activity feed cleared", "success");
         } catch (err: any) {
           toast("Failed: " + err.message, "error");
@@ -85,7 +87,7 @@ export function SetfarmActivity() {
       setShowModal(false);
       setTask("");
       setSelectedWf("");
-      api.setfarmPipeline().then(data => useAppStore.setState({ pipeline: data })).catch(() => {});
+      void refreshDataSync("pipeline");
     } catch (err: any) {
       toast("Failed: " + err.message, "error");
     } finally {
@@ -93,7 +95,7 @@ export function SetfarmActivity() {
     }
   };
 
-  if (initialLoading) return <div className="page-loading">Loading agents...</div>;
+  const receipt = (key: DataSyncKey, label: string) => <p role="status">{label}: {dataSyncMessage(sync?.[key])}</p>;
   return (
     <div className="af-page">
       <div className="af-page__header">
@@ -105,12 +107,12 @@ export function SetfarmActivity() {
             placeholder="Search project or task..."
             value={filterSearch}
             onChange={e => setFilterSearch(e.target.value)}
-            style={{ flex: 1, minWidth: "150px", background: "var(--bg-card)", border: "1px solid var(--border)", color: "var(--text-primary)", padding: "4px 8px", fontSize: "11px", fontFamily: "var(--font)" }}
+            style={{ flex: 1, minWidth: "150px", background: "var(--bg-card)", border: "1px solid var(--border)", color: "var(--text-primary)", padding: "4px 8px", fontSize: "14px", fontFamily: "var(--font)" }}
           />
           <select
             value={filterStatus}
             onChange={e => setFilterStatus(e.target.value)}
-            style={{ background: "var(--bg-card)", border: "1px solid var(--border)", color: "var(--text-primary)", padding: "4px 8px", fontSize: "11px", fontFamily: "var(--font)" }}
+            style={{ background: "var(--bg-card)", border: "1px solid var(--border)", color: "var(--text-primary)", padding: "4px 8px", fontSize: "14px", fontFamily: "var(--font)" }}
           >
             <option value="">All statuses</option>
             <option value="running">Running</option>
@@ -121,13 +123,17 @@ export function SetfarmActivity() {
         </div>
           <div className="af-page__subtitle">Agent Activity &amp; Workflow Pipeline</div>
         </div>
-        <CompactStatsBar alerts={alerts} agents={wfAgents || []} />
+        <div>
+          {receipt('alerts', 'Alerts')}{receipt('wfAgents', 'Workflow agents')}
+          {alerts !== null && wfAgents !== null ? <CompactStatsBar alerts={alerts} agents={wfAgents} /> : <p>Alerts / agent statistics unavailable</p>}
+        </div>
       </div>
 
       {/* Top half: Our 10 agents */}
       <section className="af-section">
         <div className="af-section__title">OUR AGENTS</div>
-        <AgentMiniGrid agents={agents || []} pipeline={pipeline || []} sessions={sessions || []} />
+        {receipt('agents', 'Agents')}{receipt('sessions', 'Sessions')}
+        {agents !== null && pipeline !== null && sessions !== null ? <AgentMiniGrid agents={agents} pipeline={pipeline} sessions={sessions} /> : <p>Agent grid unavailable until its collections are observed.</p>}
       </section>
 
       {/* Bottom half: 3-column layout */}
@@ -135,18 +141,20 @@ export function SetfarmActivity() {
         <div className="af-bottom__col af-bottom__col--pipeline">
           <div className="af-section__title" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             PIPELINE
-            <button className="btn btn--small btn--primary" onClick={() => setShowModal(true)}>+ START RUN</button>
+            <button className="btn btn--small btn--primary" disabled={workflows === null} onClick={() => setShowModal(true)}>+ START RUN</button>
             <button className="btn btn--small" onClick={() => navigate("/setfarm/active")}>ACTIVE RUN</button>
           </div>
-          <PipelineView runs={pipeline || []} />
+          {receipt('pipeline', 'Pipeline')}{receipt('workflows', 'Workflows')}
+          {pipeline !== null ? <PipelineView runs={pipeline} /> : <p>Pipeline unavailable</p>}
         </div>
         <div className="af-bottom__col af-bottom__col--feed">
           <div className="af-section__title" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             ACTIVITY FEED
-            <button className="btn btn--tiny" onClick={handleSaveActivity} title="Save as JSON">SAVE</button>
+            <button className="btn btn--tiny" disabled={activity === null} onClick={handleSaveActivity} title="Save as JSON">SAVE</button>
             <button className="btn btn--tiny btn--danger" onClick={handleClearActivity} title="Clear feed">CLEAR</button>
           </div>
-          <SetfarmFeed events={activity || []} />
+          {receipt('activity', 'Activity')}
+          {activity !== null ? <SetfarmFeed events={activity} /> : <p>Activity unavailable</p>}
         </div>
         <div className="af-bottom__col af-bottom__col--stats">
           <div className="af-section__title" style={{ display: "flex", alignItems: "center", gap: "8px" }}>

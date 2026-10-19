@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AGENTS, WORKFLOW_AGENT_MAP } from '../lib/constants';
 import { AgentLivePanel } from './AgentLivePanel';
+import type { ModelIdentity } from '../../server/shared/agents.js';
 
 interface AgentMiniGridProps {
   agents: any[];
@@ -81,13 +82,35 @@ function sessionTimeClass(ms: number): string {
 
 export function AgentMiniGrid({ agents, pipeline, sessions = [] }: AgentMiniGridProps) {
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
+  const displayAgents: { id: string; name: string; emoji: string; model?: string }[] = [...AGENTS];
+  const seen = new Set<string>(displayAgents.map(agent => agent.id));
+  for (const observed of agents) {
+    if (typeof observed.id !== 'string' || !observed.id || seen.has(observed.id)) continue;
+    seen.add(observed.id);
+    displayAgents.push({
+      id: observed.id,
+      name: observed.identityName || observed.name || observed.id,
+      emoji: observed.identityEmoji || observed.emoji || '',
+    });
+  }
 
   return (
     <>
       <div className="af-grid">
-        {AGENTS.map((agent) => {
+        {displayAgents.map((agent) => {
           const { status, label } = getAgentStatus(agent.id, agents, pipeline);
           const agentData = agents.find((a: any) => a.id === agent.id || a.name?.toLowerCase() === agent.id);
+
+          const identity: ModelIdentity | undefined = agentData?.modelIdentity;
+          const legacyModel = typeof agentData?.model === 'string' ? agentData.model : undefined;
+          // An authoritative null is unknown; catalog metadata is only a labelled default.
+          const model = identity ? identity.rawModelId ?? 'unknown' : legacyModel ?? agent.model ?? 'unknown';
+          const provenance: ModelIdentity['provenance'] = identity?.provenance
+            ?? (legacyModel !== undefined ? 'unknown' : agent.model ? 'static_fallback' : 'unknown');
+          const provenanceLabel = {
+            observed_session: 'Observed session', configured: 'Configured',
+            static_fallback: 'Static default', unknown: 'Unknown provenance',
+          }[provenance];
 
           // Find session for this agent
           const agentSession = sessions.find((s: any) => {
@@ -120,7 +143,9 @@ export function AgentMiniGrid({ agents, pipeline, sessions = [] }: AgentMiniGrid
                   {status === 'workflow' && 'WORKFLOW'}
                 </span>
               </div>
-              <div className="af-agent-card__model">{agent.model}</div>
+              <div className="af-agent-card__model">{model}</div>
+              <div className="af-agent-card__provider">{`Provider: ${identity?.rawProviderId ?? 'unknown'}`}</div>
+              <div className="af-agent-card__provenance">{provenanceLabel}</div>
               <div className="af-agent-card__bottom-row">
                 <span className="af-agent-card__time">{timeAgo(lastActiveStr)}</span>
                 {sessionDuration > 0 && (

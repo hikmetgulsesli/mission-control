@@ -1,17 +1,7 @@
-export const AGENTS = [
-  { id: 'main', name: 'Arya', emoji: '\u{1F99E}', role: 'CEO / Orchestrator', model: 'minimax-m2.7', color: '#ff6600' },
-  { id: 'koda', name: 'Koda', emoji: '\u{1F916}', role: 'Lead Dev', model: 'kimi-k2p5', color: '#00ff41' },
-  { id: 'flux', name: 'Flux', emoji: '\u26A1', role: 'Senior Architect', model: 'kimi-k2p5', color: '#00ffff' },
-  { id: 'atlas', name: 'Atlas', emoji: '\u{1F30D}', role: 'Infra Lead', model: 'kimi-k2p5', color: '#4488ff' },
-  { id: 'iris', name: 'Iris', emoji: '\u{1F50D}', role: 'Research Lead', model: 'minimax-m2.7', color: '#ff44ff' },
-  { id: 'sentinel', name: 'Sentinel', emoji: '\u{1F6E1}\uFE0F', role: 'QA Lead', model: 'minimax-m2.7', color: '#ffaa00' },
-  { id: 'cipher', name: 'Cipher', emoji: '\u{1F4BB}', role: 'Backend Dev', model: 'kimi-k2p5', color: '#44ff88' },
-  { id: 'lux', name: 'Lux', emoji: '\u270D\uFE0F', role: 'Content Writer', model: 'minimax-m2.7', color: '#ff8844' },
-  { id: 'nexus', name: 'Nexus', emoji: '\u{1F504}', role: 'SRE / Monitoring', model: 'minimax-m2.7', color: '#8844ff' },
-  { id: 'prism', name: 'Prism', emoji: '\u{1F3A8}', role: 'UI Designer', model: 'kimi-k2p5', color: '#ff4488' },
-] as const;
+import { AGENTS_ARRAY } from '../../server/shared/agents.js';
 
-export const AGENT_MAP = Object.fromEntries(AGENTS.map(a => [a.id, a]));
+export const AGENTS = AGENTS_ARRAY;
+export const AGENT_MAP: Record<string, typeof AGENTS[number] | undefined> = Object.fromEntries(AGENTS.map(agent => [agent.id, agent]));
 
 // Map Setfarm workflow agents to real MC agents
 export const WORKFLOW_AGENT_MAP: Record<string, string> = {
