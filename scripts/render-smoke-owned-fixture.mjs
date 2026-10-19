@@ -1038,10 +1038,11 @@ function task4BoundedV1(promise, milliseconds, code) {
     let timer;
     return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(Error(code)), milliseconds); })]).finally(() => clearTimeout(timer));
 }
-export function createTask4BrowserFenceV1(ready, parseProductBuildAuthorityV2) {
+export function createTask4BrowserFenceV1(ready, parseProductBuildAuthorityV2, serverPort) {
+    integer(serverPort, 1024, 65535); requireValue(![3080, 3333, 5432, 13081, 18789, ready.setup.postgres.port].includes(serverPort), 'TASK4_NETWORK_REFUSED');
     const rows = [], requests = new Map(), seen = new Set(), ended = new Set(), pending = new Set(), consoleErrors = [], legacyResponses = [], products = new Map();
     let failed = false, contexts = 0, installedAt = null, requestId = 0;
-    const origin = 'http://127.0.0.1:13081';
+    const origin = 'http://127.0.0.1:' + serverPort;
     const legacyBody = JSON.stringify({ status: 'unavailable', code: 'SETFARM_PRODUCT_BUILD_AUTHORITY_NOT_READY', reason: 'not_ready', upstreamStatus: 409, upstreamCode: 'RUNTIME_PACKET_RUN_NOT_V3' });
     const append = value => { if (rows.length >= 4096) { failed = true; return; } rows.push({ seq: rows.length + 1, ...value }); };
     const routeRecipe = request => NETWORK_RECIPES.browser.find(row => row.method === request.method() && request.url() === origin + row.path + (row.query ? '?' + row.query : ''));
@@ -1110,13 +1111,13 @@ export function createTask4BrowserFenceV1(ready, parseProductBuildAuthorityV2) {
     });
 }
 
-export function task4ServerPolicyV1(value, mockPort) {
+export function task4ServerPolicyV1(value, mockPort, serverPort) {
     try {
-        setup(value); integer(mockPort, 1024, 65535); requireValue(![value.postgres.port, 3080, 3333, 5432, 13081, 18789].includes(mockPort));
+        setup(value); integer(serverPort, 1024, 65535); requireValue(![value.postgres.port, mockPort, 3080, 3333, 5432, 13081, 18789].includes(serverPort)); integer(mockPort, 1024, 65535); requireValue(![value.postgres.port, 3080, 3333, 5432, 13081, 18789].includes(mockPort));
         const inner = path.join(value.resourceRoot.path, 'inner');
         return ['(version 1)', '(allow default)', '(deny network*)',
             '(allow network-outbound (remote ip "localhost:' + value.postgres.port + '") (remote ip "localhost:' + mockPort + '"))',
-            '(allow network-bind (local ip "localhost:13081"))', '(allow network-inbound (local ip "localhost:13081"))',
+            '(allow network-bind (local ip "localhost:' + serverPort + '"))', '(allow network-inbound (local ip "localhost:' + serverPort + '"))',
             '(deny file-write*)', '(allow file-write* (subpath ' + JSON.stringify(path.join(inner, 'server-home')) + ') (subpath ' + JSON.stringify(path.join(inner, 'server-runtime')) + '))', ''].join('\n');
     } catch { fail('TASK4_RESOURCE_REFUSED'); }
 }
@@ -1137,11 +1138,12 @@ export async function runTask4EntryV1() {
     finally { context.close(); }
 }
 
-function task4ServerEnvironmentV1(context, mockPort) {
+function task4ServerEnvironmentV1(context, mockPort, serverPort) {
+    requireValue(Number.isSafeInteger(serverPort) && serverPort >= 1024 && serverPort <= 65535 && ![3080, 3333, 5432, 13081, 18789, mockPort, context.ready?.setup.postgres.port].includes(serverPort), 'TASK4_RESOURCE_REFUSED');
     requireValue(context.ready !== null && context.ready !== undefined, 'TASK4_BINDING_REFUSED');
     const ready = context.ready, inner = path.join(ready.setup.resourceRoot.path, 'inner'), home = path.join(inner, 'server-home'), runtime = path.join(inner, 'server-runtime');
     return { HOME: home, TMPDIR: path.join(runtime, 'tmp'), PATH: path.join(home, 'bin'), LANG: 'C', LC_ALL: 'C', TZ: 'UTC',
-        MC_HOST: '127.0.0.1', MC_PORT: '13081', SETFARM_URL: 'http://127.0.0.1:' + mockPort,
+        MC_HOST: '127.0.0.1', MC_PORT: String(serverPort), SETFARM_URL: 'http://127.0.0.1:' + mockPort,
         SETFARM_PG_URL: ready.database.restrictedUrl, PGAPPNAME: 'task4_mc_' + ready.executionId,
         SETFARM_DIR: path.join(runtime, 'setfarm'), SETFARM_REPO_DIR: ready.projection.root.path,
         PROJECTS_DIR: path.join(runtime, 'projects'), PROJECTS_JSON: path.join(runtime, 'projects.json'),
@@ -1152,8 +1154,8 @@ function task4ServerEnvironmentV1(context, mockPort) {
         SCRIPTS_DIR: path.join(home, 'bin'), PORT_REGISTRY: path.join(home, 'ports.json'), SERVE_BIN: path.join(home, 'bin/serve') };
 }
 async function task4ImportConfiguredV1(url) { return import(url); }
-async function task4ConfiguredParserV1(context, mockPort) {
-    const environment = task4ServerEnvironmentV1(context, mockPort);
+async function task4ConfiguredParserV1(context, mockPort, serverPort) {
+    const environment = task4ServerEnvironmentV1(context, mockPort, serverPort);
     for (const name of ['.env', '.env.local']) requireValue(!fs.existsSync(path.join(context.root, name)), 'TASK4_RESOURCE_REFUSED');
     context.check();
     // This is the authenticated inner process only. No ambient HOME, credential or selected composition is inherited by config.
@@ -1173,10 +1175,10 @@ async function runTask4PagesV1(context, state) {
             state.contexts.opened++; state.contexts.pending++;
             const page = await ownedContext.newPage(); page.setDefaultTimeout(8000);
             await state.fence.attach(ownedContext, page, route);
-            const product = index === 5 ? page.waitForResponse(response => response.url() === 'http://127.0.0.1:13081/api' + route + '/product-build-authority') : null;
+            const product = index === 5 ? page.waitForResponse(response => response.url() === 'http://127.0.0.1:' + state.serverPort + '/api' + route + '/product-build-authority') : null;
             // Attach rejection immediately, while preserving the actual awaited original response below.
             if (product) product.catch(() => {});
-            const response = await page.goto('http://127.0.0.1:13081' + route, { waitUntil: 'domcontentloaded', timeout: 8000 });
+            const response = await page.goto('http://127.0.0.1:' + state.serverPort + route, { waitUntil: 'domcontentloaded', timeout: 8000 });
             requireValue(response && response.status() === 200, 'TASK4_ASSERTION_FAILED');
             await page.waitForFunction(() => {
                 const root = document.querySelector('#root');
@@ -1286,9 +1288,47 @@ async function startTask4MockV1(context, evidence, ownerState) {
     return controller;
 }
 
-function createTask4ServerV1(context, evidence, environment, policyHash, launcherHash, entryHash) {
-    const binding = task4ArtifactBindingV1(context.ready), entry = path.join(context.root, 'dist-server/index.js');
-    let child = null, original = null, owner = null, intent = null, observed = null, settled = null, listen = null, unknown = false;
+function watchTask4ServerStartupV1(child, original, port, deadline) {
+    const stream = child.stdout, expected = 'Mission Control running on http://127.0.0.1:' + port;
+    let pending = Buffer.alloc(0), size = 0, ready = false, failure = false, timer, resolveWait, rejectWait;
+    const chunks = [], wait = new Promise((resolve, reject) => { resolveWait = resolve; rejectWait = reject; });
+    const refuse = () => { failure = true; clearTimeout(timer); if (!ready) rejectWait(Error('TASK4_RESOURCE_REFUSED')); };
+    const data = chunk => {
+        if (failure) return;
+        if (!Buffer.isBuffer(chunk)) return refuse();
+        chunks.push(Buffer.from(chunk.subarray(0, Math.max(0, 131072 - size)))); size += chunk.length;
+        if (size > 131072) return refuse();
+        pending = Buffer.concat([pending, chunk]);
+        let end;
+        while ((end = pending.indexOf(10)) !== -1) {
+            const line = pending.subarray(0, end).toString('utf8'); pending = pending.subarray(end + 1);
+            if (line.startsWith('Mission Control running on ')) {
+                if (line !== expected || ready || original.ended() || Date.now() >= deadline) return refuse();
+                ready = true; clearTimeout(timer); resolveWait();
+            }
+        }
+    };
+    const ended = () => { if (!ready || pending.length > 0) refuse(); };
+    const exited = () => { if (!ready) refuse(); };
+    const closed = () => { exited(); dispose(); };
+    const dispose = () => {
+        clearTimeout(timer);
+        if (stream) for (const [name, handler] of [['data', data], ['end', ended], ['error', refuse], ['close', ended]]) stream.removeListener(name, handler);
+        child.removeListener('exit', exited); child.removeListener('close', closed);
+    };
+    if (!stream || original.ended() || Date.now() >= deadline) refuse();
+    else {
+        stream.on('data', data); stream.once('end', ended); stream.on('error', refuse); stream.once('close', ended);
+        child.once('exit', exited); child.once('close', closed); timer = setTimeout(refuse, deadline - Date.now());
+    }
+    return { wait, check() { if (failure || !ready) throw Error('TASK4_RESOURCE_REFUSED'); }, failed: () => failure,
+        bytes: () => Buffer.concat(chunks), dispose };
+}
+
+function createTask4ServerV1(context, evidence, environment, policyHash, launcherHash, entryHash, reservation) {
+    const binding = task4ArtifactBindingV1(context.ready), entry = path.join(context.root, 'dist-server/index.js'), port = Number(environment.MC_PORT);
+    requireValue(reservation && reservation.port === port && String(port) === environment.MC_PORT, 'TASK4_RESOURCE_REFUSED');
+    let child = null, original = null, owner = null, intent = null, observed = null, settled = null, listen = null, unknown = false, startup = null;
     const sameOwner = async () => {
         const value = await context.modules.native.observeUiProcessV1(child.pid); context.check();
         const pin = bindTask4ProcessV1(value, { pid: child.pid, ppid: context.owner.pid, uid: context.owner.uid,
@@ -1304,20 +1344,26 @@ function createTask4ServerV1(context, evidence, environment, policyHash, launche
         intent() { return intent; },
         async launch() {
             requireValue(child === null && intent !== null && !unknown, 'TASK4_RESOURCE_REFUSED'); context.check();
+            reservation.snapshot(); await reservation.close(); requireValue(reservation.closed(), 'TASK4_CLEANUP_UNKNOWN'); context.check();
+            const available = await task4ListenerCensusV1(context, evidence, port, null); requireValue(available.state === 'absent', 'TASK4_RESOURCE_REFUSED');
+            const deadline = Date.now() + 8000;
             child = spawn('/usr/bin/sandbox-exec', ['-f', path.join(context.ready.setup.resourceRoot.path, 'server-launch-policy.sb'), context.node, entry],
                 { cwd: context.root, env: environment, detached: false, stdio: ['ignore', 'pipe', 'pipe'] });
-            original = retainTask4ChildV1(child); requireValue(Number.isSafeInteger(child.pid), 'TASK4_RESOURCE_REFUSED');
-            // The original launcher execs Node. Observe only the exact final executable; no PID adoption or command normalization.
-            owner = await sameOwner();
-            const deadline = Date.now() + 8000;
-            while (true) {
-                requireValue(!original.ended(), 'TASK4_RESOURCE_REFUSED');
-                const current = await task4ListenerCensusV1(context, evidence, 13081, owner);
-                if (current.state === 'listening') { listen = evidence.put(current.value); break; }
-                requireValue(Date.now() < deadline, 'TASK4_RESOURCE_REFUSED'); await task4WaitV1(50);
+            original = retainTask4ChildV1(child); startup = watchTask4ServerStartupV1(child, original, port, deadline);
+            try {
+                requireValue(Number.isSafeInteger(child.pid), 'TASK4_RESOURCE_REFUSED');
+                await startup.wait; context.check(); startup.check();
+                requireValue(Date.now() < deadline && !original.ended(), 'TASK4_RESOURCE_REFUSED');
+                owner = await sameOwner(); startup.check();
+                requireValue(Date.now() < deadline && !original.ended(), 'TASK4_RESOURCE_REFUSED');
+                const current = await task4ListenerCensusV1(context, evidence, port, owner); startup.check();
+                requireValue(Date.now() < deadline && current.state === 'listening', 'TASK4_RESOURCE_REFUSED');
+                listen = evidence.put(current.value);
+                observed = evidence.put({ schema: 'mission-control.task4-server-observed.v1', ...binding, intent, owner, listener: listen });
+                return { intent, observed, owner };
+            } finally {
+                task4PrivateBytesV1(path.join(context.ready.setup.resourceRoot.path, 'inner/originals'), 'server.startup-prefix.log', startup.bytes());
             }
-            observed = evidence.put({ schema: 'mission-control.task4-server-observed.v1', ...binding, intent, owner, listener: listen });
-            return { intent, observed, owner };
         },
         async close() {
             requireValue(!unknown && child !== null && original !== null && owner !== null && observed !== null && settled === null, 'TASK4_CLEANUP_UNKNOWN');
@@ -1325,19 +1371,19 @@ function createTask4ServerV1(context, evidence, environment, policyHash, launche
                 let stop = 'exited_before_stop';
                 if (!original.ended()) {
                     await sameOwner();
-                    const current = await task4ListenerCensusV1(context, evidence, 13081, owner); requireValue(current.state === 'listening', 'TASK4_CLEANUP_UNKNOWN');
+                    const current = await task4ListenerCensusV1(context, evidence, port, owner); requireValue(current.state === 'listening', 'TASK4_CLEANUP_UNKNOWN');
                     stop = 'original_child_sigterm'; requireValue(child.kill('SIGTERM') === true, 'TASK4_CLEANUP_UNKNOWN');
                 }
                 const exit = await original.wait(8000);
                 requireValue(stop === 'original_child_sigterm' ? (exit.code === null && exit.signal === 'SIGTERM') || (exit.code === 0 && exit.signal === null)
                     : Number.isSafeInteger(exit.code) && exit.signal === null, 'TASK4_CLEANUP_UNKNOWN');
-                const after = await task4ListenerCensusV1(context, evidence, 13081, null); requireValue(after.state === 'absent', 'TASK4_CLEANUP_UNKNOWN');
-                task4SaveOriginalV1(context, 'server', original.originals()); context.check();
+                const after = await task4ListenerCensusV1(context, evidence, port, null); requireValue(after.state === 'absent', 'TASK4_CLEANUP_UNKNOWN');
+                task4SaveOriginalV1(context, 'server', original.originals()); context.check(); startup.check();
                 settled = evidence.put({ schema: 'mission-control.task4-server-settled.v1', ...binding, intent, observed, owner, exit, stop, listenerBefore: listen, listenerAfter: evidence.put(after.value) });
-            } catch (error) { unknown = true; throw error; }
+            } catch (error) { unknown = true; throw error; } finally { if (original.ended()) startup?.dispose(); }
         },
-        snapshot() { return { state: settled !== null && !unknown ? 'closed' : child === null && intent === null ? 'not_started' : 'unknown', intent, observed, settled }; },
-        binding() { requireValue(observed !== null && owner !== null && !unknown, 'TASK4_BINDING_REFUSED'); return { intent, observed, owner }; },
+        snapshot() { return { state: settled !== null && !unknown && !startup?.failed() ? 'closed' : child === null && intent === null ? 'not_started' : 'unknown', intent, observed, settled }; },
+        binding() { startup?.check(); requireValue(observed !== null && owner !== null && !unknown, 'TASK4_BINDING_REFUSED'); return { intent, observed, owner }; },
     });
 }
 
@@ -1367,14 +1413,16 @@ async function runTask4InnerV1(context) {
         state.sql = await openTask4ObserverV1(context, state);
         state.observations.before = { observedAt: new Date().toISOString(), ...await state.sql.observer.observe('before') };
         state.mock = await startTask4MockV1(context, state.evidence, state);
-        state.parser = await task4ConfiguredParserV1(context, state.mock.port);
+        state.serverPortReservation = await createTask4PortGuardV1(context, state, 'serverPortReservation');
+        state.serverPort = state.serverPortReservation.port;
+        state.parser = await task4ConfiguredParserV1(context, state.mock.port, state.serverPort);
         state.server = prepareTask4ServerV1(context, state);
         await runTask4InnerProbeV1(context, state);
         await state.server.launch();
         await runTask4PreflightV1(context, state);
         state.native = prepareTask4NativeV1(context, state);
         state.browser = await state.native.launch();
-        state.fence = createTask4BrowserFenceV1(context.ready, state.parser);
+        state.fence = createTask4BrowserFenceV1(context.ready, state.parser, state.serverPort);
         await runTask4PagesV1(context, state);
     } catch (error) { task4RecordFailureV1(state, error); }
     finally {
@@ -1388,6 +1436,7 @@ async function runTask4InnerV1(context) {
             catch (error) { task4RecordFailureV1(state, error); }
             try { await state.sql.close(); } catch (error) { task4RecordFailureV1(state, error, true); }
         }
+        if (state.serverPortReservation && !state.serverPortReservation.closed()) try { await state.serverPortReservation.close(); } catch (error) { task4RecordFailureV1(state, error, true); }
         if (state.mock) try { await state.mock.close(); } catch (error) { task4RecordFailureV1(state, error, true); }
         try { context.check(); } catch (error) { task4RecordFailureV1(state, error); }
     }
@@ -1496,7 +1545,7 @@ async function openTask4ObserverV1(context, state) {
 }
 
 async function runTask4PreflightV1(context, state) {
-    context.check(); const response = await task4PreflightHttpV1(); context.check();
+    context.check(); const response = await task4PreflightHttpV1(state.serverPort); context.check();
     requireValue(response.status === 200, 'TASK4_ASSERTION_FAILED');
     const expected = task4SeedV1(context.ready.setup.setfarm.source.sourceSha).productResponse;
     requireValue(response.bytes.equals(Buffer.from(task4CanonicalV1(expected))), 'TASK4_ASSERTION_FAILED');
@@ -1508,7 +1557,7 @@ async function runTask4PreflightV1(context, state) {
         at: new Date().toISOString(), method: 'GET', pathId: 'product_1', ...check }); state.render.preflight = check;
 }
 
-function task4PreflightHttpV1() {
+function task4PreflightHttpV1(serverPort) {
     return new Promise((resolve, reject) => {
         let requestClosed = false, socketClosed = false, connected = false, complete = false, status = null, failed = false, settled = false, length = 0;
         const chunks = [];
@@ -1518,7 +1567,7 @@ function task4PreflightHttpV1() {
             if (failed || !connected || !complete) reject(Error('TASK4_NETWORK_REFUSED'));
             else resolve({ status, bytes: Buffer.concat(chunks) });
         };
-        const request = requestHttp({ host: '127.0.0.1', port: 13081, path: '/api/setfarm/runs/' + RUN_IDS[1] + '/product-build-authority', method: 'GET', agent: false }, response => {
+        const request = requestHttp({ host: '127.0.0.1', port: serverPort, path: '/api/setfarm/runs/' + RUN_IDS[1] + '/product-build-authority', method: 'GET', agent: false }, response => {
             status = response.statusCode;
             if (response.headers['content-type'] !== 'application/json; charset=utf-8') failed = true;
             response.on('data', value => { const bytes = Buffer.from(value); length += bytes.length; if (length > 1048576) { failed = true; response.destroy(); } else chunks.push(bytes); });
@@ -1527,7 +1576,7 @@ function task4PreflightHttpV1() {
         });
         const timer = setTimeout(() => { if (!settled) { settled = true; request.destroy(); reject(Error('TASK4_CLEANUP_UNKNOWN')); } }, 8000);
         request.once('socket', socket => {
-            socket.once('connect', () => { connected = socket.remoteAddress === '127.0.0.1' && socket.remotePort === 13081; });
+            socket.once('connect', () => { connected = socket.remoteAddress === '127.0.0.1' && socket.remotePort === serverPort; });
             socket.on('error', () => { failed = true; }); socket.once('close', () => { socketClosed = true; finish(); });
         });
         request.on('error', () => { failed = true; }); request.once('close', () => { requestClosed = true; finish(); }); request.end();
@@ -1548,10 +1597,10 @@ function prepareTask4ServerV1(context, state) {
     context.check(); const launcher = task4FileSnapshotV1('/usr/bin/sandbox-exec', 1048576, 'installed');
     requireValue(launcher.hash === '8290e4be7387a0df83cd1559e86afd880464f269450573d012795761fe298f16', 'TASK4_SOURCE_DRIFT');
     const entry = context.build.files.get('dist-server/index.js'); requireValue(entry, 'TASK4_SOURCE_DRIFT');
-    const policy = Buffer.from(task4ServerPolicyV1(context.ready.setup, state.mock.port));
+    const policy = Buffer.from(task4ServerPolicyV1(context.ready.setup, state.mock.port, state.serverPort));
     const published = task4PrivateBytesV1(context.ready.setup.resourceRoot.path, 'server-launch-policy.sb', policy);
     state.policyHash = published.sha256; state.launcherHash = launcher.hash;
-    return createTask4ServerV1(context, state.evidence, task4ServerEnvironmentV1(context, state.mock.port), state.policyHash, state.launcherHash, entry.hash);
+    return createTask4ServerV1(context, state.evidence, task4ServerEnvironmentV1(context, state.mock.port, state.serverPort), state.policyHash, state.launcherHash, entry.hash, state.serverPortReservation);
 }
 
 function task4RecordFailureV1(state, error, cleanup = false) {
@@ -1586,6 +1635,7 @@ async function finalizeTask4InnerV1(context, state) {
         const server = state.server?.snapshot() ?? { state: 'not_started', intent: null, observed: null, settled: null };
         const complete = !state.cleanupUnknown && ['not_started', 'closed'].includes(state.nativeCleanup.browser)
             && ['not_started', 'closed'].includes(mock.state) && ['not_started', 'closed'].includes(server.state)
+            && (!state.serverPortReservation || state.serverPortReservation.closed())
             && state.readers.pending === 0 && state.readers.opened === state.readers.closed
             && state.contexts.pending === 0 && state.contexts.opened === state.contexts.closed;
         if (!complete) task4RecordFailureV1(state, Error('TASK4_CLEANUP_UNKNOWN'), true);
@@ -1693,7 +1743,7 @@ async function runTask4InnerProbeV1(context, state) {
                 && task4CanonicalV1(value.owner) === task4CanonicalV1(ready.setup.owner) && value.acceptedConnections === 0
                 && task4CanonicalV1(value.original) === task4CanonicalV1({ method: 'owned_http_server', observed: true })
                 && Number.isSafeInteger(value.port) && value.port >= 1024 && value.port <= 65535
-                && ![state.mock.port, ready.setup.postgres.port, 3080, 3333, 5432, 13081, 18789].includes(value.port), 'TASK4_NETWORK_REFUSED');
+                && ![state.serverPort, state.mock.port, ready.setup.postgres.port, 3080, 3333, 5432, 13081, 18789].includes(value.port), 'TASK4_NETWORK_REFUSED');
             date(value.at); return value;
         };
         const before = canary(original.canaryBefore, 'listening'), after = canary(original.canaryAfter, 'listening'), closed = canary(original.canaryClosed, 'absent');
@@ -1789,8 +1839,8 @@ async function prepareTask4OuterResourcesV1(context) {
 }
 
 async function createTask4PortGuardV1(context, state, role) {
-    requireValue(['canary', 'portReservation'].includes(role) && !state[role], 'TASK4_RESOURCE_REFUSED');
-    const server = createHttpServer(); let port = null, accepted = 0, closed = 0, callback = false, fault = false;
+    requireValue(['canary', 'portReservation', 'serverPortReservation'].includes(role) && !state[role], 'TASK4_RESOURCE_REFUSED');
+    const server = createHttpServer(); let port = null, accepted = 0, closed = 0, callback = false, fault = false, before = null;
     server.on('connection', socket => { accepted++; socket.on('close', () => { closed++; }); });
     server.on('error', () => { fault = true; });
     const controller = Object.freeze({ get port() { return port; },
@@ -1801,13 +1851,15 @@ async function createTask4PortGuardV1(context, state, role) {
             requireValue(!callback && server.listening && accepted === 0, 'TASK4_CLEANUP_UNKNOWN');
             await task4BoundedV1(new Promise((resolve, reject) => server.close(error => { if (error) reject(error); else { callback = true; resolve(); } })), 5000, 'TASK4_CLEANUP_UNKNOWN');
             requireValue(controller.closed(), 'TASK4_CLEANUP_UNKNOWN'); context.check();
+            if (role === 'serverPortReservation') task4PrivateBytesV1(path.join(context.ready.setup.resourceRoot.path, 'inner/originals'), 'server.reservation.json',
+                Buffer.from(task4CanonicalV1({ ...task4ArtifactBindingV1(context.ready), owner: context.owner, port, before, after: controller.snapshot(), closed: true }) + '\n'));
         },
     });
     state[role] = controller;
     await task4BoundedV1(new Promise((resolve, reject) => { server.once('error', reject); server.listen({ host: '127.0.0.1', port: 0, exclusive: true }, resolve); }), 5000, 'TASK4_RESOURCE_REFUSED');
     const address = server.address(); requireValue(address?.address === '127.0.0.1' && address.family === 'IPv4', 'TASK4_RESOURCE_REFUSED');
-    port = address.port; requireValue(port >= 1024 && ![3080, 3333, 5432, 13081, 18789, state.setup?.postgres.port].includes(port), 'TASK4_RESOURCE_REFUSED');
-    context.check(); return controller;
+    port = address.port; requireValue(port >= 1024 && ![3080, 3333, 5432, 13081, 18789, state.setup?.postgres.port, context.ready?.setup.postgres.port, state.mock?.port, state.serverPort].includes(port), 'TASK4_RESOURCE_REFUSED');
+    before = controller.snapshot(); context.check(); return controller;
 }
 
 function createTask4PostmasterV1(context, state, recipe) {
@@ -2038,7 +2090,10 @@ async function authenticateTask4ProbeRequestV1(context, state, request) {
         && mock.endpointRole === 'mock' && mock.host === '127.0.0.1' && mock.state === 'listening'
         && task4CanonicalV1(mock.owner) === task4CanonicalV1(inner)
         && task4CanonicalV1(mock.original) === task4CanonicalV1({ method: 'owned_http_server', observed: true }), 'TASK4_BINDING_REFUSED'); date(mock.at);
-    const policy = task4ServerPolicyV1(state.setup, mock.port), published = task4FileSnapshotV1(path.join(state.setup.resourceRoot.path, 'server-launch-policy.sb'), 16384);
+    const published = task4FileSnapshotV1(path.join(state.setup.resourceRoot.path, 'server-launch-policy.sb'), 16384);
+    const ports = [...published.bytes.toString('utf8').matchAll(/^\(allow network-bind \(local ip "localhost:([1-9][0-9]{3,4})"\)\)$/gm)];
+    requireValue(ports.length === 1, 'TASK4_SOURCE_DRIFT'); const serverPort = Number(ports[0][1]);
+    const policy = task4ServerPolicyV1(state.setup, mock.port, serverPort);
     requireValue(published.bytes.equals(Buffer.from(policy)) && published.hash === request.policyHash
         && request.launcherHash === '8290e4be7387a0df83cd1559e86afd880464f269450573d012795761fe298f16'
         && task4FileSnapshotV1('/usr/bin/sandbox-exec', 16777216, 'installed').hash === request.launcherHash, 'TASK4_SOURCE_DRIFT');
@@ -2048,7 +2103,9 @@ async function authenticateTask4ProbeRequestV1(context, state, request) {
         && task4CanonicalV1(intent.parentOwner) === task4CanonicalV1(inner) && intent.executable === context.node && intent.executableHash === context.nodeHash
         && intent.entry === entry && intent.entryHash === task4FileSnapshotV1(entry, 16777216).hash
         && intent.argvHash === hash(task4CanonicalV1([entry])) && intent.policyHash === request.policyHash && intent.launcherHash === request.launcherHash, 'TASK4_BINDING_REFUSED');
-    hex(intent.environmentHash); context.check(); return { request, binding, inner, fixture, mock, intent };
+    hex(intent.environmentHash); context.check();
+    requireValue(await task4OuterListenerV1(context, state, serverPort, inner) === 'listening', 'TASK4_BINDING_REFUSED');
+    context.check(); return { request, binding, inner, fixture, mock, intent, serverPort };
 }
 
 function readTask4ProbeReadyV1(child, original, deadline) {
@@ -2140,7 +2197,7 @@ async function runTask4OuterProbeV1(context, state) {
     const authenticated = await authenticateTask4ProbeRequestV1(context, state, requestFile.value), { request, binding, inner, mock } = authenticated;
     state.probeRequest = authenticated;
     const deadline = Date.parse(mock.at) + 30000; requireValue(Date.now() < deadline, 'TASK4_NETWORK_REFUSED');
-    const canary = await createTask4PortGuardV1(context, state, 'canary'); requireValue(canary.port !== mock.port, 'TASK4_NETWORK_REFUSED');
+    const canary = await createTask4PortGuardV1(context, state, 'canary'); requireValue(canary.port !== mock.port && canary.port !== authenticated.serverPort, 'TASK4_NETWORK_REFUSED');
     const listener = () => ({ schema: 'mission-control.task4-policy-probe-listener.v1', ...binding, endpointRole: 'owned_denied_canary',
         host: '127.0.0.1', port: canary.port, ...canary.snapshot(), owner: context.owner, original: { method: 'owned_http_server', observed: true } });
     let original, before, after, closed;

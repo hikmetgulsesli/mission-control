@@ -707,9 +707,9 @@ test('Task4 browser fence registers before navigation and pairs exact original r
     const ready = JSON.parse(GOLDEN_READY), context = new EventEmitter() as any, page = new EventEmitter() as any;
     let callback: any, websocket: any; context.route = async (pattern: string, fn: any) => { assert.equal(pattern, '**/*'); callback = fn; };
     context.routeWebSocket = async (_pattern: string, fn: any) => { websocket = fn; };
-    const fence = m.createTask4BrowserFenceV1(ready, parseProductBuildAuthorityV2); await fence.attach(context, page, '/');
+    const fence = m.createTask4BrowserFenceV1(ready, parseProductBuildAuthorityV2, 15439); await fence.attach(context, page, '/');
     assert.equal(typeof callback, 'function'); assert.equal(typeof websocket, 'function');
-    const request = { method: () => 'GET', url: () => 'http://127.0.0.1:13081/api/overview' }; let continued = 0;
+    const request = { method: () => 'GET', url: () => 'http://127.0.0.1:15439/api/overview' }; let continued = 0;
     context.emit('request', request); await callback({ request: () => request, continue: async () => { continued++; }, abort: async () => assert.fail('known request') });
     context.emit('response', { request: () => request, url: request.url, status: () => 200, body: async () => Buffer.from('{"value":0}') });
     await fence.settle(); assert.equal(continued, 1); const rows = fence.value().browser;
@@ -725,8 +725,8 @@ test('Task4 browser legacy409 budget requires exact route/body and refuses opera
     for (const mode of ['legacy', 'wrong_body', 'operational404', 'extra_console']) await t.test(mode, async () => {
         const ready = JSON.parse(GOLDEN_READY), context = new EventEmitter() as any, page = new EventEmitter() as any; let callback: any;
         context.route = async (_p: string, fn: any) => { callback = fn; }; context.routeWebSocket = async () => {};
-        const route = '/setfarm/runs/ac8cea43-7686-4d27-8092-1e3dd9207ca4', url = 'http://127.0.0.1:13081/api/setfarm/runs/ac8cea43-7686-4d27-8092-1e3dd9207ca4/' + (mode === 'operational404' ? 'operational-snapshot' : 'product-build-authority');
-        const fence = m.createTask4BrowserFenceV1(ready, parseProductBuildAuthorityV2); await fence.attach(context, page, route);
+        const route = '/setfarm/runs/ac8cea43-7686-4d27-8092-1e3dd9207ca4', url = 'http://127.0.0.1:15439/api/setfarm/runs/ac8cea43-7686-4d27-8092-1e3dd9207ca4/' + (mode === 'operational404' ? 'operational-snapshot' : 'product-build-authority');
+        const fence = m.createTask4BrowserFenceV1(ready, parseProductBuildAuthorityV2, 15439); await fence.attach(context, page, route);
         const request = { method: () => 'GET', url: () => url }; context.emit('request', request); await callback({ request: () => request, continue: async () => {}, abort: async () => assert.fail('registered path') });
         const body = JSON.stringify({ status: 'unavailable', code: 'SETFARM_PRODUCT_BUILD_AUTHORITY_NOT_READY', reason: mode === 'wrong_body' ? 'other' : 'not_ready', upstreamStatus: 409, upstreamCode: 'RUNTIME_PACKET_RUN_NOT_V3' });
         context.emit('response', { request: () => request, url: () => url, status: () => mode === 'operational404' ? 404 : 409, body: async () => Buffer.from(body) });
@@ -737,12 +737,12 @@ test('Task4 browser legacy409 budget requires exact route/body and refuses opera
 });
 
 test('Task4 Source server policy confines network to original PG/mock and writes to two private roots', async () => {
-    const m = await load(), setup = JSON.parse(GOLDEN_SETUP), policy = m.task4ServerPolicyV1(setup, 15433);
+    const m = await load(), setup = JSON.parse(GOLDEN_SETUP), policy = m.task4ServerPolicyV1(setup, 15433, 15439);
     assert.match(policy, /\(deny network\*\)/); assert.match(policy, /\(deny file-write\*\)/);
     assert.ok(policy.includes('(remote ip "localhost:15432")')); assert.ok(policy.includes('(remote ip "localhost:15433")'));
-    assert.ok(policy.includes('(local ip "localhost:13081")')); assert.ok(!policy.includes('localhost:*'));
+    assert.ok(policy.includes('(local ip "localhost:15439")')); assert.ok(!policy.includes('localhost:*'));
     assert.ok(policy.includes('"' + setup.resourceRoot.path + '/inner/server-home"')); assert.ok(policy.includes('"' + setup.resourceRoot.path + '/inner/server-runtime"'));
-    for (const port of [0, 3080, 3333, 5432, 13081, 15432, 18789, 65536]) assert.throws(() => m.task4ServerPolicyV1(setup, port), /TASK4_RESOURCE_REFUSED/);
+    for (const port of [0, 3080, 3333, 5432, 13081, 15432, 18789, 65536]) assert.throws(() => m.task4ServerPolicyV1(setup, port, 15439), /TASK4_RESOURCE_REFUSED/);
 });
 
 test('Task4 configured parser import occurs only after authenticated inner and isolated environment assignment', async () => {
@@ -755,14 +755,14 @@ test('Task4 configured parser import occurs only after authenticated inner and i
     const bindings = { path, requireValue: (v: unknown, c: string) => { if (!v) throw Error(c); }, process: { env: originalEnv },
         fs: { existsSync: () => false }, pathToFileURL: (p: string) => ({ href: p }),
         task4ImportConfiguredV1: async (url: string) => { events.push('import'); assert.equal(originalEnv.HOME, ready.setup.resourceRoot.path + '/inner/server-home');
-            assert.equal(originalEnv.GATEWAY_TOKEN, undefined); assert.equal(originalEnv.DATABASE_URL, undefined); assert.equal(originalEnv.SETFARM_PG_URL, undefined);
+            assert.equal(originalEnv.MC_PORT,'15439'); assert.equal(originalEnv.GATEWAY_TOKEN, undefined); assert.equal(originalEnv.DATABASE_URL, undefined); assert.equal(originalEnv.SETFARM_PG_URL, undefined);
             assert.equal(url, '/fixture/mc/dist-server/services/setfarm-product-build-authority.js'); return { parseProductBuildAuthorityV2: (x: any) => x }; } };
     const fn = vm.compileFunction(selected.map(n => n.getText(ast)).join('\n') + '\nreturn task4ConfiguredParserV1;', Object.keys(bindings))(...Object.values(bindings));
     const context = { ready, root: '/fixture/mc', check() { events.push('check'); } };
-    const parser = await fn(context, 15433); assert.equal(typeof parser, 'function'); assert.deepEqual(events, ['check', 'import', 'check']);
+    const parser = await fn(context, 15433, 15439); assert.equal(typeof parser, 'function'); assert.deepEqual(events, ['check', 'import', 'check']);
     assert.equal(originalEnv.SETFARM_PG_URL, undefined);
-    events.length = 0; await assert.rejects(fn({ ...context, ready: null }, 15433), /TASK4_BINDING_REFUSED/); assert.deepEqual(events, []);
-    bindings.fs.existsSync = () => true; await assert.rejects(fn(context, 15433), /TASK4_RESOURCE_REFUSED/); assert.deepEqual(events, []);
+    events.length = 0; await assert.rejects(fn({ ...context, ready: null }, 15433, 15439), /TASK4_BINDING_REFUSED/); assert.deepEqual(events, []);
+    bindings.fs.existsSync = () => true; await assert.rejects(fn(context, 15433, 15439), /TASK4_RESOURCE_REFUSED/); assert.deepEqual(events, []);
 });
 
 test('Task4 six-route runtime retains first completed screenshot before owned failure or cancellation and closes original contexts', async (t) => {
@@ -771,10 +771,10 @@ test('Task4 six-route runtime retains first completed screenshot before owned fa
     const nodes = ast.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === 'runTask4PagesV1'); assert.equal(nodes.length, 1);
     const routes = m.task4NetworkRecipesV1().browser.filter((r: any) => r.pathId.startsWith('page_')).map((r: any) => r.path);
     for (const scenario of ['pass', 'assertion_failure', 'owned_cancel', 'bad_dom', 'close_failure']) await t.test(scenario, async () => {
-        const events: string[] = [], rows: any[] = [], state: any = { browser: { newContext: async (options: any) => {
+        const events: string[] = [], rows: any[] = [], state: any = { serverPort:15439, browser: { newContext: async (options: any) => {
             assert.deepEqual(options, { viewport: { width: 1440, height: 950 }, deviceScaleFactor: 1, serviceWorkers: 'block' });
             events.push('open'); return { newPage: async () => ({ setDefaultTimeout: (n: number) => assert.equal(n, 8000),
-                goto: async (url: string) => { events.push('goto'); assert.ok(url.startsWith('http://127.0.0.1:13081/')); return { status: () => 200 }; },
+                goto: async (url: string) => { events.push('goto'); assert.ok(url.startsWith('http://127.0.0.1:15439/')); return { status: () => 200 }; },
                 waitForResponse: async () => ({ finished: async () => null }), waitForFunction: async () => { events.push('mounted'); }, evaluate: async () => ({ rootWidth: 1440, rootHeight: 950, textLength: scenario === 'bad_dom' ? 0 : 100, visibleElements: 4 }),
                 screenshot: async () => { events.push('screenshot'); return Buffer.from('png'); } }),
                 close: async () => { events.push('close'); if (scenario === 'close_failure') throw Error('transport'); } };
@@ -829,23 +829,23 @@ test('Task4 mock runtime records actual request finish and original socket close
 test('Task4 server runtime closes only its freshly reobserved original handle and awaits exit plus close', async () => {
     const ts = await import('typescript'), vm = await import('node:vm'), { EventEmitter } = await import('node:events'), m = await load();
     const text = readFileSync(new URL('../scripts/render-smoke-owned-fixture.mjs', import.meta.url), 'utf8'), ast = ts.createSourceFile('fixture.mjs', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
-    const nodes = ast.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === 'createTask4ServerV1'); assert.equal(nodes.length, 1);
+    const nodes = ast.statements.filter(n => ts.isFunctionDeclaration(n) && ['createTask4ServerV1','watchTask4ServerStartupV1'].includes(n.name?.text ?? '')); assert.equal(nodes.length, 2);
     const child = new EventEmitter() as any; child.pid = 41111; child.stdout = new EventEmitter(); child.stderr = new EventEmitter(); let signals = 0, fresh = true;
     child.kill = (signal: string) => { assert.equal(signal, 'SIGTERM'); signals++; child.emit('exit', null, signal); child.emit('close', null, signal); return true; };
     const ready = JSON.parse(GOLDEN_READY), owner = { ...ready.fixtureOwner, executable: '/fixed/node', executableHash: 'a'.repeat(64) }, bound = { ...owner, pid: child.pid, ppid: owner.pid };
     const events: string[] = [], records: any[] = [];
     const context = { ready, owner, node: '/fixed/node', nodeHash: owner.executableHash, root: '/fixture/mc', check() { events.push('check'); },
         modules: { native: { observeUiProcessV1: async () => { if (!fresh) throw Error('UI_OS_OBSERVATION_INVALID'); events.push('observe'); return {}; } } } };
-    const bindings = { path: await import('node:path'), spawn: (_exe: string, argv: string[], options: any) => { assert.equal(_exe, '/usr/bin/sandbox-exec'); assert.deepEqual(argv, ['-f', ready.setup.resourceRoot.path + '/server-launch-policy.sb', '/fixed/node', '/fixture/mc/dist-server/index.js']); assert.equal(options.detached, false); events.push('spawn'); return child; },
+    const bindings = { Buffer, setTimeout, clearTimeout, path: await import('node:path'), spawn: (_exe: string, argv: string[], options: any) => { assert.equal(_exe, '/usr/bin/sandbox-exec'); assert.deepEqual(argv, ['-f', ready.setup.resourceRoot.path + '/server-launch-policy.sb', '/fixed/node', '/fixture/mc/dist-server/index.js']); assert.equal(options.detached, false); events.push('spawn'); return child; },
         task4ArtifactBindingV1: () => ({}), task4CanonicalV1: m.task4CanonicalV1, hash, retainTask4ChildV1: m.retainTask4ChildV1,
         bindTask4ProcessV1: () => bound, requireValue: (v: unknown, c: string) => { if (!v) throw Error(c); },
         task4ListenerCensusV1: async (_ctx: any, _evidence: any, _port: number, expected: any) => ({ state: expected ? 'listening' : 'absent', value: { state: expected ? 'listening' : 'absent', owner: expected } }),
-        task4WaitV1: async () => {}, task4SaveOriginalV1: () => {} };
-    const fn = vm.compileFunction(nodes[0].getText(ast) + '\nreturn createTask4ServerV1;', Object.keys(bindings))(...Object.values(bindings));
+        task4WaitV1: async () => {}, task4SaveOriginalV1: () => {}, task4PrivateBytesV1: () => {} };
+    const fn = vm.compileFunction(nodes.map(n=>n.getText(ast)).join('\n') + '\nreturn createTask4ServerV1;', Object.keys(bindings))(...Object.values(bindings));
     const evidence = { put(v: any) { records.push(v); events.push('publish'); return { sha256: hash(JSON.stringify(v)), bytes: 1 }; } };
-    const server = fn(context, evidence, { HOME: '/private' }, 'b'.repeat(64), 'c'.repeat(64), 'd'.repeat(64));
+    let reservationClosed=false; const server = fn(context, evidence, { HOME: '/private', MC_PORT:'15439' }, 'b'.repeat(64), 'c'.repeat(64), 'd'.repeat(64),{port:15439,snapshot(){},closed:()=>reservationClosed,close:async()=>{reservationClosed=true;}});
     assert.equal(events.includes('spawn'), false); assert.equal(records.length, 1); assert.deepEqual(server.intent(), { sha256: hash(JSON.stringify(records[0])), bytes: 1 });
-    await server.launch(); assert.ok(events.indexOf('publish') < events.indexOf('spawn'));
+    const launch=server.launch();for(let i=0;i<8;i++)await Promise.resolve();child.stdout.emit('data',Buffer.from('Mission Control running on http://127.0.0.1:15439\n'));await launch; assert.ok(events.indexOf('publish') < events.indexOf('spawn'));
     fresh = false; await assert.rejects(server.close(), /UI_OS_OBSERVATION_INVALID/); assert.equal(signals, 0);
     // A refusal is latched: no later observation may convert an unknown owner into a signal authority.
     fresh = true; await assert.rejects(server.close(), /TASK4_CLEANUP_UNKNOWN/); assert.equal(signals, 0);
@@ -874,11 +874,12 @@ test('Task4 inner composition gates effects on authentication and preserves inde
     const text = readFileSync(new URL('../scripts/render-smoke-owned-fixture.mjs', import.meta.url), 'utf8'), ast = ts.createSourceFile('fixture.mjs', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
     const nodes = ast.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === 'runTask4InnerV1'); assert.equal(nodes.length, 1);
     for (const failure of [null, 'pages', 'server_close', 'bootstrap']) await t.test(failure ?? 'pass', async () => {
-        const events: string[] = [], state: any = { contexts: { opened: 0, closed: 0, pending: 0 }, readers: { opened: 0, closed: 0, pending: 0 },
+        let reservationClosed=false; const events: string[] = [], state: any = { contexts: { opened: 0, closed: 0, pending: 0 }, readers: { opened: 0, closed: 0, pending: 0 },
             evidence: {}, filesystem: {}, errors: [], observations: {}, cancelled: false };
         const bindings: any = { prepareTask4InnerResourcesV1: async () => { events.push('resources'); if (failure === 'bootstrap') throw Error('TASK4_BINDING_REFUSED'); return state; },
             openTask4ObserverV1: async () => ({ observer: { observe: async (phase: string) => { events.push('observe:' + phase); return {}; } }, close: async () => { events.push('sql_close'); } }),
             startTask4MockV1: async () => ({ port: 15433, close: async () => { events.push('mock_close'); } }),
+            createTask4PortGuardV1: async (_c:any,s:any,role:string) => { events.push('reserve'); const guard={port:15439,closed:()=>reservationClosed,close:async()=>{events.push('reservation_close');reservationClosed=true;}};s[role]=guard;return guard; },
             task4ConfiguredParserV1: async () => { events.push('parser'); return {}; },
             prepareTask4ServerV1: () => ({ launch: async () => { events.push('server_launch'); }, close: async () => { events.push('server_close'); if (failure === 'server_close') throw Error('TASK4_CLEANUP_UNKNOWN'); } }),
             runTask4InnerProbeV1: async () => { events.push('probe'); }, runTask4PreflightV1: async () => { events.push('preflight'); },
@@ -891,7 +892,7 @@ test('Task4 inner composition gates effects on authentication and preserves inde
         const fn = vm.compileFunction(nodes[0].getText(ast) + '\nreturn runTask4InnerV1;', Object.keys(bindings))(...Object.values(bindings));
         const context = { ready: JSON.parse(GOLDEN_READY), check() { events.push('check'); } };
         if (failure === 'bootstrap') { await assert.rejects(fn(context), /TASK4_BINDING_REFUSED/); assert.deepEqual(events, ['check', 'resources']); return; }
-        const result = await fn(context); assert.ok(events.indexOf('probe') < events.indexOf('server_launch'));
+        const result = await fn(context); assert.ok(events.indexOf('reserve')<events.indexOf('parser'));assert.ok(events.includes('reservation_close')); assert.ok(events.indexOf('probe') < events.indexOf('server_launch'));
         assert.ok(events.indexOf('observe:before') < events.indexOf('server_launch')); assert.ok(events.indexOf('server_close') < events.indexOf('observe:after'));
         for (const name of ['server_close', 'native_close', 'observe:after', 'sql_close', 'mock_close', 'final']) assert.equal(events.filter(e => e === name).length, 1);
         assert.ok(events.indexOf('candidate') > events.indexOf('pages')); assert.ok(events.indexOf('candidate') < events.indexOf('server_close'));
@@ -1001,12 +1002,12 @@ test('Task4 preflight transport requires complete response plus original request
     const nodes = ast.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === 'task4PreflightHttpV1'); assert.equal(nodes.length, 1);
     const request = new EventEmitter() as any, response = new EventEmitter() as any, socket = new EventEmitter() as any; request.end = () => {}; request.destroy = () => {};
     response.statusCode = 200; response.headers = { 'content-type': 'application/json; charset=utf-8' }; response.complete = true; response.destroy = () => {};
-    socket.remoteAddress = '127.0.0.1'; socket.remotePort = 13081;
+    socket.remoteAddress = '127.0.0.1'; socket.remotePort = 15439;
     let responseCallback: any;
-    const bindings = { requestHttp: (options: any, fn: any) => { assert.deepEqual(options, { host: '127.0.0.1', port: 13081, path: '/api/setfarm/runs/ad47fe65-4ec4-4fb5-89da-fff71eb4e79a/product-build-authority', method: 'GET', agent: false }); responseCallback = fn; return request; },
+    const bindings = { requestHttp: (options: any, fn: any) => { assert.deepEqual(options, { host: '127.0.0.1', port: 15439, path: '/api/setfarm/runs/ad47fe65-4ec4-4fb5-89da-fff71eb4e79a/product-build-authority', method: 'GET', agent: false }); responseCallback = fn; return request; },
         RUN_IDS: ['ac8cea43-7686-4d27-8092-1e3dd9207ca4', 'ad47fe65-4ec4-4fb5-89da-fff71eb4e79a'], setTimeout, clearTimeout };
     const fn = vm.compileFunction(nodes[0].getText(ast) + '\nreturn task4PreflightHttpV1;', Object.keys(bindings))(...Object.values(bindings));
-    let settled = false; const pending = fn().then((v: any) => { settled = true; return v; }); request.emit('socket', socket); socket.emit('connect');
+    let settled = false; const pending = fn(15439).then((v: any) => { settled = true; return v; }); request.emit('socket', socket); socket.emit('connect');
     responseCallback(response); response.emit('data', Buffer.from('{"ok":true}')); response.emit('end'); await Promise.resolve(); assert.equal(settled, false);
     request.emit('close'); await Promise.resolve(); assert.equal(settled, false); socket.emit('close'); const result = await pending;
     assert.equal(result.status, 200); assert.equal(result.bytes.toString(), '{"ok":true}');
@@ -1030,11 +1031,11 @@ test('Task4 server preparation pins installed sandbox bytes and publishes the ex
     const ts = await import('typescript'), vm = await import('node:vm'), path = await import('node:path'), m = await load();
     const text = readFileSync(new URL('../scripts/render-smoke-owned-fixture.mjs', import.meta.url), 'utf8'), ast = ts.createSourceFile('fixture.mjs', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
     const nodes = ast.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === 'prepareTask4ServerV1'); assert.equal(nodes.length, 1);
-    const ready = JSON.parse(GOLDEN_READY), order: string[] = [], state: any = { mock: { port: 15433 }, evidence: {} }; let valid = false;
-    const bindings = { path, hash, task4ServerPolicyV1: m.task4ServerPolicyV1, task4ServerEnvironmentV1: () => ({ HOME: 'private' }),
+    const ready = JSON.parse(GOLDEN_READY), order: string[] = [], state: any = { serverPort:15439,serverPortReservation:{port:15439},mock: { port: 15433 }, evidence: {} }; let valid = false;
+    const bindings = { path, hash, task4ServerPolicyV1: m.task4ServerPolicyV1, task4ServerEnvironmentV1: (_c:any,mock:number,port:number) => {assert.equal(mock,15433);assert.equal(port,15439);return {HOME:'private',MC_PORT:String(port)};},
         task4FileSnapshotV1: () => ({ hash: valid ? '8290e4be7387a0df83cd1559e86afd880464f269450573d012795761fe298f16' : 'f'.repeat(64) }),
-        task4PrivateBytesV1: (root: string, name: string, bytes: Buffer) => { assert.equal(root, ready.setup.resourceRoot.path); assert.equal(name, 'server-launch-policy.sb'); assert.equal(bytes.toString(), m.task4ServerPolicyV1(ready.setup, 15433)); order.push('policy'); return { sha256: hash(bytes), bytes: bytes.length }; },
-        createTask4ServerV1: () => { order.push('intent'); return {}; }, requireValue: (v: unknown, c: string) => { if (!v) throw Error(c); } };
+        task4PrivateBytesV1: (root: string, name: string, bytes: Buffer) => { assert.equal(root, ready.setup.resourceRoot.path); assert.equal(name, 'server-launch-policy.sb'); assert.equal(bytes.toString(), m.task4ServerPolicyV1(ready.setup, 15433, 15439)); order.push('policy'); return { sha256: hash(bytes), bytes: bytes.length }; },
+        createTask4ServerV1: (_c:any,_e:any,env:any,_p:any,_l:any,_h:any,reservation:any) => {assert.equal(env.MC_PORT,'15439');assert.equal(reservation,state.serverPortReservation);order.push('intent');return {};}, requireValue: (v: unknown, c: string) => { if (!v) throw Error(c); } };
     const fn = vm.compileFunction(nodes[0].getText(ast) + '\nreturn prepareTask4ServerV1;', Object.keys(bindings))(...Object.values(bindings));
     const context = { ready, build: { files: new Map([['dist-server/index.js', { hash: 'e'.repeat(64) }]]) }, check() {} };
     assert.throws(() => fn(context, state), /TASK4_SOURCE_DRIFT/); assert.deepEqual(order, []); valid = true; fn(context, state); assert.deepEqual(order, ['policy', 'intent']);
@@ -1480,14 +1481,20 @@ test('Task4 outer probe authenticates request ancestry, fixed policy and referen
     const text = readFileSync(new URL('../scripts/render-smoke-owned-fixture.mjs', import.meta.url), 'utf8'), ast = ts.createSourceFile('fixture.mjs', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
     const nodes = ast.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === 'authenticateTask4ProbeRequestV1'); assert.equal(nodes.length, 1);
     const ready = JSON.parse(GOLDEN_READY), common = { executionId: ready.executionId, setupDescriptorHash: ready.setupDescriptorHash, readyDescriptorHash: hash(GOLDEN_READY + '\n') };
-    for (const fault of [null, 'parent', 'policy', 'listener', 'intent']) await t.test(fault ?? 'bound', async () => {
+    for(const serverPort of [15439,25439]) for (const fault of [null, 'parent', 'policy', 'listener', 'intent', 'reservation', 'duplicate_policy', 'inbound_drift', 'wildcard', 'foreign_host', 'old_port']) await t.test(serverPort+':' +(fault ?? 'bound'), async () => {
         const inner = { ...ready.fixtureOwner, pid: 41006, ppid: 41005 }, runner = { ...ready.fixtureOwner, pid: 41004 }, fixture = { ...ready.fixtureOwner, pid: 41005, ppid: fault === 'parent' ? 999 : 41004 };
-        const policy = m.task4ServerPolicyV1(ready.setup, 15433), launcherHash = '8290e4be7387a0df83cd1559e86afd880464f269450573d012795761fe298f16';
+        let policy = m.task4ServerPolicyV1(ready.setup,15433,serverPort);
+        if(fault==='duplicate_policy')policy+='(allow network-bind (local ip "localhost:'+serverPort+'"))\n';
+        if(fault==='inbound_drift')policy=policy.replace('(allow network-inbound (local ip "localhost:'+serverPort+'"))','(allow network-inbound (local ip "localhost:25440"))');
+        if(fault==='wildcard')policy=policy.replace('localhost:'+serverPort,'localhost:*');
+        if(fault==='foreign_host')policy=policy.replace('localhost:'+serverPort,'127.0.0.2:'+serverPort);
+        if(fault==='old_port')policy=policy.replaceAll('localhost:'+serverPort,'localhost:13081');
+        const launcherHash = '8290e4be7387a0df83cd1559e86afd880464f269450573d012795761fe298f16';
         const request = { schema: 'mission-control.task4-policy-probe-request.v1', ...common, innerOwner: inner, mockListener: { sha256: 'a'.repeat(64), bytes: 1 }, serverIntent: { sha256: 'b'.repeat(64), bytes: 1 }, policyHash: hash(policy), launcherHash };
         const listener = { schema: 'mission-control.task4-listener.v1', ...common, endpointRole: 'mock', host: '127.0.0.1', port: 15433, at: '2026-10-19T09:00:02.000Z', state: 'listening', owner: fault === 'listener' ? runner : inner, original: { method: 'owned_http_server', observed: true } };
         const intent = { schema: 'mission-control.task4-server-intent.v1', ...common, parentOwner: inner, executable: ready.setup.owner.executable, executableHash: ready.setup.owner.executableHash,
             entry: '/fixture/mc/dist-server/index.js', entryHash: fault === 'intent' ? '0'.repeat(64) : 'e'.repeat(64), argvHash: hash(m.task4CanonicalV1(['/fixture/mc/dist-server/index.js'])), environmentHash: 'f'.repeat(64), policyHash: request.policyHash, launcherHash };
-        const bindings = { path, Buffer, hash, task4CanonicalV1: m.task4CanonicalV1, task4ServerPolicyV1: m.task4ServerPolicyV1,
+        const bindings = { path, Buffer, hash, task4OuterListenerV1:async(_c:any,_s:any,p:number,o:any)=>{assert.equal(p,serverPort);assert.equal(o.pid,inner.pid);return fault==='reservation'?'absent':'listening';}, task4CanonicalV1: m.task4CanonicalV1, task4ServerPolicyV1: m.task4ServerPolicyV1,
             keys: (v: any, e: string) => assert.deepEqual(Object.keys(v).sort(), e.split(' ').sort()), hex: (v: any) => assert.match(v, /^[a-f0-9]{64}$/), processPin: () => {}, date: () => {},
             bindTask4ProcessV1: (v: any) => v, readTask4ArtifactV1: (_r: any, _a: any, ref: any) => ref.sha256 === 'a'.repeat(64) ? listener : intent,
             task4FileSnapshotV1: (p: string) => p.endsWith('.sb') ? { bytes: Buffer.from(fault === 'policy' ? 'drift' : policy), hash: hash(fault === 'policy' ? 'drift' : policy) } : { hash: p.endsWith('sandbox-exec') ? launcherHash : 'e'.repeat(64) },
@@ -1495,7 +1502,7 @@ test('Task4 outer probe authenticates request ancestry, fixed policy and referen
         const fn = vm.compileFunction(nodes[0].getText(ast) + '\nreturn authenticateTask4ProbeRequestV1;', Object.keys(bindings))(...Object.values(bindings));
         const context = { root: '/fixture/mc', node: ready.setup.owner.executable, nodeHash: ready.setup.owner.executableHash, owner: ready.setup.owner, check() {}, modules: { native: { observeUiProcessV1: async (pid: number) => pid === inner.pid ? inner : fixture } } };
         const state = { setup: ready.setup, root: {}, runner: { owner: runner } };
-        if (fault) await assert.rejects(fn(context, state, request)); else { const value = await fn(context, state, request); assert.equal(value.mock.port, 15433); assert.deepEqual(value.binding, common); }
+        if (fault) await assert.rejects(fn(context, state, request)); else { const value = await fn(context, state, request); assert.equal(value.mock.port,15433);assert.equal(value.serverPort,serverPort); assert.deepEqual(value.binding, common); }
     });
 });
 
@@ -1802,4 +1809,124 @@ test('Task4 failure normalizer preserves only the three fixed phase codes and ke
         assert.deepEqual(state.errors, [cleanup ? 'TASK4_CLEANUP_UNKNOWN' : 'TASK4_INTEGRITY_FAILED']); assert.equal(state.cleanupUnknown, cleanup);
         assert.equal(state.integrity, cleanup ? 'verified' : 'failed');
     }
+});
+
+test('Task4 isolated server waits for original startup line before binding and preserves one selected port', async (t) => {
+    const ts=await import('typescript'),vm=await import('node:vm'),path=await import('node:path'),{EventEmitter}=await import('node:events'),m=await load();
+    const source=readFileSync(new URL('../scripts/render-smoke-owned-fixture.mjs',import.meta.url),'utf8'),ast=ts.createSourceFile('owned.mjs',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS);
+    const nodes=ast.statements.filter(n=>ts.isFunctionDeclaration(n)&&['createTask4ServerV1','watchTask4ServerStartupV1'].includes(n.name?.text??''));
+    for(const port of [15439,25439])for(const fault of [null,'owner','foreign_listener','late_duplicate','close_owner','reservation','reservation_close','preoccupied'])await t.test(port+':'+(fault??'closed'),async()=>{
+        const ready=JSON.parse(GOLDEN_READY),events:string[]=[],records:any[]=[],timers=new Map<number,()=>void>();let timerId=0,clock=1000,closed=false,signals=0,fresh=true;
+        const child:any=new EventEmitter();child.pid=41111;child.stdout=new EventEmitter();child.stderr=new EventEmitter();child.kill=(signal:string)=>{signals++;assert.equal(signal,'SIGTERM');child.emit('exit',0,null);child.emit('close',0,null);return true;};
+        const owner={...ready.fixtureOwner,executable:'/fixed/node',executableHash:'a'.repeat(64)},bound={...owner,pid:child.pid,ppid:owner.pid};
+        const reservation={port,snapshot:()=>{events.push('reservation_snapshot');if(fault==='reservation')throw Error('reservation');return {state:'listening',acceptedConnections:0};},closed:()=>closed,close:async()=>{events.push('reservation_close');if(fault==='reservation_close')throw Error('reservation_close');closed=true;}};
+        const bindings={Buffer,path,hash,Date:class extends Date{static now(){return clock;}},setTimeout:(fn:()=>void,ms:number)=>{assert.equal(ms,8000);timers.set(++timerId,fn);return timerId;},clearTimeout:(id:number)=>timers.delete(id),
+            task4CanonicalV1:m.task4CanonicalV1,task4ArtifactBindingV1:()=>({}),retainTask4ChildV1:m.retainTask4ChildV1,
+            spawn:(_exe:string,_argv:string[],options:any)=>{events.push('spawn');assert.equal(options.env.MC_PORT,String(port));return child;},
+            bindTask4ProcessV1:()=>{if(fault==='owner')throw Error('owner');return bound;},
+            task4ListenerCensusV1:async(_c:any,_e:any,p:number,o:any)=>{assert.equal(p,port);events.push(o?'listen':'absent');if(fault==='preoccupied'&&!o&&!events.includes('spawn'))return {state:'listening',value:{}};if(fault==='foreign_listener'&&o)throw Error('foreign');return {state:o?'listening':'absent',value:{port,state:o?'listening':'absent',owner:o}};},
+            task4PrivateBytesV1:(_root:string,name:string,bytes:Buffer)=>{assert.ok(name.startsWith('server.'));assert.ok(bytes.length<=131072);},task4SaveOriginalV1:()=>events.push('outputs'),task4WaitV1:async()=>{assert.fail('no polling');},requireValue:(v:any,c:string)=>{if(!v)throw Error(c);}};
+        const fn=vm.compileFunction(nodes.map(n=>n.getText(ast)).join('\n')+'\nreturn createTask4ServerV1;',Object.keys(bindings))(...Object.values(bindings));
+        const context={ready,owner,node:'/fixed/node',nodeHash:owner.executableHash,root:'/fixture/mc',check(){},modules:{native:{observeUiProcessV1:async()=>{events.push('observe');if(!fresh)throw Error('UI_OS_OBSERVATION_INVALID');return {};}}}};
+        const controller=fn(context,{put:(v:any)=>{records.push(v);return {sha256:hash(JSON.stringify(v)),bytes:1};}},{MC_PORT:String(port)},'b'.repeat(64),'c'.repeat(64),'d'.repeat(64),reservation);
+        const pending=controller.launch().then(()=>null,(e:Error)=>e);for(let i=0;i<8;i++)await Promise.resolve();
+        assert.equal(events.includes('observe'),false,'no binder before the original Node startup line');
+        if(['reservation','reservation_close','preoccupied'].includes(fault??'')){assert.ok(await pending);assert.ok(!events.includes('spawn'));return;}
+        assert.ok(events.indexOf('reservation_close')<events.indexOf('spawn'));child.stdout.emit('data',Buffer.from('Mission Control running on http://127.0.0.1:'));await Promise.resolve();assert.equal(events.includes('observe'),false);
+        child.stdout.emit('data',Buffer.from(port+'\n'));const error=await pending;
+        if(fault==='owner'||fault==='foreign_listener'){assert.ok(error);assert.equal(controller.snapshot().state,'unknown');assert.equal(signals,0);return;}
+        assert.equal(error,null);assert.ok(events.indexOf('observe')<events.indexOf('listen'));assert.equal(records[1].port,port);
+        if(fault==='late_duplicate'){child.stdout.emit('data',Buffer.from('Mission Control running on http://127.0.0.1:'+port+'\n'));assert.equal(controller.snapshot().state,'unknown');}
+        if(fault==='close_owner')fresh=false;
+        if(fault==='close_owner'||fault==='late_duplicate')await assert.rejects(controller.close());else await controller.close();
+        assert.equal(signals,fault==='close_owner'?0:1);assert.equal(controller.snapshot().state,fault?'unknown':'closed');assert.equal(timers.size,0);
+        if(fault==='close_owner'){assert.ok(child.stdout.listenerCount('data')>1,'startup monitor survives an unclosed original');fresh=true;await assert.rejects(controller.close());assert.equal(signals,0);child.emit('exit',1,null);child.emit('close',1,null);assert.equal(child.stdout.listenerCount('data'),1,'only original stdout capture remains after full close');}
+    });
+});
+
+test('Task4 server policy binds a fresh private server port and rejects old live or shared endpoints', async()=>{
+    const m=await load(),setup=JSON.parse(GOLDEN_SETUP);
+    for(const port of [15439,25439]){const policy=m.task4ServerPolicyV1(setup,15433,port);assert.ok(policy.includes('(allow network-bind (local ip "localhost:'+port+'"))'));assert.ok(policy.includes('(allow network-inbound (local ip "localhost:'+port+'"))'));assert.ok(!policy.includes('13081'));}
+    for(const port of [undefined,0,3080,3333,5432,13081,18789,15432,15433,65536])assert.throws(()=>m.task4ServerPolicyV1(setup,15433,port));
+});
+
+test('Task4 startup stream requires one complete exact original line and latches late faults through settlement', async(t)=>{
+    const ts=await import('typescript'),vm=await import('node:vm'),{EventEmitter}=await import('node:events');
+    const source=readFileSync(new URL('../scripts/render-smoke-owned-fixture.mjs',import.meta.url),'utf8'),ast=ts.createSourceFile('owned.mjs',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS);
+    const nodes=ast.statements.filter(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='watchTask4ServerStartupV1');assert.equal(nodes.length,1);
+    for(const fault of [null,'partial','wrong_port','wrong_host','suffix','duplicate','late_duplicate','late_error','late_partial','error','exit','close','deadline','timeout','overflow','missing'])await t.test(fault??'fragmented',async()=>{
+        const child:any=new EventEmitter();child.stdout=fault==='missing'?null:new EventEmitter();let clock=1000,timer:(()=>void)|null=null,complete=false;
+        const bindings={Buffer,Date:class extends Date{static now(){return clock;}},setTimeout:(fn:()=>void,ms:number)=>{assert.equal(ms,8000);timer=fn;return 1;},clearTimeout:()=>{timer=null;}};
+        const fn=vm.compileFunction(nodes[0].getText(ast)+'\nreturn watchTask4ServerStartupV1;',Object.keys(bindings))(...Object.values(bindings));
+        const monitor=fn(child,{ended:()=>complete},15439,9000), result=monitor.wait.then(()=>null,(error:Error)=>error);const prefix='Mission Control running on http://127.0.0.1:';
+        if(fault==='missing'){}
+        else if(fault==='timeout'){clock=9000;const fire=timer as unknown as ()=>void;fire();}
+        else if(fault==='exit'||fault==='close'){complete=true;child.emit(fault,1,null);}
+        else if(fault==='error')child.stdout.emit('error',Error('private'));
+        else if(fault==='overflow')child.stdout.emit('data',Buffer.alloc(131073,65));
+        else {
+            child.stdout.emit('data',Buffer.from('Cache preface\n'+prefix));let done=false;result.then(()=>{done=true;});await Promise.resolve();assert.equal(done,false);
+            if(fault==='deadline')clock=9000;
+            const suffix=fault==='wrong_port'?'15440\n':fault==='suffix'?'15439 extra\n':fault==='partial'?'15439':'15439\n';
+            if(fault==='wrong_host'){child.stdout.emit('data',Buffer.from('wrong\n'));}else child.stdout.emit('data',Buffer.from(suffix));
+            if(fault==='partial')child.stdout.emit('end');
+            if(fault==='duplicate'||fault==='late_duplicate'){await Promise.resolve();child.stdout.emit('data',Buffer.from(prefix+'15439\n'));}
+            if(fault==='late_error')child.stdout.emit('error',Error('late'));
+            if(fault==='late_partial'){child.stdout.emit('data',Buffer.from(prefix));child.stdout.emit('end');}
+        }
+        const error=await result;if(fault&&!fault.startsWith('late_')&&fault!=='duplicate')assert.equal(error?.message,'TASK4_RESOURCE_REFUSED');
+        if(fault)assert.throws(()=>monitor.check(),/TASK4_RESOURCE_REFUSED/);else monitor.check();
+        assert.equal(timer,null);assert.ok(monitor.bytes().length<=131072);monitor.dispose();
+        if(child.stdout)for(const event of ['data','error','end','close'])assert.equal(child.stdout.listenerCount(event),0);assert.equal(child.listenerCount('exit'),0);assert.equal(child.listenerCount('close'),0);
+    });
+});
+
+test('Task4 reservation finally closes after early probe failure and refuses uncertain closure', async(t)=>{
+    const ts=await import('typescript'),vm=await import('node:vm');const source=readFileSync(new URL('../scripts/render-smoke-owned-fixture.mjs',import.meta.url),'utf8'),ast=ts.createSourceFile('owned.mjs',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS);
+    const nodes=ast.statements.filter(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='runTask4InnerV1');assert.equal(nodes.length,1);
+    for(const failure of ['reserve','parser','probe','reservation_close'])await t.test(failure,async()=>{
+        let closed=false;const events:string[]=[],state:any={observations:{},errors:[],cleanupUnknown:false};const guard={port:15439,closed:()=>closed,close:async()=>{events.push('reservation_close');if(failure==='reservation_close')throw Error('TASK4_CLEANUP_UNKNOWN');closed=true;}};
+        const bindings={prepareTask4InnerResourcesV1:async()=>state,openTask4ObserverV1:async()=>({observer:{observe:async()=>({})},close:async()=>events.push('sql_close')}),startTask4MockV1:async()=>({port:15433,close:async()=>events.push('mock_close')}),
+            createTask4PortGuardV1:async(_c:any,s:any,role:string)=>{s[role]=guard;events.push('reserve');if(failure==='reserve')throw Error('TASK4_RESOURCE_REFUSED');return guard;},
+            task4ConfiguredParserV1:async(_c:any,m:number,p:number)=>{assert.equal(m,15433);assert.equal(p,15439);assert.equal(closed,false);events.push('parser');if(failure==='parser')throw Error('TASK4_RESOURCE_REFUSED');return {};},
+            prepareTask4ServerV1:()=>({launch:async()=>assert.fail('no server start after failed probe'),close:async()=>{events.push('server_close');throw Error('TASK4_CLEANUP_UNKNOWN');}}),runTask4InnerProbeV1:async()=>{events.push('probe');assert.equal(closed,false);throw Error('TASK4_NETWORK_REFUSED');},
+            retainTask4RenderCandidateV1:()=>{},task4RecordFailureV1:(s:any,e:Error,c=false)=>{s.errors.push(e.message);if(c)s.cleanupUnknown=true;},finalizeTask4InnerV1:async()=>state,requireValue:(v:any,c:string)=>{if(!v)throw Error(c);}};
+        const fn=vm.compileFunction(nodes[0].getText(ast)+'\nreturn runTask4InnerV1;',Object.keys(bindings))(...Object.values(bindings));const result=await fn({ready:{},check(){}});
+        assert.equal(events.filter(e=>e==='reservation_close').length,1);assert.ok(events.includes('sql_close'));assert.ok(events.includes('mock_close'));assert.equal(closed,failure!=='reservation_close');if(failure==='reservation_close')assert.equal(result.cleanupUnknown,true);
+    });
+});
+
+test('Task4 server reservation owns original ephemeral assignment and records callback closure without retry',async(t)=>{
+    const ts=await import('typescript'),vm=await import('node:vm'),path=await import('node:path'),{EventEmitter}=await import('node:events'),m=await load();
+    const source=readFileSync(new URL('../scripts/render-smoke-owned-fixture.mjs',import.meta.url),'utf8'),ast=ts.createSourceFile('owned.mjs',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS);const nodes=ast.statements.filter(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='createTask4PortGuardV1');assert.equal(nodes.length,1);
+    for(const port of [15439,25439,3080,3333,5432,13081,18789,15432,15433])for(const fault of [null,'callback','accepted'])await t.test(port+':'+(fault??'closed'),async()=>{
+        const ready=JSON.parse(GOLDEN_READY),state:any={mock:{port:15433}},records:any[]=[];let listens=0,closeCalls=0,finish:()=>void=()=>{};const server:any=new EventEmitter();server.listening=false;
+        server.listen=(options:any,cb:()=>void)=>{assert.ok(state.serverPortReservation);assert.deepEqual(options,{host:'127.0.0.1',port:0,exclusive:true});listens++;server.listening=true;cb();};server.address=()=>server.listening?{address:'127.0.0.1',family:'IPv4',port}:null;
+        server.close=(cb:(e?:Error)=>void)=>{closeCalls++;finish=()=>{if(fault==='callback')cb(Error('close'));else{server.listening=false;cb();}};};
+        const bindings={path,Buffer,createHttpServer:()=>server,task4BoundedV1:(v:any)=>v,task4CanonicalV1:m.task4CanonicalV1,task4ArtifactBindingV1:()=>({executionId:ready.executionId}),task4PrivateBytesV1:(dir:string,name:string,bytes:Buffer)=>{assert.equal(dir,ready.setup.resourceRoot.path+'/inner/originals');assert.equal(name,'server.reservation.json');records.push(JSON.parse(bytes.toString()));},requireValue:(v:any,c:string)=>{if(!v)throw Error(c);}};
+        const fn=vm.compileFunction(nodes[0].getText(ast)+'\nreturn createTask4PortGuardV1;',Object.keys(bindings))(...Object.values(bindings));let guard:any;const allowed=[15439,25439].includes(port);const context={ready,owner:ready.fixtureOwner,check(){}};
+        if(allowed)guard=await fn(context,state,'serverPortReservation');else{await assert.rejects(fn(context,state,'serverPortReservation'));guard=state.serverPortReservation;assert.ok(guard);}
+        assert.equal(listens,1);assert.equal(guard.port,port);assert.equal(guard.closed(),false);
+        if(fault==='accepted'){const socket:any=new EventEmitter();server.emit('connection',socket);await assert.rejects(guard.close());assert.equal(closeCalls,0);assert.equal(records.length,0);return;}
+        const pending=guard.close();let settled=false;const result=pending.then(()=>{settled=true;return null;},(e:Error)=>{settled=true;return e;});await Promise.resolve();assert.equal(settled,false);assert.equal(records.length,0);finish();const error=await result;
+        if(fault==='callback'){assert.ok(error);assert.equal(guard.closed(),false);assert.equal(records.length,0);}else{assert.equal(error,null);assert.equal(guard.closed(),true);assert.equal(records.length,1);assert.equal(records[0].port,port);assert.equal(records[0].after.state,'absent');assert.equal(records[0].after.acceptedConnections,0);if(allowed)assert.equal(records[0].before.state,'listening');}
+    });
+});
+
+test('Task4 dynamic browser origin refuses every other port including retained13081',async(t)=>{
+    const m=await load(),{EventEmitter}=await import('node:events');for(const port of [15439,25439])for(const requested of [port,13081,3080,port+1])await t.test(port+':'+requested,async()=>{
+        const ready=JSON.parse(GOLDEN_READY),context:any=new EventEmitter(),page:any=new EventEmitter();let handler:any,allowed=0,denied=0;context.route=async(_p:string,fn:any)=>{handler=fn;};context.routeWebSocket=async()=>{};
+        const fence=m.createTask4BrowserFenceV1(ready,()=>assert.fail('not product'),port);await fence.attach(context,page,'/');const request={method:()=> 'GET',url:()=> 'http://127.0.0.1:'+requested+'/api/overview'};context.emit('request',request);await handler({request:()=>request,continue:async()=>{allowed++;},abort:async()=>{denied++;}});
+        assert.equal(allowed,requested===port?1:0);assert.equal(denied,requested===port?0:1);if(requested!==port)await assert.rejects(fence.settle());
+    });
+});
+
+test('Task4 dynamic preflight binds both request port and original connected endpoint',async(t)=>{
+    const ts=await import('typescript'),vm=await import('node:vm'),{EventEmitter}=await import('node:events');
+    const source=readFileSync(new URL('../scripts/render-smoke-owned-fixture.mjs',import.meta.url),'utf8'),ast=ts.createSourceFile('owned.mjs',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS);const nodes=ast.statements.filter(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='task4PreflightHttpV1');assert.equal(nodes.length,1);
+    for(const port of [15439,25439])for(const endpoint of [port,13081,port+1])await t.test(port+':'+endpoint,async()=>{
+        const request:any=new EventEmitter(),response:any=new EventEmitter(),socket:any=new EventEmitter();request.end=()=>{};request.destroy=()=>{};response.destroy=()=>{};response.statusCode=200;response.headers={'content-type':'application/json; charset=utf-8'};response.complete=true;socket.remoteAddress='127.0.0.1';socket.remotePort=endpoint;let receive:any,timer:any;
+        const bindings={Buffer,RUN_IDS:['legacy','v3'],setTimeout:(fn:any,ms:number)=>{assert.equal(ms,8000);timer=fn;return 1;},clearTimeout:()=>{timer=null;},requestHttp:(options:any,fn:any)=>{assert.equal(options.host,'127.0.0.1');assert.equal(options.port,port);assert.equal(options.method,'GET');assert.equal(options.agent,false);receive=fn;return request;}};
+        const fn=vm.compileFunction(nodes[0].getText(ast)+'\nreturn task4PreflightHttpV1;',Object.keys(bindings))(...Object.values(bindings));const pending=fn(port).then((value:any)=>({value,error:null}),(error:Error)=>({error,value:null}));request.emit('socket',socket);socket.emit('connect');receive(response);response.emit('data',Buffer.from('{}'));response.emit('end');request.emit('close');socket.emit('close');const result=await pending;assert.equal(timer,null);if(endpoint===port)assert.equal(result.value.status,200);else assert.equal(result.error.message,'TASK4_NETWORK_REFUSED');
+    });
 });
