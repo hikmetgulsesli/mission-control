@@ -1024,6 +1024,10 @@ async function behavior(id, { page, context, state, loaded, capture, open, getPa
         await loaded('/scrape');
         await page.getByRole('button', { name: 'Clone This', exact: true }).click();
         await page.waitForURL(url => url.pathname === '/prd' && url.searchParams.get('title') === 'A101');
+        await page.waitForFunction(() => {
+            const descriptions = document.querySelectorAll('textarea[placeholder="Project description, requests, details..."]');
+            return descriptions.length === 1 && descriptions[0].value === 'A101 shopping application';
+        }, undefined, { timeout: 8000 });
         assert(await page.getByPlaceholder('Project description, requests, details...').inputValue() === 'A101 shopping application');
         await page.getByRole('button', { name: 'History', exact: true }).click();
         await page.locator('.prd-history-item').first().waitFor();
