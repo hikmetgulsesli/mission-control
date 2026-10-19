@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Root alone stages, commits, pushes and delivers. Only one implementation worker at a time.
+- Root alone stages, commits, pushes and delivers. Only one implementation worker per repository at a time; disjoint Setfarm and Mission Control work may proceed in parallel with frozen shared contracts and Root-serialized delivery.
 - Preserve existing English source/UI copy; design Turkish terms are conceptual English equivalents, never guard exceptions.
 - Preserve every technical destination, bookmarks, Office state, shell and all eight RunDetail tabs.
 - Sans body15px; ordinary controls14–16px; mono only code/log/IDs; no blanket font-size !important rule.
@@ -27,7 +27,7 @@
 
 **Interfaces:** `NavigationItem` has id,label,group,href,shortcut?,external?,action?; export `NAVIGATION_GROUPS`, `NAVIGATION_ITEMS`, `resolveNavigationShortcut(event)`, `isNavigationItemActive(item,pathname)`. `resolveNavigationShortcut` returns `{type:'navigate',href:string}|{type:'shell'}|null`. `useNavigationPreferences` returns known favorite IDs and toggle; versioned storage is UI preference only. Registry includes `/controls` before its separate page lands, but do not deliver a broken route; Root integrates only after Controls task.
 
-- [ ] Add actual registry/shortcut/preference tests and SSR of real TabNav with MemoryRouter. Assert all retained URLs/groups/searchable labels, contextual run active state, Shell action and favorites filtering.
+- [x] Add actual registry/shortcut/preference tests and SSR of real TabNav with MemoryRouter. Assert all retained URLs/groups/searchable labels, contextual run active state, Shell action and favorites filtering.
 
 ```ts
 assert.equal(resolveNavigationShortcut({key:'D',target:null} as KeyboardEvent)?.type, 'navigate');
@@ -35,9 +35,9 @@ assert.equal(resolveNavigationShortcut({key:'p',ctrlKey:true} as KeyboardEvent),
 assert.ok(NAVIGATION_ITEMS.some(x => x.href === '/agents'));
 ```
 
-- [ ] Run `node --import tsx --test tests/navigation.test.ts tests/navigation-render.test.tsx`; capture RED.
-- [ ] Implement standalone Overview and groups Work(`/setfarm`,`/setfarm/active`,`/live`), Projects(`/projects`,`/prd`), System(`/ops`,`/controls`,`/changelog`,explicit3333dashboard), Tools(`/office`,`/chat`,`/agents`,`/files`,`/scrape`,`/rules`,`/workflows`,`/tasks`,Shell), Usage(`/costs`,`/performance`); preserve `/perf` alias/contextual run URLs. Use button aria-expanded/focus and search input labels. Favorites persist safely with invalid/unknown-ID filtering. D/P case-insensitive; preserve0–9/R/L, skip inputs/select/contenteditable, IME and Ctrl/Meta/Alt. Escape closes shell and open menu. Office remains mounted/visible according to current semantics.
-- [ ] Run focused tests; record actual SSR coverage and later browser checks needed. Root commits `feat(nav): group tools with search and favorites`.
+- [x] Run `node --import tsx --test tests/navigation.test.ts tests/navigation-render.test.tsx`; capture RED.
+- [x] Implement standalone Overview and groups Work(`/setfarm`,`/setfarm/active`,`/live`), Projects(`/projects`,`/prd`), System(`/ops`,`/controls`,`/changelog`,explicit3333dashboard), Tools(`/office`,`/chat`,`/agents`,`/files`,`/scrape`,`/rules`,`/workflows`,`/tasks`,Shell), Usage(`/costs`,`/performance`); preserve `/perf` alias/contextual run URLs. Use button aria-expanded/focus and search input labels. Favorites persist safely with invalid/unknown-ID filtering. D/P case-insensitive; preserve0–9/R/L, skip inputs/select/contenteditable, IME and Ctrl/Meta/Alt. Escape closes shell and open menu. Office remains mounted/visible according to current semantics.
+- [x] Run focused tests; record actual SSR coverage and later browser checks needed. Root commits `feat(nav): group tools with search and favorites`.
 
 ### Task 2: Readability, restrained theme and responsive roster
 

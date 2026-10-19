@@ -1,6 +1,6 @@
 # Controls Mission Control Consumer and UI Regression Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Root is the sole delivery owner; execute one implementation worker at a time and return reviewed diffs to root without staging, committing, pushing, or deploying from a worker.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Root is the sole delivery owner; execute at most one implementation worker per repository at a time and return reviewed diffs to root without staging, committing, pushing, or deploying from a worker.
 
 **Goal:** Give the local operator working Controls launch, durable progress/reconnect/cancel, safe real evidence, and an isolated all-page UI regression runner with retained screenshots.
 
@@ -108,7 +108,7 @@ The production `ManualWorkerPortV1` executes only the captured exact compiled SF
 
 **Files:** Create `server/services/control-jobs.ts`, `controls-local-request.ts`, `control-evidence.ts`, `server/routes/controls.ts`; modify `server/services/fresh-installation-runtime.ts`, `server/app.ts`; test matching `server/services/*.test.ts` and `server/routes/controls.test.ts`.
 
-**Interfaces:** Consume paired SF fixed schemas, `readSelectedControlEvidenceV1(input)` and exact compiled worker `dist/cli/control-test-worker-v1.js`. Produce `ControlJobsV1` and GET/POST routes described above. The listener capability must be captured after `server.listen` by reading actual `server.address()`, not inferred from config or `req.socket.localAddress` alone. A production child receives nonce only over inherited IPC/descriptor and starts after durable intent and idempotency receipt publication.
+**Interfaces:** Consume paired SF fixed schemas, `readSelectedControlEvidenceV1(input)` and exact compiled worker `dist/cli/control-test-worker-v1.js`. Produce `ControlJobsV1` and GET/POST routes described above. The listener capability must be captured after `server.listen` by reading actual `server.address()`, not inferred from config or `req.socket.localAddress` alone. A production child receives nonce only over inherited IPC/descriptor and starts after durable intent and idempotency receipt publication. The private intent path is exactly selected `runtime/mission-control/controls/jobs/<jobId>/intent.json`, matching the SF spec registration reader; no caller path is accepted.
 
 - [ ] **Step 1: Write RED broker tests** using a temp selected directory and a fake `ManualWorkerPortV1` that counts effects. Core assertions:
 

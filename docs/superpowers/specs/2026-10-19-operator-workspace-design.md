@@ -12,7 +12,7 @@ User approval: “hepsini yapalm”, following the page-by-page audit and “Tü
 
 ## Non-negotiable constraints
 
-- Root alone stages, commits, pushes and delivers. Only one implementation worker at a time; writers are the selected linked worktrees. Do not build/edit the current live MC checkout during implementation.
+- Root alone stages, commits, pushes and delivers. Only one implementation worker per repository at a time; disjoint repository work may proceed in parallel with frozen shared contracts and Root-serialized delivery. Writers are the selected linked worktrees. Do not build/edit the current live MC checkout during implementation.
 - Live ports remain 3080/3333/18789. No provider calls, live state mutation or service restart for unit/UI fixtures. No new external dependency unless a concrete source need is established.
 - Preserve failed/cancelled records, all runtime/secret/admission guards and current DB authority. No generic shell runner or guard bypass. No published migration changes. ACL/credential effects require their own bounded authority audit.
 - The existing English source contract and English product copy remain. Turkish design terms are semantic labels, implemented with English equivalents; compiler prompts remain English. Secret values, private absolute paths and raw logs never enter client bundles/evidence responses.
