@@ -61,7 +61,7 @@ export function PixelOffice({ visible }: Props) {
   const [agentStates, setAgentStates] = useState<OfficeAgentState[]>([]);
   const [recentEvents, setRecentEvents] = useState<{ agent: string; text: string; time: number }[]>([]);
 
-  const { messages: wsEvents } = useWebSocket();
+  const { messages: wsEvents } = useWebSocket(active);
 
   // Create engine once, persist across navigations
   useEffect(() => {

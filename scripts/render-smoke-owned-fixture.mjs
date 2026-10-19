@@ -547,7 +547,6 @@ const requestRecipe = (pathId, target) => {
 const NETWORK_RECIPES = freeze({
     browser: [
         ...RENDER_ROUTES.map((route, index) => requestRecipe('page_' + index, route)),
-        requestRecipe('asset_js', '/assets/index-CHfhnR83.js'), requestRecipe('asset_css', '/assets/index-B3LCKtEj.css'),
         ...[
             ['overview', '/api/overview'], ['system', '/api/system'], ['pipeline', '/api/setfarm/pipeline'], ['kimi_quota', '/api/kimi-quota'],
             ['model_limits', '/api/model-limits'], ['quota', '/api/quota'], ['agents', '/api/agents'], ['activity', '/api/setfarm/activity?limit=50'],
@@ -559,15 +558,41 @@ const NETWORK_RECIPES = freeze({
             requestRecipe('product_' + index, `/api/setfarm/runs/${id}/product-build-authority`)]),
     ],
     mock: RUN_IDS.flatMap((id, index) => [requestRecipe('operational_' + index, `/api/runs/${id}/operational-snapshot`),
-        requestRecipe('model_' + index, `/api/runs/${id}/operational-model`), requestRecipe('product_' + index, `/api/runs/${id}/product-build-authority`)]),
+        requestRecipe('model_' + index, `/api/runs/${id}/operational-model`), requestRecipe('product_' + index, `/api/runs/${id}/product-build-authority`),
+        requestRecipe('supervisor_' + index, `/api/runs/${id}/supervisor`)]),
 });
-export function task4NetworkRecipesV1() { return NETWORK_RECIPES; }
+export function task4NetworkRecipesV1(measuredBuild) {
+    try {
+        requireValue(measuredBuild?.files instanceof Map);
+        const read = name => {
+            const file = measuredBuild.files.get(name);
+            requireValue(file && Buffer.isBuffer(file.bytes) && file.bytes.length > 0 && file.bytes.length <= 16777216 && hash(file.bytes) === file.hash);
+            return file.bytes;
+        };
+        const bytes = read('dist/index.html'), html = bytes.toString('utf8');
+        requireValue(bytes.length <= 65536 && Buffer.from(html).equals(bytes));
+        const scripts = [...html.matchAll(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi)];
+        const links = [...html.matchAll(/<link\b[^>]*>/gi)];
+        requireValue(scripts.length === 1 && links.length === 1 && (html.match(/<script\b/gi) ?? []).length === 1
+            && !/<(?:style|iframe|img|source|audio|video|object|embed|base)\b/i.test(html));
+        const js = /^<script type="module" crossorigin src="(\/assets\/index-[A-Za-z0-9_-]{8,64}\.js)"><\/script>$/.exec(scripts[0][0]);
+        const css = /^<link rel="stylesheet" crossorigin href="(\/assets\/index-[A-Za-z0-9_-]{8,64}\.css)">$/.exec(links[0][0]);
+        requireValue(js && css); read('dist' + js[1]); read('dist' + css[1]);
+        return freeze({ browser: [...NETWORK_RECIPES.browser.slice(0, RENDER_ROUTES.length),
+            requestRecipe('asset_js', js[1]), requestRecipe('asset_css', css[1]), ...NETWORK_RECIPES.browser.slice(RENDER_ROUTES.length)],
+            mock: [...NETWORK_RECIPES.mock] });
+    } catch { fail('TASK4_SOURCE_DRIFT'); }
+}
 export function task4MockResponseV1(method, target, sourceSha) {
     const recipe = NETWORK_RECIPES.mock.find(row => row.method === method && row.path + (row.query ? '?' + row.query : '') === target);
     if (!recipe) return null;
     const index = Number(recipe.pathId.slice(-1)), runId = RUN_IDS[index];
     let body, status = 200;
-    if (recipe.pathId.startsWith('operational_')) body = task4OperationalSnapshotV1(sourceSha, runId);
+    if (recipe.pathId.startsWith('supervisor_')) body = { available: false, runId, workdir: null, stateRoot: null, status: 'missing',
+        activeWorkers: [], activeFixers: [], storyCount: 0, openBlockers: 0, warnings: 0, resolved: 0, pendingInterventions: 0, checklistItems: 0, checklistPassed: 0,
+        visual: { available: false, status: 'missing', issueCount: 0, routesChecked: [], controlsChecked: 0, screenshots: [] },
+        artifacts: {}, recentEvents: [], candidateWorkdirs: [] };
+    else if (recipe.pathId.startsWith('operational_')) body = task4OperationalSnapshotV1(sourceSha, runId);
     else if (recipe.pathId.startsWith('model_')) body = task4OperationalModelV1(sourceSha, runId);
     else if (index === 0) { status = 409; body = { code: 'RUNTIME_PACKET_RUN_NOT_V3' }; }
     else body = task4SeedV1(sourceSha).productResponse;
@@ -953,8 +978,9 @@ export function createTask4FilesystemV1(ready, evidence) {
     const binding = task4ArtifactBindingV1(ready), inner = path.join(ready.setup.resourceRoot.path, 'inner');
     const roots = { server_home: 'server-home', server_runtime: 'server-runtime', native_home: 'home', native_profile: 'profile', native_tmp: 'tmp' };
     const snapshots = [], operations = [], first = new Map(), last = new Map(), pins = new Map(), checkpoints = [];
-    let before = null, after = null, tmpAfter = 'unknown', failed = false;
-    const guarded = action => { try { requireValue(!failed); return action(); } catch { failed = true; fail('TASK4_RESOURCE_REFUSED'); } };
+    let before = null, after = null, tmpAfter = 'unknown', failed = false, firstFailure = null;
+    let observation = { operation: 'initial', rootId: null, relative: null, kind: null };
+    const guarded = action => { try { requireValue(!failed); return action(); } catch { firstFailure ??= { ...observation }; failed = true; fail('TASK4_RESOURCE_REFUSED'); } };
     const readSync = () => {
         const file = path.join(inner, 'server-runtime/setfarm/mc-sync-state.json');
         if (!fs.existsSync(file)) return null;
@@ -966,6 +992,7 @@ export function createTask4FilesystemV1(ready, evidence) {
         return { sha256: pin.hash, bytes: pin.bytes.length, ...body };
     };
     const capture = (rootId, phase) => guarded(() => {
+        observation = { operation: 'capture', rootId: Object.hasOwn(roots, rootId) ? rootId : null, relative: null, kind: null };
         requireValue(Object.hasOwn(roots, rootId) && ['before_server', 'after_route', 'after_server_close'].includes(phase) && snapshots.length < 24
             && !last.has(rootId) && !(phase === 'before_server' && first.has(rootId)));
         const locator = path.join(inner, roots[rootId]), pin = captureTask4DirectoryV1(locator, true);
@@ -975,13 +1002,16 @@ export function createTask4FilesystemV1(ready, evidence) {
             const walk = directory => {
                 for (const name of fs.readdirSync(directory).sort()) {
                     requireValue(entries.length < 4096 && /^[\x21-\x7e ]+$/.test(name) && !name.includes('\\'));
-                    const file = path.join(directory, name), stat = fs.lstatSync(file, { bigint: true }), relative = path.relative(locator, file);
+                    const file = path.join(directory, name), relative = path.relative(locator, file);
+                    observation = { operation: 'walk', rootId, relative: relative.slice(0, 256), kind: null };
+                    const stat = fs.lstatSync(file, { bigint: true });
                     requireValue(stat.uid === BigInt(ready.setup.resourceRoot.uid));
                     const row = { relative, kind: stat.isSymbolicLink() ? 'symlink' : stat.isDirectory() ? 'directory' : 'file', uid: Number(stat.uid),
                         mode: Number(stat.mode & 0o777n), dev: String(stat.dev), ino: String(stat.ino), bytes: 0, sha256: null, linkHash: null };
                     if (row.kind === 'symlink') { const target = fs.readlinkSync(file); row.bytes = Buffer.byteLength(target); row.linkHash = hash(target);
                         const final = fs.lstatSync(file, { bigint: true }); requireValue(final.isSymbolicLink() && final.dev === stat.dev && final.ino === stat.ino && final.ctimeNs === stat.ctimeNs); }
                     else {
+                        observation = { ...observation, kind: row.kind };
                         requireValue(!(stat.mode & 0o022n));
                         if (row.kind === 'file') { requireValue(stat.isFile()); const observed = task4FileSnapshotV1(file, 536870912); row.bytes = observed.bytes.length; row.sha256 = observed.hash; }
                     }
@@ -993,11 +1023,15 @@ export function createTask4FilesystemV1(ready, evidence) {
                 requireValue(first.has(rootId)); const baseline = first.get(rootId).entries;
                 const mutable = name => rootId === 'server_runtime' && ['setfarm/mc-sync-state.json', 'setfarm/mc-sync-state.json.tmp'].includes(name);
                 for (const entry of entries) {
+                    observation = { operation: 'baseline_compare', rootId, relative: entry.relative.slice(0, 256), kind: entry.kind };
                     if (mutable(entry.relative)) { requireValue(entry.kind === 'file'); continue; }
                     if (rootId === 'server_runtime' && entry.relative === 'setfarm' && !baseline.some(row => row.relative === 'setfarm')) { requireValue(entry.kind === 'directory'); continue; }
                     const previous = baseline.find(row => row.relative === entry.relative); requireValue(previous && task4CanonicalV1(previous) === task4CanonicalV1(entry));
                 }
-                for (const entry of baseline) if (!mutable(entry.relative)) requireValue(entries.some(row => task4CanonicalV1(row) === task4CanonicalV1(entry)));
+                for (const entry of baseline) if (!mutable(entry.relative)) {
+                    observation = { operation: 'baseline_compare', rootId, relative: entry.relative.slice(0, 256), kind: entry.kind };
+                    requireValue(entries.some(row => task4CanonicalV1(row) === task4CanonicalV1(entry)));
+                }
             }
             const at = new Date().toISOString(), value = { schema: 'mission-control.task4-filesystem-snapshot.v1', ...binding, rootId, rootPin: pin.value, at, entries };
             const ref = evidence.put(value); snapshots.push({ seq: snapshots.length + 1, phase, at, rootId, rootPin: pin.value, entries: ref });
@@ -1007,6 +1041,7 @@ export function createTask4FilesystemV1(ready, evidence) {
         } finally { pin.close(); }
     });
     return Object.freeze({ capture,
+        diagnostics() { return freeze({ firstFailure: firstFailure ? { ...firstFailure } : null }); },
         checkpoint(route) { return guarded(() => {
             requireValue(RENDER_ROUTES.includes(route) && checkpoints.length < 24); const state = readSync(); requireValue(state);
             const at = new Date().toISOString(); requireValue(at >= state.savedAt); checkpoints.push({ ...state, at, route }); return freeze(state);
@@ -1038,27 +1073,36 @@ function task4BoundedV1(promise, milliseconds, code) {
     let timer;
     return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(Error(code)), milliseconds); })]).finally(() => clearTimeout(timer));
 }
-export function createTask4BrowserFenceV1(ready, parseProductBuildAuthorityV2, serverPort) {
+export function createTask4BrowserFenceV1(ready, parseProductBuildAuthorityV2, serverPort, recipes) {
     integer(serverPort, 1024, 65535); requireValue(![3080, 3333, 5432, 13081, 18789, ready.setup.postgres.port].includes(serverPort), 'TASK4_NETWORK_REFUSED');
     const rows = [], requests = new Map(), seen = new Set(), ended = new Set(), pending = new Set(), consoleErrors = [], legacyResponses = [], products = new Map();
-    let failed = false, contexts = 0, installedAt = null, requestId = 0;
+    let failed = false, contexts = 0, installedAt = null, requestId = 0, version = 0;
+    const waiters = new Set(), events = []; let firstFailure = null;
+    const changed = () => { version++; for (const wake of [...waiters]) wake(); };
+    const failure = (reason, request = null, status = null) => {
+        failed = true;
+        const row = request ? requests.get(request) : null;
+        const event = { seq: events.length + 1, at: new Date().toISOString(), reason, requestId: row?.requestId ?? null, pathId: row?.pathId ?? null,
+            status: Number.isSafeInteger(status) && status >= 100 && status <= 599 ? status : null };
+        firstFailure ??= event; if (events.length < 128) events.push(event); changed();
+    };
     const origin = 'http://127.0.0.1:' + serverPort;
     const legacyBody = JSON.stringify({ status: 'unavailable', code: 'SETFARM_PRODUCT_BUILD_AUTHORITY_NOT_READY', reason: 'not_ready', upstreamStatus: 409, upstreamCode: 'RUNTIME_PACKET_RUN_NOT_V3' });
-    const append = value => { if (rows.length >= 4096) { failed = true; return; } rows.push({ seq: rows.length + 1, ...value }); };
-    const routeRecipe = request => NETWORK_RECIPES.browser.find(row => row.method === request.method() && request.url() === origin + row.path + (row.query ? '?' + row.query : ''));
-    const track = action => {
-        const promise = Promise.resolve().then(action).catch(() => { failed = true; }).finally(() => pending.delete(promise));
-        pending.add(promise);
+    const append = value => { if (rows.length >= 4096) { failure('row_cap'); return; } rows.push({ seq: rows.length + 1, ...value }); changed(); };
+    const routeRecipe = request => recipes.browser.find(row => row.method === request.method() && request.url() === origin + row.path + (row.query ? '?' + row.query : ''));
+    const track = (response, action) => {
+        const promise = Promise.resolve().then(action).catch(() => { failure('response_validation', response.request(), response.status()); }).finally(() => { pending.delete(promise); changed(); });
+        pending.add(promise); changed();
     };
     return Object.freeze({
         async attach(context, page, route) {
             requireValue(!failed && RENDER_ROUTES.includes(route) && contexts < 6, 'TASK4_NETWORK_REFUSED'); const contextId = ++contexts;
-            context.on('request', request => { if (seen.size >= 4096) failed = true; else seen.add(request); });
+            context.on('request', request => { if (seen.size >= 4096) failure('request_cap'); else seen.add(request); changed(); });
             context.on('requestfailed', request => {
-                failed = true; const row = requests.get(request); if (!row || ended.has(request)) return;
+                failure('request_failed', request); const row = requests.get(request); if (!row || ended.has(request)) return;
                 ended.add(request); append({ ...row, at: new Date().toISOString(), stage: 'failed', decision: 'observe', status: null, bodyHash: null, failureCode: 'request_failed' });
             });
-            context.on('response', response => track(async () => {
+            context.on('response', response => track(response, async () => {
                 const request = response.request(), row = requests.get(request);
                 requireValue(row && !ended.has(request) && response.url() === request.url());
                 const bytes = await response.body(); requireValue(Buffer.isBuffer(bytes) && bytes.length <= 16777216);
@@ -1076,35 +1120,56 @@ export function createTask4BrowserFenceV1(ready, parseProductBuildAuthorityV2, s
                 }
                 ended.add(request); append({ ...row, at: new Date().toISOString(), stage: 'response', decision: 'observe', status, bodyHash, failureCode: null });
             }));
-            page.on('pageerror', () => { failed = true; });
+            page.on('pageerror', () => { failure('page_error'); });
             page.on('console', message => {
                 if (message.type() !== 'error' && !/uncaught|typeerror|referenceerror|react minified error/i.test(message.text())) return;
-                if (consoleErrors.length >= 128) { failed = true; return; }
-                consoleErrors.push({ route, text: message.text(), url: message.location().url });
+                if (consoleErrors.length >= 128) { failure('console_cap'); return; }
+                const expected = message.text() === 'Failed to load resource: the server responded with a status of 409 (Conflict)';
+                consoleErrors.push({ route, expected, urlHash: hash(message.location().url) });
+                if (!expected) failure('console_error'); else changed();
             });
             await context.route('**/*', async routeHandle => {
                 const request = routeHandle.request(), recipe = routeRecipe(request);
-                if (requests.has(request) || requestId >= 4096) { failed = true; await routeHandle.abort('blockedbyclient'); return; }
+                if (requests.has(request) || requestId >= 4096) { failure('duplicate_or_cap', request); await routeHandle.abort('blockedbyclient'); return; }
                 const row = { requestId: ++requestId, contextId, route, at: new Date().toISOString(), stage: 'intercept', method: ['GET', 'HEAD'].includes(request.method()) ? request.method() : 'OTHER',
                     target: request.url().startsWith(origin + '/') ? 'mc' : 'other', pathId: recipe?.pathId ?? null, urlHash: hash(request.url()), decision: recipe ? 'continue' : 'abort', status: null, bodyHash: null, failureCode: recipe ? null : 'blocked_by_fixture' };
                 requests.set(request, row); append(row);
-                if (!recipe) { failed = true; await routeHandle.abort('blockedbyclient'); return; }
-                try { await routeHandle.continue(); } catch { failed = true; }
+                if (!recipe) { failure('request_denied', request); await routeHandle.abort('blockedbyclient'); return; }
+                try { await routeHandle.continue(); } catch { failure('continue_failed', request); }
             });
-            await context.routeWebSocket('**/*', socket => { failed = true; socket.close(); });
+            await context.routeWebSocket('**/*', socket => { failure('websocket'); socket.close(); });
             installedAt ??= new Date().toISOString();
         },
         async settle() {
+            const deadline = Date.now() + 8000;
             try {
-                const deadline = Date.now() + 8000;
-                while (pending.size) await task4BoundedV1(Promise.all([...pending]), Math.max(1, deadline - Date.now()), 'TASK4_NETWORK_REFUSED');
-                requireValue(!failed && requests.size === seen.size && [...seen].every(request => requests.has(request)) && requests.size === ended.size);
+                for (;;) {
+                    requireValue(!failed && Date.now() < deadline);
+                    const observedVersion = version;
+                    if (pending.size === 0 && requests.size > 0 && requests.size === seen.size
+                        && [...seen].every(request => requests.has(request)) && requests.size === ended.size) break;
+                    await new Promise((resolve, reject) => {
+                        let timer;
+                        const wake = () => { clearTimeout(timer); waiters.delete(wake); resolve(); };
+                        waiters.add(wake);
+                        timer = setTimeout(() => { waiters.delete(wake); failure('settlement_timeout'); reject(Error('TASK4_NETWORK_REFUSED')); }, Math.max(1, deadline - Date.now()));
+                        if (version !== observedVersion || failed) wake();
+                    });
+                }
                 const unused = [...legacyResponses];
                 for (const error of consoleErrors) {
-                    requireValue(error.text === 'Failed to load resource: the server responded with a status of 409 (Conflict)');
-                    const match = unused.findIndex(row => row.url === error.url && row.route === error.route); requireValue(match >= 0); unused.splice(match, 1);
+                    requireValue(error.expected);
+                    const match = unused.findIndex(row => hash(row.url) === error.urlHash && row.route === error.route); requireValue(match >= 0); unused.splice(match, 1);
                 }
-            } catch { failed = true; fail('TASK4_NETWORK_REFUSED'); }
+                requireValue(!failed && Date.now() < deadline);
+            } catch { if (!failed) failure('settlement_validation'); fail('TASK4_NETWORK_REFUSED'); }
+        },
+        diagnostics() {
+            const open = [...requests].filter(([request]) => !ended.has(request));
+            return freeze({ firstFailure: firstFailure ? { ...firstFailure } : null, events: events.map(event => ({ ...event })),
+                counts: { seen: seen.size, intercepted: requests.size, ended: ended.size, pendingBodies: pending.size, open: open.length, eventsTruncated: events.length === 128 },
+                openRequests: open.slice(0, 32).map(([request, row]) => ({ requestId: row.requestId, contextId: row.contextId, pathId: row.pathId,
+                    method: row.method, urlHash: row.urlHash, url: row.pathId ? request.url().slice(0, 512) : null })) });
         },
         product(route) { return products.has(route) ? structuredClone(products.get(route)) : null; },
         value() { return freeze({ browserInstalledAt: installedAt, browser: structuredClone(rows), complete: !failed && installedAt !== null && pending.size === 0 && requests.size > 0 && requests.size === ended.size && requests.size === seen.size }); },
@@ -1143,6 +1208,7 @@ function task4ServerEnvironmentV1(context, mockPort, serverPort) {
     requireValue(context.ready !== null && context.ready !== undefined, 'TASK4_BINDING_REFUSED');
     const ready = context.ready, inner = path.join(ready.setup.resourceRoot.path, 'inner'), home = path.join(inner, 'server-home'), runtime = path.join(inner, 'server-runtime');
     return { HOME: home, TMPDIR: path.join(runtime, 'tmp'), PATH: path.join(home, 'bin'), LANG: 'C', LC_ALL: 'C', TZ: 'UTC',
+        MC_TASK6A_SELECTED_CLI_NO_SPAWN_V1: '1',
         MC_HOST: '127.0.0.1', MC_PORT: String(serverPort), SETFARM_URL: 'http://127.0.0.1:' + mockPort,
         SETFARM_PG_URL: ready.database.restrictedUrl, PGAPPNAME: 'task4_mc_' + ready.executionId,
         SETFARM_DIR: path.join(runtime, 'setfarm'), SETFARM_REPO_DIR: ready.projection.root.path,
@@ -1180,10 +1246,24 @@ async function runTask4PagesV1(context, state) {
             if (product) product.catch(() => {});
             const response = await page.goto('http://127.0.0.1:' + state.serverPort + route, { waitUntil: 'domcontentloaded', timeout: 8000 });
             requireValue(response && response.status() === 200, 'TASK4_ASSERTION_FAILED');
-            await page.waitForFunction(() => {
-                const root = document.querySelector('#root');
-                return root && (root.textContent ?? '').trim().length >= 40 && root.querySelectorAll('a,button,input,select,textarea').length >= 2;
-            });
+            await page.waitForFunction(({ index, runIds }) => {
+                const visible = element => {
+                    const box = element.getBoundingClientRect(), style = getComputedStyle(element);
+                    return box.width > 0 && box.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+                };
+                const unique = selector => { const rows = [...document.querySelectorAll(selector)].filter(visible); return rows.length === 1 ? rows[0] : null; };
+                if ([...document.querySelectorAll('.page-loading, .page-error')].some(visible)) return false;
+                if (index === 0) return Boolean(unique('.overview') && unique('.overview .stat-cards'));
+                if (index === 1) return Boolean(unique('.af-page') && [...document.querySelectorAll('.af-pipeline__header')].filter(visible).length === 2);
+                if (index === 3) {
+                    const buttons = [...document.querySelectorAll('.projects-page__actions button')].filter(visible);
+                    return Boolean(unique('.projects-page') && unique('.projects-grid') && buttons.length === 4 && buttons.every(button => !button.disabled));
+                }
+                const run = unique('.run-detail-page'), id = unique('.rd-meta > span:first-child');
+                const expected = index === 2 ? runIds : [runIds[index - 4]];
+                return Boolean(run && id && expected.some(value => id.textContent.trim() === '#' + value.slice(0, 8))
+                    && [...document.querySelectorAll('.rd-tabs .rd-tab')].filter(visible).length === 8 && unique('.rd-content'));
+            }, { index, runIds: RUN_IDS });
             if (product) { const observed = await product; requireValue(await observed.finished() === null, 'TASK4_NETWORK_REFUSED'); }
             row.dom = await task4BoundedV1(page.evaluate(() => {
                 const root = document.querySelector('#root'), bounds = root?.getBoundingClientRect();
@@ -1203,11 +1283,14 @@ async function runTask4PagesV1(context, state) {
         } catch (error) {
             failure = error; row.status = 'fail'; row.code = /^TASK4_[A-Z_]+$/.test(error.message) ? error.message : 'TASK4_ASSERTION_FAILED';
             state.render.stop = { kind: 'failure', afterRoute: route };
+            task4RecordFailureV1(state, error);
+            retainTask4FailureDiagnosticsV1(context, state, 'network-failure-before-close');
         } finally {
             if (ownedContext) {
                 try { await task4BoundedV1(ownedContext.close(), 8000, 'TASK4_CLEANUP_UNKNOWN'); state.contexts.closed++; state.contexts.pending--; }
                 catch { failure = Error('TASK4_CLEANUP_UNKNOWN'); state.render.stop = { kind: 'unknown', afterRoute: route }; }
             }
+            if (failure) retainTask4FailureDiagnosticsV1(context, state, 'network-failure-after-close');
         }
         if (failure) throw failure;
         state.render.stop = { kind: 'complete', afterRoute: route };
@@ -1218,6 +1301,16 @@ async function runTask4PagesV1(context, state) {
             state.cancelled = true; state.render.stop.kind = 'cancelled'; fail('TASK4_CANCELLED');
         }
     }
+}
+
+function retainTask4FailureDiagnosticsV1(context, state, stage) {
+    try {
+        requireValue(['network-failure-before-close', 'network-failure-after-close', 'filesystem-failure'].includes(stage), 'TASK4_RESULT_PUBLICATION_FAILED');
+        const observation = stage === 'filesystem-failure' ? state.filesystem.diagnostics() : state.fence.diagnostics();
+        task4PrivateBytesV1(path.join(state.inner, 'originals'), stage + '.json', Buffer.from(task4CanonicalV1({
+            schema: 'mission-control.task4-private-failure-diagnostic.v1', ...task4ArtifactBindingV1(context.ready),
+            at: new Date().toISOString(), stage, observation }) + '\n'));
+    } catch (error) { task4RecordFailureV1(state, Error('TASK4_RESULT_PUBLICATION_FAILED')); }
 }
 
 async function startTask4MockV1(context, evidence, ownerState) {
@@ -1422,7 +1515,7 @@ async function runTask4InnerV1(context) {
         await runTask4PreflightV1(context, state);
         state.native = prepareTask4NativeV1(context, state);
         state.browser = await state.native.launch();
-        state.fence = createTask4BrowserFenceV1(context.ready, state.parser, state.serverPort);
+        state.fence = createTask4BrowserFenceV1(context.ready, state.parser, state.serverPort, state.networkRecipes);
         await runTask4PagesV1(context, state);
     } catch (error) { task4RecordFailureV1(state, error); }
     finally {
@@ -1516,6 +1609,7 @@ async function prepareTask4InnerResourcesV1(context) {
         rootPin.sync(); authenticated.check();
         const pins = { check() { authenticated.check(); rootPin.check(); }, close() { rootPin.close(); authenticated.close(); } };
         return { inner, pins, evidence, filesystem, startedAt: new Date().toISOString(), jobId: randomUUID(), errors: [], integrity: 'verified', cleanupUnknown: false,
+            networkRecipes: task4NetworkRecipesV1(context.build),
             contexts: { opened: 0, closed: 0, pending: 0 }, readers: { opened: 0, closed: 0, pending: 0 }, observations: {}, cancelled: false,
             sql: null, mock: null, server: null, native: null, browser: null, fence: null, parser: null, proxy: null,
             nativeCleanup: { browser: 'not_started', children: [] },
@@ -1619,6 +1713,7 @@ async function finalizeTask4InnerV1(context, state) {
         for (const rootId of ['server_home', 'server_runtime', 'native_home', 'native_profile', 'native_tmp']) {
             try { state.filesystem.capture(rootId, 'after_server_close'); } catch (error) { task4RecordFailureV1(state, error, true); }
         }
+        if (state.filesystem.diagnostics().firstFailure) retainTask4FailureDiagnosticsV1(context, state, 'filesystem-failure');
         const filesystem = state.filesystem.value(), filesystemRef = state.evidence.put(filesystem); state.render.filesystem = filesystemRef;
         const network = buildTask4NetworkV1(context, state); state.render.network = state.evidence.put(network);
         const observations = { before: null, after: null };
@@ -1775,7 +1870,7 @@ function buildTask4NetworkV1(context, state) {
     let server = null; try { server = state.server?.binding() ?? null; } catch { /* Missing original binding cannot qualify the ledger. */ }
     const browser = state.fence?.value() ?? { browserInstalledAt: null, browser: [], complete: false };
     return freeze({ schema: 'mission-control.task4-network-ledger.v1', ...task4ArtifactBindingV1(context.ready),
-        policy: { recipeHash: hash(task4CanonicalV1(NETWORK_RECIPES)), browserInstalledAt: browser.browserInstalledAt,
+        policy: { recipeHash: hash(task4CanonicalV1(state.networkRecipes)), browserInstalledAt: browser.browserInstalledAt,
             serverPolicyHash: state.policyHash ?? null, serverLaunchRef: server?.observed ?? null },
         browser: browser.browser, mock: state.mock?.rows() ?? [],
         osFence: { coverage: 'server_launch_policy_bound_parent_probe_required', policyHash: state.policyHash ?? null, launcherHash: state.launcherHash ?? null,

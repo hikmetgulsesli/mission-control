@@ -707,7 +707,7 @@ test('Task4 browser fence registers before navigation and pairs exact original r
     const ready = JSON.parse(GOLDEN_READY), context = new EventEmitter() as any, page = new EventEmitter() as any;
     let callback: any, websocket: any; context.route = async (pattern: string, fn: any) => { assert.equal(pattern, '**/*'); callback = fn; };
     context.routeWebSocket = async (_pattern: string, fn: any) => { websocket = fn; };
-    const fence = m.createTask4BrowserFenceV1(ready, parseProductBuildAuthorityV2, 15439); await fence.attach(context, page, '/');
+    const fence = m.createTask4BrowserFenceV1(ready, parseProductBuildAuthorityV2, 15439, m.task4NetworkRecipesV1(pass6MeasuredBuild())); await fence.attach(context, page, '/');
     assert.equal(typeof callback, 'function'); assert.equal(typeof websocket, 'function');
     const request = { method: () => 'GET', url: () => 'http://127.0.0.1:15439/api/overview' }; let continued = 0;
     context.emit('request', request); await callback({ request: () => request, continue: async () => { continued++; }, abort: async () => assert.fail('known request') });
@@ -726,7 +726,7 @@ test('Task4 browser legacy409 budget requires exact route/body and refuses opera
         const ready = JSON.parse(GOLDEN_READY), context = new EventEmitter() as any, page = new EventEmitter() as any; let callback: any;
         context.route = async (_p: string, fn: any) => { callback = fn; }; context.routeWebSocket = async () => {};
         const route = '/setfarm/runs/ac8cea43-7686-4d27-8092-1e3dd9207ca4', url = 'http://127.0.0.1:15439/api/setfarm/runs/ac8cea43-7686-4d27-8092-1e3dd9207ca4/' + (mode === 'operational404' ? 'operational-snapshot' : 'product-build-authority');
-        const fence = m.createTask4BrowserFenceV1(ready, parseProductBuildAuthorityV2, 15439); await fence.attach(context, page, route);
+        const fence = m.createTask4BrowserFenceV1(ready, parseProductBuildAuthorityV2, 15439, m.task4NetworkRecipesV1(pass6MeasuredBuild())); await fence.attach(context, page, route);
         const request = { method: () => 'GET', url: () => url }; context.emit('request', request); await callback({ request: () => request, continue: async () => {}, abort: async () => assert.fail('registered path') });
         const body = JSON.stringify({ status: 'unavailable', code: 'SETFARM_PRODUCT_BUILD_AUTHORITY_NOT_READY', reason: mode === 'wrong_body' ? 'other' : 'not_ready', upstreamStatus: 409, upstreamCode: 'RUNTIME_PACKET_RUN_NOT_V3' });
         context.emit('response', { request: () => request, url: () => url, status: () => mode === 'operational404' ? 404 : 409, body: async () => Buffer.from(body) });
@@ -769,7 +769,7 @@ test('Task4 six-route runtime retains first completed screenshot before owned fa
     const ts = await import('typescript'), vm = await import('node:vm'), m = await load();
     const source = readFileSync(new URL('../scripts/render-smoke-owned-fixture.mjs', import.meta.url), 'utf8'), ast = ts.createSourceFile('fixture.mjs', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
     const nodes = ast.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === 'runTask4PagesV1'); assert.equal(nodes.length, 1);
-    const routes = m.task4NetworkRecipesV1().browser.filter((r: any) => r.pathId.startsWith('page_')).map((r: any) => r.path);
+    const routes = m.task4NetworkRecipesV1(pass6MeasuredBuild()).browser.filter((r: any) => r.pathId.startsWith('page_')).map((r: any) => r.path);
     for (const scenario of ['pass', 'assertion_failure', 'owned_cancel', 'bad_dom', 'close_failure']) await t.test(scenario, async () => {
         const events: string[] = [], rows: any[] = [], state: any = { serverPort:15439, browser: { newContext: async (options: any) => {
             assert.deepEqual(options, { viewport: { width: 1440, height: 950 }, deviceScaleFactor: 1, serviceWorkers: 'block' });
@@ -781,7 +781,8 @@ test('Task4 six-route runtime retains first completed screenshot before owned fa
         } }, native: { census: async () => { events.push('census'); } }, fence: { attach: async () => { events.push('fence'); }, settle: async () => {}, product: () => ({ status: 200 }) },
         filesystem: { capture: () => {}, checkpoint: () => {} }, evidence: { png: () => { const ref = { sha256: hash(String(rows.length)), bytes: 3 }; rows.push(ref); return ref; } },
         contexts: { opened: 0, closed: 0, pending: 0 }, render: { routes: routes.map((route: string) => ({ route, status: 'not_started', code: null, screenshot: null, dom: null, productResponse: null })), stop: { kind: 'unknown', afterRoute: null } }, cancelled: false };
-        const bindings = { RENDER_ROUTES: routes, requireValue: (v: unknown, code: string) => { if (!v) throw Error(code); },
+        const bindings = { RENDER_ROUTES: routes, RUN_IDS: ['ac8cea43-7686-4d27-8092-1e3dd9207ca4', 'ad47fe65-4ec4-4fb5-89da-fff71eb4e79a'],
+            task4RecordFailureV1() {}, retainTask4FailureDiagnosticsV1() {}, requireValue: (v: unknown, code: string) => { if (!v) throw Error(code); },
             fail: (code: string) => { throw Error(code); }, task4BoundedV1: (p: Promise<any>) => p };
         const fn = vm.compileFunction(nodes[0].getText(ast) + '\nreturn runTask4PagesV1;', Object.keys(bindings))(...Object.values(bindings));
         const ctx = { scenario: ['bad_dom', 'close_failure'].includes(scenario) ? 'pass' : scenario, check() {} };
@@ -804,7 +805,7 @@ test('Task4 mock runtime records actual request finish and original socket close
     server.listening = false; server.listen = (_options: any, cb: any) => { server.listening = true; cb(); }; server.address = () => server.listening ? { address: '127.0.0.1', family: 'IPv4', port: 15433 } : null;
     server.close = (cb: any) => { server.listening = false; closeCallback = cb; };
     const bindings = { createHttpServer: (fn: any) => { handler = fn; return server; }, task4ArtifactBindingV1: () => ({}),
-        task4MockResponseV1: m.task4MockResponseV1, NETWORK_RECIPES: m.task4NetworkRecipesV1(), hash,
+        task4MockResponseV1: m.task4MockResponseV1, NETWORK_RECIPES: m.task4NetworkRecipesV1(pass6MeasuredBuild()), hash,
         requireValue: (v: unknown, code = 'TASK4_NETWORK_REFUSED') => { if (!v) throw Error(code); }, fail: (code: string) => { throw Error(code); },
         task4BoundedV1: (p: Promise<any>) => p, freeze: (v: any) => v };
     const fn = vm.compileFunction(nodes[0].getText(ast) + '\nreturn startTask4MockV1;', Object.keys(bindings))(...Object.values(bindings));
@@ -947,11 +948,11 @@ test('Task4 inner resource preparation creates only fixed private roots after pi
     let pinned = false, refused = true; const ready = JSON.parse(GOLDEN_READY); ready.setup.resourceRoot.path = root;
     const bindings = { fs, path, hash, captureTask4DirectoryV1: m.captureTask4DirectoryV1, captureTask4FileV1: m.captureTask4FileV1,
         captureTask4InnerPinsV1: async () => { if (refused) throw Error('TASK4_BINDING_REFUSED'); pinned = true; return { check() { assert.equal(pinned, true); }, close() {} }; },
-        createTask4EvidenceV1: m.createTask4EvidenceV1, createTask4FilesystemV1: m.createTask4FilesystemV1,
-        task4ArtifactBindingV1: () => ({}), randomUUID: () => '12345678-1234-4234-8234-123456789012', RENDER_ROUTES: m.task4NetworkRecipesV1().browser.filter((r: any) => r.pathId.startsWith('page_')).map((r: any) => r.path),
+        createTask4EvidenceV1: m.createTask4EvidenceV1, createTask4FilesystemV1: m.createTask4FilesystemV1, task4NetworkRecipesV1: m.task4NetworkRecipesV1,
+        task4ArtifactBindingV1: () => ({}), randomUUID: () => '12345678-1234-4234-8234-123456789012', RENDER_ROUTES: m.task4NetworkRecipesV1(pass6MeasuredBuild()).browser.filter((r: any) => r.pathId.startsWith('page_')).map((r: any) => r.path),
         requireValue: (v: unknown, c: string) => { if (!v) throw Error(c); } };
     const fn = vm.compileFunction(nodes.map(n => n.getText(ast)).join('\n') + '\nreturn prepareTask4InnerResourcesV1;', Object.keys(bindings))(...Object.values(bindings));
-    const context = { ready, modules: { native: { createUiArtifactStoreV1 } } };
+    const context = { ready, build: pass6MeasuredBuild(), modules: { native: { createUiArtifactStoreV1 } } };
     try {
         await assert.rejects(fn(context), /TASK4_BINDING_REFUSED/); assert.deepEqual(fs.readdirSync(root), []);
         refused = false; const state = await fn(context); assert.ok(pinned); assert.equal(state.render.routes.length, 6);
@@ -1051,7 +1052,7 @@ test('Task4 final settlement retains partial PNGs and never upgrades late integr
         let closedPins = 0; const state: any = { startedAt: '2026-10-19T09:00:01.000Z', jobId: '12345678-1234-4234-8234-123456789012', errors: [], integrity: 'verified', cleanupUnknown: mode === 'cleanup_unknown',
             pins: { check() { if (mode === 'late_integrity') throw Error('TASK4_SOURCE_DRIFT'); }, close() { closedPins++; } },
             evidence: { put, inventory: () => ({ json: values.map(v => ({ sha256: hash(m.task4CanonicalV1(v) + '\n'), bytes: Buffer.byteLength(m.task4CanonicalV1(v) + '\n') })).sort((a, b) => a.sha256.localeCompare(b.sha256)), png: [png], native: [], totalBytes: 100 }) },
-            filesystem: { capture() {}, value: () => ({ complete: true, syncState: { before: null, after: { sha256: 'f'.repeat(64) } } }) },
+            filesystem: { capture() {}, diagnostics: () => ({ firstFailure: null }), value: () => ({ complete: true, syncState: { before: null, after: { sha256: 'f'.repeat(64) } } }) },
             observations: { before: { observedAt: '2026-10-19T09:00:01.000Z' }, after: { observedAt: '2026-10-19T09:00:02.000Z' } },
             readers: { opened: 1, closed: 1, pending: 0 }, contexts: { opened: 1, closed: 1, pending: 0 },
             nativeCleanup: { browser: 'closed', children: [] }, mock: { cleanup: () => ({ state: 'closed' }) }, server: { snapshot: () => ({ state: 'closed' }) },
@@ -1195,13 +1196,13 @@ test('Task4 network assembly requires real closure counters, original policy rec
     const text = readFileSync(new URL('../scripts/render-smoke-owned-fixture.mjs', import.meta.url), 'utf8'), ast = ts.createSourceFile('fixture.mjs', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
     const nodes = ast.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === 'buildTask4NetworkV1'); assert.equal(nodes.length, 1);
     const ready = JSON.parse(GOLDEN_READY), owner = ready.fixtureOwner, ref = { sha256: 'a'.repeat(64), bytes: 1 };
-    let closed = true; const state: any = { policyHash: 'b'.repeat(64), launcherHash: 'c'.repeat(64), probe: ref, proxy: ref,
+    let closed = true; const state: any = { networkRecipes: m.task4NetworkRecipesV1(pass6MeasuredBuild()), policyHash: 'b'.repeat(64), launcherHash: 'c'.repeat(64), probe: ref, proxy: ref,
         server: { binding: () => ({ observed: ref, owner }) }, mock: { rows: () => [{ finished: true, closed }], complete: () => closed },
         fence: { value: () => ({ browserInstalledAt: '2026-10-19T09:00:01.000Z', browser: [{ seq: 1 }], complete: true }) } };
-    const bindings = { hash, task4CanonicalV1: m.task4CanonicalV1, NETWORK_RECIPES: m.task4NetworkRecipesV1(), task4ArtifactBindingV1: () => ({}), freeze: (v: any) => v };
+    const bindings = { hash, task4CanonicalV1: m.task4CanonicalV1, NETWORK_RECIPES: m.task4NetworkRecipesV1(pass6MeasuredBuild()), task4ArtifactBindingV1: () => ({}), freeze: (v: any) => v };
     const fn = vm.compileFunction(nodes[0].getText(ast) + '\nreturn buildTask4NetworkV1;', Object.keys(bindings))(...Object.values(bindings));
     const result = fn({ ready }, state); assert.equal(result.complete, true); assert.equal(result.policy.serverLaunchRef, ref); assert.equal(result.osFence.serverOwner, owner);
-    assert.equal(result.osFence.actualAllowed.proxy, ref); assert.equal(result.policy.recipeHash, hash(m.task4CanonicalV1(m.task4NetworkRecipesV1())));
+    assert.equal(result.osFence.actualAllowed.proxy, ref); assert.equal(result.policy.recipeHash, hash(m.task4CanonicalV1(m.task4NetworkRecipesV1(pass6MeasuredBuild()))));
     closed = false; assert.equal(fn({ ready }, state).complete, false); closed = true; state.probe = null; assert.equal(fn({ ready }, state).complete, false);
 });
 
@@ -1916,7 +1917,7 @@ test('Task4 server reservation owns original ephemeral assignment and records ca
 test('Task4 dynamic browser origin refuses every other port including retained13081',async(t)=>{
     const m=await load(),{EventEmitter}=await import('node:events');for(const port of [15439,25439])for(const requested of [port,13081,3080,port+1])await t.test(port+':'+requested,async()=>{
         const ready=JSON.parse(GOLDEN_READY),context:any=new EventEmitter(),page:any=new EventEmitter();let handler:any,allowed=0,denied=0;context.route=async(_p:string,fn:any)=>{handler=fn;};context.routeWebSocket=async()=>{};
-        const fence=m.createTask4BrowserFenceV1(ready,()=>assert.fail('not product'),port);await fence.attach(context,page,'/');const request={method:()=> 'GET',url:()=> 'http://127.0.0.1:'+requested+'/api/overview'};context.emit('request',request);await handler({request:()=>request,continue:async()=>{allowed++;},abort:async()=>{denied++;}});
+        const fence=m.createTask4BrowserFenceV1(ready,()=>assert.fail('not product'),port,m.task4NetworkRecipesV1(pass6MeasuredBuild()));await fence.attach(context,page,'/');const request={method:()=> 'GET',url:()=> 'http://127.0.0.1:'+requested+'/api/overview'};context.emit('request',request);await handler({request:()=>request,continue:async()=>{allowed++;},abort:async()=>{denied++;}});
         assert.equal(allowed,requested===port?1:0);assert.equal(denied,requested===port?0:1);if(requested!==port)await assert.rejects(fence.settle());
     });
 });
@@ -1929,4 +1930,224 @@ test('Task4 dynamic preflight binds both request port and original connected end
         const bindings={Buffer,RUN_IDS:['legacy','v3'],setTimeout:(fn:any,ms:number)=>{assert.equal(ms,8000);timer=fn;return 1;},clearTimeout:()=>{timer=null;},requestHttp:(options:any,fn:any)=>{assert.equal(options.host,'127.0.0.1');assert.equal(options.port,port);assert.equal(options.method,'GET');assert.equal(options.agent,false);receive=fn;return request;}};
         const fn=vm.compileFunction(nodes[0].getText(ast)+'\nreturn task4PreflightHttpV1;',Object.keys(bindings))(...Object.values(bindings));const pending=fn(port).then((value:any)=>({value,error:null}),(error:Error)=>({error,value:null}));request.emit('socket',socket);socket.emit('connect');receive(response);response.emit('data',Buffer.from('{}'));response.emit('end');request.emit('close');socket.emit('close');const result=await pending;assert.equal(timer,null);if(endpoint===port)assert.equal(result.value.status,200);else assert.equal(result.error.message,'TASK4_NETWORK_REFUSED');
     });
+});
+
+// Simulated already-measured build material for pure recipe components; no runtime custody credit.
+function pass6MeasuredBuild(js = '/assets/index-NewBuild1.js', css = '/assets/index-NewStyle1.css') {
+    const bytes = Buffer.from('<!DOCTYPE html><html><head><script type="module" crossorigin src="' + js + '"></script><link rel="stylesheet" crossorigin href="' + css + '"></head><body><div id="root"></div></body></html>');
+    const files = new Map<string, any>([['dist/index.html', { bytes, hash: hash(bytes) }], ['dist' + js, { bytes: Buffer.from('JS'), hash: hash('JS') }], ['dist' + css, { bytes: Buffer.from('CSS'), hash: hash('CSS') }]]);
+    return { files };
+}
+test('Task4 measured asset recipes bind changed actual index paths and captured content rather than stale build names', async () => {
+    const m = await load(), build = pass6MeasuredBuild(), recipes = m.task4NetworkRecipesV1(build);
+    assert.deepEqual(recipes.browser.filter((r: any) => r.pathId.startsWith('asset_')), [
+        { pathId: 'asset_js', method: 'GET', path: '/assets/index-NewBuild1.js', query: '' },
+        { pathId: 'asset_css', method: 'GET', path: '/assets/index-NewStyle1.css', query: '' }]);
+    assert.equal(Object.isFrozen(recipes.browser), true);
+    const next = m.task4NetworkRecipesV1(pass6MeasuredBuild('/assets/index-Another2.js'));
+    assert.equal(next.browser.find((r: any) => r.pathId === 'asset_js').path, '/assets/index-Another2.js');
+    assert.equal(recipes.browser.find((r: any) => r.pathId === 'asset_js').path, '/assets/index-NewBuild1.js');
+});
+test('Task4 measured asset recipe refuses unbound missing duplicate external and drifting material', async (t) => {
+    const m = await load();
+    for (const fault of ['missing_input', 'missing_js', 'index_hash', 'leaf_hash', 'duplicate', 'extra_style', 'external', 'query', 'fragment', 'traversal', 'not_module', 'extra_link', 'invalid_utf8']) await t.test(fault, () => {
+        const b = pass6MeasuredBuild(); let html = b.files.get('dist/index.html').bytes.toString();
+        if (fault === 'missing_js') b.files.delete('dist/assets/index-NewBuild1.js');
+        if (fault === 'index_hash') b.files.get('dist/index.html').hash = 'a'.repeat(64);
+        if (fault === 'leaf_hash') b.files.get('dist/assets/index-NewBuild1.js').bytes = Buffer.from('drift');
+        if (fault === 'duplicate') html += '<script type="module" crossorigin src="/assets/index-NewBuild1.js"></script>';
+        if (fault === 'extra_style') html += '<style>body{}</style>';
+        if (fault === 'extra_link') html += '<link rel="preconnect" href="https://external.invalid">';
+        if (fault === 'external') html = html.replace('/assets/index-NewBuild1.js', 'https://external.invalid/index-NewBuild1.js');
+        if (fault === 'query') html = html.replace('.js"', '.js?x=1"');
+        if (fault === 'fragment') html = html.replace('.css"', '.css#x"');
+        if (fault === 'traversal') html = html.replace('/assets/index-', '/assets/../index-');
+        if (fault === 'not_module') html = html.replace('type="module"', 'type="text/javascript"');
+        if (!['index_hash','leaf_hash','missing_js'].includes(fault)) { const bytes = fault === 'invalid_utf8' ? Buffer.from([255]) : Buffer.from(html); b.files.set('dist/index.html', { bytes, hash: hash(bytes) }); }
+        assert.throws(() => m.task4NetworkRecipesV1(fault === 'missing_input' ? undefined : b), /TASK4_SOURCE_DRIFT/);
+    });
+});
+
+async function pass6SourceFunctions(names: string[], bindings: Record<string, any>) {
+    const ts = await import('typescript'), vm = await import('node:vm');
+    const text = readFileSync(new URL('../scripts/render-smoke-owned-fixture.mjs', import.meta.url), 'utf8'), tree = ts.createSourceFile('owned.mjs', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const nodes = names.map(name => { const matches = tree.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === name); assert.equal(matches.length, 1, name); return matches[0]; });
+    return vm.compileFunction(nodes.map(n => n.getText(tree).replace(/^export /, '')).join('\n') + '\nreturn {' + names.join(',') + '};', Object.keys(bindings))(...Object.values(bindings));
+}
+test('Task4 private environment activates existing compiled CLI refusal before queue or child effects', async () => {
+    const path = await import('node:path'), ts = await import('typescript'), vm = await import('node:vm');
+    const { task4ServerEnvironmentV1 } = await pass6SourceFunctions(['task4ServerEnvironmentV1'], { path, requireValue: (v: any, code: string) => { if (!v) throw Error(code); } });
+    const environment = task4ServerEnvironmentV1({ ready: JSON.parse(GOLDEN_READY) }, 15433, 15439);
+    assert.equal(environment.MC_TASK6A_SELECTED_CLI_NO_SPAWN_V1, '1');
+    const cli = readFileSync(new URL('../dist-server/utils/cli.js', import.meta.url), 'utf8'), fence = readFileSync(new URL('../dist-server/utils/task6a-selected-cli-fence.js', import.meta.url), 'utf8');
+    const tree = ts.createSourceFile('cli.js', cli, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const nodes = tree.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === 'runCliRaw'); assert.equal(nodes.length, 1);
+    const fenceTree = ts.createSourceFile('fence.js', fence, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const vars = fenceTree.statements.filter(ts.isVariableStatement); assert.equal(vars.length, 2);
+    let acquisitions = 0, spawned = 0;
+    const bindings = { process: { env: environment }, inflight: new Map(), acquire: async () => { acquisitions++; }, release() {}, freshMissionControlSelectedV1: () => false,
+        freshSetfarmCliInvocationV1: () => null, execFileAsync: async () => { spawned++; return { stdout: 'ordinary output' }; }, commandTimeoutMsV1: () => 25000, env: {}, console: { error() {} } };
+    const fn = vm.compileFunction(vars.map(n => n.getText(fenceTree).replace(/^export /, '')).join('\n') + '\n' + nodes[0].getText(tree).replace(/^export /, '') + '\nreturn runCliRaw;', Object.keys(bindings))(...Object.values(bindings));
+    await assert.rejects(fn('openclaw', ['agents', 'list', '--json']), /MC_TASK6A_SELECTED_CLI_NO_SPAWN/); assert.equal(acquisitions, 0); assert.equal(spawned, 0);
+    delete bindings.process.env.MC_TASK6A_SELECTED_CLI_NO_SPAWN_V1;
+    const ordinary = vm.compileFunction(vars.map(n => n.getText(fenceTree).replace(/^export /, '')).join('\n') + '\n' + nodes[0].getText(tree).replace(/^export /, '') + '\nreturn runCliRaw;', Object.keys(bindings))(...Object.values(bindings));
+    assert.equal(await ordinary('openclaw', ['agents', 'list', '--json']), 'ordinary output'); assert.equal(spawned, 1);
+});
+test('Task4 two supervisor mock responses match actual SF missing producer without granting authority', async () => {
+    const m = await load(), ts = await import('typescript'), vm = await import('node:vm'), path = await import('node:path');
+    const sf = path.resolve(import.meta.dirname, '../../setfarm-dashboard-cutover-controller-20261007-v1/src/server/supervisor-summary.ts');
+    const text = readFileSync(sf, 'utf8'), tree = ts.createSourceFile('supervisor.ts', text, ts.ScriptTarget.Latest, true);
+    const names = ['readSupervisorArtifactSummary', 'supervisorWorkdirCandidates', 'addCandidate', 'parseContext', 'expandTilde'];
+    const nodes = names.map(name => { const found = tree.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === name); assert.equal(found.length, 1, name); return found[0]; });
+    const body = ts.transpileModule(nodes.map(n => n.getText(tree).replace(/^export /, '')).join('\n'), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+    const producer = vm.compileFunction(body + '\nreturn readSupervisorArtifactSummary;', ['fs', 'path', 'os', 'summarizeFromRoot'])({ existsSync() { assert.fail('fixed seed has no filesystem candidates'); } }, path, { homedir() { assert.fail('no ambient HOME'); } }, () => assert.fail('no material'));
+    const seed = m.task4SeedV1('1'.repeat(40));
+    const runs = seed.runs;
+    for (const [i, run] of runs.entries()) {
+        const target = '/api/runs/' + run.id + '/supervisor', response = m.task4MockResponseV1('GET', target, '1'.repeat(40));
+        assert.ok(response); assert.equal(response.status, 200); assert.equal(response.contentType, 'application/json; charset=utf-8');
+        assert.deepEqual(JSON.parse(response.body), producer(run)); assert.equal(JSON.parse(response.body).available, false); assert.equal(Object.hasOwn(JSON.parse(response.body), 'source'), false);
+        const recipe = m.task4NetworkRecipesV1(pass6MeasuredBuild()).mock.find((r: any) => r.path === target); assert.equal(recipe.pathId, 'supervisor_' + i);
+        assert.equal(m.task4MockResponseV1('POST', target, '1'.repeat(40)), null); assert.equal(m.task4MockResponseV1('GET', target + '?extra=1', '1'.repeat(40)), null);
+    }
+});
+
+async function pass6Fence() {
+    const m = await load(), { EventEmitter } = await import('node:events');
+    const context: any = new EventEmitter(), page: any = new EventEmitter(); let route: any, ws: any;
+    context.route = async (_: string, fn: any) => { route = fn; }; context.routeWebSocket = async (_: string, fn: any) => { ws = fn; };
+    const recipes = m.task4NetworkRecipesV1(pass6MeasuredBuild());
+    const fence = m.createTask4BrowserFenceV1(JSON.parse(GOLDEN_READY), () => assert.fail('not product'), 15439, recipes);
+    await fence.attach(context, page, '/');
+    return { fence, context, page, ws: () => ws, async request(target = '/api/overview') {
+        const request = { method: () => 'GET', url: () => 'http://127.0.0.1:15439' + target }; context.emit('request', request);
+        let decision = ''; await route({ request: () => request, continue: async () => { decision = 'continue'; }, abort: async () => { decision = 'abort'; } });
+        return { request, decision };
+    }, response(request: any, body: Promise<Buffer> = Promise.resolve(Buffer.from('{}'))) { context.emit('response', { request: () => request, url: request.url, status: () => 200, body: () => body }); } };
+}
+const pass6Flush = async () => { for (let i = 0; i < 15; i++) await Promise.resolve(); };
+test('Task4 admitted requests wait for delayed original headers and complete bodies before positive settlement', async () => {
+    const x = await pass6Fence(), { request } = await x.request(); let settled = false;
+    const pending = x.fence.settle().then(() => { settled = true; return null; }, (e: Error) => { settled = true; return e; });
+    await pass6Flush(); assert.equal(settled, false, 'admitted request still awaiting headers');
+    let body!: (v: Buffer) => void; x.response(request, new Promise(resolve => { body = resolve; })); await pass6Flush(); assert.equal(settled, false);
+    body(Buffer.from('{}')); assert.equal(await pending, null); assert.equal(x.fence.value().complete, true);
+});
+test('Task4 browser uses measured asset table and does not admit a previous build asset', async () => {
+    const x = await pass6Fence(); const known = await x.request('/assets/index-NewBuild1.js'); assert.equal(known.decision, 'continue'); x.response(known.request); await x.fence.settle();
+    const stale = await x.request('/assets/index-CHfhnR83.js'); assert.equal(stale.decision, 'abort'); await assert.rejects(x.fence.settle(), /TASK4_NETWORK_REFUSED/);
+});
+test('Task4 fence failure diagnostics preserve first cause and redact unknown URL and error text', async () => {
+    const x = await pass6Fence(), original = await x.request();
+    let settled = false; const pending = x.fence.settle().then(() => { settled = true; }, () => { settled = true; }); await pass6Flush(); assert.equal(settled, false);
+    x.page.emit('pageerror', Error('private-secret')); await pending;
+    x.ws()({ url: () => 'ws://foreign.invalid/private?token=secret', close() {} });
+    const d = x.fence.diagnostics(); assert.equal(d.firstFailure.reason, 'page_error'); assert.equal(d.counts.open, 1); assert.equal(d.openRequests[0].pathId, 'overview');
+    assert.equal(d.openRequests[0].url, original.request.url()); assert.ok(!JSON.stringify(d).includes('private-secret')); assert.ok(!JSON.stringify(d).includes('token=secret'));
+    assert.ok(d.events.some((e: any) => e.reason === 'websocket')); x.response(original.request); await pass6Flush(); await assert.rejects(x.fence.settle(), /TASK4_NETWORK_REFUSED/);
+});
+
+test('Task4 actual page callback refuses loading shell until the successful route body is mounted', async () => {
+    const vm = await import('node:vm'); let loaded = false, shots = 0, waiting = 0; let release!: () => void;
+    const mounted = new Promise<void>(r => { release = r; });
+    const element: any = { textContent: 'shell has enough placeholder text to satisfy old predicate', disabled: false, getBoundingClientRect: () => ({ width: 800, height: 900 }), querySelectorAll: () => [element, element] };
+    const document = { querySelector: (selector: string) => selector === '#root' ? element : selector === '.page-loading' ? loaded ? null : element : loaded ? element : null,
+        querySelectorAll: (selector: string) => selector === '.page-loading, .page-error' ? loaded ? [] : [element] : loaded ? [element] : [] };
+    const context: any = { newPage: async () => ({ setDefaultTimeout() {}, goto: async () => ({ status: () => 200 }),
+        waitForFunction: async (fn: any, arg: any) => { const evaluate = () => vm.runInNewContext('(' + fn.toString() + ')(arg)', { document, arg, getComputedStyle: () => ({ display: 'block', visibility: 'visible' }) });
+            if (!evaluate()) { waiting++; await mounted; assert.ok(evaluate()); } },
+        evaluate: async () => ({ rootWidth: 800, rootHeight: 900, textLength: 100, visibleElements: 2 }), screenshot: async () => { shots++; return Buffer.from('png'); } }), close: async () => {} };
+    const state: any = { browser: { newContext: async () => context }, contexts: { opened: 0, closed: 0, pending: 0 }, native: { census: async () => {} },
+        fence: { attach: async () => {}, settle: async () => {} }, render: { routes: [{ route: '/', status: 'not_started' }] },
+        evidence: { png: () => ({ sha256: 'a'.repeat(64), bytes: 3 }) }, filesystem: { capture() {}, checkpoint() {} }, serverPort: 15439 };
+    const { runTask4PagesV1 } = await pass6SourceFunctions(['runTask4PagesV1'], { RENDER_ROUTES: ['/'], RUN_IDS: ['a','b'], task4BoundedV1: (p: any) => p,
+        requireValue: (v: unknown, c: string) => { if (!v) throw Error(c); }, fail: (c: string) => { throw Error(c); } });
+    const running = runTask4PagesV1({ check() {}, scenario: 'pass' }, state); await pass6Flush();
+    assert.equal(shots, 0, 'loading shell cannot be captured'); assert.equal(waiting, 1); loaded = true; release(); await running; assert.equal(shots, 1);
+});
+
+test('Task4 page failures retain bounded original fence evidence before and after owned context close', async () => {
+    const path = await import('node:path'), m = await load(); const events: string[] = [], records: any[] = [];
+    const state: any = { inner: '/private/inner', errors: [], integrity: 'verified', browser: { newContext: async () => ({
+        newPage: async () => ({ setDefaultTimeout() {}, goto: async () => { throw Error('TASK4_NETWORK_REFUSED'); } }), close: async () => { events.push('close'); } }) },
+        contexts: { opened: 0, closed: 0, pending: 0 }, native: { census: async () => {} }, render: { routes: [{ route: '/' }] },
+        fence: { attach: async () => {}, diagnostics: () => ({ firstFailure: { reason: 'request_denied' }, events: [], counts: { open: 1 }, openRequests: [] }) }, serverPort: 15439 };
+    const text = readFileSync(new URL('../scripts/render-smoke-owned-fixture.mjs', import.meta.url), 'utf8');
+    // The page body is always actual Source; pre-fix missing private publication is the causal failure.
+    const names = ['runTask4PagesV1', 'task4RecordFailureV1']; if (text.includes('function retainTask4FailureDiagnosticsV1(')) names.push('retainTask4FailureDiagnosticsV1');
+    const { runTask4PagesV1 } = await pass6SourceFunctions(names, { path, task4ArtifactBindingV1: () => ({}), task4CanonicalV1: m.task4CanonicalV1,
+        task4PrivateBytesV1: (_dir: string, name: string, bytes: Buffer) => { events.push(name); records.push(JSON.parse(bytes.toString())); if (name.includes('before')) throw Error('TASK4_RESULT_PUBLICATION_FAILED'); },
+        RENDER_ROUTES: ['/'], task4BoundedV1: (p: any) => p, requireValue: (v: any, c: string) => { if (!v) throw Error(c); } });
+    await assert.rejects(runTask4PagesV1({ ready: {}, check() {} }, state), /TASK4_NETWORK_REFUSED/);
+    assert.deepEqual(events, ['network-failure-before-close.json', 'close', 'network-failure-after-close.json']);
+    assert.equal(state.errors[0], 'TASK4_NETWORK_REFUSED'); assert.ok(state.errors.includes('TASK4_RESULT_PUBLICATION_FAILED')); assert.equal(state.contexts.pending, 0);
+    assert.equal(records[0].observation.firstFailure.reason, 'request_denied');
+});
+
+test('Task4 filesystem refusal keeps first bounded path metadata while preserving immutable baseline failure', async () => {
+    const m = await load(), fs = await import('node:fs'), os = await import('node:os'), path = await import('node:path');
+    const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'task4-pass6-fs-')); fs.chmodSync(root, 0o700);
+    const ready = JSON.parse(GOLDEN_READY); ready.setup.resourceRoot.path = root;
+    fs.mkdirSync(path.join(root, 'inner'), { mode: 0o700 }); fs.mkdirSync(path.join(root, 'inner/server-home'), { mode: 0o700 });
+    const records: any[] = [], ledger = m.createTask4FilesystemV1(ready, { put(v: any) { records.push(v); return { sha256: hash(JSON.stringify(v)), bytes: 1 }; } });
+    try {
+        ledger.capture('server_home', 'before_server'); fs.mkdirSync(path.join(root, 'inner/server-home/.local'), { mode: 0o700 });
+        assert.throws(() => ledger.capture('server_home', 'after_server_close'), /TASK4_RESOURCE_REFUSED/); assert.equal(records.length, 1);
+        const d = ledger.diagnostics(); assert.equal(d.firstFailure.rootId, 'server_home'); assert.equal(d.firstFailure.relative, '.local'); assert.equal(d.firstFailure.kind, 'directory');
+        assert.equal(d.firstFailure.operation, 'baseline_compare'); assert.throws(() => ledger.capture('native_home', 'after_server_close'), /TASK4_RESOURCE_REFUSED/);
+        assert.deepEqual(ledger.diagnostics(), d); assert.equal(ledger.value().complete, false);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('Task4 settlement keeps one original deadline across header and body wakeups and refuses late completion', async () => {
+    const m = await load(), { EventEmitter } = await import('node:events'); let now = 1000, id = 0; const timers = new Map<number, { fn: () => void; at: number }>();
+    class Clock extends Date { constructor(...args: any[]) { super(args.length ? args[0] : now); } static now() { return now; } }
+    const { createTask4BrowserFenceV1 } = await pass6SourceFunctions(['createTask4BrowserFenceV1'], {
+        Date: Clock, setTimeout: (fn: () => void, ms: number) => { const key = ++id; timers.set(key, { fn, at: now + ms }); return key; }, clearTimeout: (key: number) => timers.delete(key),
+        integer: (n: number, min: number, max: number) => assert.ok(n >= min && n <= max), requireValue: (v: any) => { if (!v) throw Error('invalid'); }, fail: (c: string) => { throw Error(c); },
+        hash, freeze: (v: any) => v, RENDER_ROUTES: ['/'], RUN_IDS: [], task4SeedV1: () => assert.fail('not product') });
+    const context: any = new EventEmitter(), page = new EventEmitter(); let route: any;
+    context.route = async (_: string, fn: any) => { route = fn; }; context.routeWebSocket = async () => {};
+    const fence = createTask4BrowserFenceV1(JSON.parse(GOLDEN_READY), () => {}, 15439, m.task4NetworkRecipesV1(pass6MeasuredBuild())); await fence.attach(context, page, '/');
+    const request = { method: () => 'GET', url: () => 'http://127.0.0.1:15439/api/overview' }; context.emit('request', request); await route({ request: () => request, continue: async () => {} });
+    const pending = fence.settle().then(() => null, (e: Error) => e); await pass6Flush(); assert.deepEqual([...timers.values()].map(t => t.at), [9000]);
+    now = 5000; let finish!: (value: Buffer) => void;
+    context.emit('response', { request: () => request, url: request.url, status: () => 200, body: () => new Promise<Buffer>(resolve => { finish = resolve; }) });
+    await pass6Flush(); assert.deepEqual([...timers.values()].map(t => t.at), [9000], 'header wakeup must not restart deadline');
+    now = 9000; const expired = [...timers.values()][0]; timers.clear(); expired.fn(); assert.equal((await pending).message, 'TASK4_NETWORK_REFUSED');
+    finish(Buffer.from('{}')); await pass6Flush(); assert.equal(fence.value().complete, false); assert.equal(fence.diagnostics().firstFailure.reason, 'settlement_timeout');
+    assert.equal(timers.size, 0, 'late completion cannot schedule another wait after deadline failure');
+});
+test('Task4 completion in queued request-response boundary cannot lose the settlement wakeup', async () => {
+    const x = await pass6Fence(), { request } = await x.request();
+    const completion = x.fence.settle(); queueMicrotask(() => x.response(request)); await completion;
+    assert.equal(x.fence.value().complete, true);
+});
+
+test('Task4 loaded route predicate requires each expected body, fixed run identity and unblocked project actions', async () => {
+    const ts = await import('typescript'), vm = await import('node:vm');
+    const text = readFileSync(new URL('../scripts/render-smoke-owned-fixture.mjs', import.meta.url), 'utf8'), tree = ts.createSourceFile('owned.mjs', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const fn = tree.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === 'runTask4PagesV1')[0]; const calls: any[] = [];
+    const visit = (n: any) => { if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === 'waitForFunction') calls.push(n); ts.forEachChild(n, visit); }; visit(fn);
+    assert.equal(calls.length, 1); const predicate = calls[0].arguments[0].getText(tree);
+    const runIds = ['ac8cea43-7686-4d27-8092-1e3dd9207ca4', 'ad47fe65-4ec4-4fb5-89da-fff71eb4e79a'];
+    for (let index = 0; index < 6; index++) {
+        const el = (text = '', disabled = false) => ({ textContent: text, disabled, getBoundingClientRect: () => ({ width: 600, height: 30 }) });
+        const map: Record<string, any[]> = { '.page-loading, .page-error': [], '.overview': [el()], '.overview .stat-cards': [el()], '.af-page': [el()], '.af-pipeline__header': [el(), el()],
+            '.projects-page': [el()], '.projects-grid': [el()], '.projects-page__actions button': [el(), el(), el(), el()], '.run-detail-page': [el()],
+            '.rd-meta > span:first-child': [el('#' + runIds[index === 5 ? 1 : 0].slice(0, 8))], '.rd-tabs .rd-tab': Array.from({ length: 8 }, () => el()), '.rd-content': [el()] };
+        const evaluate = () => vm.runInNewContext('(' + predicate + ')(arg)', { arg: { index, runIds }, document: { querySelectorAll: (selector: string) => map[selector] ?? [] }, getComputedStyle: () => ({ display: 'block', visibility: 'visible' }) });
+        assert.equal(evaluate(), true, 'loaded route ' + index); map['.page-loading, .page-error'] = [el()]; assert.equal(evaluate(), false); map['.page-loading, .page-error'] = [];
+        const selector = index === 0 ? '.overview' : index === 1 ? '.af-page' : index === 3 ? '.projects-page' : '.run-detail-page'; const prior = map[selector]; map[selector] = []; assert.equal(evaluate(), false); map[selector] = [...prior, el()]; assert.equal(evaluate(), false); map[selector] = prior;
+        if ([2,4,5].includes(index)) { map['.rd-meta > span:first-child'] = [el('#unrelated')]; assert.equal(evaluate(), false); }
+        if (index === 3) { map['.projects-page__actions button'][0].disabled = true; assert.equal(evaluate(), false); }
+    }
+});
+
+test('Task4 rejected response diagnostic binds actual request and status without response body disclosure', async () => {
+    const x = await pass6Fence(), { request } = await x.request();
+    x.context.emit('response', { request: () => request, url: request.url, status: () => 500, body: async () => Buffer.from('private response detail') });
+    await assert.rejects(x.fence.settle(), /TASK4_NETWORK_REFUSED/);
+    const d = x.fence.diagnostics(); assert.equal(d.firstFailure.reason, 'response_validation'); assert.equal(d.firstFailure.requestId, 1); assert.equal(d.firstFailure.status, 500);
+    assert.equal(d.firstFailure.pathId, 'overview'); assert.ok(!JSON.stringify(d).includes('private response detail'));
 });
