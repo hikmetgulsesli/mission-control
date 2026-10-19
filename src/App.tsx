@@ -19,6 +19,8 @@ import { NotFound } from "./pages/NotFound";
 import { Scrape } from "./pages/Scrape";
 import { Rules } from "./pages/Rules";
 import { Live } from "./pages/Live";
+import { Controls } from './pages/Controls';
+import './components/controls/controls.css';
 
 function RunDetailRoute() {
   const { id } = useParams<{ id: string }>();
@@ -41,6 +43,7 @@ export default function App() {
           <Route path="agents" element={<Agents />} />
           <Route path="chat" element={<Chat />} />
           <Route path="ops" element={<Ops />} />
+          <Route path="controls" element={<Controls />} />
           <Route path="costs" element={<Costs />} />
           <Route path="performance" element={<Performance />} />
           <Route path="perf" element={<Navigate to="/performance" replace />} />
