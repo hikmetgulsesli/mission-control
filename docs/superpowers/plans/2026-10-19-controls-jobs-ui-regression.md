@@ -258,6 +258,11 @@ Follow the spec Private SF custody closure section. Publish exact immutable inte
 
 ## Accepted original-session private protocol
 
+Root private UI fixture composition: the measured built `dist-server/scripts/ui-regression-fixtures.mjs` exports `UI_REGRESSION_FIXTURE_V1` with exactly fixtureVersion, fixtureHash and an ordered unique nonempty assertionIds catalog (max2048). Missing/unsafe/unmeasured assets refuse UI launch. Task3 owns its deterministic data/catalog hash and stock build copies; Task1 only captures the trusted module and validates final reports against every catalog ID, not a screenshot/count shortcut.
+
+Root HTTP fixture limit: a real ephemeral listener must fail the exact production3080 policy. Positive actual route/auth/socket/raw-header behavior may use immutable injected capability facts matching3080 as explicit component data, paired with real server.address() ephemeral denial and pure exact3080 positive. This is not real3080 listener evidence and creates no production test-port exception, request capability or broader listener. The production getter remains actual server.address(); live acceptance supplies the later real positive.
+
+
 Follow the paired spec Accepted private worker channel/journal and exact paired exports/UI lifecycle sections. Independent frame/journal/receipt counters, durable original-channel ACK mapping and cancellation latch, no restart adoption, UI vs SF final dispatch and fixed pure exports supersede earlier metadata-only port wording. MC alone writes receipts. Provisional reportRefs remains empty until definite SF release/closure final_closed or validated UI final report+owned-cleanup. Source-only fake effects do not qualify selected compiled execution. Root serializes paired ABI changes; MC never edits SF schema/guard sources.
 
 ### Task 4: Owned isolation for existing built-server render smoke
