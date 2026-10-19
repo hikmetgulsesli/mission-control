@@ -1366,7 +1366,7 @@ test('lost-response behavior waits for rejection then reloads and manually reuse
             getByLabel: (label: string) => label === 'Check' ? { selectOption: async (kind: string) => assert.equal(kind, 'ui_regression') } : { check: async () => { events.push('confirm'); } },
             getByRole: (role: string, options: any) => {
                 if (role === 'alert') return { waitFor: async () => { events.push('wait-alert'); arrived(); await rejected; if (scenario === 'missing-alert') throw Error('alert timeout'); events.push('alert'); } };
-                if (role === 'region') return { innerText: async () => job };
+                if (role === 'region') return { innerText: async () => job, scrollIntoViewIfNeeded: async () => { events.push('scroll'); } };
                 if (options.name instanceof RegExp || options.name?.source) return { click: async () => { launched++; events.push('launch'); state.launchBodies.push({ ...body, ...(launched === 2 && scenario === 'changed-key' ? { idempotencyKey: '018d819f-0a78-7d38-bb1f-0195b029ddac' } : {}) }); state.jobs.set(job, {}); if (launched === 2 && scenario === 'duplicate-job') state.jobs.set('second', {}); } };
                 return { waitFor: async () => {} };
             },
@@ -1378,8 +1378,66 @@ test('lost-response behavior waits for rejection then reloads and manually reuse
             const waited = await Promise.race([waiting.then(() => true), running.then(() => false)]);
             assert.equal(waited, true); assert.deepEqual(events, ['clear', 'confirm', 'launch', 'wait-alert']);
             release(); const error = await running;
-            if (scenario === 'delayed-rejection') { assert.equal(error, null); assert.deepEqual(events, ['clear', 'confirm', 'launch', 'wait-alert', 'alert', 'reload', 'confirm', 'launch', 'reconnected']); }
+            if (scenario === 'delayed-rejection') { assert.equal(error, null); assert.deepEqual(events, ['clear', 'confirm', 'launch', 'wait-alert', 'alert', 'reload', 'confirm', 'launch', 'reconnected', 'scroll']); }
             else { assert.ok(error); if (scenario === 'missing-alert') { assert.equal(launched, 1); assert.ok(!events.includes('reload')); } }
         } finally { release(); await running; }
+    });
+});
+
+// Exercise the unchanged private behavior and its actual runCatalog capture callback.
+// Removing/moving the scroll must expose an unframed capture or a capture after refusal.
+test('final Controls captures frame unique owned progress only after positive evidence', async (t) => {
+    const ts = await import('typescript'), { runInNewContext } = await import('node:vm');
+    const { uiCanonicalV1 } = await import('../scripts/ui-regression-lifecycle.mjs');
+    const source = readFileSync(new URL('../scripts/ui-regression-fixtures.mjs', import.meta.url), 'utf8');
+    const ast = ts.createSourceFile('ui-regression-fixtures.mjs', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const declarations = ['behavior', 'controlReady', 'confirmLaunch', 'navigate', 'until', 'deferred'].map(name => {
+        const matches = ast.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === name);
+        assert.equal(matches.length, 1); return matches[0].getText(ast);
+    }).join('\n');
+    const callbacks: any[] = [];
+    const visit = (node: any) => { if (ts.isArrowFunction(node) && node.getText(ast).startsWith('async () => { await behavior(id,')) callbacks.push(node); ts.forEachChild(node, visit); };
+    visit(ast); assert.equal(callbacks.length, 1);
+    const A = '018d819f-0a78-7d38-bb1f-0195b029ddaf', B = '018d819f-0a78-7d38-bb1f-0195b029ddb0';
+    const behavior = runInNewContext(declarations + '\nbehavior', { assert, JOB_A: A, JOB_B: B, AT: '2026-10-19T00:00:00.000Z', uiCanonicalV1, setTimeout, delay: (ms: number) => new Promise(r => setTimeout(r, ms)) });
+    const ids = ['controls.lost-response-reload-idempotency', 'controls.cancel-owned-settlement', 'controls.crossmount-delayed-a-new-b', 'controls.unknown-retention'];
+    for (const id of ids) for (const scenario of ['framed', 'final-evidence-refused', 'missing-region', 'duplicate-region', 'scroll-refused']) await t.test(id + ':' + scenario, async () => {
+        const events: string[] = [];
+        const state: any = { jobs: new Map([[A, { state: 'running', revision: 2 }], [B, { state: 'running', revision: 2 }]]), launches: new Map(), launchBodies: [] };
+        let launches = 0;
+        const finalEvidence = () => { events.push('final-evidence'); if (scenario === 'final-evidence-refused') throw Error('final evidence refused'); };
+        const region = {
+            innerText: async () => {
+                if (id === ids[0] || id === ids[3]) finalEvidence();
+                return id === ids[1] ? 'Cancelling ' + A : id === ids[0] ? A : B;
+            },
+            getByText: (text: string, options: any) => { assert.equal(text, B); assert.equal(options.exact, true); return { waitFor: async () => {} }; },
+            scrollIntoViewIfNeeded: async () => {
+                assert.deepEqual(events, ['final-evidence'], 'scroll follows the final positive evidence exactly once');
+                events.push('scroll');
+                if (scenario !== 'framed') throw Error('owned region ' + scenario);
+            },
+        };
+        const page: any = {
+            url: () => 'http://127.0.0.1:13082/controls',
+            evaluate: async (callback: Function) => runInNewContext('(' + callback.toString() + ')()', { localStorage: { clear() {}, getItem(key: string) { assert.equal(key, 'mission-control.controls.selected-job.v1'); finalEvidence(); return B; } } }),
+            getByLabel: (label: string) => label === 'Check' ? { selectOption: async () => {} } : { check: async () => {} },
+            getByRole: (role: string, options: any = {}) => {
+                if (role === 'region') {
+                    assert.equal(options.name, 'Owned progress');
+                    return { ...region, scrollIntoViewIfNeeded: async () => { assert.equal(options.exact, true); await region.scrollIntoViewIfNeeded(); } };
+                }
+                if (role === 'searchbox') return { fill: async () => {} };
+                if (options.name?.source) return { click: async () => { launches++; const job = id === ids[0] || launches === 1 ? A : B; state.jobs.set(job, { state: 'running', revision: 2 }); state.launchBodies.push({ kind: 'ui_regression', idempotencyKey: A }); } };
+                return { waitFor: async () => {}, click: async () => { if (options.name === 'Request cancellation') state.jobs.set(A, { state: 'cancelling', revision: 3 }); } };
+            },
+            getByText: (text: any) => ({ waitFor: async () => { if (text === 'Cancelled · Terminal') finalEvidence(); } }),
+            locator: () => ({ first: () => ({ click: async () => {} }) }),
+            reload: async () => {}, waitForFunction: async () => {}, waitForURL: async () => {},
+        };
+        const run = runInNewContext('(' + callbacks[0].getText(ast) + ')', { behavior, id, page, context: {}, state, loaded: async () => {}, open: async () => {}, URL, noErrors: async () => { events.push('noErrors'); }, capture: async (captureId: string, route: string) => { assert.equal(captureId, 'behavior-' + id); assert.equal(route, '/controls'); events.push('capture'); } });
+        const error = await run().then(() => null, (error: Error) => error);
+        if (scenario === 'framed') { assert.equal(error, null); assert.deepEqual(events, ['final-evidence', 'scroll', 'noErrors', 'capture']); }
+        else { assert.ok(error); assert.ok(!events.includes('capture')); assert.ok(!events.includes('noErrors')); assert.deepEqual(events, scenario === 'final-evidence-refused' ? ['final-evidence'] : ['final-evidence', 'scroll']); }
     });
 });

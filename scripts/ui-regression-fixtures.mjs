@@ -1084,6 +1084,7 @@ async function behavior(id, { page, context, state, loaded, capture }) {
             await page.getByText('Existing request reconnected.', { exact: true }).waitFor();
             assert(state.jobs.size === 1 && state.launchBodies.length === 2 && uiCanonicalV1(first) === uiCanonicalV1(state.launchBodies[1]));
             assert((await page.getByRole('region', { name: 'Owned progress' }).innerText()).includes(JOB_A));
+            await page.getByRole('region', { name: 'Owned progress', exact: true }).scrollIntoViewIfNeeded();
             return;
         }
         if (id === 'controls.cancel-owned-settlement') {
@@ -1097,6 +1098,7 @@ async function behavior(id, { page, context, state, loaded, capture }) {
             state.jobs.set(JOB_A, { ...old, state: 'cancelled', phase: 'terminal', revision: old.revision + 1, finishedAt: AT });
             await page.getByRole('button', { name: 'Refresh evidence', exact: true }).click();
             await page.getByText('Cancelled · Terminal', { exact: true }).waitFor();
+            await page.getByRole('region', { name: 'Owned progress', exact: true }).scrollIntoViewIfNeeded();
             return;
         }
         if (id === 'controls.crossmount-delayed-a-new-b') {
@@ -1125,6 +1127,7 @@ async function behavior(id, { page, context, state, loaded, capture }) {
             await page.getByRole('region', { name: 'Owned progress' }).getByText(JOB_B, { exact: true }).waitFor();
             assert(state.jobs.size === 2);
             assert(await page.evaluate(() => localStorage.getItem('mission-control.controls.selected-job.v1')) === JOB_B);
+            await page.getByRole('region', { name: 'Owned progress', exact: true }).scrollIntoViewIfNeeded();
             return;
         }
         if (id === 'controls.unknown-retention') {
@@ -1136,6 +1139,7 @@ async function behavior(id, { page, context, state, loaded, capture }) {
             await page.reload();
             await page.getByText('CONTROL_CUSTODY_UNCERTAIN', { exact: true }).waitFor();
             assert((await page.getByRole('region', { name: 'Owned progress' }).innerText()).includes(JOB_B));
+            await page.getByRole('region', { name: 'Owned progress', exact: true }).scrollIntoViewIfNeeded();
             return;
         }
     }
