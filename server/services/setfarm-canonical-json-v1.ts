@@ -19,4 +19,3 @@ export function canonicalJsonStringify(value: unknown): string {
 export function hashCanonicalJson(value: unknown): string {
   return createHash("sha256").update(canonicalJsonStringify(value), "utf8").digest("hex");
 }
-
