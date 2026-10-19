@@ -1678,6 +1678,7 @@ function task4PreflightHttpV1(serverPort) {
 }
 
 function prepareTask4NativeV1(context, state) {
+    process.env.TMPDIR = path.join(state.inner, 'tmp');
     const actual = context.owner;
     state.uiOwner = { pid: actual.pid, processStartedAt: actual.startedAt, processGroupId: actual.pgid, source: 'observed_os',
         executable: actual.executable, script: path.join(context.root, 'scripts/render-smoke.mjs'), commandHash: actual.commandHash };

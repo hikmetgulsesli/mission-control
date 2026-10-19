@@ -1018,10 +1018,10 @@ test('Task4 native binding uses the measured original inner identity and unchang
     const ts = await import('typescript'), vm = await import('node:vm'), path = await import('node:path'), m = await load();
     const text = readFileSync(new URL('../scripts/render-smoke-owned-fixture.mjs', import.meta.url), 'utf8'), ast = ts.createSourceFile('fixture.mjs', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
     const nodes = ast.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === 'prepareTask4NativeV1'); assert.equal(nodes.length, 1);
-    const ready = JSON.parse(GOLDEN_READY), owner = ready.fixtureOwner, state: any = { evidence: { store: {} }, jobId: '12345678-1234-4234-8234-123456789012', cancelled: false };
+    const ready = JSON.parse(GOLDEN_READY), owner = ready.fixtureOwner, state: any = { inner: ready.setup.resourceRoot.path + '/inner', evidence: { store: {} }, jobId: '12345678-1234-4234-8234-123456789012', cancelled: false };
     const schema = {}, sentinel = {}; let supplied: any;
     const context = { ready, owner, root: '/fixture/mc', modules: { native: { createUiNativeLifecycleV1(...args: any[]) { assert.equal(args.length, 1); supplied = args[0]; return sentinel; } }, protocol: { UiWorkerLifecycleRecordV1Schema: schema } } };
-    const bindings = { path, hash, task4CanonicalV1: m.task4CanonicalV1, task4ArtifactBindingV1: () => ({ readyDescriptorHash: 'a'.repeat(64) }) };
+    const bindings = { path, hash, process: { env: {} }, task4CanonicalV1: m.task4CanonicalV1, task4ArtifactBindingV1: () => ({ readyDescriptorHash: 'a'.repeat(64) }) };
     const fn = vm.compileFunction(nodes[0].getText(ast) + '\nreturn prepareTask4NativeV1;', Object.keys(bindings))(...Object.values(bindings));
     assert.equal(fn(context, state), sentinel); assert.equal(supplied.recordSchema, schema); assert.equal(supplied.store, state.evidence.store);
     assert.deepEqual(supplied.owner, { pid: owner.pid, processStartedAt: owner.startedAt, processGroupId: owner.pgid, source: 'observed_os', executable: owner.executable, script: '/fixture/mc/scripts/render-smoke.mjs', commandHash: owner.commandHash });
@@ -2150,4 +2150,49 @@ test('Task4 rejected response diagnostic binds actual request and status without
     await assert.rejects(x.fence.settle(), /TASK4_NETWORK_REFUSED/);
     const d = x.fence.diagnostics(); assert.equal(d.firstFailure.reason, 'response_validation'); assert.equal(d.firstFailure.requestId, 1); assert.equal(d.firstFailure.status, 500);
     assert.equal(d.firstFailure.pathId, 'overview'); assert.ok(!JSON.stringify(d).includes('private response detail'));
+});
+
+test('Task4 controller temp selection precedes installed Chromium CDP cached artifact allocation without changing server environment', async () => {
+    const ts = await import('typescript'), vm = await import('node:vm'), path = await import('node:path'), m = await load();
+    const bundle = readFileSync(new URL('../node_modules/playwright-core/lib/coreBundle.js', import.meta.url), 'utf8');
+    const tree = ts.createSourceFile('coreBundle.js', bundle, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const initializers: any[] = [], methods: any[] = [];
+    const visit = (node: any) => {
+        if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken
+            && ts.isIdentifier(node.left) && node.left.text === 'ARTIFACTS_FOLDER2') initializers.push(node.right);
+        if (ts.isMethodDeclaration(node) && node.name.getText(tree) === '_connectOverCDPImpl') methods.push(node);
+        ts.forEachChild(node, visit);
+    };
+    visit(tree); assert.equal(initializers.length, 1); assert.equal(methods.length, 1);
+    const statement = methods[0].body.statements[0]; assert.ok(ts.isVariableStatement(statement));
+    const declarations = statement.declarationList.declarations; assert.equal(declarations.length, 1);
+    assert.equal(declarations[0].name.getText(tree), 'artifactsDir');
+    const ready = JSON.parse(GOLDEN_READY), inner = path.join(ready.setup.resourceRoot.path, 'inner');
+    const environment: Record<string, string> = { TMPDIR: path.join(inner, 'server-runtime/tmp'), HOME: path.join(inner, 'server-home'), LANG: 'C', MC_PORT: '15439' };
+    const original = { ...environment }, allocations: string[] = [];
+    // Installed package code runs with simulated os/fs effects; no browser, socket, filesystem or ambient process mutation.
+    const prefix = () => vm.runInNewContext(initializers[0].getText(tree), {
+        import_path25: { default: path }, import_os11: { default: { tmpdir: () => environment.TMPDIR } },
+    });
+    const allocate = (cached: string) => vm.runInNewContext('(async () => ' + declarations[0].initializer.getText(tree) + ')()', {
+        ARTIFACTS_FOLDER2: cached, progress2: { race: (p: Promise<string>) => p },
+        import_fs27: { default: { promises: { mkdtemp: async (p: string) => { allocations.push(p); return p + 'owned'; } } } },
+    });
+    const oldCached = prefix(); assert.equal(oldCached, path.join(inner, 'server-runtime/tmp/playwright-artifacts-'));
+    const state: any = { inner, evidence: { store: {} }, jobId: '12345678-1234-4234-8234-123456789012', cancelled: false };
+    let capturedPrefix: string | undefined, delegated = 0;
+    const context = { ready, owner: ready.fixtureOwner, root: '/fixture/mc', modules: {
+        native: { createUiNativeLifecycleV1(...args: any[]) { delegated++; assert.equal(args.length, 1); capturedPrefix = prefix(); return { owned: true }; } },
+        protocol: { UiWorkerLifecycleRecordV1Schema: {} },
+    } };
+    const functions = await pass6SourceFunctions(['prepareTask4NativeV1', 'task4ServerEnvironmentV1'], {
+        path, hash, process: { env: environment }, task4CanonicalV1: m.task4CanonicalV1,
+        task4ArtifactBindingV1: () => ({ readyDescriptorHash: 'a'.repeat(64) }), requireValue: (v: any, code: string) => { if (!v) throw Error(code); },
+    });
+    assert.deepEqual(functions.prepareTask4NativeV1(context, state), { owned: true }); assert.equal(delegated, 1);
+    await allocate(capturedPrefix!);
+    assert.deepEqual(allocations, [path.join(inner, 'tmp/playwright-artifacts-')], 'actual installed cached CDP allocation belongs to native_tmp');
+    assert.deepEqual(environment, { ...original, TMPDIR: path.join(inner, 'tmp') });
+    assert.equal(oldCached, path.join(inner, 'server-runtime/tmp/playwright-artifacts-'), 'changing environment cannot repair an already cached package prefix');
+    assert.equal(functions.task4ServerEnvironmentV1(context, 15433, 15439).TMPDIR, original.TMPDIR, 'separate original server environment remains unchanged');
 });
