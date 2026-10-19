@@ -19,6 +19,14 @@ const AGENTS = Array.from({ length: 14 }, (_, i) => ({ id: 'fixture-agent-' + (i
 const AVATARS = AGENTS.map(agent => ({ path: `/avatars/${agent.id}.svg`, contentType: 'image/svg+xml', body: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><title>${agent.name}</title><rect width="64" height="64" rx="12" fill="#243247"/><rect x="12" y="18" width="40" height="32" rx="8" fill="#c4d9ef"/><circle cx="24" cy="32" r="4" fill="#243247"/><circle cx="40" cy="32" r="4" fill="#243247"/><path d="M24 42h16M32 18v-6" stroke="#243247" stroke-width="3"/></svg>\n` }));
 const METRICS = { ram: { source: 'fixture', observedAt: AT, status: 'available', total: 16, used: 0, percent: 0, semantics: 'total-os.freemem' }, cpu: { source: 'fixture', observedAt: AT, status: 'unknown', percent: null }, disk: { source: 'fixture', observedAt: AT, status: 'available', total: 100, used: 0, percent: 0, path: '/fixture', mount: '/fixture', totalBytes: 100000000000, usedBytes: 0, freeBytes: 100000000000 }, load: 0 };
 const RUNS = [{ id: LEGACY, runNumber: 1, workflow: 'fixture-legacy', task: 'Legacy fixture', status: 'completed', updatedAt: AT, steps: [], storyCount: 1, storiesDone: 1 }, { id: V3, runNumber: 2, workflow: 'fixture-v3', task: 'V3 fixture', status: 'completed', updatedAt: AT, steps: [], storyCount: 1, storiesDone: 1 }];
+const PIPELINE = RUNS.map(run => ({ ...run, storyProgress: { completed: 1, total: 1, verified: 1, skipped: 0, running: 0, pending: 0, done: 0, failed: 0 }, operational: null }));
+const ALERTS = { counts: { abandoned: 0, timeout: 0, failed: 0 }, recent: [] };
+const QUOTA = {};
+const FIXED_GETS = [
+    { target: '/api/agents/main/history?limit=40', body: { messages: [] } },
+    { target: '/api/live-feed/projects?format=rich', body: [] },
+    { target: '/api/live-feed/history?limit=300', body: [] },
+];
 const RULE = { id: 'fixture-rule', title: 'Fixture rule', content: 'Keep failure evidence.', category: 'general', project_type: 'general', severity: 'mandatory', applies_to: 'all', readonly: false, enabled: true, stack_pack_ids: [] };
 const HISTORY = [{ id: 'fixture-prd', title: 'Old history title', description: 'Old history description', prd_content: '# Old saved project', prd_version: 1, platform: 'web', urls: [], mockup_screens: [], chat_history: [], run_id: null, created_at: AT }];
 // Exact IDs/codes from the Source-owned SF activation and convergence preflight runners.
@@ -41,7 +49,7 @@ const CONVERGENCE_PREFLIGHT_CHECKS = [
     ['execution_profile', 'EVAL_EXECUTION_PROFILE_PINNED'],
     ['result_store', 'EVAL_RESULT_STORES_READY'],
 ].map(([id, code]) => ({ id, status: 'pass', code }));
-const DATA = { controls: { activationChecks: ACTIVATION_CHECKS, convergencePreflightChecks: CONVERGENCE_PREFLIGHT_CHECKS }, agents: AGENTS, avatars: AVATARS, metrics: METRICS, runs: RUNS, rule: RULE, history: HISTORY, trending: [{ name: 'A101', description: 'A101 shopping application', developer: 'Fixture', category: 'Shopping' }] };
+const DATA = { controls: { activationChecks: ACTIVATION_CHECKS, convergencePreflightChecks: CONVERGENCE_PREFLIGHT_CHECKS }, agents: AGENTS, avatars: AVATARS, metrics: METRICS, runs: RUNS, pipeline: PIPELINE, alerts: ALERTS, quota: QUOTA, fixedGets: FIXED_GETS, rule: RULE, history: HISTORY, trending: [{ name: 'A101', description: 'A101 shopping application', developer: 'Fixture', category: 'Shopping' }] };
 export const UI_REGRESSION_FIXTURE_V1 = Object.freeze({ fixtureVersion: 'ui-regression-owned-v1', fixtureHash: uiHashV1(uiCanonicalV1({ data: DATA, routes: ROUTES, viewports: VIEWPORTS, tabs: TABS, assertionIds: ASSERTIONS })), assertionIds: Object.freeze(ASSERTIONS) });
 const assert = (condition, code = 'UI_ASSERTION_FAILED') => {
     if (!condition)
@@ -132,10 +140,13 @@ function evidence(variant = 'planned') {
 }
 function receipt(id, body) { return { schema: 'mission-control.control-job.v1', jobId: id, kind: body.kind, revision: 1, selectionHash: body.expectedSelectionHash, sourceSha: SOURCE, mcSourceSha: SOURCE, mcBuildHash: BUILD, suiteHash: body.kind === 'convergence_full8' ? 'f'.repeat(64) : null, state: 'running', requestedAt: AT, startedAt: AT, updatedAt: AT, finishedAt: null, phase: 'running', code: null, currentCaseId: null, ownedRunId: null, completedCases: 1, plannedCases: body.kind === 'convergence_full8' ? 8 : body.kind === 'ui_regression' ? ASSERTIONS.length : 6, reportRefs: {}, cancelRequested: false }; }
 function createFixtureState() { return { unexpected: [], activeAssertion: null, browserRequests: [], requestFailures: [], intentionalFaults: [], jobs: new Map(), launches: new Map(), launchBodies: [], evidence: evidence(), history: HISTORY, holdHistory: null, holdLaunch: null, loseNextLaunch: false, cancelSettled: false, requests: [], pendingResponses: new Set() }; }
-async function fixtureResponse(state, method, url, body) {
+async function fixtureResponse(state, method, url, body, rawTarget) {
     const p = url.pathname;
     state.requests.push({ method, path: p });
     if (method === 'GET') {
+        const fixed = FIXED_GETS.find(read => read.target === rawTarget);
+        if (fixed)
+            return fixed.body;
         if (p === '/api/controls/evidence')
             return state.evidence;
         if (p === '/api/controls/jobs')
@@ -162,8 +173,10 @@ async function fixtureResponse(state, method, url, body) {
             return { agents: AGENTS, agentCount: 14, activeRuns: [], activeRunCount: 0, cronCount: 0, costToday: 0, costAllTime: 0, system: METRICS, gateway: null, sessions: [], alerts: [], crons: [], agentLastActive: {}, openPRs: [], recentDeploys: [], agentSummary: [] };
         if (p === '/api/office/status')
             return { agents: AGENTS.map(a => ({ id: a.id, status: 'idle', activity: '' })) };
-        if (p === '/api/runs' || p === '/api/setfarm/pipeline')
+        if (p === '/api/runs')
             return RUNS;
+        if (p === '/api/setfarm/pipeline')
+            return PIPELINE;
         if (p === '/api/runs/stuck')
             return { runs: [] };
         if (p === '/api/kimi-quota')
@@ -171,9 +184,9 @@ async function fixtureResponse(state, method, url, body) {
         if (p === '/api/telemetry' && [LEGACY, V3].includes(url.searchParams.get('runId')))
             return { schema: 'mission-control.pipeline-telemetry.v1', status: 'available_limited', runId: url.searchParams.get('runId'), history: { state: 'unavailable', reasonCode: 'PRECISE_TRANSITION_HISTORY_UNAVAILABLE' }, analysis: { coverage: ['historical_execution_duration'] }, steps: [], transitions: [], bottlenecks: [] };
         if (p === '/api/setfarm/alerts')
-            return { alerts: [], summary: { total: 0, critical: 0, warning: 0 } };
+            return ALERTS;
         if (p === '/api/quota')
-            return { providers: [], available: true };
+            return QUOTA;
         if (p === '/api/costs')
             return { totalToday: 0, totalAllTime: 0, projectedMonthly: 0, breakdownAllTime: [], breakdownToday: [], subagentCostAllTime: 0, subagentCostToday: 0, tokenUsage: [], tokenUsageToday: [], costStatus: { totalToday: 'available', totalAllTime: 'available', projectedMonthly: 'available', subagentCostAllTime: 'available', subagentCostToday: 'available' }, usageSource: 'dashboard_data' };
         if (p === '/api/performance')
@@ -273,7 +286,7 @@ export async function createUiRegressionFixtureSessionV1({ buildDir, tempRoot, c
                     parts.push(part);
                 }
                 const body = bytes ? JSON.parse(Buffer.concat(parts)) : null;
-                const value = await fixtureResponse(state, req.method, url, body);
+                const value = await fixtureResponse(state, req.method, url, body, req.url);
                 const intentionalFault = value?.__fixtureDisconnect ? 'lost_response' : value?.__fixtureStatus === 503 && ((req.method === 'POST' && url.pathname === '/api/rules' && state.activeAssertion === 'rules.draft-503' && body?.title === 'Keep draft' && body?.content === 'Keep complete content') || (req.method === 'DELETE' && url.pathname === '/api/rules/fixture-rule' && state.activeAssertion === 'rules.delete-confirmation-503')) ? 'rules_503' : null;
                 if (intentionalFault) {
                     const bodyHash = uiHashV1(Buffer.concat(parts));

@@ -517,7 +517,7 @@ test('review fix3 fourteen deterministic avatar assets are served only at exact 
     const f = workspace();
     const { createUiRegressionFixtureSessionV1, UI_REGRESSION_FIXTURE_V1 } = await load();
     assert.equal(UI_REGRESSION_FIXTURE_V1.fixtureVersion, 'ui-regression-owned-v1');
-    assert.equal(UI_REGRESSION_FIXTURE_V1.fixtureHash, '2027075249626adb6f803b9d2a3139500fb262de446f002bd82ca98598aa1c1d');
+    assert.equal(UI_REGRESSION_FIXTURE_V1.fixtureHash, '285bad0531b64ac7f8f070b60cfca73dead8f03d90d69341fe9097a6ed0642e4');
     assert.equal(UI_REGRESSION_FIXTURE_V1.assertionIds.length, 316);
     assert.equal(createHash('sha256').update(JSON.stringify(UI_REGRESSION_FIXTURE_V1.assertionIds)).digest('hex'), '4ded731c52c60105daa60639aa64683b68d1d3f22e9c3e685bb794b67e8ba88d');
     const { request } = await import('node:http');
@@ -600,4 +600,78 @@ test('review fix3 installed browser fence permits exactly fourteen GET avatars a
         const diagnostics = result.diagnosticHashes.map(hash => JSON.parse(readFileSync(path.join(f.tempRoot, 'artifacts', hash + '.json'), 'utf8')));
         assert.deepEqual(diagnostics[0].requests, cases.filter(row => row[2] === 'abort').map(row => ({ method: row[1], path: 'denied-origin-or-route' })));
     } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
+
+test('review fix4 real fixture responses satisfy mounted pipeline and exact read contracts', async (t) => {
+    const f = workspace();
+    const { createUiRegressionFixtureSessionV1 } = await load();
+    const { request } = await import('node:http');
+    const read = (target: string, method = 'GET') => new Promise<{ status: number; body: any }>((resolve, reject) => {
+        const req = request({ host: '127.0.0.1', port: 13082, path: target, method, agent: false }, res => {
+            const parts: Buffer[] = [];
+            res.on('data', part => parts.push(part));
+            res.once('error', reject);
+            res.once('end', () => {
+                try { const text = Buffer.concat(parts).toString(); resolve({ status: res.statusCode!, body: text ? JSON.parse(text) : null }); }
+                catch (error) { reject(error); }
+            });
+        });
+        req.once('error', reject);
+        req.end();
+    });
+    let session;
+    try {
+        session = await createUiRegressionFixtureSessionV1(f);
+        await t.test('actual PipelineView renders both HTTP rows and their coherent eight story buckets', async () => {
+            const { createElement } = await import('react');
+            const { renderToStaticMarkup } = await import('react-dom/server');
+            const { MemoryRouter } = await import('react-router-dom');
+            const { PipelineView } = await import('../src/components/PipelineView.tsx');
+            const response = await read('/api/setfarm/pipeline');
+            assert.equal(response.status, 200);
+            const html = renderToStaticMarkup(createElement(MemoryRouter, {}, createElement(PipelineView, { runs: response.body })));
+            assert.match(html, /Legacy fixture/);
+            assert.match(html, /V3 fixture/);
+            assert.equal(response.body.length, 2);
+            const summaries = (await read('/api/runs')).body;
+            for (const run of response.body) {
+                const summary = summaries.find((row: any) => row.id === run.id);
+                assert.deepEqual(run.storyProgress, { completed: 1, total: 1, verified: 1, skipped: 0, running: 0, pending: 0, done: 0, failed: 0 });
+                assert.equal(run.storyProgress.total, summary.storyCount);
+                assert.equal(run.storyProgress.completed, summary.storiesDone);
+                assert.equal(run.operational, null);
+                assert.equal((await read('/api/setfarm/runs/' + run.id + '/operational-snapshot')).body.status, 'unavailable');
+            }
+            assert.match(html, /UNKNOWN/);
+        });
+        await t.test('alerts uses its actual consumed counts and recent envelope', async () => {
+            assert.deepEqual(await read('/api/setfarm/alerts'), { status: 200, body: { counts: { abandoned: 0, timeout: 0, failed: 0 }, recent: [] } });
+        });
+        await t.test('quota is an empty provider-keyed map', async () => {
+            assert.deepEqual(await read('/api/quota'), { status: 200, body: {} });
+        });
+        for (const [target, body] of [['/api/agents/main/history?limit=40', { messages: [] }], ['/api/live-feed/projects?format=rich', []], ['/api/live-feed/history?limit=300', []]] as const)
+            await t.test('exact deterministic GET ' + target, async () => {
+                assert.deepEqual(await read(target), { status: 200, body });
+                assert.deepEqual(await read(target), { status: 200, body });
+            });
+        await t.test('unknown siblings alternate queries traversal mutation and foreign origins stay denied', async () => {
+            const before = session.unexpectedRequests.length;
+            const invalid: [string, string][] = [
+                ['/api/agents/main/history', 'GET'], ['/api/agents/main/history?limit=41', 'GET'],
+                ['/api/agents/main/history?limit=40&extra=1', 'GET'], ['/api/agents/other/history?limit=40', 'GET'],
+                ['/api/live-feed/projects', 'GET'], ['/api/live-feed/projects?format=plain', 'GET'],
+                ['/api/live-feed/history', 'GET'], ['/api/live-feed/history?limit=301', 'GET'],
+                ['/api/live-feed/history?limit=300&agent=all', 'GET'], ['/api/live-feed/unknown?limit=300', 'GET'],
+                ['/api/live-feed/x/../history?limit=300', 'GET'], ['/api/live-feed/%2e/history?limit=300', 'GET'],
+                ['/api/agents/main/history?limit=40', 'POST'], ['/api/live-feed/projects?format=rich', 'POST'], ['/api/live-feed/history?limit=300', 'POST'],
+                ['http://foreign.invalid/api/live-feed/history?limit=300', 'GET'],
+            ];
+            for (const [target, method] of invalid) assert.equal((await read(target, method)).status, 403, target);
+            assert.equal(session.unexpectedRequests.length - before, invalid.length);
+        });
+    } finally {
+        if (session) await session.close();
+        rmSync(f.root, { recursive: true, force: true });
+    }
 });
