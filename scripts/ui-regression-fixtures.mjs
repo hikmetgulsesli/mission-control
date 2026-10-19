@@ -19,6 +19,23 @@ const AGENTS = Array.from({ length: 14 }, (_, i) => ({ id: 'fixture-agent-' + (i
 const AVATARS = AGENTS.map(agent => ({ path: `/avatars/${agent.id}.svg`, contentType: 'image/svg+xml', body: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><title>${agent.name}</title><rect width="64" height="64" rx="12" fill="#243247"/><rect x="12" y="18" width="40" height="32" rx="8" fill="#c4d9ef"/><circle cx="24" cy="32" r="4" fill="#243247"/><circle cx="40" cy="32" r="4" fill="#243247"/><path d="M24 42h16M32 18v-6" stroke="#243247" stroke-width="3"/></svg>\n` }));
 const METRICS = { ram: { source: 'fixture', observedAt: AT, status: 'available', total: 16, used: 0, percent: 0, semantics: 'total-os.freemem' }, cpu: { source: 'fixture', observedAt: AT, status: 'unknown', percent: null }, disk: { source: 'fixture', observedAt: AT, status: 'available', total: 100, used: 0, percent: 0, path: '/fixture', mount: '/fixture', totalBytes: 100000000000, usedBytes: 0, freeBytes: 100000000000 }, load: 0 };
 const RUNS = [{ id: LEGACY, runNumber: 1, workflow: 'fixture-legacy', task: 'Legacy fixture', status: 'completed', updatedAt: AT, steps: [], storyCount: 1, storiesDone: 1 }, { id: V3, runNumber: 2, workflow: 'fixture-v3', task: 'V3 fixture', status: 'completed', updatedAt: AT, steps: [], storyCount: 1, storiesDone: 1 }];
+// Fixed simulated planning presentation only; no operational/product authority.
+const PLANNING = RUNS.map((run, index) => {
+    const rawRun = { id: run.id, run_number: run.runNumber, workflow_id: run.workflow, status: run.status, task: run.task, steps: [{ step_id: 'fixture-step', status: 'done' }] };
+    const rawStories = [{ id: 'fixture-story-' + (index + 1), run_id: run.id, story_index: 0, story_id: 'story-1', title: 'Fixture story', description: 'Retained fixture story', acceptance_criteria: '["Fixture acceptance"]', status: 'verified', output: null, retry_count: 0, max_retries: 2, depends_on: '[]', shared_files: '[]', story_screens: '[]', scope_files: '["README.md"]', pr_url: null, merge_status: null }];
+    const detailStories = rawStories.map(story => ({ ...story, storyId: story.story_id, acceptanceCriteria: JSON.parse(story.acceptance_criteria), scopeFiles: JSON.parse(story.scope_files), sharedFiles: JSON.parse(story.shared_files), dependsOn: JSON.parse(story.depends_on), storyScreens: JSON.parse(story.story_screens), retryCount: story.retry_count, maxRetries: story.max_retries, output: '', prUrl: null, mergeStatus: null }));
+    const phases = [{ id: 'fixture-step', label: 'Fixture planning evidence', status: 'pass', items: [{ id: 'fixture-step.evidence', label: 'Simulated planning record', owner: 'fixture-agent-1', stepId: 'fixture-step', storyId: 'story-1', status: 'pass', evidence: 'Simulated fixture only; no operational authority', blocker: '' }] }];
+    const progress = phases.flatMap(phase => phase.items).reduce((counts, item) => { counts.total++; counts[item.status]++; return counts; }, { total: 0, pass: 0, fail: 0, pending: 0, deferred: 0, na: 0 });
+    const contract = {
+        schema: 'setfarm.run-contract.v1', version: 1, runId: run.id, runNumber: run.runNumber, workflowId: run.workflow, status: run.status, task: run.task, updatedAt: AT, reason: 'fixture-simulated-planning-only',
+        project: { repo: '', branch: '', displayName: 'Fixture planning only', techStack: 'fixture-local', uiLanguage: 'English' },
+        stackPack: { id: 'fixture-local', label: 'Fixture local', confidence: 'low', evidence: ['Simulated fixture only; no operational authority'] },
+        phases, progress,
+        stories: rawStories.map(story => ({ storyId: story.story_id, title: story.title, status: story.status, ownsScreens: JSON.parse(story.story_screens), scopeFiles: JSON.parse(story.scope_files), sharedFiles: JSON.parse(story.shared_files), dependsOn: JSON.parse(story.depends_on), deferred: false })), blockers: [],
+    };
+    return { runId: run.id, rawRun, rawStories, detailStories, plan: { prd: '', stories: [], rawOutput: '' }, contract };
+});
+const RUN_DETAILS = RUNS.map(run => ({ ...run, fullSteps: [{ id: 'fixture-step', agent: 'fixture-agent-1', status: 'done', output: 'Fixture step complete', retryCount: 0 }], stories: PLANNING.find(plan => plan.runId === run.id).detailStories, gitLog: [{ hash: 'abcd123', message: 'Fixture commit', date: AT, author: 'Fixture' }], diffStats: [], fileTree: ['README.md'], agentChats: [{ agent: 'fixture-agent-1', sessionId: 'fixture-session', messages: [{ role: 'assistant', text: 'Fixture conversation', timestamp: AT }] }], progressLog: 'Fixture progress', supervisor: null }));
 const PIPELINE = RUNS.map(run => ({ ...run, storyProgress: { completed: 1, total: 1, verified: 1, skipped: 0, running: 0, pending: 0, done: 0, failed: 0 }, operational: null }));
 const ALERTS = { counts: { abandoned: 0, timeout: 0, failed: 0 }, recent: [] };
 const QUOTA = {};
@@ -49,7 +66,7 @@ const CONVERGENCE_PREFLIGHT_CHECKS = [
     ['execution_profile', 'EVAL_EXECUTION_PROFILE_PINNED'],
     ['result_store', 'EVAL_RESULT_STORES_READY'],
 ].map(([id, code]) => ({ id, status: 'pass', code }));
-const DATA = { controls: { activationChecks: ACTIVATION_CHECKS, convergencePreflightChecks: CONVERGENCE_PREFLIGHT_CHECKS }, agents: AGENTS, avatars: AVATARS, metrics: METRICS, runs: RUNS, pipeline: PIPELINE, alerts: ALERTS, quota: QUOTA, fixedGets: FIXED_GETS, rule: RULE, history: HISTORY, trending: [{ name: 'A101', description: 'A101 shopping application', developer: 'Fixture', category: 'Shopping' }] };
+const DATA = { controls: { activationChecks: ACTIVATION_CHECKS, convergencePreflightChecks: CONVERGENCE_PREFLIGHT_CHECKS }, agents: AGENTS, avatars: AVATARS, metrics: METRICS, runs: RUNS, planning: PLANNING, runDetails: RUN_DETAILS, pipeline: PIPELINE, alerts: ALERTS, quota: QUOTA, fixedGets: FIXED_GETS, rule: RULE, history: HISTORY, trending: [{ name: 'A101', description: 'A101 shopping application', developer: 'Fixture', category: 'Shopping' }] };
 export const UI_REGRESSION_FIXTURE_V1 = Object.freeze({ fixtureVersion: 'ui-regression-owned-v1', fixtureHash: uiHashV1(uiCanonicalV1({ data: DATA, routes: ROUTES, viewports: VIEWPORTS, tabs: TABS, assertionIds: ASSERTIONS })), assertionIds: Object.freeze(ASSERTIONS) });
 const assert = (condition, code = 'UI_ASSERTION_FAILED') => {
     if (!condition)
@@ -205,17 +222,19 @@ async function fixtureResponse(state, method, url, body, rawTarget) {
         if (run && [LEGACY, V3].includes(run[1])) {
             const id = run[1], tail = run[2];
             if (tail === 'detail')
-                return { ...RUNS.find(r => r.id === id), fullSteps: [{ id: 'fixture-step', agent: 'fixture-agent-1', status: 'done', output: 'Fixture step complete', retryCount: 0 }], stories: [{ id: 'story-1', title: 'Fixture story', description: 'Retained fixture story', acceptanceCriteria: ['Fixture acceptance'] }], gitLog: [{ hash: 'abcd123', message: 'Fixture commit', date: AT, author: 'Fixture' }], diffStats: [], fileTree: ['README.md'], agentChats: [{ agent: 'fixture-agent-1', sessionId: 'fixture-session', messages: [{ role: 'assistant', text: 'Fixture conversation', timestamp: AT }] }], progressLog: 'Fixture progress', supervisor: null };
-            if (tail === 'stories' || tail === 'events' || tail === 'errors')
+                return RUN_DETAILS.find(run => run.id === id);
+            if (tail === 'stories')
+                return PLANNING.find(plan => plan.runId === id).rawStories;
+            if (tail === 'events' || tail === 'errors')
                 return [];
             if (tail === 'supervisor')
                 return { available: false };
             if (tail === 'plan')
-                return { plan: null, stories: [] };
+                return PLANNING.find(plan => plan.runId === id).plan;
             if (tail === 'design')
                 return { design: null };
             if (tail === 'contract')
-                return { available: false, contract: null };
+                return PLANNING.find(plan => plan.runId === id).contract;
             if (tail === 'operations')
                 return { available: false };
             if (tail === 'operational-snapshot')
@@ -502,6 +521,87 @@ async function runCatalog({ browser, state, store, measured, control, schemas })
         state.requestFailures.length = 0;
         state.intentionalFaults.length = 0;
     };
+    const assertOverflow = async () => {
+        const overflow = await page.evaluate(() => {
+            const tolerance = 1, samples = [];
+            let count = 0;
+            const add = (kind, element) => {
+                count++;
+                if (samples.length >= 8)
+                    return;
+                const rect = element.getBoundingClientRect();
+                const number = value => Number.isFinite(value) ? Math.round(value * 100) / 100 : 0;
+                samples.push({ kind, tag: element.tagName.toLowerCase().slice(0, 20), className: (element.getAttribute('class') ?? '').slice(0, 80), left: number(rect.left), right: number(rect.right), clientWidth: number(element.clientWidth), scrollWidth: number(element.scrollWidth) });
+            };
+            const root = document.documentElement;
+            if (root.scrollWidth > window.innerWidth + tolerance)
+                add('document-width', root);
+            const main = document.querySelector('.layout__content');
+            if (!main) {
+                add('missing-main', root);
+                return { count, samples };
+            }
+            const visible = element => {
+                const rect = element.getBoundingClientRect(), style = getComputedStyle(element);
+                return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+            };
+            if (!visible(main)) {
+                add('hidden-main', main);
+                return { count, samples };
+            }
+            const mainRect = main.getBoundingClientRect();
+            const mainLeft = Math.max(0, mainRect.left + main.clientLeft), mainRight = Math.min(window.innerWidth, mainRect.left + main.clientLeft + main.clientWidth);
+            if (mainRect.left < -tolerance || mainRect.right > window.innerWidth + tolerance)
+                add('main-bounds', main);
+            if (main.scrollWidth > main.clientWidth + tolerance)
+                add('main-content', main);
+            const scrollSelectors = '.cron-table,.token-table-wrapper,.token-table,.rd-tabs,.rd-chat-sidebar,.chat-sidebar,.af-pipeline__steps,.af-inline-plan__tabs,.rules__stages';
+            const scrollers = new Set(Array.from(main.querySelectorAll(scrollSelectors)).filter(element => visible(element) && ['auto', 'scroll'].includes(getComputedStyle(element).overflowX)));
+            const bounds = element => {
+                let rect = element.getBoundingClientRect();
+                for (let parent = element.parentElement; parent && parent !== main; parent = parent.parentElement) {
+                    const style = getComputedStyle(parent);
+                    if (scrollers.has(parent)) {
+                        // The content can scroll; its original bounded wrapper cannot escape.
+                        rect = parent.getBoundingClientRect();
+                    }
+                    else if (['hidden', 'clip', 'auto', 'scroll'].includes(style.overflowX)) {
+                        const clip = parent.getBoundingClientRect(), left = clip.left + parent.clientLeft, right = left + parent.clientWidth;
+                        if (rect.left < left - tolerance || rect.right > right + tolerance)
+                            add('ancestor-clip', element);
+                    }
+                }
+                if (rect.left < mainLeft - tolerance || rect.right > mainRight + tolerance)
+                    add('horizontal-bounds', element);
+            };
+            for (const pageRoot of main.children) {
+                if (!visible(pageRoot))
+                    continue;
+                bounds(pageRoot);
+                if (pageRoot.scrollWidth > pageRoot.clientWidth + tolerance && !scrollers.has(pageRoot))
+                    add('page-content', pageRoot);
+            }
+            for (const scroller of scrollers)
+                bounds(scroller);
+            const critical = new Set(main.querySelectorAll('.af-page__header,.projects-page__header,.projects-page__actions,.projects-sort,.rules__actions,.rules__filters,.oe-unavailable,.pixel-office__canvas-wrap'));
+            for (const header of main.querySelectorAll('.af-page__header'))
+                for (const child of header.children)
+                    critical.add(child);
+            for (const element of critical) {
+                if (!visible(element))
+                    continue;
+                bounds(element);
+                // The canvas bitmap has its own bounded rendering coordinates.
+                if (!element.matches('.pixel-office__canvas-wrap') && element.scrollWidth > element.clientWidth + tolerance)
+                    add('critical-content', element);
+            }
+            for (const element of main.querySelectorAll('button,input,select,textarea,a,[role="button"]'))
+                if (visible(element))
+                    bounds(element);
+            return { count, samples };
+        });
+        assert(overflow.count === 0, 'UI_HORIZONTAL_OVERFLOW ' + JSON.stringify(overflow));
+    };
     const loaded = async (route) => { await page.goto(ORIGIN + route, { waitUntil: 'networkidle', timeout: 15000 }); await page.locator('#root').waitFor({ state: 'visible' }); await page.locator('.page-loading').waitFor({ state: 'hidden' }); assert(new URL(page.url()).pathname === route, 'UI_UNEXPECTED_REDIRECT'); assert((await page.locator('body').innerText()).trim().length > 50, 'UI_EMPTY_PAGE'); };
     try {
         for (const v of VIEWPORTS) {
@@ -514,87 +614,7 @@ async function runCatalog({ browser, state, store, measured, control, schemas })
                 currentRoute = route;
                 const prefix = `page.${routeId(route)}.${v.width}`;
                 await check(prefix + '.loaded', () => loaded(route), `${routeId(route)}-${v.width}`);
-                await check(prefix + '.overflow', async () => {
-                    const overflow = await page.evaluate(() => {
-                        const tolerance = 1, samples = [];
-                        let count = 0;
-                        const add = (kind, element) => {
-                            count++;
-                            if (samples.length >= 8)
-                                return;
-                            const rect = element.getBoundingClientRect();
-                            const number = value => Number.isFinite(value) ? Math.round(value * 100) / 100 : 0;
-                            samples.push({ kind, tag: element.tagName.toLowerCase().slice(0, 20), className: (element.getAttribute('class') ?? '').slice(0, 80), left: number(rect.left), right: number(rect.right), clientWidth: number(element.clientWidth), scrollWidth: number(element.scrollWidth) });
-                        };
-                        const root = document.documentElement;
-                        if (root.scrollWidth > window.innerWidth + tolerance)
-                            add('document-width', root);
-                        const main = document.querySelector('.layout__content');
-                        if (!main) {
-                            add('missing-main', root);
-                            return { count, samples };
-                        }
-                        const visible = element => {
-                            const rect = element.getBoundingClientRect(), style = getComputedStyle(element);
-                            return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
-                        };
-                        if (!visible(main)) {
-                            add('hidden-main', main);
-                            return { count, samples };
-                        }
-                        const mainRect = main.getBoundingClientRect();
-                        const mainLeft = Math.max(0, mainRect.left + main.clientLeft), mainRight = Math.min(window.innerWidth, mainRect.left + main.clientLeft + main.clientWidth);
-                        if (mainRect.left < -tolerance || mainRect.right > window.innerWidth + tolerance)
-                            add('main-bounds', main);
-                        if (main.scrollWidth > main.clientWidth + tolerance)
-                            add('main-content', main);
-                        const scrollSelectors = '.cron-table,.token-table-wrapper,.token-table,.rd-tabs,.rd-chat-sidebar,.chat-sidebar,.af-pipeline__steps,.af-inline-plan__tabs,.rules__stages';
-                        const scrollers = new Set(Array.from(main.querySelectorAll(scrollSelectors)).filter(element => visible(element) && ['auto', 'scroll'].includes(getComputedStyle(element).overflowX)));
-                        const bounds = element => {
-                            let rect = element.getBoundingClientRect();
-                            for (let parent = element.parentElement; parent && parent !== main; parent = parent.parentElement) {
-                                const style = getComputedStyle(parent);
-                                if (scrollers.has(parent)) {
-                                    // The content can scroll; its original bounded wrapper cannot escape.
-                                    rect = parent.getBoundingClientRect();
-                                }
-                                else if (['hidden', 'clip', 'auto', 'scroll'].includes(style.overflowX)) {
-                                    const clip = parent.getBoundingClientRect(), left = clip.left + parent.clientLeft, right = left + parent.clientWidth;
-                                    if (rect.left < left - tolerance || rect.right > right + tolerance)
-                                        add('ancestor-clip', element);
-                                }
-                            }
-                            if (rect.left < mainLeft - tolerance || rect.right > mainRight + tolerance)
-                                add('horizontal-bounds', element);
-                        };
-                        for (const pageRoot of main.children) {
-                            if (!visible(pageRoot))
-                                continue;
-                            bounds(pageRoot);
-                            if (pageRoot.scrollWidth > pageRoot.clientWidth + tolerance && !scrollers.has(pageRoot))
-                                add('page-content', pageRoot);
-                        }
-                        for (const scroller of scrollers)
-                            bounds(scroller);
-                        const critical = new Set(main.querySelectorAll('.af-page__header,.projects-page__header,.projects-page__actions,.projects-sort,.rules__actions,.rules__filters,.oe-unavailable,.pixel-office__canvas-wrap'));
-                        for (const header of main.querySelectorAll('.af-page__header'))
-                            for (const child of header.children)
-                                critical.add(child);
-                        for (const element of critical) {
-                            if (!visible(element))
-                                continue;
-                            bounds(element);
-                            // The canvas bitmap has its own bounded rendering coordinates.
-                            if (!element.matches('.pixel-office__canvas-wrap') && element.scrollWidth > element.clientWidth + tolerance)
-                                add('critical-content', element);
-                        }
-                        for (const element of main.querySelectorAll('button,input,select,textarea,a,[role="button"]'))
-                            if (visible(element))
-                                bounds(element);
-                        return { count, samples };
-                    });
-                    assert(overflow.count === 0, 'UI_HORIZONTAL_OVERFLOW ' + JSON.stringify(overflow));
-                });
+                await check(prefix + '.overflow', assertOverflow);
                 await check(prefix + '.fonts', async () => assert(await page.evaluate(() => Array.from(document.querySelectorAll('p,button,input,select,textarea,li,td,dd,label')).filter(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(e).visibility !== 'hidden'; }).every(e => parseFloat(getComputedStyle(e).fontSize) >= 12)), 'UI_UNREADABLE_FONT'));
                 await check(prefix + '.console-network', async () => { await noErrors(); assert(!await page.evaluate(() => window.__uiUnexpectedServiceWorker), 'UI_SERVICE_WORKER_DENIED'); });
             }
@@ -613,6 +633,35 @@ async function runCatalog({ browser, state, store, measured, control, schemas })
                         assert(await selected.count() === 1, 'UI_RUN_TAB_NOT_UNIQUE');
                         await selected.click();
                         assert(await page.locator('.rd-tab--active').count() === 1 && await selected.evaluate(element => element.classList.contains('rd-tab--active')), 'UI_RUN_TAB_NOT_ACTIVE');
+                        if (tab === 'Run Contract')
+                            await page.waitForFunction(() => {
+                                const visible = element => {
+                                    const rect = element.getBoundingClientRect(), style = getComputedStyle(element);
+                                    return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+                                };
+                                const wrappers = document.querySelectorAll('.rd-contract-wrap');
+                                if (wrappers.length !== 1 || !visible(wrappers[0]))
+                                    return false;
+                                const wrapper = wrappers[0];
+                                if (Array.from(wrapper.querySelectorAll('.af-inline-plan__loading')).some(visible))
+                                    return false;
+                                const contracts = wrapper.querySelectorAll('.af-contract');
+                                if (contracts.length !== 1 || !visible(contracts[0]))
+                                    return false;
+                                const contract = contracts[0], items = contract.querySelectorAll('.af-contract__item'), stories = contract.querySelectorAll('.af-contract__story');
+                                if (items.length !== 1 || stories.length !== 1 || !visible(items[0]) || !visible(stories[0]))
+                                    return false;
+                                const exact = (scope, selector, text) => {
+                                    const matches = scope.querySelectorAll(selector);
+                                    return matches.length === 1 && visible(matches[0]) && matches[0].textContent.trim() === text;
+                                };
+                                return exact(contract, '.af-contract__summary-main > strong', 'Fixture planning only')
+                                    && exact(items[0], '.af-contract__item-label', 'Simulated planning record')
+                                    && exact(items[0], '.af-contract__item-evidence', 'Simulated fixture only; no operational authority')
+                                    && exact(stories[0], '.af-contract__story-id', 'story-1')
+                                    && exact(stories[0], '.af-contract__story-title', 'Fixture story');
+                            });
+                        await assertOverflow();
                         await noErrors();
                     }, `run-${id}-${v.width}-${tab.toLowerCase().replaceAll(' ', '-')}`);
             }

@@ -517,7 +517,7 @@ test('review fix3 fourteen deterministic avatar assets are served only at exact 
     const f = workspace();
     const { createUiRegressionFixtureSessionV1, UI_REGRESSION_FIXTURE_V1 } = await load();
     assert.equal(UI_REGRESSION_FIXTURE_V1.fixtureVersion, 'ui-regression-owned-v1');
-    assert.equal(UI_REGRESSION_FIXTURE_V1.fixtureHash, '318f49b3b977335e95cb4c7b716324950787ce30bbbfb332cb21e2a487ff828b');
+    assert.equal(UI_REGRESSION_FIXTURE_V1.fixtureHash, 'b662bf27e6ab9479a47986c4cc35c5cd9a23e301f695f5cb142c0e15712e3aa4');
     assert.equal(UI_REGRESSION_FIXTURE_V1.assertionIds.length, 316);
     assert.equal(createHash('sha256').update(JSON.stringify(UI_REGRESSION_FIXTURE_V1.assertionIds)).digest('hex'), '4ded731c52c60105daa60639aa64683b68d1d3f22e9c3e685bb794b67e8ba88d');
     const { request } = await import('node:http');
@@ -694,6 +694,7 @@ function responsiveGeometry(scenario: string) {
     const page = element('div', 'projects-page', 8, 374, main);
     if (scenario === 'document-overflow') root.scrollWidth = 500;
     if (scenario === 'main-overflow') main.scrollWidth = 600;
+    if (scenario === 'tab-content-overflow') { main.scrollWidth = 600; page.scrollWidth = 592; }
     if (scenario === 'hidden-header') {
         const header = element('div', 'af-page__header', 8, 374, page, { overflowX: 'hidden' }); header.scrollWidth = 650;
     }
@@ -701,8 +702,8 @@ function responsiveGeometry(scenario: string) {
     if (scenario === 'clipped-ancestor') {
         const clip = element('div', 'panel', 8, 100, page, { overflowX: 'hidden' }); element('button', 'action', 80, 100, clip);
     }
-    if (['bounded-table', 'bounded-tabs', 'overwide-wrapper', 'arbitrary-auto', 'hidden-scroller'].includes(scenario)) {
-        const name = scenario === 'arbitrary-auto' ? 'not-reviewed' : scenario === 'bounded-tabs' ? 'rd-tabs' : 'cron-table';
+    if (['bounded-table', 'bounded-tabs', 'bounded-inline-tabs', 'overwide-wrapper', 'arbitrary-auto', 'hidden-scroller'].includes(scenario)) {
+        const name = scenario === 'arbitrary-auto' ? 'not-reviewed' : scenario === 'bounded-tabs' ? 'rd-tabs' : scenario === 'bounded-inline-tabs' ? 'af-inline-plan__tabs' : 'cron-table';
         const wrapper = element('div', name, 8, scenario === 'overwide-wrapper' ? 500 : 374, page, { overflowX: scenario === 'hidden-scroller' ? 'hidden' : 'auto' });
         wrapper.scrollWidth = 900;
         element('button', 'internal-control', 600, 100, wrapper);
@@ -769,6 +770,7 @@ test('run tab assertion binds the exact selected button despite uppercase render
         ['uppercase', 'pass', 1], ['badge-count', 'pass', 1], ['wrong-active', 'fail', 1],
         ['duplicate-active', 'fail', 1], ['ambiguous-selection', 'fail', 0], ['missing-selection', 'fail', 0],
         ['prefix-label', 'fail', 0], ['not-actionable', 'fail', 1],
+        ['tab-content-overflow', 'fail', 1], ['bounded-inline-tabs', 'pass', 1],
     ];
     for (const [scenario, expected, expectedClicks] of cases) await t.test(scenario, async () => {
         const f = workspace();
@@ -788,9 +790,14 @@ test('run tab assertion binds the exact selected button despite uppercase render
         });
         const geometry: any = responsiveGeometry('wrapped-fit');
         geometry.document.querySelectorAll = () => [];
+        const tabGeometry: any = responsiveGeometry(['tab-content-overflow', 'bounded-inline-tabs'].includes(scenario) ? scenario : 'wrapped-fit');
+        tabGeometry.document.querySelectorAll = () => [];
+        let tabMainQueries = 0;
+        const originalQuery = tabGeometry.document.querySelector;
+        tabGeometry.document.querySelector = (selector: string) => { if (selector === '.layout__content') tabMainQueries++; return originalQuery(selector); };
         const page = { on() {}, setDefaultTimeout() {}, goto: async (url: string) => { currentUrl = url; },
             locator: (selector: string) => selector === '.rd-tab' ? locator(nodes) : selector === '.rd-tab--active' ? locator(nodes.filter(n => n.classList.contains('rd-tab--active'))) : { waitFor: async () => {}, innerText: async () => 'Simulated page body for reaching the real tab assertion in the Source engine.' },
-            evaluate: async (callback: Function) => runInNewContext('(' + callback.toString() + ')()', geometry),
+            evaluate: async (callback: Function) => runInNewContext('(' + callback.toString() + ')()', clicks ? tabGeometry : geometry),
             screenshot: async () => Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0]), url: () => currentUrl,
         };
         const browser = { newContext: async () => { contexts++; return { route: async () => {}, routeWebSocket: async () => {}, addInitScript: async () => {}, on() {}, newPage: async () => page, close: async () => { closed++; } }; } };
@@ -800,6 +807,14 @@ test('run tab assertion binds the exact selected button despite uppercase render
             assert.equal(result.report.assertions.at(-1).id, targetId);
             assert.equal(result.report.assertions.at(-1).status, expected);
             assert.equal(clicks, expectedClicks);
+            if (['tab-content-overflow', 'bounded-inline-tabs'].includes(scenario)) assert.equal(tabMainQueries, 1, 'tab content must run the actual shared geometry callback');
+            if (scenario === 'tab-content-overflow') {
+                const diagnostic = JSON.parse(readFileSync(path.join(f.tempRoot, 'artifacts', result.diagnosticHashes[0] + '.json'), 'utf8'));
+                assert.match(diagnostic.message, /^UI_HORIZONTAL_OVERFLOW /);
+                const details = JSON.parse(diagnostic.message.slice('UI_HORIZONTAL_OVERFLOW '.length));
+                assert.ok(details.samples.some((sample: any) => sample.kind === 'main-content'));
+                assert.ok(details.samples.some((sample: any) => sample.kind === 'page-content'));
+            }
             assert.equal(closed, contexts);
             assert.equal(result.report.screenshots.length, 61);
             assert.equal(result.report.outcome, 'incomplete'); // fixed boundary cancellation prevents full-run authority
@@ -866,5 +881,190 @@ test('navigation shortcut setup blurs focused elements without clicking provider
         assert.equal(blurs, scenario === 'non-html-focus' ? 0 : 1);
         assert.equal(clicks, 0);
         assert.deepEqual(posts, []);
+    });
+});
+
+test('planning fixture HTTP responses match fixed pure production story and contract normalization', async (t) => {
+    const ts = await import('typescript');
+    const { request } = await import('node:http');
+    const { runInNewContext } = await import('node:vm');
+    const contractSource = readFileSync(new URL('../server/routes/setfarm-activity.ts', import.meta.url), 'utf8');
+    const contractAst = ts.createSourceFile('setfarm-activity.ts', contractSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const contractDeclarations = ['safeJson', 'compactDisplay', 'formatListEntry', 'parseList', 'contractStatus', 'normalizeVisibleStatus', 'normalizeRunContract'].map(name => {
+        const matches = contractAst.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === name);
+        assert.equal(matches.length, 1, name);
+        return matches[0].getText(contractAst);
+    }).join('\n');
+    assert.doesNotMatch(contractDeclarations, /\b(import|require|process|fetch|readRepoContract|buildFallbackContract)\b/);
+    const normalizeContract = runInNewContext(ts.transpileModule('(function(){' + contractDeclarations + ';return normalizeRunContract;})()', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, {});
+    const storySource = readFileSync(new URL('../server/utils/setfarm-db.ts', import.meta.url), 'utf8');
+    const storyAst = ts.createSourceFile('setfarm-db.ts', storySource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const storyDeclarations = ['safeJson', 'parseJsonList', 'normalizeStoryRow'].map(name => {
+        const matches = storyAst.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === name);
+        assert.equal(matches.length, 1, name);
+        return matches[0].getText(storyAst);
+    }).join('\n');
+    assert.doesNotMatch(storyDeclarations, /\b(import|require|process|fetch)\b/);
+    const normalizeStory = runInNewContext(ts.transpileModule('(function(){' + storyDeclarations + ';return normalizeStoryRow;})()', { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, {});
+    const json = (value: any) => JSON.parse(JSON.stringify(value));
+    const f = workspace();
+    const { createUiRegressionFixtureSessionV1 } = await load();
+    let session;
+    try {
+        session = await createUiRegressionFixtureSessionV1(f);
+        const ids = ['ac8cea43-7686-4d27-8092-1e3dd9207ca4', 'ad47fe65-4ec4-4fb5-89da-fff71eb4e79a'];
+        for (const [index, id] of ids.entries()) {
+            // Each request belongs to this fixture lifetime, never a global fetch socket pool.
+            const readWire = (tail: string) => new Promise<{ status: number; body: string }>((resolve, reject) => {
+                const req = request({ host: '127.0.0.1', port: 13082, path: '/api/setfarm/runs/' + id + '/' + tail, method: 'GET', agent: false }, res => {
+                    const chunks: Buffer[] = [];
+                    res.on('data', chunk => chunks.push(chunk));
+                    res.once('error', reject);
+                    res.once('end', () => resolve({ status: res.statusCode!, body: Buffer.concat(chunks).toString('utf8') }));
+                });
+                req.once('error', reject);
+                req.end();
+            });
+            const read = async (tail: string) => { const response = await readWire(tail); assert.equal(response.status, 200); return JSON.parse(response.body); };
+            const [detail, stories, plan, contract] = await Promise.all(['detail', 'stories', 'plan', 'contract'].map(read));
+            // These retained unavailable wire bodies must not acquire planning authority.
+            for (const [tail, expectedBody] of [
+                ['operational-snapshot', { status: 'unavailable', code: 'SETFARM_OPERATIONAL_SNAPSHOT_NOT_FOUND', reason: 'not_found' }],
+                ['product-build-authority', { status: 'unavailable', code: 'SETFARM_PRODUCT_BUILD_AUTHORITY_NOT_READY', reason: 'not_ready', upstreamStatus: 409, upstreamCode: index === 0 ? 'RUNTIME_PACKET_RUN_NOT_V3' : 'RUNTIME_PACKET_NOT_READY' }],
+            ] as const) {
+                const response = await readWire(tail);
+                assert.equal(response.status, 200);
+                assert.equal(response.body, JSON.stringify(expectedBody));
+            }
+            const row = { id: 'fixture-story-' + (index + 1), run_id: id, story_index: 0, story_id: 'story-1', title: 'Fixture story', description: 'Retained fixture story', acceptance_criteria: '["Fixture acceptance"]', status: 'verified', output: null, retry_count: 0, max_retries: 2, depends_on: '[]', shared_files: '[]', story_screens: '[]', scope_files: '["README.md"]', pr_url: null, merge_status: null };
+            const rawRun = { id, run_number: index + 1, workflow_id: index === 0 ? 'fixture-legacy' : 'fixture-v3', status: 'completed', task: index === 0 ? 'Legacy fixture' : 'V3 fixture', steps: [{ step_id: 'fixture-step', status: 'done' }] };
+            const seed = {
+                schema: 'setfarm.run-contract.v1', version: 1, runId: id, runNumber: index + 1, workflowId: rawRun.workflow_id, status: 'completed', task: rawRun.task, updatedAt: '2026-10-19T10:00:00.000Z', reason: 'fixture-simulated-planning-only',
+                project: { repo: '', branch: '', displayName: 'Fixture planning only', techStack: 'fixture-local', uiLanguage: 'English' },
+                stackPack: { id: 'fixture-local', label: 'Fixture local', confidence: 'low', evidence: ['Simulated fixture only; no operational authority'] },
+                phases: [{ id: 'fixture-step', label: 'Fixture planning evidence', items: [{ id: 'fixture-step.evidence', label: 'Simulated planning record', owner: 'fixture-agent-1', stepId: 'fixture-step', storyId: 'story-1', status: 'pass', evidence: 'Simulated fixture only; no operational authority', blocker: '' }] }],
+                stories: [{ storyId: 'story-1', title: 'Fixture story', status: 'verified', ownsScreens: [], scopeFiles: ['README.md'], sharedFiles: [], dependsOn: [], deferred: false }], blockers: [],
+            };
+            await t.test(id + ' raw stories retain row/run/local identity and detail uses actual conversion', () => {
+                assert.deepEqual(stories, [row]);
+                assert.deepEqual(detail.stories, json(stories.map(normalizeStory)));
+                assert.equal(detail.stories[0].id, row.id);
+                assert.equal(detail.stories[0].storyId, 'story-1');
+                assert.equal(detail.storyCount, 1); assert.equal(detail.storiesDone, 1);
+                assert.deepEqual(detail.fullSteps.map((step: any) => ({ step_id: step.id, status: step.status })), rawRun.steps);
+            });
+            await t.test(id + ' empty plan is the exact no-plan-output producer branch', () => {
+                assert.deepEqual(plan, { prd: '', stories: [], rawOutput: '' });
+            });
+            await t.test(id + ' direct contract equals production normalization with coherent one-item progress', () => {
+                assert.equal(Object.hasOwn(contract, 'available'), false); assert.equal(Object.hasOwn(contract, 'contract'), false);
+                assert.deepEqual(contract, json(normalizeContract(seed, [row], rawRun)));
+                assert.equal(contract.schema, 'setfarm.run-contract.v1'); assert.equal(contract.runId, id);
+                assert.equal(contract.stories.length, 1); assert.equal(contract.stories[0].storyId, row.story_id);
+                assert.equal(contract.phases[0].items[0].stepId, detail.fullSteps[0].id);
+                assert.deepEqual(contract.progress, { total: 1, pass: 1, fail: 0, pending: 0, deferred: 0, na: 0 });
+                assert.equal(contract.progress.total, contract.phases.flatMap((phase: any) => phase.items).length);
+            });
+            await t.test(id + ' running step probe activates real closure status normalization', () => {
+                const running = json(normalizeContract(seed, [row], { ...rawRun, steps: [{ step_id: 'fixture-step', status: 'running' }] }));
+                assert.equal(running.phases[0].items[0].status, 'pending');
+                assert.equal(running.phases[0].status, 'pending');
+                assert.deepEqual(running.progress, { total: 1, pass: 0, fail: 0, pending: 1, deferred: 0, na: 0 });
+            });
+        }
+        assert.equal(session.unexpectedRequests.length, 0);
+    } finally {
+        if (session) await session.close();
+        rmSync(f.root, { recursive: true, force: true });
+    }
+});
+
+// Simulated asynchronous mount; actual readiness and geometry callbacks execute in VM.
+test('Run Contract waits for successful fixture content before checking loaded tab geometry', async (t) => {
+    const { runInNewContext } = await import('node:vm');
+    for (const scenario of ['loaded-overflow', 'loaded-bounded', 'unavailable', 'wrong-title']) await t.test(scenario, async () => {
+        const f = workspace();
+        const { runUiRegressionV1 } = await load();
+        let phase = 'loading', activeTab = '', currentUrl = '', stop = false, contexts = 0, closed = 0;
+        let geometryWhileLoading = 0, geometryAfterLoaded = 0;
+        let arrived!: () => void, release!: () => void;
+        const waitArrived = new Promise<void>(resolve => { arrived = resolve; });
+        const mountReleased = new Promise<void>(resolve => { release = resolve; });
+        function mountedNodes() {
+            const nodes: any[] = [];
+            const element = (tag: string, className: string, text: string, parent: any = null) => {
+                const node: any = { tagName: tag.toUpperCase(), className, textContent: text, parentElement: parent,
+                    style: { visibility: 'visible', display: 'block' }, getBoundingClientRect: () => ({ width: 300, height: 30 }),
+                    matches: (selector: string): boolean => {
+                        const parts = selector.split('>').map(p => p.trim());
+                        if (parts.length === 2) return node.matches(parts[1]) && !!parent?.matches(parts[0]);
+                        return selector.startsWith('.') ? className.split(' ').includes(selector.slice(1)) : tag === selector;
+                    },
+                    querySelectorAll: (selector: string) => nodes.filter(candidate => { for (let p = candidate.parentElement; p; p = p.parentElement) if (p === node) return candidate.matches(selector); return false; }),
+                };
+                nodes.push(node); return node;
+            };
+            const wrapper = element('div', 'rd-contract-wrap', '');
+            if (phase === 'loading') element('div', 'af-inline-plan__loading', 'Loading plan data...', wrapper);
+            else if (scenario === 'unavailable') element('div', 'story-checklist__empty', 'No stories found', wrapper);
+            else {
+                const contract = element('div', 'af-contract', '', wrapper);
+                const summary = element('div', 'af-contract__summary-main', '', contract);
+                element('strong', '', scenario === 'wrong-title' ? 'Wrong planning content' : 'Fixture planning only', summary);
+                const item = element('div', 'af-contract__item', '', contract);
+                element('span', 'af-contract__item-label', 'Simulated planning record', item);
+                element('span', 'af-contract__item-evidence', 'Simulated fixture only; no operational authority', item);
+                const story = element('div', 'af-contract__story', '', contract);
+                element('span', 'af-contract__story-id', 'story-1', story);
+                element('span', 'af-contract__story-title', 'Fixture story', story);
+            }
+            return nodes;
+        }
+        const evaluate = (callback: Function) => {
+            const loadedContract = activeTab === 'Run Contract' && phase === 'loaded';
+            const geometry: any = responsiveGeometry(loadedContract && scenario === 'loaded-overflow' ? 'tab-content-overflow' : 'bounded-inline-tabs');
+            const originalQuery = geometry.document.querySelector;
+            geometry.document.querySelector = (selector: string) => {
+                if (activeTab === 'Run Contract' && selector === '.layout__content') phase === 'loading' ? geometryWhileLoading++ : geometryAfterLoaded++;
+                return originalQuery(selector);
+            };
+            geometry.document.querySelectorAll = (selector: string) => mountedNodes().filter(node => node.matches(selector));
+            return runInNewContext('(' + callback.toString() + ')()', geometry);
+        };
+        const tabs = ['Execution', 'Pipeline', 'Run Contract'].map(text => ({ textContent: text, classList: { contains: (name: string) => name === 'rd-tab--active' && text === activeTab } }));
+        const locator = (items: typeof tabs): any => ({
+            filter: ({ hasText }: { hasText: RegExp }) => locator(items.filter(node => hasText.test(node.textContent))),
+            count: async () => items.length,
+            click: async () => { assert.equal(items.length, 1); activeTab = items[0].textContent; },
+            evaluate: async (callback: Function) => { assert.equal(items.length, 1); return callback(items[0]); },
+        });
+        const page = { on() {}, setDefaultTimeout() {}, goto: async (url: string) => { currentUrl = url; },
+            locator: (selector: string) => selector === '.rd-tab' ? locator(tabs) : selector === '.rd-tab--active' ? locator(tabs.filter(node => node.classList.contains('rd-tab--active'))) : { waitFor: async () => {}, innerText: async () => 'Simulated body text for reaching the actual asynchronous Run Contract tab assertion.' },
+            evaluate: async (callback: Function) => evaluate(callback),
+            waitForFunction: async (callback: Function) => { assert.equal(evaluate(callback), false, 'loading placeholder cannot satisfy readiness'); arrived(); await mountReleased; if (!evaluate(callback)) throw Error('simulated readiness timeout'); },
+            screenshot: async () => Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0]), url: () => currentUrl,
+        };
+        const browser = { newContext: async () => { contexts++; return { route: async () => {}, routeWebSocket: async () => {}, addInitScript: async () => {}, on() {}, newPage: async () => page, close: async () => { closed++; } }; } };
+        const targetId = 'run.ac8cea43-7686-4d27-8092-1e3dd9207ca4.390.run-contract';
+        const running = runUiRegressionV1({ ...f, browser, control: { cancellationRequested: () => stop, onAssertionBoundary: async ({ id, edge }: any) => { if (id === targetId && edge === 'after') stop = true; } } });
+        try {
+            const waited = await Promise.race([waitArrived.then(() => true), running.then(() => false)]);
+            const queriesBeforeRelease = geometryWhileLoading;
+            phase = 'loaded'; release();
+            const result = await running;
+            assert.equal(result.report.assertions.at(-1).id, targetId);
+            assert.equal(result.report.assertions.at(-1).status, scenario === 'loaded-bounded' ? 'pass' : 'fail');
+            assert.equal(waited, true, 'tab must await real content readiness');
+            assert.equal(queriesBeforeRelease, 0, 'no geometry while only loading placeholder is mounted');
+            assert.equal(geometryAfterLoaded, ['loaded-overflow', 'loaded-bounded'].includes(scenario) ? 1 : 0);
+            assert.equal(result.report.assertions.length, 243);
+            assert.equal(result.report.screenshots.length, 63);
+            assert.equal(result.report.outcome, 'incomplete');
+            assert.equal(closed, contexts);
+            if (scenario === 'loaded-overflow') {
+                const diagnostic = JSON.parse(readFileSync(path.join(f.tempRoot, 'artifacts', result.diagnosticHashes[0] + '.json'), 'utf8'));
+                assert.match(diagnostic.message, /^UI_HORIZONTAL_OVERFLOW /);
+            }
+        } finally { release(); await running; rmSync(f.root, { recursive: true, force: true }); }
     });
 });

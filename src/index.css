@@ -4621,6 +4621,7 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
 }
 .af-inline-plan__tabs {
   display: flex;
+  overflow-x: auto;
   gap: 2px;
   border-bottom: 1px solid var(--border);
   margin-bottom: 8px;
