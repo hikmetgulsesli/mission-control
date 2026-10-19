@@ -8667,13 +8667,24 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
 
 .prd-actions {
   display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
   gap: 8px;
   align-items: center;
+}
+
+.prd-actions > .prd-input-group {
+  min-width: 0;
+  max-width: 100%;
 }
 
 /* Launch section — compact inline */
 .prd-launch {
   display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
   gap: 8px;
   align-items: center;
   padding: 8px 10px;
@@ -8684,17 +8695,23 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
 
 .prd-launch__inputs {
   display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
   gap: 6px;
-  flex: 1;
+  flex: 1 1 240px;
 }
 
 .prd-launch__inputs .prd-input {
-  flex: 1;
+  flex: 1 1 160px;
+  min-width: 0;
+  max-width: 100%;
   padding: 6px 8px;
 }
 
 .prd-launch__inputs .prd-select {
   width: 120px;
+  max-width: 100%;
   padding: 6px 8px;
 }
 
