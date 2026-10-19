@@ -757,18 +757,46 @@ export function createFixedManualWorkerPortV1(selected: SelectedControlRuntimeV1
             if (!intentBytes.equals(controlBytesV1(intent)) || controlHashV1(intentBytes) !== binding.intentHash)
                 fail('CONTROL_CUSTODY_UNCERTAIN');
             const executableHash = controlHashV1(readFileSync(executable));
-            const env: NodeJS.ProcessEnv = { PATH: '/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin', LANG: 'C', LC_ALL: 'C', TZ: 'UTC' };
-            for (const key of ['HOME', 'TMPDIR', 'USER'])
-                if (process.env[key])
-                    env[key] = process.env[key];
-            if (!ui) {
-                env.SETFARM_INSTALLATION_DIR = selected.installationDir;
-                env.SETFARM_REPO_DIR = selected.releaseDir;
-            }
+            // Load the existing MC config only for full8, before the last
+            // selection await. UI and activation workers need no MC auth.
+            const mcConfig = intent.receipt.kind === 'convergence_full8' ? (await import('../config.js')).config : undefined;
             const intentFd = ui ? openSync(intentFile, constants.O_RDONLY | constants.O_NOFOLLOW) : null;
             let childProcess: ReturnType<typeof spawn>;
             try {
                 await selected.assertUnchanged();
+                // Read current inputs and spawn synchronously after the final
+                // await; never inherit ambient loader, database or provider keys.
+                const env: NodeJS.ProcessEnv = { PATH: '/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin', LANG: 'C', LC_ALL: 'C', TZ: 'UTC' };
+                for (const key of ['HOME', 'TMPDIR', 'USER'])
+                    if (process.env[key])
+                        env[key] = process.env[key];
+                if (!ui) {
+                    const runtimeDir = path.join(selected.installationDir, 'runtime');
+                    const configuredRuntimeDir = process.env.SETFARM_ENV_DIR, activation = process.env.SETFARM_V3_ACTIVATION;
+                    if ((configuredRuntimeDir !== undefined && configuredRuntimeDir !== runtimeDir)
+                        || (activation !== undefined && activation !== 'enabled' && activation !== 'disabled'))
+                        fail('CONTROL_WORKER_UNAVAILABLE');
+                    env.SETFARM_INSTALLATION_DIR = selected.installationDir;
+                    env.SETFARM_REPO_DIR = selected.releaseDir;
+                    env.SETFARM_ENV_DIR = runtimeDir;
+                    if (activation !== undefined)
+                        env.SETFARM_V3_ACTIVATION = activation;
+                    if (mcConfig) {
+                        const runtime = process.env.SETFARM_AGENT_RUNTIME, model = process.env.SETFARM_CODEX_MODEL;
+                        const mcUrl = process.env.MC_INTERNAL_URL ?? 'http://127.0.0.1:3080';
+                        const dashboardUrl = process.env.SETFARM_DASHBOARD_URL ?? 'http://127.0.0.1:3333';
+                        if (runtime !== 'codex' || typeof model !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._/-]{0,193}$/.test(model)
+                            || mcUrl !== 'http://127.0.0.1:3080' || dashboardUrl !== 'http://127.0.0.1:3333')
+                            fail('CONTROL_WORKER_UNAVAILABLE');
+                        env.SETFARM_AGENT_RUNTIME = runtime;
+                        env.SETFARM_CODEX_MODEL = model;
+                        env.MC_INTERNAL_URL = mcUrl;
+                        env.SETFARM_DASHBOARD_URL = dashboardUrl;
+                        const token = mcConfig.authToken;
+                        if (token)
+                            env.MC_AUTH_TOKEN = token;
+                    }
+                }
                 childProcess = spawn(executable, [script, '--job-id', jobId], { cwd: selected.releaseDir, env, shell: false, serialization: 'json', stdio: ui ? ['ignore', 'pipe', 'pipe', 'ipc', intentFd!] : ['ignore', 'pipe', 'pipe', 'ipc'] });
             }
             finally {

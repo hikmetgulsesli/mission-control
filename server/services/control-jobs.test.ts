@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { test, mock } from 'node:test';
 import fs from 'node:fs';
+import childProcess from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { mkdtempSync, realpathSync, mkdirSync, readFileSync, readdirSync, writeFileSync, existsSync, chmodSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -233,6 +235,283 @@ test('fixed real child buffers early frames until beginDelivery and elides secre
     assert.match(log, /private output omitted/);
     assert.equal(log.includes('very-secret'), false);
     assert.throws(() => session.beginDelivery({ onFrame: async () => { }, onUnavailable: async () => { } }), /CONTROL_CHANNEL_INVALID/);
+});
+
+// Observe the existing original spawn, without replacing the transport, broker,
+// intent publication, process observation or IPC with a fake worker port.
+async function probeWorkerEnvironment(options: {
+    kind?: 'activation_preflight' | 'convergence_full8' | 'ui_regression';
+    env?: Record<string, string | undefined>;
+    token?: string;
+    duringFinalSelection?: () => void;
+} = {}) {
+    const kind = options.kind ?? 'activation_preflight', f = fixture({ ui: kind === 'ui_regression' });
+    const release = path.join(f.selected.installationDir, 'release');
+    const workerPath = path.join(release, 'dist', 'cli', 'control-test-worker-v1.js');
+    mkdirSync(path.dirname(workerPath), { recursive: true, mode: 0o700 });
+    const forbidden = ['AUTH_TOKEN', 'SETFARM_PG_URL', 'DATABASE_URL', 'PGPASSWORD', 'SETFARM_TEST_PG_ADMIN_URL', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'STITCH_API_KEY', 'SETFARM_OPERATIONAL_WRITE_TOKEN', 'NODE_OPTIONS', 'NODE_PATH', 'LD_PRELOAD', 'DYLD_INSERT_LIBRARIES', 'SETFARM_INTERNAL_PRODUCTION_CONTEXT', 'SETFARM_TASK6A_TEST_PG_DATA_DIRECTORY', 'ARBITRARY_SECRET', 'CODEX_CLI', 'SETFARM_PROTOCOL'];
+    const added = ['SETFARM_INSTALLATION_DIR', 'SETFARM_REPO_DIR', 'SETFARM_ENV_DIR', 'SETFARM_V3_ACTIVATION', 'SETFARM_AGENT_RUNTIME', 'SETFARM_CODEX_MODEL', 'MC_INTERNAL_URL', 'SETFARM_DASHBOARD_URL', 'MC_AUTH_TOKEN'];
+    // The probe emits predicates only, never values or token hashes.
+    writeFileSync(workerPath, `
+const env = process.env;
+const absent = keys => keys.every(key => env[key] === undefined);
+process.send({ probe: {
+    activationEnabled: env.SETFARM_V3_ACTIVATION === 'enabled',
+    activationDisabled: env.SETFARM_V3_ACTIVATION === 'disabled',
+    activationAbsent: env.SETFARM_V3_ACTIVATION === undefined,
+    installationMatches: env.SETFARM_INSTALLATION_DIR === ${JSON.stringify(f.selected.installationDir)},
+    releaseMatches: env.SETFARM_REPO_DIR === ${JSON.stringify(release)},
+    runtimeDirectoryMatches: env.SETFARM_ENV_DIR === ${JSON.stringify(path.join(f.selected.installationDir, 'runtime'))},
+    runtimeMatches: env.SETFARM_AGENT_RUNTIME === 'codex',
+    modelMatches: env.SETFARM_CODEX_MODEL === 'gpt-6.1-sol',
+    mcEndpointMatches: env.MC_INTERNAL_URL === 'http://127.0.0.1:3080',
+    sfEndpointMatches: env.SETFARM_DASHBOARD_URL === 'http://127.0.0.1:3333',
+    tokenMatches: env.MC_AUTH_TOKEN === ${JSON.stringify(options.token)},
+    forbiddenAbsent: absent(${JSON.stringify(forbidden)}),
+    uiStripped: absent(${JSON.stringify(added)}),
+    full8OnlyAbsent: absent(['SETFARM_AGENT_RUNTIME','SETFARM_CODEX_MODEL','MC_INTERNAL_URL','SETFARM_DASHBOARD_URL','MC_AUTH_TOKEN']),
+    commonMatches: env.PATH === '/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin' && env.LANG === 'C' && env.LC_ALL === 'C' && env.TZ === 'UTC'
+} });
+// Wait for broker custody before natural exit; retain a natural timeout for
+// startup failures so tests never need kill/adoption cleanup.
+const deadline = setTimeout(() => process.exit(0), 1500);
+process.once('message', () => { clearTimeout(deadline); setTimeout(() => process.exit(0), 25); });
+`, { mode: 0o600 });
+    const environment: Record<string, string | undefined> = {
+        SETFARM_INSTALLATION_DIR: '/dummy/foreign-installation', SETFARM_REPO_DIR: '/dummy/foreign-release',
+        SETFARM_ENV_DIR: undefined, SETFARM_V3_ACTIVATION: 'enabled',
+        SETFARM_AGENT_RUNTIME: 'codex', SETFARM_CODEX_MODEL: 'gpt-6.1-sol',
+        MC_INTERNAL_URL: undefined, SETFARM_DASHBOARD_URL: undefined, MC_AUTH_TOKEN: 'dummy-ambient-token',
+        ...Object.fromEntries(forbidden.map(key => [key, 'dummy-excluded-value'])),
+        // Presence (even an empty value) must be excluded. Keep loader sentinels
+        // inert for the test runner's own tsx/esbuild subprocesses.
+        NODE_OPTIONS: '', NODE_PATH: '', LD_PRELOAD: '', DYLD_INSERT_LIBRARIES: '', ...options.env,
+    };
+    const previous = new Map(Object.keys(environment).map(key => [key, process.env[key]]));
+    const originalSpawn = childProcess.spawn;
+    const children: { child: ReturnType<typeof childProcess.spawn>; exit: Promise<unknown>; close: Promise<unknown> }[] = [];
+    const spawnObserver = mock.method(childProcess, 'spawn', (...args: Parameters<typeof childProcess.spawn>) => {
+        const child = originalSpawn(...args);
+        children.push({ child,
+            exit: new Promise(resolve => child.once('exit', (code, signal) => resolve({ code, signal }))),
+            close: new Promise(resolve => child.once('close', (code, signal) => resolve({ code, signal }))),
+        });
+        return child;
+    });
+    syncBuiltinESMExports();
+    let transportChecks = 0, inTransport = false, finalSelectionRan = false, session: any;
+    const selected = { ...f.selected, releaseDir: release, workerPath,
+        ...(kind === 'ui_regression' ? { ui: { ...f.selected.ui!, workerPath } } : {}),
+        async assertUnchanged() {
+            // Exercise the transport's real second await, immediately before
+            // spawn; broker checks and later owner observation stay intact.
+            if (inTransport && ++transportChecks === 2) {
+                await Promise.resolve(); finalSelectionRan = true; options.duringFinalSelection?.();
+            }
+        },
+    };
+    const frames: any[] = [], startErrors: string[] = [];
+    const port = createFixedManualWorkerPortV1(selected);
+    const worker: ManualWorkerPortV1 = { async startFixed(input) {
+        try {
+            inTransport = true;
+            session = await port.startFixed(input);
+            return { ...session, beginDelivery(events: ManualWorkerEventsV1) {
+                session.beginDelivery({ async onFrame(frame: unknown) { frames.push(frame); await events.onFrame(frame); }, onUnavailable: events.onUnavailable });
+            } };
+        } catch (error) { startErrors.push((error as Error).message); throw error; }
+    } };
+    const jobs = createControlJobsV1({ root: f.root, selected, worker });
+    let result: Awaited<ReturnType<typeof jobs.create>> | undefined;
+    try {
+        for (const [key, value] of Object.entries(environment)) {
+            if (value === undefined) delete process.env[key]; else process.env[key] = value;
+        }
+        result = await jobs.create({ ...f.request, kind });
+    } finally {
+        // Settle the actual originals before restoring environment or mocks.
+        try { await Promise.all(children.flatMap(child => [child.exit, child.close])); }
+        finally {
+            spawnObserver.mock.restore(); syncBuiltinESMExports();
+            for (const [key, value] of previous) {
+                if (value === undefined) delete process.env[key]; else process.env[key] = value;
+            }
+        }
+    }
+    const settlement = await Promise.all(children.map(async child => ({
+        pid: child.child.pid, exit: await child.exit, close: await child.close,
+    })));
+    const dir = path.join(f.root, 'jobs', result!.receipt.jobId);
+    const receipt = (await jobs.get(result!.receipt.jobId))!;
+    const projection = JSON.stringify(receipt);
+    const logs = ['stdout.log', 'stderr.log'].map(name => existsSync(path.join(dir, name)) ? readFileSync(path.join(dir, name), 'utf8') : '').join('');
+    assert.equal(logs.includes('dummy-'), false);
+    assert.equal(projection.includes('dummy-'), false);
+    if (options.token) { assert.equal(logs.includes(options.token), false); assert.equal(projection.includes(options.token), false); }
+    assert.equal(JSON.stringify(frames).includes('dummy-'), false);
+    return { probe: frames.find(frame => frame.probe)?.probe, settlement, startErrors, owner: session?.originalChild, receipt, finalSelectionRan };
+}
+function assertProbeSettled(result: Awaited<ReturnType<typeof probeWorkerEnvironment>>) {
+    assert.equal(result.settlement.length, 1);
+    assert.equal(result.settlement[0].pid, result.owner.pid);
+    assert.deepEqual(result.settlement[0].exit, { code: 0, signal: null });
+    assert.deepEqual(result.settlement[0].close, { code: 0, signal: null });
+    assert.equal(result.receipt.state, 'ownership_unknown');
+    assert.deepEqual(result.receipt.reportRefs, {});
+    assert.deepEqual(result.startErrors, []);
+    assert.equal(result.finalSelectionRan, true);
+}
+test('fixed real activation child preserves enabled, disabled and absent activation without full8 inputs', async t => {
+    // Removing activation, ENV_DIR or selected locator assignments breaks the
+    // actual child predicates; forwarding ambient secrets breaks exclusion.
+    for (const activation of ['enabled', 'disabled', undefined]) {
+        await t.test(activation ?? 'absent', async t => {
+            const result = await probeWorkerEnvironment({ env: { SETFARM_V3_ACTIVATION: activation } });
+            assertProbeSettled(result);
+            t.diagnostic(JSON.stringify({ settlement: result.settlement, probe: result.probe }));
+            assert.equal(result.probe.activationEnabled, activation === 'enabled');
+            assert.equal(result.probe.activationDisabled, activation === 'disabled');
+            assert.equal(result.probe.activationAbsent, activation === undefined);
+            assert.equal(result.probe.installationMatches, true);
+            assert.equal(result.probe.releaseMatches, true);
+            assert.equal(result.probe.runtimeDirectoryMatches, true);
+            assert.equal(result.probe.full8OnlyAbsent, true);
+            assert.equal(result.probe.forbiddenAbsent, true);
+            assert.equal(result.probe.commonMatches, true);
+        });
+    }
+});
+test('fixed worker reads activation after the final selection await and refuses invalid SF environment before spawn', async t => {
+    // Building env before the final await would use stale enabled activation.
+    await t.test('valid activation drift is read at original spawn', async t => {
+        const result = await probeWorkerEnvironment({ duringFinalSelection() { process.env.SETFARM_V3_ACTIVATION = 'disabled'; } });
+        assertProbeSettled(result);
+        t.diagnostic(JSON.stringify({ settlement: result.settlement, probe: result.probe }));
+        assert.equal(result.probe.activationDisabled, true);
+        assert.equal(result.probe.activationEnabled, false);
+    });
+    for (const [name, env] of [
+        ['conflicting runtime directory', { SETFARM_ENV_DIR: '/dummy/foreign-runtime' }],
+        ['invalid activation', { SETFARM_V3_ACTIVATION: 'ENABLED' }],
+        ['empty activation', { SETFARM_V3_ACTIVATION: '' }],
+    ] as const) {
+        await t.test(name, async () => {
+            const result = await probeWorkerEnvironment({ env });
+            assert.deepEqual(result.settlement, []);
+            assert.deepEqual(result.startErrors, ['CONTROL_WORKER_UNAVAILABLE']);
+            assert.equal(result.probe, undefined);
+            assert.equal(result.receipt.state, 'ownership_unknown');
+        });
+    }
+    await t.test('invalid activation drift refuses original spawn', async () => {
+        const result = await probeWorkerEnvironment({ duringFinalSelection() { process.env.SETFARM_V3_ACTIVATION = 'invalid'; } });
+        assert.equal(result.finalSelectionRan, true);
+        assert.deepEqual(result.settlement, []);
+        assert.deepEqual(result.startErrors, ['CONTROL_WORKER_UNAVAILABLE']);
+    });
+});
+test('fixed real UI child retains stripped selection profile and auth environment', async t => {
+    // Applying the SF builder to UI would leak these inputs or refuse startup.
+    const result = await probeWorkerEnvironment({ kind: 'ui_regression', env: {
+        SETFARM_ENV_DIR: '/dummy/foreign-runtime', SETFARM_V3_ACTIVATION: 'invalid',
+        SETFARM_AGENT_RUNTIME: 'invalid', SETFARM_CODEX_MODEL: 'invalid model',
+        MC_INTERNAL_URL: 'https://foreign.invalid', SETFARM_DASHBOARD_URL: 'https://foreign.invalid',
+    } });
+    assertProbeSettled(result);
+    t.diagnostic(JSON.stringify({ settlement: result.settlement, probe: result.probe }));
+    assert.equal(result.probe.uiStripped, true);
+    assert.equal(result.probe.forbiddenAbsent, true);
+    assert.equal(result.probe.commonMatches, true);
+});
+test('full8 fixed real child environment boundaries', async t => {
+    if (!process.execArgv.includes('--experimental-test-module-mocks')) {
+        // Isolate the unavoidable config double from ordinary test invocation.
+        // No real config import (dotenv/gateway credential reads) is allowed.
+        const child = childProcess.spawn(process.execPath, ['--experimental-test-module-mocks', '--import', 'tsx', '--test', '--test-name-pattern', '^full8 fixed real child environment boundaries$', fileURLToPath(import.meta.url)], {
+            env: { PATH: '/opt/homebrew/bin:/usr/bin:/bin', HOME: tmpdir(), TMPDIR: tmpdir(), USER: 'controls-test' }, stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        let stdout = '', stderr = '';
+        child.stdout!.on('data', chunk => stdout += chunk); child.stderr!.on('data', chunk => stderr += chunk);
+        const exit = new Promise(resolve => child.once('exit', (code, signal) => resolve({ code, signal })));
+        const close = new Promise(resolve => child.once('close', (code, signal) => resolve({ code, signal })));
+        const settled = await Promise.all([exit, close]);
+        t.diagnostic(stdout); t.diagnostic(stderr); t.diagnostic(JSON.stringify({ harnessSettlement: settled }));
+        assert.deepEqual(settled, [{ code: 0, signal: null }, { code: 0, signal: null }]);
+        return;
+    }
+    const config = { authToken: 'dummy-loaded-mc-token' };
+    const configMock = (mock as any).module(new URL('../config.ts', import.meta.url), { exports: { config } });
+    try {
+        await t.test('selected profile and fixed local endpoints reach the original full8 child', async t => {
+            // Removing runtime/model/ENV_DIR/endpoints/MC_AUTH_TOKEN assignments
+            // breaks these actual child predicates. Generic AUTH_TOKEN cannot pass.
+            const result = await probeWorkerEnvironment({ kind: 'convergence_full8', token: config.authToken });
+            assertProbeSettled(result);
+            t.diagnostic(JSON.stringify({ settlement: result.settlement, probe: result.probe }));
+            for (const key of ['runtimeMatches', 'modelMatches', 'runtimeDirectoryMatches', 'activationEnabled', 'installationMatches', 'releaseMatches', 'mcEndpointMatches', 'sfEndpointMatches', 'tokenMatches', 'forbiddenAbsent', 'commonMatches'])
+                assert.equal(result.probe[key], true, key);
+        });
+        await t.test('empty loaded auth does not borrow ambient AUTH_TOKEN or MC_AUTH_TOKEN', async () => {
+            config.authToken = '';
+            try {
+                const result = await probeWorkerEnvironment({ kind: 'convergence_full8' });
+                assertProbeSettled(result);
+                assert.equal(result.probe.tokenMatches, true);
+                assert.equal(result.probe.forbiddenAbsent, true);
+            } finally { config.authToken = 'dummy-loaded-mc-token'; }
+        });
+        await t.test('profile endpoints and loaded token changed during final await refuse before original spawn', async () => {
+            // Capturing/validating any input before that await would leak stale
+            // values to a child (including auth to an untrusted endpoint).
+            const result = await probeWorkerEnvironment({ kind: 'convergence_full8', token: config.authToken,
+                duringFinalSelection() {
+                    process.env.SETFARM_CODEX_MODEL = 'invalid model';
+                    process.env.MC_INTERNAL_URL = 'https://foreign.invalid';
+                    config.authToken = 'dummy-changed-token';
+                },
+            });
+            try {
+                assert.equal(result.finalSelectionRan, true);
+                assert.deepEqual(result.settlement, []);
+                assert.deepEqual(result.startErrors, ['CONTROL_WORKER_UNAVAILABLE']);
+            } finally { config.authToken = 'dummy-loaded-mc-token'; }
+        });
+        await t.test('current loaded auth is read after the final await', async () => {
+            try {
+                const result = await probeWorkerEnvironment({ kind: 'convergence_full8', token: 'dummy-changed-token',
+                    duringFinalSelection() { config.authToken = 'dummy-changed-token'; },
+                });
+                assertProbeSettled(result);
+                assert.equal(result.probe.tokenMatches, true);
+            } finally { config.authToken = 'dummy-loaded-mc-token'; }
+        });
+        // Removing profile/path/endpoint validation must create a real child,
+        // causing these assertions on original process settlement to fail.
+        for (const [name, env] of [
+            ['missing runtime', { SETFARM_AGENT_RUNTIME: undefined }],
+            ['foreign runtime', { SETFARM_AGENT_RUNTIME: 'other' }],
+            ['missing model', { SETFARM_CODEX_MODEL: undefined }],
+            ['empty model', { SETFARM_CODEX_MODEL: '' }],
+            ['invalid model', { SETFARM_CODEX_MODEL: 'model with spaces' }],
+            ['overlong model', { SETFARM_CODEX_MODEL: 'a'.repeat(195) }],
+            ['foreign runtime directory', { SETFARM_ENV_DIR: '/dummy/foreign-runtime' }],
+            ['foreign MC host', { MC_INTERNAL_URL: 'https://foreign.invalid' }],
+            ['foreign MC port', { MC_INTERNAL_URL: 'http://127.0.0.1:3081' }],
+            ['MC userinfo', { MC_INTERNAL_URL: 'http://dummy@127.0.0.1:3080' }],
+            ['MC query', { MC_INTERNAL_URL: 'http://127.0.0.1:3080?dummy' }],
+            ['MC fragment', { MC_INTERNAL_URL: 'http://127.0.0.1:3080#dummy' }],
+            ['foreign dashboard', { SETFARM_DASHBOARD_URL: 'https://foreign.invalid' }],
+            ['dashboard suffix', { SETFARM_DASHBOARD_URL: 'http://127.0.0.1:3333/' }],
+        ] as const) {
+            await t.test(name, async () => {
+                const result = await probeWorkerEnvironment({ kind: 'convergence_full8', env, token: config.authToken });
+                assert.deepEqual(result.settlement, []);
+                assert.deepEqual(result.startErrors, ['CONTROL_WORKER_UNAVAILABLE']);
+                assert.equal(result.probe, undefined);
+                assert.equal(result.receipt.state, 'ownership_unknown');
+            });
+        }
+    } finally { configMock.restore(); }
 });
 test('older terminal receipts remain readable after selection changes without authorizing old idempotency keys', async () => {
     const f = fixture();

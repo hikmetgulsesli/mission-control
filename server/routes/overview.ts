@@ -110,54 +110,36 @@ async function fetchRecentDeploys(projects: readonly ProjectProjectionRecord[]):
     return [];
   }
 }
-// Build agent summary from sessions + office status
-async function fetchAgentSummary(dataFile: any): Promise<any[]> {
+// Workflow mappings describe role templates, not observed agent ownership.
+function buildAgentSummary(agents: any[] | null, activeRuns: any[] | null, dataFile: any): any[] | null {
+  if (agents === null) return null;
   const sessions = dataFile?.sessions || [];
-  const now = Date.now();
-  const ONE_HOUR = 60 * 60 * 1000;
-
-  // Get office status for working/idle
-  let officeAgents: any[] = [];
-  try {
-    const runs = (await getRuns()) as any[];
-    const activeRuns = runs.filter((r: any) => r.status === 'running');
-    const working = new Map<string, string>();
-    working.set('main', 'CEO orchestration');
-
-
-    for (const run of activeRuns) {
-      const wf = run.workflow_id || run.workflow || '';
-      const mapping = STEP_MAPPING[wf];
-      if (!mapping) continue;
-      for (const step of run.steps || []) {
-        if (step.status !== 'running') continue;
-        const agents = mapping[step.step_id || step.id || ''];
-        if (agents) for (const a of agents) working.set(a, `${step.step_id} (${wf})`);
+  const mappedSteps = new Map<string, string>();
+  for (const run of activeRuns || []) {
+    const workflow = run.workflow_id || run.workflow || '';
+    const mapping = STEP_MAPPING[workflow];
+    if (!mapping) continue;
+    for (const step of run.steps || []) {
+      if (step.status !== 'running') continue;
+      const stepId = step.step_id || step.id || '';
+      for (const agentId of mapping[stepId] || []) {
+        mappedSteps.set(agentId, `Mapped running step: ${stepId} (${workflow})`);
       }
     }
-    officeAgents = REAL_AGENTS.map(id => ({
-      id,
-      status: working.has(id) ? 'working' : 'idle',
-      currentTask: working.get(id) || '',
-    }));
-  } catch {
-    officeAgents = REAL_AGENTS.map(id => ({ id, status: 'idle', currentTask: '' }));
   }
 
-  // Merge with session data for lastActivity
-  return officeAgents.map(a => {
-    const agentSessions = sessions.filter((s: any) => {
-      const sid = s.agent || s.key?.split(':')?.[1];
-      return sid === a.id;
-    });
-    const latestSession = agentSessions
-      .filter((s: any) => s.updatedAt)
-      .sort((x: any, y: any) => (y.updatedAt || 0) - (x.updatedAt || 0))[0];
-    const lastActivity = latestSession?.updatedAt || null;
-
+  return agents.map(agent => {
+    const latestSession = sessions
+      .filter((session: any) => (session.agent || session.key?.split(':')?.[1]) === agent.id && session.updatedAt)
+      .sort((a: any, b: any) => b.updatedAt - a.updatedAt)[0];
     return {
-      ...a,
-      lastActivity,
+      id: agent.id,
+      name: agent.name,
+      identityName: agent.identityName,
+      identityEmoji: agent.identityEmoji,
+      status: activeRuns === null ? 'unknown' : mappedSteps.has(agent.id) ? 'mapped' : 'unmapped',
+      currentTask: mappedSteps.get(agent.id) || '',
+      lastActivity: latestSession?.updatedAt || null,
     };
   });
 }
@@ -177,7 +159,7 @@ router.get('/overview', async (_req, res) => {
     ]);
 
     const agentList = agents.status === 'fulfilled'
-      ? agents.value.filter((a: any) => REAL_AGENTS.includes(a.id))
+      ? agents.value
       : [];
 
     const runList = runs.status === 'fulfilled' ? runs.value as any[] : [];
@@ -230,11 +212,15 @@ router.get('/overview', async (_req, res) => {
     });
 
     // Agent summary
-    const agentSummary = await cached('agent-summary', 15000, () => fetchAgentSummary(data));
+    const agentSummary = buildAgentSummary(
+      agents.status === 'fulfilled' ? agentList : null,
+      runs.status === 'fulfilled' && projectProjections.status === 'fulfilled' ? activeRuns : null,
+      data,
+    );
 
     res.json({
       agents: agentList,
-      agentCount: agentList.length,
+      agentCount: agents.status === 'fulfilled' ? agentList.length : null,
       activeRuns,
       activeRunCount: activeRuns.length,
       cronCount: activeCrons,

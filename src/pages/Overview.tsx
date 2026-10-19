@@ -5,7 +5,6 @@ import { useAppStore } from '../store/appStore';
 import { AgentCard } from '../components/AgentCard';
 import { ActivityFeed } from '../components/ActivityFeed';
 import { GlitchText } from '../components/GlitchText';
-import { AGENT_MAP } from '../lib/constants';
 import type { CronStatusItem, OpenPR, DeployInfo, AgentSummary, ModelLimitItem, ModelBadge } from '../lib/types';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -57,13 +56,14 @@ function ModelLimits() {
 
   return (
     <div className="panel">
-      <h3 className="panel__title">MODEL LIMITS</h3>
+      <h3 className="panel__title">LOCAL MODEL CONFIGURATION</h3>
+      <p>Plans, prices and agent assignments are configured defaults; account billing is not verified.</p>
       <div className="model-limits">
         {data.map((p) => {
           const q = quota?.[p.id];
-          const used = q?.used || 0;
-          const limit = q?.limit || p.limits?.promptsPer5h || null;
-          const pct = limit ? Math.min((used / limit) * 100, 100) : null;
+          const used = q?.used ?? null;
+          const limit = q?.limit ?? p.limits?.promptsPer5h ?? null;
+          const pct = used !== null && limit ? Math.min((used / limit) * 100, 100) : null;
           const barColor = pct !== null ? (pct > 80 ? 'var(--red, #f44)' : pct > 50 ? 'var(--orange, #ff9800)' : 'var(--green, #66bb6a)') : p.color;
 
           return (
@@ -79,7 +79,7 @@ function ModelLimits() {
                   {p.agents.map((a: string) => a.charAt(0).toUpperCase() + a.slice(1)).join(', ')}
                 </span>
                 <span className="model-limit-item__usage">
-                  {used} calls / 5h
+                  {used === null ? 'Usage unavailable' : `${used} calls / 5h`}
                 </span>
                 {(p.usage?.today?.cost ?? 0) > 0 && (
                   <span className="model-limit-item__today-cost">
@@ -87,7 +87,12 @@ function ModelLimits() {
                   </span>
                 )}
               </div>
-              {limit && (
+              {used === null && limit !== null && (
+                <div className="quota-bar">
+                  <span className="quota-bar__label" style={{ marginLeft: 0 }}>Configured limit: {limit} calls / 5h</span>
+                </div>
+              )}
+              {used !== null && limit !== null && (
                 <div className="quota-bar">
                   <div className="quota-bar__track">
                     <div className="quota-bar__fill" style={{ width: `${pct}%`, background: barColor }} />
@@ -95,7 +100,7 @@ function ModelLimits() {
                   <span className="quota-bar__label">{used}/{limit}</span>
                 </div>
               )}
-              {!limit && q && (
+              {used !== null && limit === null && (
                 <div className="quota-bar">
                   <span className="quota-bar__label" style={{ marginLeft: 0 }}>{used} calls / 5h</span>
                 </div>
@@ -189,41 +194,42 @@ function DeploysPanel({ deploys }: { deploys: DeployInfo[] }) {
   );
 }
 
-function AgentSummaryPanel({ agents }: { agents: AgentSummary[] }) {
-  const workingCount = agents.filter(a => a.status === 'working').length;
+function AgentSummaryPanel({ agents }: { agents?: AgentSummary[] | null }) {
+  const mappedCount = agents?.filter(agent => agent.status === 'mapped').length ?? 0;
+  const mappingUnavailable = agents?.some(agent => agent.status === 'unknown');
 
   return (
     <div className="hub-col">
       <h4 className="hub-col__title">
         <span className="hub-col__icon">{'\u25C9'}</span> AGENTS
-        <span className="hub-col__count">{workingCount}/{agents.length} active</span>
+        <span className="hub-col__count">
+          {agents == null ? 'Unknown' : mappingUnavailable ? 'Running-step mappings unavailable' : `${mappedCount}/${agents.length} running-step mappings`}
+        </span>
       </h4>
-      <div className="hub-col__list">
-        {agents.map((a) => {
-          const meta = AGENT_MAP[a.id];
-          const name = meta?.name || a.id;
-          const emoji = meta?.emoji || '?';
-          const isWorking = a.status === 'working';
-
-          return (
-            <div key={a.id} className={`hub-agent ${isWorking ? 'hub-agent--working' : ''}`}>
-              <span className="hub-agent__emoji">{emoji}</span>
-              <span className="hub-agent__name">{name}</span>
-              <span className={`hub-agent__dot ${isWorking ? 'hub-agent__dot--on' : ''}`} />
-              <span className="hub-agent__task">
-                {isWorking
-                  ? a.currentTask
-                  : a.lastActivity
-                    ? (() => {
-                        const ts = typeof a.lastActivity === 'number' ? a.lastActivity : new Date(a.lastActivity as string).getTime();
-                        return isNaN(ts) ? 'idle' : formatDistanceToNow(ts, { addSuffix: true });
-                      })()
-                    : 'idle'}
-              </span>
-            </div>
-          );
-        })}
-      </div>
+      {agents == null ? (
+        <div className="hub-col__empty">Agent roster unavailable</div>
+      ) : agents.length === 0 ? (
+        <div className="hub-col__empty">No observed agents</div>
+      ) : (
+        <div className="hub-col__list">
+          {agents.map(agent => {
+            const isMapped = agent.status === 'mapped';
+            const lastActivity = agent.lastActivity == null ? NaN : typeof agent.lastActivity === 'number'
+              ? agent.lastActivity : new Date(agent.lastActivity).getTime();
+            return (
+              <div key={agent.id} className={`hub-agent ${isMapped ? 'hub-agent--working' : ''}`}>
+                <span className="hub-agent__emoji">{agent.identityEmoji || '◉'}</span>
+                <span className="hub-agent__name">{agent.identityName || agent.name || agent.id}</span>
+                <span className={`hub-agent__dot ${isMapped ? 'hub-agent__dot--on' : ''}`} />
+                <span className="hub-agent__task">
+                  {agent.status === 'unknown' ? 'Mapping unavailable' : isMapped ? agent.currentTask : 'No mapped running step'}
+                  {Number.isFinite(lastActivity) && ` · Last activity ${formatDistanceToNow(lastActivity, { addSuffix: true })}`}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -243,7 +249,7 @@ export function Overview() {
 
       <div className="stat-cards">
         <div className="stat-card">
-          <div className="stat-card__value">{data.agentCount}</div>
+          <div className="stat-card__value">{data.agentCount ?? 'Unknown'}</div>
           <div className="stat-card__label">AGENTS</div>
           <div className="stat-card__sub">{data.sessions?.length || 0} sessions</div>
         </div>
@@ -270,7 +276,7 @@ export function Overview() {
         <div className="command-center__grid">
           <OpenPRsPanel prs={data.openPRs || []} />
           <DeploysPanel deploys={data.recentDeploys || []} />
-          <AgentSummaryPanel agents={data.agentSummary || []} />
+          <AgentSummaryPanel agents={data.agentSummary} />
         </div>
       </div>
 

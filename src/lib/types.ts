@@ -124,7 +124,7 @@ export interface PerformanceData {
 
 export interface OverviewData {
   agents: Agent[];
-  agentCount: number;
+  agentCount: number | null;
   activeRuns: Run[];
   activeRunCount: number;
   cronCount: number;
@@ -138,7 +138,7 @@ export interface OverviewData {
   agentLastActive?: Record<string, number>;
   openPRs?: OpenPR[];
   recentDeploys?: DeployInfo[];
-  agentSummary?: AgentSummary[];
+  agentSummary?: AgentSummary[] | null;
 }
 
 export interface Session {
@@ -201,9 +201,12 @@ export interface DeployInfo {
 
 export interface AgentSummary {
   id: string;
-  status: string;
+  name?: string;
+  identityName?: string;
+  identityEmoji?: string;
+  status: 'mapped' | 'unmapped' | 'unknown';
   currentTask?: string;
-  lastActivity?: number | string;
+  lastActivity?: number | string | null;
 }
 
 export interface ModelLimitItem {
