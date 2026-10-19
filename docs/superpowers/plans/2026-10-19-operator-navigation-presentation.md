@@ -41,12 +41,12 @@ assert.ok(NAVIGATION_ITEMS.some(x => x.href === '/agents'));
 
 ### Task 2: Readability, restrained theme and responsive roster
 
-**Files:** Modify `src/index.css`, `src/components/{Layout,GlitchText}.tsx`, `src/pages/Agents.tsx`; targeted ordinary page/component inline style sources found by census (list exact added files in report before edits). Create `tests/operator-theme-render.test.tsx` for meaningful actual component semantics if needed; avoid implementation-mirroring CSS snapshot tests.
+**Files:** Modify `src/index.css`, `src/components/{Layout,GlitchText}.tsx`, `src/pages/Agents.tsx`; targeted ordinary inline source files approved from the read-only census: `src/pages/{Rules,SetfarmActivity,Overview,Performance}.tsx`, `src/components/{CostChart,LiveFeed,PipelineView,AgentCard,KimiQuotaBanner}.tsx`, `src/components/run-detail/TelemetryChart.tsx`, `src/components/pipeline/{ErrorCard,DeleteRunModal}.tsx`, `src/components/prd/{PrdEditor,ScreenshotUpload}.tsx`. Census `.superpowers/sdd/2026-10-19-operator-navigation-presentation/task-2-census.md` records exact owning lines. Reconcile Task1 nav changes before edits. Create `tests/operator-theme-render.test.tsx` for meaningful actual component semantics if needed; avoid implementation-mirroring CSS snapshot tests.
 
 **Interfaces:** Preserve existing component props and semantic state colors. Shared `--font-body`/`--font-mono`, surfaces/text/border/accent tokens used by existing classes; no new UI dependency. Functional plan owns StatusBar metrics behavior; this task changes its styles only after that task is reviewed.
 
 - [ ] Record baseline actual render/browser evidence (audit screenshot paths), inspect ordinary8–12px inline sizes and mono usage, identify roster width defect. Any new behavior gets meaningful RED before implementation; reversible CSS edits need visual checks, no artificial failing test.
-- [ ] Set body sans15px, ordinary controls14–16px, readable muted contrast and calmer surfaces. Remove ScanlineOverlay mount; change GlitchText ordinary heading behavior once, preserving API/accessibility. Fix `.agents-page__grid` flex1/min-width0/width100%, preserve auto-fill columns, stack selected panel on narrow widths. Preserve log/code mono and PixelOffice artwork. Replace targeted tiny ordinary labels rather than blanket overrides.
+- [ ] Set body sans15px, ordinary controls14–16px, readable muted contrast and calmer surfaces. Remove ScanlineOverlay mount; change GlitchText ordinary heading behavior once, preserving API/accessibility. Fix `.agents-page__grid` flex1/min-width0/width100%, preserve auto-fill columns, and keep the selected AgentLivePanel as its existing fixed modal overlay with readable narrow-width content; it is not an in-flow sidebar. Preserve log/code mono and PixelOffice artwork. Replace targeted tiny ordinary labels rather than blanket overrides.
 
 ```css
 .agents-page__grid { flex: 1; min-width: 0; width: 100%; }
@@ -54,7 +54,7 @@ body { font-family: var(--font-body); font-size: 15px; }
 code, pre { font-family: var(--font-mono); }
 ```
 
-- [ ] Run `npm run build` after Root source commit if clean build identity requires it, and existing `npm run render:smoke`. Later isolated browser fixture verifies all routes/tabs at390/768/1440, no horizontal overflow, actual computed fonts, roster columns and focus. Preserve screenshots including failures. Root commits `style(ui): improve operator readability`.
+- [ ] Run `npm run build` after Root source commit if clean build identity requires it, and existing `npm run render:smoke`. Later isolated browser fixture verifies all routes/tabs at390/768/1440, no horizontal overflow, actual computed fonts, roster columns, selected modal behavior and focus. Preserve screenshots including failures. Root commits `style(ui): improve operator readability`.
 
 ### Task 3: Visibility-aware polling with honest stale state
 
