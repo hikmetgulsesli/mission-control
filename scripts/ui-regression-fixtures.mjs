@@ -28,7 +28,7 @@ const FIXED_GETS = [
     { target: '/api/live-feed/history?limit=300', body: [] },
 ];
 const RULE = { id: 'fixture-rule', title: 'Fixture rule', content: 'Keep failure evidence.', category: 'general', project_type: 'general', severity: 'mandatory', applies_to: 'all', readonly: false, enabled: true, stack_pack_ids: [] };
-const HISTORY = [{ id: 'fixture-prd', title: 'Old history title', description: 'Old history description', prd_content: '# Old saved project', prd_version: 1, platform: 'web', urls: [], mockup_screens: [], chat_history: [], run_id: null, created_at: AT }];
+const HISTORY = [{ id: 'fixture-prd', title: 'Old history title', description: 'Old history description', prd_content: '# Old saved project', prd_version: 1, score: null, score_details: null, cost_estimate: null, platform: 'web', urls: [], mockup_screens: [], chat_history: [], run_id: null, created_at: AT }];
 // Exact IDs/codes from the Source-owned SF activation and convergence preflight runners.
 // These are local simulated projection rows; no activation or provider check is executed here.
 const ACTIVATION_CHECKS = [
@@ -608,7 +608,13 @@ async function runCatalog({ browser, state, store, measured, control, schemas })
                 if (!stopped)
                     await loaded(currentRoute);
                 for (const tab of TABS)
-                    await check(`run.${id}.${v.width}.${tab.toLowerCase().replaceAll(' ', '-')}`, async () => { await page.locator('.rd-tab').filter({ hasText: new RegExp('^' + tab + '(?:\\d+)?$') }).click(); assert((await page.locator('.rd-tab--active').innerText()).startsWith(tab), 'UI_RUN_TAB_NOT_ACTIVE'); await noErrors(); }, `run-${id}-${v.width}-${tab.toLowerCase().replaceAll(' ', '-')}`);
+                    await check(`run.${id}.${v.width}.${tab.toLowerCase().replaceAll(' ', '-')}`, async () => {
+                        const selected = page.locator('.rd-tab').filter({ hasText: new RegExp('^' + tab + '(?:\\d+)?$') });
+                        assert(await selected.count() === 1, 'UI_RUN_TAB_NOT_UNIQUE');
+                        await selected.click();
+                        assert(await page.locator('.rd-tab--active').count() === 1 && await selected.evaluate(element => element.classList.contains('rd-tab--active')), 'UI_RUN_TAB_NOT_ACTIVE');
+                        await noErrors();
+                    }, `run-${id}-${v.width}-${tab.toLowerCase().replaceAll(' ', '-')}`);
             }
         }
         if (!stopped && !cancellation()) {

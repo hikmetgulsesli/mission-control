@@ -517,7 +517,7 @@ test('review fix3 fourteen deterministic avatar assets are served only at exact 
     const f = workspace();
     const { createUiRegressionFixtureSessionV1, UI_REGRESSION_FIXTURE_V1 } = await load();
     assert.equal(UI_REGRESSION_FIXTURE_V1.fixtureVersion, 'ui-regression-owned-v1');
-    assert.equal(UI_REGRESSION_FIXTURE_V1.fixtureHash, '285bad0531b64ac7f8f070b60cfca73dead8f03d90d69341fe9097a6ed0642e4');
+    assert.equal(UI_REGRESSION_FIXTURE_V1.fixtureHash, '318f49b3b977335e95cb4c7b716324950787ce30bbbfb332cb21e2a487ff828b');
     assert.equal(UI_REGRESSION_FIXTURE_V1.assertionIds.length, 316);
     assert.equal(createHash('sha256').update(JSON.stringify(UI_REGRESSION_FIXTURE_V1.assertionIds)).digest('hex'), '4ded731c52c60105daa60639aa64683b68d1d3f22e9c3e685bb794b67e8ba88d');
     const { request } = await import('node:http');
@@ -759,4 +759,73 @@ test('responsive overflow assertion checks real evaluator against simulated main
             }
         } finally { rmSync(f.root, { recursive: true, force: true }); }
     });
+});
+
+// Simulated page/locator effects, not native tab or page qualification. The real engine
+// executes its tab assertion; unrelated page gates use a bounded synthetic DOM.
+test('run tab assertion binds the exact selected button despite uppercase rendered text', async (t) => {
+    const { runInNewContext } = await import('node:vm');
+    const cases: [string, 'pass' | 'fail', number][] = [
+        ['uppercase', 'pass', 1], ['badge-count', 'pass', 1], ['wrong-active', 'fail', 1],
+        ['duplicate-active', 'fail', 1], ['ambiguous-selection', 'fail', 0], ['missing-selection', 'fail', 0],
+        ['prefix-label', 'fail', 0], ['not-actionable', 'fail', 1],
+    ];
+    for (const [scenario, expected, expectedClicks] of cases) await t.test(scenario, async () => {
+        const f = workspace();
+        const { runUiRegressionV1 } = await load();
+        let stop = false, clicks = 0, currentUrl = '', contexts = 0, closed = 0;
+        const targetId = 'run.ac8cea43-7686-4d27-8092-1e3dd9207ca4.390.execution';
+        const node = (text: string, active: boolean) => ({ textContent: text, innerText: text.toUpperCase(), classList: { contains: (name: string) => name === 'rd-tab--active' && active } });
+        const selected = node(scenario === 'badge-count' ? 'Execution12' : scenario === 'prefix-label' ? 'Execution extra' : 'Execution', scenario !== 'wrong-active');
+        const nodes = scenario === 'missing-selection' ? [node('Stories', true)] : [selected, node('Stories', ['wrong-active', 'duplicate-active'].includes(scenario))];
+        if (scenario === 'ambiguous-selection') nodes.push(node('Execution', false));
+        const locator = (items: typeof nodes): any => ({
+            filter: ({ hasText }: { hasText: RegExp }) => locator(items.filter(n => hasText.test(n.textContent))),
+            count: async () => items.length,
+            click: async () => { assert.equal(items.length, 1, 'simulated strict locator cardinality'); clicks++; if (scenario === 'not-actionable') throw Error('simulated button not actionable'); },
+            innerText: async () => { assert.equal(items.length, 1, 'simulated strict locator cardinality'); return items[0].innerText; },
+            evaluate: async (callback: Function) => { assert.equal(items.length, 1, 'simulated strict locator cardinality'); return callback(items[0]); },
+        });
+        const geometry: any = responsiveGeometry('wrapped-fit');
+        geometry.document.querySelectorAll = () => [];
+        const page = { on() {}, setDefaultTimeout() {}, goto: async (url: string) => { currentUrl = url; },
+            locator: (selector: string) => selector === '.rd-tab' ? locator(nodes) : selector === '.rd-tab--active' ? locator(nodes.filter(n => n.classList.contains('rd-tab--active'))) : { waitFor: async () => {}, innerText: async () => 'Simulated page body for reaching the real tab assertion in the Source engine.' },
+            evaluate: async (callback: Function) => runInNewContext('(' + callback.toString() + ')()', geometry),
+            screenshot: async () => Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0]), url: () => currentUrl,
+        };
+        const browser = { newContext: async () => { contexts++; return { route: async () => {}, routeWebSocket: async () => {}, addInitScript: async () => {}, on() {}, newPage: async () => page, close: async () => { closed++; } }; } };
+        try {
+            const result = await runUiRegressionV1({ ...f, browser, control: { cancellationRequested: () => stop, onAssertionBoundary: async ({ id, edge }: any) => { if (id === targetId && edge === 'after') stop = true; } } });
+            assert.equal(result.report.assertions.length, 241);
+            assert.equal(result.report.assertions.at(-1).id, targetId);
+            assert.equal(result.report.assertions.at(-1).status, expected);
+            assert.equal(clicks, expectedClicks);
+            assert.equal(closed, contexts);
+            assert.equal(result.report.screenshots.length, 61);
+            assert.equal(result.report.outcome, 'incomplete'); // fixed boundary cancellation prevents full-run authority
+        } finally { rmSync(f.root, { recursive: true, force: true }); }
+    });
+});
+
+test('PRD history HTTP fixture preserves explicit unscored producer nulls', async () => {
+    const f = workspace();
+    const { createUiRegressionFixtureSessionV1 } = await load();
+    let session;
+    try {
+        session = await createUiRegressionFixtureSessionV1(f);
+        const response = await fetch('http://127.0.0.1:13082/api/prd/history');
+        assert.equal(response.status, 200);
+        const rows = await response.json();
+        assert.equal(rows.length, 1);
+        assert.equal(rows[0].id, 'fixture-prd');
+        for (const field of ['score', 'score_details', 'cost_estimate']) {
+            assert.equal(Object.hasOwn(rows[0], field), true, 'producer field must not be omitted: ' + field);
+            assert.equal(rows[0][field], null, 'unscored producer value: ' + field);
+        }
+        assert.equal(rows[0].score !== null, false, 'actual PRD footer guard must not mount an unscored ring');
+        assert.equal(session.unexpectedRequests.length, 0);
+    } finally {
+        if (session) await session.close();
+        rmSync(f.root, { recursive: true, force: true });
+    }
 });
