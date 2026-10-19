@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { HealthChecks } from '../src/components/controls/HealthChecks';
 import { TestEvidence } from '../src/components/controls/TestEvidence';
 import { ManualTestRequirements } from '../src/components/controls/ManualTestRequirements';
-import { Controls } from '../src/pages/Controls';
+import { Controls, EvidenceHistory } from '../src/pages/Controls';
 
 const ids = ['utility-status-baseline','utility-preference-compositional','operations-work-baseline','operations-queue-paraphrase','game-start-baseline','game-restart-compositional','negative-ambiguous-product','negative-unsupported-kernel'];
 const availability = { state: 'available' as const, code: null };
@@ -60,4 +60,23 @@ test('manual requirements and page render the actual panels', () => {
   assert.match(html, /Activation health/);
   assert.match(html, /Evaluation evidence/);
   assert.match(html, /Manual check/);
+});
+
+test('receipt and UI report expose safe public source and build identities with provenance', () => {
+  const receipt = { schema: 'mission-control.control-job.v1' as const, jobId: '00000000-0000-4000-8000-000000000001', kind: 'activation_preflight' as const, revision: 1, selectionHash: 'c'.repeat(64), sourceSha: 'd'.repeat(40), mcSourceSha: 'e'.repeat(40), mcBuildHash: 'f'.repeat(64), suiteHash: null, state: 'completed' as const, requestedAt: '2026-10-19T00:00:00.000Z', startedAt: null, updatedAt: '2026-10-19T00:00:01.000Z', finishedAt: '2026-10-19T00:00:01.000Z', phase: 'closed', code: null, currentCaseId: null, ownedRunId: null, completedCases: 0, plannedCases: 0, reportRefs: {}, cancelRequested: false };
+  const uiReport = { availability, report: { hash:'1'.repeat(64),compatibility:'historical' as const,mcSourceSha:'2'.repeat(40),mcBuildHash:'3'.repeat(64),fixtureVersion:'fixture.v1',fixtureHash:'4'.repeat(64),startedAt:'2026-10-19T00:00:00.000Z',finishedAt:'2026-10-19T00:00:01.000Z',outcome:'fail' as const,assertions:[],screenshots:[] } };
+  const html = renderToStaticMarkup(<TestEvidence evaluation={evaluation} ui={uiReport} receipt={receipt}/>);
+  for (const value of [receipt.selectionHash,receipt.sourceSha,receipt.mcSourceSha,receipt.mcBuildHash,uiReport.report.mcSourceSha,uiReport.report.mcBuildHash]) assert.match(html,new RegExp(value));
+  assert.match(html,/Job source|Receipt source/);
+  assert.match(html,/UI report source/);
+  assert.match(renderToStaticMarkup(<Controls/>),/Current source.*Unknown|Current selection.*Unknown/s);
+});
+
+test('historical projection expands through the real panels with blockers and all eight cases', () => {
+  const html=renderToStaticMarkup(<EvidenceHistory history={[{id:'7'.repeat(64),sourceSha:'8'.repeat(40),evidence:{activation,evaluation}}]}/>);
+  assert.match(html,/Historical evidence/);
+  assert.match(html,/8{40}/);
+  assert.equal((html.match(/data-testid="control-case-row"/g)??[]).length,8);
+  assert.match(html,/EVAL_CANCEL_REQUESTED/);
+  assert.match(html,/run-0/);
 });

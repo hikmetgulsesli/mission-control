@@ -71,4 +71,3 @@ export function parsePendingControlLaunchV1(value: unknown): PendingControlLaunc
 export function readPendingControlLaunchV1(storage?: Pick<Storage,'getItem'>): PendingControlLaunchV1|null {try{const raw=storage?.getItem(CONTROL_PENDING_KEY_V1);return raw?parsePendingControlLaunchV1(JSON.parse(raw)):null;}catch{return null;}}
 export function writePendingControlLaunchV1(storage:Pick<Storage,'setItem'>,pending:PendingControlLaunchV1):void {storage.setItem(CONTROL_PENDING_KEY_V1,JSON.stringify(parsePendingControlLaunchV1(pending)));}
 export function clearPendingControlLaunchV1(storage:Pick<Storage,'removeItem'>):void {storage.removeItem(CONTROL_PENDING_KEY_V1);}
-export const terminalControlStates = new Set<ControlJobReceiptV1['state']>(['completed','failed','blocked','cancelled','ownership_unknown']);
