@@ -924,7 +924,7 @@ export function retainTask4ChildV1(child, cap = 131072) {
     child.on('close', (code, signal) => { if (close) fault = true; else close = { code, signal }; complete(); });
     return Object.freeze({
         wait(timeoutMs) {
-            requireValue(Number.isSafeInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 300000, 'TASK4_CHILD_UNKNOWN');
+            requireValue(Number.isSafeInteger(timeoutMs) && timeoutMs > 0 && timeoutMs <= 1200000, 'TASK4_CHILD_UNKNOWN');
             if (close) { try { return Promise.resolve(validate()); } catch (error) { return Promise.reject(error); } }
             return new Promise((resolve, reject) => {
                 const pending = { resolve, reject, timer: null };
@@ -1479,7 +1479,7 @@ async function prepareTask4InnerResourcesV1(context) {
 async function task4PostgresV1() { return (await import('postgres')).default; }
 async function openTask4ObserverV1(context, state) {
     const postgres = await task4PostgresV1(); context.check();
-    const client = postgres(context.ready.database.restrictedUrl, { max: 1, prepare: false, fetch_types: false, connect_timeout: 5,
+    const client = postgres(context.ready.database.restrictedUrl, { max: 1, prepare: false, connect_timeout: 5,
         idle_timeout: 0, max_lifetime: 0, ssl: false, onnotice() {}, connection: { application_name: 'task4_observer_' + context.ready.executionId, statement_timeout: 5000 } });
     state.readers.opened++; state.readers.pending++; state.filesystem.operation('create', 'sql_client');
     let original = null, observer = null, closing = false;
@@ -1968,16 +1968,25 @@ async function startTask4RunnerV1(context, state) {
     context.check(); requireValue(state.setup, 'TASK4_BINDING_REFUSED');
     const root = state.root.value.path, argv = ['--import', 'tsx', path.join(context.launch.setfarm.root, 'scripts/run-isolated-postgres-tests.ts'), '--',
         'node', '--import', 'tsx', '--test', '--test-concurrency=1', 'tests/fixtures/mission-control-render-smoke-owned-v1.ts'];
+    const startedAt = Date.now(), preparationDeadline = startedAt + 600000, attemptDeadline = startedAt + 1200000;
     const child = spawn(context.node, argv, { cwd: context.launch.setfarm.root, detached: false, stdio: ['ignore', 'pipe', 'pipe', 'ignore', 'pipe'],
         env: { HOME: path.join(root, 'home'), TMPDIR: path.join(root, 'tmp'), PATH: '/usr/bin:/bin', LANG: 'C', LC_ALL: 'C', TZ: 'UTC',
             TSX_DISABLE_CACHE: '1', SETFARM_TEST_PG_ADMIN_URL: state.adminUrl } });
-    const original = retainTask4ChildV1(child, 1048576); let owner = null, delivered = false, exit = null, saved = false;
-    // Attach an original completion observer immediately; later failure cannot abandon its rejection or handle.
-    const terminal = original.wait(240000).then(value => ({ value, error: null }), error => ({ value: null, error }));
-    state.runner = Object.freeze({ child, get owner() { return owner; }, deliveryFinished() { return delivered; }, exit() { return exit; },
+    const original = retainTask4ChildV1(child, 1048576); let owner = null, delivered = false, exit = null, saved = false, completion = null;
+    // Both budgets start once at this original spawn. Attach completion immediately and never restart it on polls/waits.
+    const terminal = (async () => {
+        const remaining = attemptDeadline - Date.now(); requireValue(remaining > 0, 'TASK4_RUNNER_TIMEOUT');
+        return await original.wait(remaining);
+    })().then(value => (completion = { value, error: null }), error => (completion = { value: null, error }));
+    state.runner = Object.freeze({ child, preparationDeadline, attemptDeadline, get owner() { return owner; },
+        deliveryFinished() { return delivered; }, exit() { return exit; }, completed() { return completion !== null; },
         async wait() {
-            const completed = await terminal; if (completed.error) throw completed.error; exit = completed.value;
-            if (!saved) { task4SaveOriginalV1(context, 'runner', original.originals()); saved = true; } context.check(); return exit;
+            const completed = await terminal; exit = completed.value;
+            if (!saved) {
+                try { task4SaveOriginalV1(context, 'runner', original.originals()); saved = true; }
+                catch (error) { if (!completed.error) throw error; }
+            }
+            if (completed.error) throw completed.error; context.check(); return exit;
         } });
     requireValue(Number.isSafeInteger(child.pid), 'TASK4_RESOURCE_REFUSED');
     const observed = await context.modules.native.observeUiProcessV1(child.pid); context.check();
@@ -2066,8 +2075,23 @@ async function executeTask4ProbeV1(context, state, authenticated) {
         stdout: raw.stdout, stderr: raw.stderr, stdoutHash: raw.stdoutHash, stderrHash: raw.stderrHash };
 }
 
+async function waitTask4PreparationV1(context, state) {
+    const runner = state.runner, deadline = runner.preparationDeadline;
+    const check = () => {
+        requireValue(Date.now() < deadline, 'TASK4_PREPARATION_TIMEOUT'); context.check();
+        const completed = runner.completed(); requireValue(Date.now() < deadline, 'TASK4_PREPARATION_TIMEOUT'); return completed;
+    };
+    while (true) {
+        if (check()) { await runner.wait(); fail('TASK4_RUNNER_CLOSED_BEFORE_REQUEST'); }
+        const value = readTask4FixedV1(state.root, 'policy-probe-request.json', true);
+        if (check()) { await runner.wait(); fail('TASK4_RUNNER_CLOSED_BEFORE_REQUEST'); }
+        if (value) return value;
+        await task4WaitV1(Math.min(25, deadline - Date.now()));
+    }
+}
+
 async function runTask4OuterProbeV1(context, state) {
-    const requestFile = await waitTask4FixedV1(context, state.root, 'policy-probe-request.json', Date.now() + 180000);
+    const requestFile = await waitTask4PreparationV1(context, state);
     const authenticated = await authenticateTask4ProbeRequestV1(context, state, requestFile.value), { request, binding, inner, mock } = authenticated;
     state.probeRequest = authenticated;
     const deadline = Date.parse(mock.at) + 30000; requireValue(Date.now() < deadline, 'TASK4_NETWORK_REFUSED');

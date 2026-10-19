@@ -926,10 +926,10 @@ test('Task4 runtime observer reserves one restricted backend and records closure
     const nodes = ast.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === 'openTask4ObserverV1'); assert.equal(nodes.length, 1);
     const ready = JSON.parse(GOLDEN_READY), events: string[] = [], reserved = { release() { events.push('release'); } }; let finish: any;
     const state = { readers: { opened: 0, closed: 0, pending: 0 }, filesystem: { operation: () => {} } };
-    const bindings = { task4PostgresV1: async () => (url: string, options: any) => { assert.equal(url, ready.database.restrictedUrl); assert.equal(options.max, 1); assert.equal(options.fetch_types, false);
+    const bindings = { task4PostgresV1: async () => (url: string, options: any) => { assert.equal(url, ready.database.restrictedUrl); assert.equal(options.max, 1); assert.equal(Object.hasOwn(options, 'fetch_types'), false); assert.equal(options.prepare, false);
         assert.equal(options.connection.application_name, 'task4_observer_' + ready.executionId); return { reserve: async () => reserved, end: () => new Promise(resolve => { events.push('end'); finish = resolve; }) }; },
         createTask4ObserverV1: (bound: any, original: any) => { assert.equal(bound, ready); assert.equal(original, reserved); return {}; },
-        task4BoundedV1: (p: any) => p, requireValue: (v: unknown, c: string) => { if (!v) throw Error(c); } };
+        task4BoundedV1: (p: any, ms: number) => { assert.equal(ms, 8000); return p; }, requireValue: (v: unknown, c: string) => { if (!v) throw Error(c); } };
     const fn = vm.compileFunction(nodes[0].getText(ast) + '\nreturn openTask4ObserverV1;', Object.keys(bindings))(...Object.values(bindings));
     const opened = await fn({ ready, check() {} }, state); assert.deepEqual(state.readers, { opened: 1, closed: 0, pending: 1 });
     const closing = opened.close(); await Promise.resolve(); assert.deepEqual(events, ['release', 'end']); assert.equal(state.readers.closed, 0);
@@ -1377,17 +1377,23 @@ test('Task4 P3 launcher uses exact six-cell vector and original fd4, retains chi
     const ts = await import('typescript'), vm = await import('node:vm'), path = await import('node:path'), m = await load();
     const text = readFileSync(new URL('../scripts/render-smoke-owned-fixture.mjs', import.meta.url), 'utf8'), ast = ts.createSourceFile('fixture.mjs', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
     const nodes = ast.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === 'startTask4RunnerV1'); assert.equal(nodes.length, 1);
-    for (const fault of [null, 'delivery']) await t.test(fault ?? 'delivered', async () => {
-        const ready = JSON.parse(GOLDEN_READY), events: string[] = [], original = { wait: async (n: number) => { assert.equal(n, 240000); events.push('exit_close'); return { code: 0, signal: null, exitObserved: true, closeObserved: true }; }, originals: () => ({}) };
+    for (const fault of [null, 'delivery', 'terminal', 'terminal_save']) await t.test(fault ?? 'delivered', async () => {
+        let now = 1000; const originalError = Error('TASK4_CHILD_UNKNOWN'), raw = { stdout: 'original runner prefix', stderr: 'original runner diagnostic' };
+        const ready = JSON.parse(GOLDEN_READY), events: string[] = [], original = { wait: async (n: number) => { assert.equal(n, 1199993); events.push('exit_close'); if (fault?.startsWith('terminal')) throw originalError; return { code: 0, signal: null, exitObserved: true, closeObserved: true }; }, originals: () => raw };
         const state: any = { setup: ready.setup, root: { value: ready.setup.resourceRoot }, adminUrl: 'private' }; let argv: string[] = [];
         const context = { node: '/fixed/node', nodeHash: 'a'.repeat(64), owner: ready.setup.owner, launch: { setfarm: ready.setup.setfarm.source }, check() {}, modules: { native: { observeUiProcessV1: async () => ({ pid: 41004 }) } } };
-        const bindings: any = { path, Buffer, task4CanonicalV1: m.task4CanonicalV1, hash,
-            spawn: (exe: string, args: string[], options: any) => { assert.equal(exe, '/fixed/node'); argv = args; assert.equal(options.env.SETFARM_TEST_PG_ADMIN_URL, 'private'); assert.ok(!Object.hasOwn(options.env, 'NODE_OPTIONS')); assert.deepEqual(options.stdio, ['ignore', 'pipe', 'pipe', 'ignore', 'pipe']); return { pid: 41004, stdio: [null, null, null, null, {}] }; },
+        const bindings: any = { Date: { now: () => now }, path, Buffer, task4CanonicalV1: m.task4CanonicalV1, hash,
+            spawn: (exe: string, args: string[], options: any) => { now += 7; assert.equal(exe, '/fixed/node'); argv = args; assert.equal(options.env.SETFARM_TEST_PG_ADMIN_URL, 'private'); assert.ok(!Object.hasOwn(options.env, 'NODE_OPTIONS')); assert.deepEqual(options.stdio, ['ignore', 'pipe', 'pipe', 'ignore', 'pipe']); return { pid: 41004, stdio: [null, null, null, null, {}] }; },
             retainTask4ChildV1: () => original, bindTask4ProcessV1: (v: any, expected: any) => { assert.equal(expected.rawArgs, ['/fixed/node', ...argv].join(' ')); return v; },
-            task4WriteOriginalV1: async () => { events.push('fd4'); if (fault) throw Error('delivery'); }, task4SaveOriginalV1: () => events.push('saved'), requireValue: (v: any, c: string) => { if (!v) throw Error(c); } };
+            task4WriteOriginalV1: async () => { events.push('fd4'); if (fault === 'delivery') throw Error('delivery'); }, task4SaveOriginalV1: (_c: any, role: string, bytes: any) => { assert.equal(role, 'runner'); assert.equal(bytes, raw); events.push('saved'); if (fault === 'terminal_save') throw Error('publication'); }, requireValue: (v: any, c: string) => { if (!v) throw Error(c); } };
         const fn = vm.compileFunction(nodes[0].getText(ast) + '\nreturn startTask4RunnerV1;', Object.keys(bindings))(...Object.values(bindings));
-        if (fault) await assert.rejects(fn(context, state)); else await fn(context, state);
-        assert.ok(state.runner); await state.runner.wait(); assert.deepEqual(argv.slice(-6), ['node', '--import', 'tsx', '--test', '--test-concurrency=1', 'tests/fixtures/mission-control-render-smoke-owned-v1.ts']);
+        if (fault === 'delivery') await assert.rejects(fn(context, state)); else await fn(context, state);
+        assert.ok(state.runner);
+        if (fault?.startsWith('terminal')) {
+            await assert.rejects(state.runner.wait(), (error: any) => error === originalError);
+            assert.equal(state.runner.completed(), true); assert.equal(state.runner.exit(), null); assert.ok(events.includes('saved')); return;
+        }
+        assert.equal(state.runner.preparationDeadline, 601000); assert.equal(state.runner.attemptDeadline, 1201000); now = 900000; await state.runner.wait(); await state.runner.wait(); assert.equal(events.filter(v => v === 'exit_close').length, 1); assert.deepEqual(argv.slice(-6), ['node', '--import', 'tsx', '--test', '--test-concurrency=1', 'tests/fixtures/mission-control-render-smoke-owned-v1.ts']);
         assert.equal(state.runner.deliveryFinished(), fault === null); assert.equal(state.runner.exit().closeObserved, true); assert.ok(events.includes('saved'));
     });
 });
@@ -1459,7 +1465,8 @@ test('Task4 outer probe publishes immutable original before mock receipt and ref
         const allowed = { startedAt: '2026-10-19T09:00:01.000Z', finishedAt: '2026-10-19T09:00:01.100Z', outcome: 'connected', errno: null }, denied = { ...allowed, outcome: 'denied', errno: 'EPERM' };
         let closed = false, snapshots = 0; const state: any = { root: {}, setup: ready.setup }, request = { ...binding, policyHash: 'a'.repeat(64), launcherHash: 'b'.repeat(64), mockListener: before };
         const bindings: any = { Date: class extends Date { static now() { return Date.parse('2026-10-19T09:00:02.000Z'); } }, hash, task4CanonicalV1: m.task4CanonicalV1,
-            waitTask4FixedV1: async (_c: any, _r: any, name: string) => { events.push(name); return { value: name === 'policy-probe-request.json' ? request : { schema: 'mission-control.task4-policy-probe-mock.v1', ...binding, owner: inner, before, after, acceptedConnections: 1, sockets: { opened: 1, closed: fault === 'mock' ? 0 : 1, active: fault === 'mock' ? 1 : 0 } } }; },
+            waitTask4PreparationV1: async () => { events.push('policy-probe-request.json'); return { value: request }; },
+            waitTask4FixedV1: async (_c: any, _r: any, name: string, deadline: number) => { assert.equal(deadline, Date.parse(mock.at) + 30000); events.push(name); return { value: name === 'policy-probe-request.json' ? request : { schema: 'mission-control.task4-policy-probe-mock.v1', ...binding, owner: inner, before, after, acceptedConnections: 1, sockets: { opened: 1, closed: fault === 'mock' ? 0 : 1, active: fault === 'mock' ? 1 : 0 } } }; },
             authenticateTask4ProbeRequestV1: async () => ({ request, binding, inner, mock }),
             createTask4PortGuardV1: async (_c: any, s: any) => { s.canary = { port: 15434, snapshot: () => ({ at: closed ? '2026-10-19T09:00:03.000Z' : snapshots++ === 0 ? '2026-10-19T09:00:00.000Z' : '2026-10-19T09:00:02.000Z', state: closed ? 'absent' : 'listening', acceptedConnections: 0 }), close: async () => { closed = true; }, closed: () => closed }; return s.canary; },
             executeTask4ProbeV1: async () => { if (fault === 'probe') throw Error('probe'); return { owner: inner, exit: { code: 0, signal: null, exitObserved: true, closeObserved: true }, allowed, denied, stdout: '', stderr: '', stdoutHash: hash(''), stderrHash: hash('') }; },
@@ -1600,4 +1607,74 @@ test('Task4 installed-kind capture preserves strict real private ancestry and re
             if (fault !== 'private') assert.throws(() => pin.check(), /TASK4_SOURCE_DRIFT/);
         } finally { pin?.close(); fs.rmSync(root, { recursive: true, force: true }); }
     });
+});
+
+
+test('Task4 cold observer uses installed default startup before reserve; simulated ReadyForQuery only', async () => {
+    const ts = await import('typescript'), vm = await import('node:vm'), postgres = (await import('postgres')).default;
+    const text = readFileSync(new URL('../scripts/render-smoke-owned-fixture.mjs', import.meta.url), 'utf8');
+    const ast = ts.createSourceFile('owned.mjs', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const nodes = ast.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === 'openTask4ObserverV1'); assert.equal(nodes.length, 1);
+    const driverText = readFileSync(new URL('../node_modules/postgres/src/connection.js', import.meta.url), 'utf8');
+    const driverAst = ts.createSourceFile('connection.js', driverText, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS), found: import('typescript').FunctionDeclaration[] = [];
+    const visit = (n: import('typescript').Node) => { if (ts.isFunctionDeclaration(n) && n.name?.text === 'ReadyForQuery') found.push(n); ts.forEachChild(n, visit); }; visit(driverAst); assert.equal(found.length, 1);
+    const ready = JSON.parse(GOLDEN_READY), events: string[] = []; let pool: ReturnType<typeof postgres> | undefined;
+    const state: any = { readers: { opened: 0, closed: 0, pending: 0 }, filesystem: { operation: (op: string) => events.push(op) } };
+    const reserved = { release() { events.push('release'); } };
+    const bindings = { task4PostgresV1: async () => (url: string, options: any) => {
+        // The installed constructor resolves options only. No real reserve/query/socket is invoked.
+        pool = postgres(url, options); const needsTypes = pool.options.fetch_types;
+        return { reserve() { events.push('reserve'); return new Promise(resolve => {
+            const factory = vm.compileFunction(`let query=null,results=null,errorResponse=null,result=null,initial={reserve:true},retries=0;
+                const Result=class{},connectTimer={cancel(){}},target_session_attrs=null,backendParameters={},options={shared:{}},sent=[],connection={reserved:null},ending=false;
+                let fetched=false; const fetchArrayTypes=()=>{fetched=true;},onopen=()=>resolve(reserved);
+                ${found[0].getText(driverAst)}
+                ReadyForQuery(Buffer.alloc(6)); if(fetched){events.push('driver_startup');ReadyForQuery(Buffer.alloc(6));}`,
+                ['needsTypes','resolve','reserved','events','Buffer']);
+            factory(needsTypes, resolve, reserved, events, Buffer);
+        }); }, async end() { events.push('end'); await pool!.end(); } };
+    }, task4BoundedV1: (promise: any, ms: number, code: string) => {
+        assert.equal(ms, 8000); if (code === 'TASK4_CLEANUP_UNKNOWN') return promise;
+        return Promise.race([promise, new Promise((_r, reject) => queueMicrotask(() => reject(Error(code))))]);
+    }, createTask4ObserverV1: (_r: any, connection: any) => { assert.equal(connection, reserved); events.push('observer'); return {}; }, requireValue: (v: any, code: string) => { if (!v) throw Error(code); } };
+    const open = vm.compileFunction(nodes[0].getText(ast) + '\nreturn openTask4ObserverV1;', Object.keys(bindings))(...Object.values(bindings));
+    try { await open({ ready, check() {} }, state); assert.deepEqual(events, ['create','reserve','driver_startup','observer']); }
+    finally { if (state.sql) await state.sql.close(); else await pool?.end(); }
+    assert.deepEqual(state.readers, { opened: 1, closed: 1, pending: 0 });
+});
+
+test('Task4 preparation uses one original runner deadline and refuses early close late files and expiry', async (t) => {
+    const ts = await import('typescript'), vm = await import('node:vm');
+    const text = readFileSync(new URL('../scripts/render-smoke-owned-fixture.mjs', import.meta.url), 'utf8'), ast = ts.createSourceFile('owned.mjs', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const nodes = ast.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === 'waitTask4PreparationV1'); assert.equal(nodes.length, 1);
+    for (const mode of ['ready','early_close','early_error','expiry','late_read','close_on_read','context_expiry','nonreset']) await t.test(mode, async () => {
+        let now = 599990, reads = 0, waits = 0, originalWaits = 0, done = mode.startsWith('early');
+        const originalError = Error('TASK4_CHILD_UNKNOWN'), request = { value: { fixed: true } };
+        const state = { root: {}, runner: { preparationDeadline: 600000, completed: () => done,
+            wait: async () => { originalWaits++; if (mode === 'early_error') throw originalError; return { code: 1, signal: null, exitObserved: true, closeObserved: true }; } } };
+        if (mode === 'expiry') now = 600000;
+        const bindings = { Date: { now: () => now }, readTask4FixedV1: (_r: any, name: string, live: boolean) => {
+            assert.equal(name, 'policy-probe-request.json'); assert.equal(live, true); reads++;
+            if (mode === 'late_read') now = 600000; if (mode === 'close_on_read') done = true;
+            return mode === 'nonreset' ? null : request;
+        }, task4WaitV1: async (ms: number) => { waits++; assert.ok(ms > 0 && ms <= 25); now += ms; }, requireValue: (v: any, c: string) => { if (!v) throw Error(c); }, fail: (c: string) => { throw Error(c); } };
+        const fn = vm.compileFunction(nodes[0].getText(ast) + '\nreturn waitTask4PreparationV1;', Object.keys(bindings))(...Object.values(bindings));
+        const action = fn({ check() { if (mode === 'context_expiry') now = 600000; } }, state);
+        if (mode === 'ready') assert.equal(await action, request);
+        else if (mode === 'early_error') await assert.rejects(action, e => e === originalError);
+        else await assert.rejects(action, /TASK4_PREPARATION_TIMEOUT|TASK4_RUNNER_CLOSED_BEFORE_REQUEST/);
+        if (mode.startsWith('early')) { assert.equal(reads, 0); assert.equal(originalWaits, 1); }
+        if (mode === 'expiry' || mode === 'context_expiry') assert.equal(reads, 0);
+        if (mode === 'nonreset') { assert.equal(waits, 1); assert.equal(reads, 1); assert.equal(now, 600000); }
+        if (mode === 'close_on_read') assert.equal(originalWaits, 1);
+    });
+});
+
+test('Task4 original child permits fixed whole-runner cap but still refuses overflow and requires exit AND close', async () => {
+    const m = await load(), { EventEmitter } = await import('node:events');
+    const child: any = new EventEmitter(); child.stdout = new EventEmitter(); child.stderr = new EventEmitter();
+    const original = m.retainTask4ChildV1(child); assert.throws(() => original.wait(1200001), /TASK4_CHILD_UNKNOWN/);
+    let settled = false; const pending = original.wait(1200000).then(value => { settled = true; return value; });
+    child.emit('exit', 1, null); await Promise.resolve(); assert.equal(settled, false);
+    child.emit('close', 1, null); assert.deepEqual(await pending, { code: 1, signal: null, exitObserved: true, closeObserved: true });
 });
