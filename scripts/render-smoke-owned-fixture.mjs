@@ -1997,6 +1997,123 @@ function createTask4PostmasterV1(context, state, recipe) {
     return controller;
 }
 
+// Fixed root-owned OS interpreter only. Other Source/Node/PG files retain the single-link guard.
+function captureTask4SystemPythonV1() {
+    const locator = '/usr/bin/python3', expected = '179301dcb41ea78accc3fa0048a7e6f6710d891945a751a34addd622020c1818';
+    let fd;
+    const refuse = () => fail('TASK4_SOURCE_DRIFT');
+    try {
+        const parents = [];
+        for (let parent = path.dirname(locator); ; parent = path.dirname(parent)) {
+            const stat = fs.lstatSync(parent, { bigint: true });
+            requireValue(stat.isDirectory() && !stat.isSymbolicLink() && stat.uid === 0n && !(stat.mode & 0o022n) && fs.realpathSync(parent) === parent);
+            parents.push({ path: parent, stat }); if (parent === path.dirname(parent)) break;
+            requireValue(parents.length < 16);
+        }
+        const first = fs.lstatSync(locator, { bigint: true });
+        const fields = ['dev', 'ino', 'uid', 'gid', 'mode', 'nlink', 'size', 'mtimeNs', 'ctimeNs'];
+        const same = (a, b) => fields.every(key => a[key] === b[key]);
+        requireValue(first.isFile() && !first.isSymbolicLink() && first.uid === 0n && (first.mode & 0o7777n) === 0o755n
+            && first.nlink > 0n && Number.isSafeInteger(Number(first.nlink)) && first.size === 118928n && fs.realpathSync(locator) === locator);
+        fd = fs.openSync(locator, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+        const descriptor = fd; let closed = false;
+        const read = () => {
+            requireValue(!closed && same(first, fs.fstatSync(descriptor, { bigint: true })) && same(first, fs.lstatSync(locator, { bigint: true })));
+            const bytes = Buffer.alloc(Number(first.size)); let offset = 0;
+            while (offset < bytes.length) { const count = fs.readSync(descriptor, bytes, offset, bytes.length - offset, offset); requireValue(count > 0); offset += count; }
+            requireValue(same(first, fs.fstatSync(descriptor, { bigint: true })) && same(first, fs.lstatSync(locator, { bigint: true })) && hash(bytes) === expected);
+        };
+        const check = () => {
+            try {
+                requireValue(!closed && fs.realpathSync(locator) === locator);
+                for (const parent of parents) {
+                    const now = fs.lstatSync(parent.path, { bigint: true });
+                    requireValue(now.isDirectory() && !now.isSymbolicLink() && fs.realpathSync(parent.path) === parent.path
+                        && ['dev', 'ino', 'uid', 'gid', 'mode'].every(key => now[key] === parent.stat[key]));
+                }
+                read();
+            } catch { refuse(); }
+        };
+        check();
+        return Object.freeze({ hash: expected, identity: Object.freeze(Object.fromEntries(fields.map(key => [key, String(first[key])]))), check,
+            close() { if (!closed) { closed = true; fs.closeSync(descriptor); } } });
+    } catch { if (fd !== undefined) try { fs.closeSync(fd); } catch {} return refuse(); }
+}
+
+const TASK4_PG_KERNEL_PROGRAM_V1 = "import ctypes, sys\ntry:\n    if len(sys.argv) != 2 or not sys.argv[1].isascii() or not sys.argv[1].isdigit(): raise ValueError()\n    pid = int(sys.argv[1])\n    if not 0 < pid <= 2147483647 or str(pid) != sys.argv[1]: raise ValueError()\n    lib = ctypes.CDLL('/usr/lib/libproc.dylib', use_errno=True)\n    fn = lib.proc_pidpath\n    fn.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_uint32]\n    fn.restype = ctypes.c_int\n    buf = ctypes.create_string_buffer(4096)\n    count = fn(pid, buf, 4096)\n    raw = bytes(buf)\n    end = raw.find(b'\\0')\n    if not 0 < count < 4096 or not 0 < end <= count: raise ValueError()\n    value = raw[:end]\n    text = value.decode('utf-8', 'strict')\n    if not text.startswith('/') or any(ord(c) < 32 or ord(c) == 127 for c in text): raise ValueError()\n    output = value + b'\\n'\n    if sys.stdout.buffer.write(output) != len(output): raise ValueError()\n    sys.stdout.buffer.flush()\nexcept BaseException:\n    sys.exit(1)\n";
+
+// Independent original facts only; never a substitute for native reader WeakMaps.
+function task4PgOriginalV1(child, method, argv) {
+    const chunks = { stdout: [], stderr: [] }, sizes = { stdout: 0, stderr: 0 }, hashes = { stdout: createHash('sha256'), stderr: createHash('sha256') };
+    let exit = null, close = null, fault = null;
+    child.on('error', () => { fault ??= 'spawn'; });
+    for (const name of ['stdout', 'stderr']) {
+        child[name].on('error', () => { fault ??= 'stream'; });
+        child[name].on('data', chunk => {
+            const bytes = Buffer.from(chunk); hashes[name].update(bytes); sizes[name] += bytes.length;
+            if (close) fault ??= 'late_output';
+            if (sizes[name] > 8192) fault ??= 'output_cap'; else chunks[name].push(bytes);
+        });
+    }
+    child.on('exit', (code, signal) => { if (exit || close) fault ??= 'exit_order'; else exit = { code, signal }; });
+    child.on('close', (code, signal) => { if (close) fault ??= 'close_order'; else close = { code, signal }; });
+    return () => ({ method, argv, exit, close, fault, stdout: { bytes: sizes.stdout, sha256: hashes.stdout.copy().digest('hex'), base64: Buffer.concat(chunks.stdout).toString('base64') },
+        stderr: { bytes: sizes.stderr, sha256: hashes.stderr.copy().digest('hex'), base64: Buffer.concat(chunks.stderr).toString('base64') } });
+}
+async function task4ObservePgMemberV1(context, state, row, phase) {
+    integer(row.pid); requireValue(['before-1', 'before-2'].includes(phase), 'TASK4_BINDING_REFUSED');
+    const owner = state.postgres.owner, executable = path.join(TASK4_PG_BIN, 'postgres'), helpers = [], pins = [];
+    let failed = false, stage = 'material', order = 0, pythonHash = null, pythonIdentity = null, pgHash = null;
+    const args = ['-ww', '-p', String(row.pid), '-o', 'pid=', '-o', 'ppid=', '-o', 'uid=', '-o', 'lstart=', '-o', 'pgid=', '-o', 'args='];
+    const comm = ['-ww', '-p', String(row.pid), '-o', 'comm='];
+    const equal = (a, b) => Array.isArray(a) && a.length === b.length && a.every((v, i) => v === b[i]);
+    const check = () => { context.check(); state.root.check(); for (const pin of pins) pin.check(); };
+    try {
+        check(); requireValue(owner.executable === executable, 'TASK4_BINDING_REFUSED');
+        const python = captureTask4SystemPythonV1(); pins.push(python); pythonHash = python.hash; pythonIdentity = python.identity ?? null;
+        requireValue(pythonHash === '179301dcb41ea78accc3fa0048a7e6f6710d891945a751a34addd622020c1818', 'TASK4_SOURCE_DRIFT');
+        const pg = captureTask4FileV1(executable, 536870912, 'installed'); pins.push(pg); pgHash = pg.hash;
+        requireValue(pgHash === owner.executableHash && pgHash === '38c50336c63ae8b73b799a8c0ebc4f948e311eee882a633c8286d1ca4110b502', 'TASK4_SOURCE_DRIFT'); check();
+        const readPs = context.modules.native.createUiPsReaderV1((file, argv, options) => {
+            requireValue(file === '/bin/ps' && equal(argv, args) && [1, 3].includes(order), 'TASK4_BINDING_REFUSED');
+            const child = spawn(file, argv, options); helpers.push(task4PgOriginalV1(child, order === 1 ? 'ps_args_before' : 'ps_args_after', [file, ...argv]));
+            return child; // Same original handle and untouched native listeners/WeakMaps.
+        });
+        const adapter = async argv => {
+            requireValue(order < 3 && equal(argv, order === 1 ? comm : args), 'TASK4_BINDING_REFUSED');
+            const current = order++; stage = ['args_before', 'kernel_path', 'args_after'][current]; check();
+            if (current !== 1) { const value = await readPs(argv); check(); return value; }
+            const kernelArgs = ['-I', '-S', '-B', '-c', TASK4_PG_KERNEL_PROGRAM_V1, String(row.pid)];
+            const child = spawn('/usr/bin/python3', kernelArgs, { shell: false, cwd: state.root.value.path,
+                env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', LANG: 'C', LC_ALL: 'C', TZ: 'UTC' }, stdio: ['ignore', 'pipe', 'pipe'] });
+            helpers.push(task4PgOriginalV1(child, 'kernel_path', ['/usr/bin/python3', ...kernelArgs]));
+            const original = retainTask4ChildV1(child, 4096), completion = await original.wait(2000); check();
+            requireValue(completion.code === 0 && completion.signal === null && completion.exitObserved && completion.closeObserved, 'TASK4_BINDING_REFUSED');
+            const output = original.originals(); stage = 'kernel_output';
+            requireValue(output.stderrBytes === 0 && output.stdoutBytes > 1 && output.stdoutBytes <= 4096, 'TASK4_BINDING_REFUSED');
+            const value = output.stdout; requireValue(Buffer.byteLength(value) === output.stdoutBytes && /^\/[^\r\n\0]+\n$/.test(value), 'TASK4_BINDING_REFUSED');
+            const image = value.slice(0, -1); absolutePath(image);
+            requireValue(fs.realpathSync(image) === image && image === executable, 'TASK4_BINDING_REFUSED'); check(); return value;
+        };
+        const observed = await context.modules.native.observeUiProcessV1(row.pid, adapter); stage = 'member_binding'; check();
+        requireValue(order === 3 && ['pid', 'ppid', 'pgid', 'uid', 'startedAt'].every(key => observed[key] === row[key])
+            && observed.uid === context.owner.uid && observed.executable === executable, 'TASK4_BINDING_REFUSED');
+        for (const get of helpers) { const value = get(); requireValue(value.fault === null && value.exit?.code === 0 && value.exit.signal === null
+            && value.close?.code === 0 && value.close.signal === null && value.stderr.bytes === 0, 'TASK4_BINDING_REFUSED'); }
+        stage = 'complete'; return observed;
+    } catch (error) { failed = true; throw error; }
+    finally {
+        let settlementError = null;
+        try {
+            const value = { schema: 'mission-control.task4-pg-member-originals.v1', pid: row.pid, phase, stage, failed, pythonHash, pythonIdentity, pgHash,
+                programHash: hash(TASK4_PG_KERNEL_PROGRAM_V1), helpers: helpers.map(get => get()) };
+            task4PrivateBytesV1(path.join(state.root.value.path, 'outer/originals'), 'pg-member-' + phase + '-' + row.pid + '.json', Buffer.from(task4CanonicalV1(value) + '\n'));
+        } catch (error) { settlementError = error; }
+        for (const pin of pins.reverse()) { try { pin.close(); } catch (error) { settlementError ??= error; } }
+        if (!failed && settlementError) throw settlementError;
+    }
+}
+
 async function task4PostgresCensusV1(context, state, after) {
     const reader = context.modules.native.createUiPsReaderV1(), owner = state.postgres.owner;
     const snapshot = async suffix => {
@@ -2018,21 +2135,21 @@ async function task4PostgresCensusV1(context, state, after) {
             while (changed) { changed = false; for (const row of rows) if (ids.has(row.ppid) && !ids.has(row.pid)) { ids.add(row.pid); changed = true; } requireValue(ids.size <= 256, 'TASK4_CLEANUP_UNKNOWN'); }
             return rows.filter(row => ids.has(row.pid)).sort((a, b) => a.pid - b.pid);
         };
-        const bind = async rows => {
+        const bind = async (rows, phase) => {
             const retained = [];
             for (const row of rows) {
                 requireValue(row.uid === context.owner.uid, 'TASK4_BINDING_REFUSED');
-                const observed = await context.modules.native.observeUiProcessV1(row.pid); context.check();
+                const observed = await task4ObservePgMemberV1(context, state, row, phase); context.check();
                 requireValue(fields.every(key => row[key] === observed[key]) && observed.executable === owner.executable, 'TASK4_BINDING_REFUSED');
                 retained.push({ ...row, executable: observed.executable, commandHash: hash(observed.rawArgs) });
             }
             return retained;
         };
         const first = select((await snapshot('before-1')).rows);
-        state.pgCohort = await bind(first);
+        state.pgCohort = await bind(first, 'before-1');
         const second = select((await snapshot('before-2')).rows);
         requireValue(task4CanonicalV1(first) === task4CanonicalV1(second), 'TASK4_BINDING_REFUSED');
-        await bind(second); return;
+        await bind(second, 'before-2'); return;
     }
     requireValue(Array.isArray(state.pgCohort) && state.pgCohort.length > 0 && state.pgCohort.some(row => row.pid === owner.pid), 'TASK4_CLEANUP_UNKNOWN');
     const absent = [];

@@ -1349,6 +1349,7 @@ test('Task4 PostgreSQL census parses complete raw snapshots and rejects retained
             }
         } } };
         const bindings = { path, Date: class extends Date { static now() { return clock; } }, hash, task4CanonicalV1: m.task4CanonicalV1,
+            task4ObservePgMemberV1: (c: any, _s: any, row: any) => c.modules.native.observeUiProcessV1(row.pid),
             task4PrivateBytesV1: (_p: string, n: string, b: Buffer) => { writes.push({ n, value: n.endsWith('.log') ? b.toString() : JSON.parse(b.toString()) }); return { sha256: hash(b), bytes: b.length }; },
             task4WaitV1: async (ms: number) => { assert.equal(ms, 100); clock += ms; }, requireValue: (v: any, c: string) => { if (!v) throw Error(c); } };
         const fn = vm.compileFunction(nodes[0].getText(ast) + '\nreturn task4PostgresCensusV1;', Object.keys(bindings))(...Object.values(bindings));
@@ -2195,4 +2196,131 @@ test('Task4 controller temp selection precedes installed Chromium CDP cached art
     assert.deepEqual(environment, { ...original, TMPDIR: path.join(inner, 'tmp') });
     assert.equal(oldCached, path.join(inner, 'server-runtime/tmp/playwright-artifacts-'), 'changing environment cannot repair an already cached package prefix');
     assert.equal(functions.task4ServerEnvironmentV1(context, 15433, 15439).TMPDIR, original.TMPDIR, 'separate original server environment remains unchanged');
+});
+
+async function task4PgKernelComponent(fault: string|null = null) {
+    const ts = await import('typescript'), vm = await import('node:vm'), path = await import('node:path'), events = await import('node:events');
+    const m = await load(), native = await import('../scripts/ui-regression-lifecycle.mjs');
+    const text = readFileSync(new URL('../scripts/render-smoke-owned-fixture.mjs', import.meta.url),'utf8'), ast = ts.createSourceFile('fixture.mjs',text,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS);
+    const names = ['task4PostgresCensusV1','task4ObservePgMemberV1','task4PgOriginalV1'];
+    const nodes = ast.statements.filter(n => ts.isFunctionDeclaration(n) && names.includes(n.name?.text ?? '') || ts.isVariableStatement(n) && n.declarationList.declarations.some(d => d.name.getText(ast) === 'TASK4_PG_KERNEL_PROGRAM_V1'));
+    const pg='/Users/setrox/ai/setrox/.task4-toolchain-v1/Cellar/postgresql@17/17.10/bin/postgres', pgHash='38c50336c63ae8b73b799a8c0ebc4f948e311eee882a633c8286d1ca4110b502';
+    const owner={pid:49193,ppid:48697,pgid:48697,uid:501,startedAt:'2026-10-19T18:26:05.000Z',executable:pg,executableHash:pgHash};
+    const childArgs="49194 49193   501 Mon Oct 19 18:26:05 2026     49194 postgres: checkpointer                                     \n", childComm="postgres: checkpointer \n", writes:any[]=[], launches:any[]=[], children:any[]=[], checks:string[]=[];
+    let psArgs=0, kernel=0, snapshots=0, pinChecks=0, closedPins=0;
+    const originalError=new Error('component original error'),publicationError=new Error('component publication error'),closeError=new Error('component pin close error');
+    const spawn = (exe:string,args:string[],options:any) => {
+        launches.push({exe,args,options});const child:any=new events.EventEmitter();child.stdout=new events.EventEmitter();child.stderr=new events.EventEmitter();child.kill=()=>{throw Error('unexpected signal');};children.push(child);
+        queueMicrotask(()=>{
+            let out:Buffer|string='',code=0,signal:null|string=null;
+            if(exe==='/bin/ps') {
+                if(args.includes('-A')) { snapshots++;out='49193 48697 48697 501 Mon Oct 19 18:26:05 2026\n49194 49193 49194 501 Mon Oct 19 18:26:05 2026\n'; }
+                else if(args.at(-1)==='comm=')out=args[2]==='49194'?childComm:pg+'\n';
+                else {psArgs++;out=args[2]==='49194'?childArgs:'49193 48697 501 Mon Oct 19 18:26:05 2026 48697 '+pg+' -D /owned/pgdata\n';
+                    if(fault==='args_drift'&&psArgs===2)out+=' ';
+                    if(fault?.startsWith('metadata_')){const field=fault.slice(9),values:any={pid:'49192',ppid:'48698',uid:'502',pgid:'48698',startedAt:'Mon Oct 19 18:26:06 2026'};
+                        const rx=/^(\d+) (\d+) (\d+) ([A-Za-z]{3} [A-Za-z]{3} +\d{1,2} \d{2}:\d{2}:\d{2} \d{4}) (\d+) ([^\n]+)\n$/;
+                        const before=rx.exec(String(out));assert.ok(before);const fields=before.slice(1),slot=({pid:0,ppid:1,uid:2,startedAt:3,pgid:4} as Record<string,number>)[field]!;
+                        const changed=[...fields];changed[slot]=values[field];out=changed.join(' ')+'\n';
+                        const after=rx.exec(String(out));assert.ok(after);assert.notEqual(after[slot+1],before[slot+1]);
+                        for(let i=0;i<fields.length;i++)if(i!==slot)assert.equal(after[i+1],before[i+1]);}
+                }
+            } else {
+                assert.equal(exe,'/usr/bin/python3');assert.deepEqual(args.slice(0,4),['-I','-S','-B','-c']);assert.match(args[4]!,/proc_pidpath/);assert.match(args[5]!,/^[1-9][0-9]*$/);assert.equal(args.length,6);
+                kernel++;out=pg+'\n';
+                if(fault==='nonabsolute')out='postgres: checkpointer \n';if(fault==='wrong_path')out='/foreign/postgres\n';if(fault==='no_lf')out=pg;
+                if(fault==='two_lines')out=pg+'\n'+pg+'\n';if(fault==='nul')out=pg+'\0\n';if(fault==='invalid_utf8')out=Buffer.from([255,10]);if(fault==='cap')out='x'.repeat(8193);
+                if(fault==='exit')code=1;if(fault==='signal')signal='SIGTERM';if(fault==='stderr')child.stderr.emit('data',Buffer.from('bounded failure'));
+                if(fault==='stream')child.stdout.emit('error',originalError);if(fault==='spawn_event')child.emit('error',originalError);
+            }
+            child.stdout.emit('data',Buffer.isBuffer(out)?out:Buffer.from(out));
+            if(!(exe==='/usr/bin/python3'&&fault==='missing_exit'))child.emit('exit',code,signal);
+            if(exe==='/usr/bin/python3'&&fault==='late_close')setTimeout(()=>child.emit('close',0,null),2100);
+            if(!(exe==='/usr/bin/python3'&&['missing_close','late_close'].includes(fault??'')))child.emit('close',exe==='/usr/bin/python3'&&fault==='close_mismatch'?1:code,signal);
+        });return child;
+    };
+    const state:any={root:{value:{path:'/private/owned'},check(){}},postgres:{owner}};
+    const context:any={owner:{uid:501},check(){if(fault?.startsWith('context_drift')&&kernel)throw originalError;},modules:{native:{
+        createUiPsReaderV1:(launch:any=spawn)=>native.createUiPsReaderV1(launch),parseUiMetadataSnapshotV1:native.parseUiMetadataSnapshotV1,
+        observeUiProcessV1:async(pid:number,reader:any)=>{
+            if(reader&&fault==='dispatch_pid')return reader(['-ww','-p','99999','-o','comm=']);
+            if(reader&&fault==='dispatch_comm_first')return reader(['-ww','-p',String(pid),'-o','comm=']);
+            const value=await native.observeUiProcessV1(pid,reader??native.createUiPsReaderV1(spawn));
+            if(reader&&fault==='dispatch_extra')await reader(['-ww','-p',String(pid),'-o','comm=']);return value;} }}};
+    const bindings:any={path,Buffer,TextDecoder,Date,hash,createHash,spawn,task4CanonicalV1:(v:any)=>{if(fault==='context_drift_construct'&&v?.schema==='mission-control.task4-pg-member-originals.v1')throw publicationError;return m.task4CanonicalV1(v);},retainTask4ChildV1:m.retainTask4ChildV1,
+        captureTask4SystemPythonV1:()=>bindings.captureTask4FileV1('/usr/bin/python3'),
+        TASK4_PG_BIN:path.dirname(pg),fs:{realpathSync:(v:string)=>fault==='noncanonical'?v+'/different':v},
+        integer:(v:any)=>assert.ok(Number.isSafeInteger(v)&&v>0),absolutePath:(v:string)=>assert.ok(v.startsWith('/')&&!/[\0\r\n]/.test(v)),
+        requireValue:(v:any,c:string)=>{if(!v)throw Error(c);},
+        captureTask4FileV1:(v:string)=>({hash:v===pg?(fault==='wrong_hash'?'f'.repeat(64):pgHash):(fault==='python_hash'?'f'.repeat(64):'179301dcb41ea78accc3fa0048a7e6f6710d891945a751a34addd622020c1818'),check(){pinChecks++;checks.push(v);if(fault==='pin_drift'&&kernel)throw originalError;},close(){closedPins++;if(['context_drift_close','write_failure_close','close_failure'].includes(fault??''))throw closeError;}}),
+        task4PrivateBytesV1:(_p:string,n:string,b:Buffer)=>{if(['write_failure','context_drift_write','write_failure_close'].includes(fault??'')&&n.startsWith('pg-member-'))throw publicationError;writes.push({n,value:n.endsWith('.json')?JSON.parse(b.toString()):b.toString()});return {sha256:hash(b),bytes:b.length};},
+        task4WaitV1:async()=>{},};
+    const fn=vm.compileFunction(nodes.map(n=>n.getText(ast)).join('\n')+'\nreturn task4PostgresCensusV1;',Object.keys(bindings))(...Object.values(bindings));
+    let error:any=null;try{await fn(context,state,false);}catch(e){error=e;}
+    return {error,state,writes,launches,children,psArgs,kernel,snapshots,pinChecks,originalError,publicationError,closeError,closedPins,context,nodes,bindings};
+}
+
+test('Task4 PG kernel path binds actual current worker title through unchanged native observer',async()=>{
+    const result=await task4PgKernelComponent();assert.equal(result.error,null);
+    assert.equal(result.state.pgCohort.length,2);assert.equal(result.snapshots,2);assert.equal(result.kernel,4);assert.equal(result.psArgs,8);
+    assert.equal(result.state.pgCohort[1].pid,49194);assert.equal(result.state.pgCohort[1].pgid,49194);
+    const originals=result.writes.filter(w=>w.n.startsWith('pg-member-'));assert.equal(originals.length,4);
+    for(const entry of originals){assert.equal(entry.value.helpers.length,3);assert.equal(entry.value.helpers[1].method,'kernel_path');
+        for(const helper of entry.value.helpers){assert.equal(helper.exit.code,0);assert.equal(helper.close.code,0);assert.equal(helper.fault,null);}}
+});
+
+
+test('Task4 PG kernel adapter refuses uncertain originals identities and dispatch before stop',async(t)=>{
+    const faults=['args_drift','nonabsolute','wrong_path','no_lf','two_lines','nul','invalid_utf8','cap','exit','signal','stderr','stream','spawn_event',
+        'missing_exit','missing_close','close_mismatch','late_close','wrong_hash','python_hash','noncanonical','pin_drift','context_drift',
+        'dispatch_pid','dispatch_comm_first','dispatch_extra','write_failure','context_drift_write','context_drift_construct',
+        ...['pid','ppid','uid','pgid','startedAt'].map(v=>'metadata_'+v)];
+    for(const fault of faults)await t.test(fault,async()=>{
+        const r=await task4PgKernelComponent(fault);assert.ok(r.error,fault);assert.equal(r.state.pgCohort,undefined);assert.equal(r.snapshots,1);
+        assert.equal(r.launches.filter(v=>v.exe==='/usr/bin/python3').length<=1,true); // No retry.
+        if(fault.startsWith('context_drift')||fault==='pin_drift')assert.equal(r.error,r.originalError);
+        if(fault==='write_failure')assert.equal(r.error,r.publicationError);
+        if(fault==='missing_close'||fault==='late_close'){const record=r.writes.find(v=>v.n.startsWith('pg-member-')).value;
+            assert.equal(record.failed,true);assert.equal(record.helpers[1].close,null);}
+        if(fault==='late_close'){await new Promise(resolve=>setTimeout(resolve,150));assert.ok(r.error);assert.equal(r.state.pgCohort,undefined);}
+        if(fault.startsWith('dispatch_'))assert.equal(r.error.message,'TASK4_BINDING_REFUSED');
+    });
+});
+
+
+test('Task4 PG kernel pin cleanup preserves original failures and closes every pin',async()=>{
+    for(const fault of ['context_drift_close','write_failure_close','close_failure']){
+        const r=await task4PgKernelComponent(fault);
+        assert.equal(r.error,fault==='context_drift_close'?r.originalError:fault==='write_failure_close'?r.publicationError:r.closeError);
+        assert.equal(r.closedPins,2);assert.equal(r.state.pgCohort,undefined);
+    }
+});
+
+
+test('Task4 fixed system Python pin accepts invariant OS hardlinks without widening generic pins',async()=>{
+    const ts=await import('typescript'),vm=await import('node:vm'),path=await import('node:path');
+    const source=readFileSync(new URL('../scripts/render-smoke-owned-fixture.mjs',import.meta.url),'utf8'),ast=ts.createSourceFile('fixture.mjs',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS);
+    const nodes=ast.statements.filter(n=>ts.isFunctionDeclaration(n)&&['captureTask4SystemPythonV1','captureTask4FileV1'].includes(n.name?.text??''));
+    const fixed=nodes.some(n=>(n as import('typescript').FunctionDeclaration).name?.text==='captureTask4SystemPythonV1');
+    const body=nodes.map(n=>n.getText(ast).replace(/^export /,'')).join('\n')+'\nreturn {generic:captureTask4FileV1,fixed:'+(fixed?'captureTask4SystemPythonV1':"()=>captureTask4FileV1('/usr/bin/python3',16777216,'installed')")+'};';
+    const run=()=>{
+        const trusted=Buffer.alloc(118928,7),file:any={dev:1n,ino:2n,uid:0n,gid:0n,mode:0o100755n,nlink:78n,size:118928n,mtimeNs:3n,ctimeNs:4n};
+        const parent:any={...file,ino:5n,mode:0o40755n,nlink:2n,size:4096n};let content=Buffer.from(trusted),closed=0,readZero=false,alias=false,symlink=false,descriptorDrift=false;
+        const shape=(v:any,dir:boolean)=>({...v,isFile:()=>!dir,isDirectory:()=>dir,isSymbolicLink:()=>symlink});
+        const fs={constants:{O_RDONLY:0,O_NOFOLLOW:256},lstatSync:(p:string)=>shape(p==='/usr/bin/python3'?file:parent,p!=='/usr/bin/python3'),
+            fstatSync:()=>shape({...file,ino:descriptorDrift?99n:file.ino},false),realpathSync:(p:string)=>alias?p+'/alias':p,
+            openSync:(p:string,flags:number)=>{assert.equal(p,'/usr/bin/python3');assert.equal(flags,256);return 17;},closeSync:()=>{closed++;},
+            readSync:(_fd:number,b:Buffer,off:number,len:number,pos:number)=>{if(readZero)return 0;const n=Math.min(len,16384);content.copy(b,off,pos,pos+n);return n;}};
+        const bindings={fs,path,Buffer,process:{getuid:()=>501},hash:(b:Buffer)=>b.equals(trusted)?'179301dcb41ea78accc3fa0048a7e6f6710d891945a751a34addd622020c1818':hash(b),
+            fail:(code:string)=>{throw Error(code);},requireValue:(v:any)=>{if(!v)throw Error('TASK4_SOURCE_DRIFT');},absolutePath:()=>{},integer:()=>{}};
+        const api=vm.compileFunction(body,Object.keys(bindings))(...Object.values(bindings));
+        return {api,file,parent,fs,set:(kind:string)=>{if(kind==='content')content[0]=8;if(kind==='read_zero')readZero=true;if(kind==='alias')alias=true;if(kind==='symlink')symlink=true;if(kind==='descriptor')descriptorDrift=true;},closed:()=>closed};
+    };
+    const good=run(),pin=good.api.fixed();assert.equal(pin.hash,'179301dcb41ea78accc3fa0048a7e6f6710d891945a751a34addd622020c1818');pin.check();pin.close();assert.equal(good.closed(),1);
+    assert.throws(()=>good.api.generic('/usr/bin/python3',16777216,'installed'),{message:'TASK4_SOURCE_DRIFT'});
+    for(const key of ['dev','ino','uid','gid','mode','nlink','size','mtimeNs','ctimeNs']){const v=run(),p=v.api.fixed();v.file[key]++;assert.throws(()=>p.check(),{message:'TASK4_SOURCE_DRIFT'});p.close();}
+    for(const key of ['dev','ino','uid','gid','mode']){const v=run(),p=v.api.fixed();v.parent[key]++;assert.throws(()=>p.check(),{message:'TASK4_SOURCE_DRIFT'});p.close();}
+    for(const fault of ['content','read_zero','alias','symlink','descriptor']){const v=run(),p=v.api.fixed();v.set(fault);assert.throws(()=>p.check(),{message:'TASK4_SOURCE_DRIFT'});p.close();}
+    for(const change of [(v:any)=>{v.file.nlink=0n;},(v:any)=>{v.file.uid=501n;},(v:any)=>{v.file.mode=0o100775n;},(v:any)=>{v.parent.uid=501n;},(v:any)=>{v.parent.mode=0o40775n;}]){
+        const v=run();change(v);assert.throws(()=>v.api.fixed(),{message:'TASK4_SOURCE_DRIFT'});}
 });
