@@ -661,6 +661,8 @@ async function runCatalog({ browser, state, store, measured, control, schemas })
                                     && exact(stories[0], '.af-contract__story-id', 'story-1')
                                     && exact(stories[0], '.af-contract__story-title', 'Fixture story');
                             });
+                        if (tab === 'Run Contract')
+                            await page.locator('.rd-contract-wrap .af-contract__story').scrollIntoViewIfNeeded();
                         await assertOverflow();
                         await noErrors();
                     }, `run-${id}-${v.width}-${tab.toLowerCase().replaceAll(' ', '-')}`);
@@ -851,7 +853,22 @@ async function behavior(id, { page, context, state, loaded, capture }) {
         assert(await page.locator('.agent-card-wrap').count() === 14);
         await page.getByTitle('Live view', { exact: true }).first().click();
         await page.locator('.live-panel').waitFor({ state: 'visible' });
-        assert((await page.locator('.live-panel').innerText()).includes('idle'));
+        await page.waitForFunction(() => {
+            const visible = element => {
+                const rect = element.getBoundingClientRect(), style = getComputedStyle(element);
+                return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+            };
+            const panels = document.querySelectorAll('.live-panel');
+            if (panels.length !== 1 || !visible(panels[0]))
+                return false;
+            const panel = panels[0];
+            if (Array.from(panel.querySelectorAll('.live-panel__loading')).some(visible) || Array.from(panel.querySelectorAll('.live-panel__error')).some(visible))
+                return false;
+            const statuses = panel.querySelectorAll('.live-panel__header .live-panel__status');
+            const empty = panel.querySelectorAll('.live-panel__output .live-panel__empty');
+            return statuses.length === 1 && visible(statuses[0]) && statuses[0].classList.contains('live-panel__status--idle') && statuses[0].textContent.trim() === 'idle'
+                && empty.length === 1 && visible(empty[0]);
+        });
         await capture();
         await page.keyboard.press('Escape');
         await page.locator('.live-panel').waitFor({ state: 'hidden' });

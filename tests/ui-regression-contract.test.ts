@@ -986,7 +986,8 @@ test('Run Contract waits for successful fixture content before checking loaded t
         const f = workspace();
         const { runUiRegressionV1 } = await load();
         let phase = 'loading', activeTab = '', currentUrl = '', stop = false, contexts = 0, closed = 0;
-        let geometryWhileLoading = 0, geometryAfterLoaded = 0;
+        let geometryWhileLoading = 0, geometryAfterLoaded = 0, scrolls = 0;
+        const contractEvents: string[] = [];
         let arrived!: () => void, release!: () => void;
         const waitArrived = new Promise<void>(resolve => { arrived = resolve; });
         const mountReleased = new Promise<void>(resolve => { release = resolve; });
@@ -1025,7 +1026,10 @@ test('Run Contract waits for successful fixture content before checking loaded t
             const geometry: any = responsiveGeometry(loadedContract && scenario === 'loaded-overflow' ? 'tab-content-overflow' : 'bounded-inline-tabs');
             const originalQuery = geometry.document.querySelector;
             geometry.document.querySelector = (selector: string) => {
-                if (activeTab === 'Run Contract' && selector === '.layout__content') phase === 'loading' ? geometryWhileLoading++ : geometryAfterLoaded++;
+                if (activeTab === 'Run Contract' && selector === '.layout__content') {
+                    phase === 'loading' ? geometryWhileLoading++ : geometryAfterLoaded++;
+                    contractEvents.push('geometry');
+                }
                 return originalQuery(selector);
             };
             geometry.document.querySelectorAll = (selector: string) => mountedNodes().filter(node => node.matches(selector));
@@ -1039,23 +1043,26 @@ test('Run Contract waits for successful fixture content before checking loaded t
             evaluate: async (callback: Function) => { assert.equal(items.length, 1); return callback(items[0]); },
         });
         const page = { on() {}, setDefaultTimeout() {}, goto: async (url: string) => { currentUrl = url; },
-            locator: (selector: string) => selector === '.rd-tab' ? locator(tabs) : selector === '.rd-tab--active' ? locator(tabs.filter(node => node.classList.contains('rd-tab--active'))) : { waitFor: async () => {}, innerText: async () => 'Simulated body text for reaching the actual asynchronous Run Contract tab assertion.' },
+            locator: (selector: string) => selector === '.rd-contract-wrap .af-contract__story' ? { scrollIntoViewIfNeeded: async () => { assert.equal(phase, 'loaded'); assert.ok(['loaded-overflow', 'loaded-bounded'].includes(scenario)); scrolls++; contractEvents.push('scroll'); } } : selector === '.rd-tab' ? locator(tabs) : selector === '.rd-tab--active' ? locator(tabs.filter(node => node.classList.contains('rd-tab--active'))) : { waitFor: async () => {}, innerText: async () => 'Simulated body text for reaching the actual asynchronous Run Contract tab assertion.' },
             evaluate: async (callback: Function) => evaluate(callback),
             waitForFunction: async (callback: Function) => { assert.equal(evaluate(callback), false, 'loading placeholder cannot satisfy readiness'); arrived(); await mountReleased; if (!evaluate(callback)) throw Error('simulated readiness timeout'); },
-            screenshot: async () => Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0]), url: () => currentUrl,
+            screenshot: async () => { if (activeTab === 'Run Contract') contractEvents.push('capture'); return Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0]); }, url: () => currentUrl,
         };
         const browser = { newContext: async () => { contexts++; return { route: async () => {}, routeWebSocket: async () => {}, addInitScript: async () => {}, on() {}, newPage: async () => page, close: async () => { closed++; } }; } };
         const targetId = 'run.ac8cea43-7686-4d27-8092-1e3dd9207ca4.390.run-contract';
         const running = runUiRegressionV1({ ...f, browser, control: { cancellationRequested: () => stop, onAssertionBoundary: async ({ id, edge }: any) => { if (id === targetId && edge === 'after') stop = true; } } });
         try {
             const waited = await Promise.race([waitArrived.then(() => true), running.then(() => false)]);
-            const queriesBeforeRelease = geometryWhileLoading;
+            const queriesBeforeRelease = geometryWhileLoading, scrollsBeforeRelease = scrolls;
             phase = 'loaded'; release();
             const result = await running;
             assert.equal(result.report.assertions.at(-1).id, targetId);
             assert.equal(result.report.assertions.at(-1).status, scenario === 'loaded-bounded' ? 'pass' : 'fail');
             assert.equal(waited, true, 'tab must await real content readiness');
             assert.equal(queriesBeforeRelease, 0, 'no geometry while only loading placeholder is mounted');
+            assert.equal(scrollsBeforeRelease, 0, 'no scrolling while only loading placeholder is mounted');
+            assert.equal(scrolls, ['loaded-overflow', 'loaded-bounded'].includes(scenario) ? 1 : 0);
+            assert.deepEqual(contractEvents, ['loaded-overflow', 'loaded-bounded'].includes(scenario) ? ['scroll', 'geometry', 'capture'] : ['capture']);
             assert.equal(geometryAfterLoaded, ['loaded-overflow', 'loaded-bounded'].includes(scenario) ? 1 : 0);
             assert.equal(result.report.assertions.length, 243);
             assert.equal(result.report.screenshots.length, 63);
@@ -1066,5 +1073,79 @@ test('Run Contract waits for successful fixture content before checking loaded t
                 assert.match(diagnostic.message, /^UI_HORIZONTAL_OVERFLOW /);
             }
         } finally { release(); await running; rmSync(f.root, { recursive: true, force: true }); }
+    });
+});
+
+// Simulated asynchronous AgentLivePanel DOM; actual private behavior and readiness callback execute unchanged.
+test('agent panel waits for loaded idle DOM before capture and Escape', async (t) => {
+    const ts = await import('typescript');
+    const { runInNewContext } = await import('node:vm');
+    const source = readFileSync(new URL('../scripts/ui-regression-fixtures.mjs', import.meta.url), 'utf8');
+    const parsed = ts.createSourceFile('ui-regression-fixtures.mjs', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const declarations = parsed.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === 'behavior');
+    assert.equal(declarations.length, 1);
+    const assertions = parsed.statements.filter(ts.isVariableStatement).flatMap(statement => [...statement.declarationList.declarations]).filter(declaration => ts.isIdentifier(declaration.name) && declaration.name.text === 'assert');
+    assert.equal(assertions.length, 1);
+    const behavior = runInNewContext('const ' + assertions[0].getText(parsed) + '; (' + declarations[0].getText(parsed) + ')');
+    for (const scenario of ['delayed-idle', 'uppercase-idle', 'error', 'fallback', 'wrong-status']) await t.test(scenario, async () => {
+        let phase = scenario === 'uppercase-idle' ? 'loaded' : 'loading', closed = false;
+        const events: string[] = [];
+        let arrived!: () => void, release!: () => void;
+        const waitArrived = new Promise<void>(resolve => { arrived = resolve; });
+        const mountReleased = new Promise<void>(resolve => { release = resolve; });
+        const node = (textContent = '', className = ''): any => ({ textContent, className,
+            classList: { contains: (name: string) => className.split(' ').includes(name) },
+            getBoundingClientRect: () => ({ width: 200, height: 30 }),
+        });
+        const panel = node();
+        panel.querySelectorAll = (selector: string) => {
+            if (selector === '.live-panel__loading') return phase === 'loading' ? [node('Loading...')] : [];
+            if (selector === '.live-panel__error') return phase === 'loaded' && scenario === 'error' ? [node('HTTP 503')] : [];
+            if (phase === 'loading' || scenario === 'fallback') return [];
+            if (selector === '.live-panel__header .live-panel__status') {
+                const status = scenario === 'wrong-status' ? 'working' : 'idle';
+                return [node(status, 'live-panel__status live-panel__status--' + status)];
+            }
+            if (selector === '.live-panel__output .live-panel__empty') return [node('Agent is idle — no recent output')];
+            throw Error('unexpected panel selector: ' + selector);
+        };
+        const document = { querySelectorAll: (selector: string) => { assert.equal(selector, '.live-panel'); return [panel]; } };
+        const evaluate = (callback: Function) => runInNewContext('(' + callback.toString() + ')()', { document, getComputedStyle: () => ({ display: 'block', visibility: 'visible' }) });
+        const page = {
+            locator: (selector: string) => {
+                if (selector === '.agent-card-wrap') return { count: async () => 14 };
+                assert.equal(selector, '.live-panel');
+                return { waitFor: async ({ state }: { state: string }) => { if (state === 'hidden') assert.equal(closed, true); events.push(state); },
+                    innerText: async () => phase === 'loading' ? 'Loading...' : scenario === 'uppercase-idle' ? 'IDLE' : 'idle',
+                };
+            },
+            getByTitle: (title: string, options: any) => { assert.equal(title, 'Live view'); assert.equal(options.exact, true); return { first: () => ({ click: async () => { events.push('click'); } }) }; },
+            waitForFunction: async (callback: Function) => {
+                if (phase === 'loading') { assert.equal(evaluate(callback), false); arrived(); await mountReleased; }
+                if (!evaluate(callback)) throw Error('simulated idle readiness timeout');
+                events.push('ready');
+            },
+            keyboard: { press: async (key: string) => { assert.equal(key, 'Escape'); closed = true; events.push('Escape'); } },
+        };
+        const running = behavior('agents.grid-panel', { page, loaded: async (route: string) => { assert.equal(route, '/agents'); events.push('loaded'); }, capture: async () => { events.push('capture'); } }).then(() => null, (error: Error) => error);
+        try {
+            if (phase === 'loading') {
+                const waited = await Promise.race([waitArrived.then(() => true), running.then(() => false)]);
+                const beforeRelease = [...events];
+                phase = 'loaded'; release();
+                await running;
+                assert.equal(waited, true, 'must await loaded status instead of sampling the loading panel');
+                assert.deepEqual(beforeRelease, ['loaded', 'click', 'visible']);
+            }
+            const error = await running;
+            if (['delayed-idle', 'uppercase-idle'].includes(scenario)) {
+                assert.equal(error, null);
+                assert.deepEqual(events, ['loaded', 'click', 'visible', 'ready', 'capture', 'Escape', 'hidden']);
+            } else {
+                assert.match(error?.message ?? '', /simulated idle readiness timeout/);
+                assert.deepEqual(events, ['loaded', 'click', 'visible']);
+                assert.equal(closed, false);
+            }
+        } finally { release(); await running; }
     });
 });
