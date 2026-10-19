@@ -56,7 +56,7 @@ export function ChatPanel({ events, onSend, connected, selectedAgent }: Props) {
   const [userMessages, setUserMessages] = useState<ChatMessage[]>([]);
   const [history, setHistory] = useState<ChatMessage[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
-  const topRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
   const lastUserSendTs = useRef<number>(0);
 
   useEffect(() => {
@@ -137,7 +137,7 @@ export function ChatPanel({ events, onSend, connected, selectedAgent }: Props) {
   }, [agentMessages]);
 
   useEffect(() => {
-    topRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   }, [allMessages]);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -186,8 +186,7 @@ export function ChatPanel({ events, onSend, connected, selectedAgent }: Props) {
         </span>
       </div>
 
-      <div className="chat-panel__messages">
-        <div ref={topRef} />
+      <div className="chat-panel__messages" ref={messagesRef}>
         {isThinking && !agentMessages.some(m => !m.done && m.text) && (
           <div className="chat-msg chat-msg--assistant">
             <div className="chat-msg__header">

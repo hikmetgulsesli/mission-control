@@ -766,6 +766,28 @@ test('responsive overflow assertion checks real evaluator against simulated main
 
 // Simulated page/locator effects, not native tab or page qualification. The real engine
 // executes its tab assertion; unrelated page gates use a bounded synthetic DOM.
+// Existing whole-engine tab doubles must also mount the newly required base-page
+// content. Actual loaded/readiness/geometry callbacks still execute; no guard bypass.
+function withChatWorkflowsLoadedDom(geometry: any) {
+    const main = geometry.document.querySelector('.layout__content'), queryAll = geometry.document.querySelectorAll;
+    main.scrollTop = 0;
+    main.getBoundingClientRect = () => ({ left: 0, right: 390, width: 390, top: 200, bottom: 900, height: 700 });
+    geometry.window.innerHeight = 900;
+    const content: Record<string, [string, number, number]> = {
+        '.chat-page h2': ['COMMS', 208, 235], '.chat-page > button': ['Show Progress', 250, 290],
+        '.chat-panel__agent-info': ['Arya', 304, 330], '.chat-panel__status': ['ONLINE', 304, 330],
+        '.chat-panel__input input': ['', 850, 882], '.chat-panel__input button': ['SEND', 850, 882],
+        '.chat-panel__empty': ['No messages with Arya yet Send a message to start a conversation', 400, 500],
+        '.workflows-page [role="status"]': ['No workflows in the last observed collection.', 300, 330],
+    };
+    geometry.document.querySelectorAll = (selector: string) => {
+        const value = content[selector];
+        if (!value) return selector === '.chat-panel__loading' ? [] : queryAll(selector);
+        return [{ textContent: value[0], style: { display: 'block', visibility: 'visible' },
+            getBoundingClientRect: () => ({ left: 8, right: 382, width: 374, top: value[1], bottom: value[2], height: value[2] - value[1] }) }];
+    };
+    return geometry;
+}
 test('run tab assertion binds the exact selected button despite uppercase rendered text', async (t) => {
     const { runInNewContext } = await import('node:vm');
     const cases: [string, 'pass' | 'fail', number][] = [
@@ -799,7 +821,8 @@ test('run tab assertion binds the exact selected button despite uppercase render
         tabGeometry.document.querySelector = (selector: string) => { if (selector === '.layout__content') tabMainQueries++; return originalQuery(selector); };
         const page = { on() {}, setDefaultTimeout() {}, goto: async (url: string) => { currentUrl = url; },
             locator: (selector: string) => selector === '.rd-tab' ? locator(nodes) : selector === '.rd-tab--active' ? locator(nodes.filter(n => n.classList.contains('rd-tab--active'))) : { waitFor: async () => {}, innerText: async () => 'Simulated page body for reaching the real tab assertion in the Source engine.' },
-            evaluate: async (callback: Function) => runInNewContext('(' + callback.toString() + ')()', clicks ? tabGeometry : geometry),
+            evaluate: async (callback: Function) => runInNewContext('(' + callback.toString() + ')()', ['/chat', '/workflows'].includes(new URL(currentUrl).pathname) ? withChatWorkflowsLoadedDom({ ...geometry, document: { ...geometry.document } }) : clicks ? tabGeometry : geometry),
+            waitForFunction: async (callback: Function) => { assert.ok(runInNewContext('(' + callback.toString() + ')()', withChatWorkflowsLoadedDom({ ...geometry, document: { ...geometry.document } })), 'mounted base page readiness'); },
             screenshot: async () => Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0]), url: () => currentUrl,
         };
         const browser = { newContext: async () => { contexts++; return { route: async () => {}, routeWebSocket: async () => {}, addInitScript: async () => {}, on() {}, newPage: async () => page, close: async () => { closed++; } }; } };
@@ -1035,7 +1058,7 @@ test('Run Contract waits for successful fixture content before checking loaded t
                 return originalQuery(selector);
             };
             geometry.document.querySelectorAll = (selector: string) => mountedNodes().filter(node => node.matches(selector));
-            return runInNewContext('(' + callback.toString() + ')()', geometry);
+            return runInNewContext('(' + callback.toString() + ')()', ['/chat', '/workflows'].includes(new URL(currentUrl).pathname) ? withChatWorkflowsLoadedDom(geometry) : geometry);
         };
         const tabs = ['Execution', 'Pipeline', 'Run Contract'].map(text => ({ textContent: text, classList: { contains: (name: string) => name === 'rd-tab--active' && text === activeTab } }));
         const locator = (items: typeof tabs): any => ({
@@ -1047,7 +1070,7 @@ test('Run Contract waits for successful fixture content before checking loaded t
         const page = { on() {}, setDefaultTimeout() {}, goto: async (url: string) => { currentUrl = url; },
             locator: (selector: string) => selector === '.rd-contract-wrap .af-contract__story' ? { scrollIntoViewIfNeeded: async () => { assert.equal(phase, 'loaded'); assert.ok(['loaded-overflow', 'loaded-bounded'].includes(scenario)); scrolls++; contractEvents.push('scroll'); } } : selector === '.rd-tab' ? locator(tabs) : selector === '.rd-tab--active' ? locator(tabs.filter(node => node.classList.contains('rd-tab--active'))) : { waitFor: async () => {}, innerText: async () => 'Simulated body text for reaching the actual asynchronous Run Contract tab assertion.' },
             evaluate: async (callback: Function) => evaluate(callback),
-            waitForFunction: async (callback: Function) => { assert.equal(evaluate(callback), false, 'loading placeholder cannot satisfy readiness'); arrived(); await mountReleased; if (!evaluate(callback)) throw Error('simulated readiness timeout'); },
+            waitForFunction: async (callback: Function) => { if (['/chat', '/workflows'].includes(new URL(currentUrl).pathname)) { assert.ok(evaluate(callback), 'mounted base page readiness'); return; } assert.equal(evaluate(callback), false, 'loading placeholder cannot satisfy readiness'); arrived(); await mountReleased; if (!evaluate(callback)) throw Error('simulated readiness timeout'); },
             screenshot: async () => { if (activeTab === 'Run Contract') contractEvents.push('capture'); return Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0]); }, url: () => currentUrl,
         };
         const browser = { newContext: async () => { contexts++; return { route: async () => {}, routeWebSocket: async () => {}, addInitScript: async () => {}, on() {}, newPage: async () => page, close: async () => { closed++; } }; } };
@@ -1577,5 +1600,126 @@ test('populated Projects actual behavior checks card-local geometry at all width
             assert.equal(events.filter(e => e.startsWith('capture:')).length, 3, 'actual capture deduplicates final automatic capture');
             for (const w of [390, 768, 1440]) assert.ok(events.indexOf('geometry:' + w) < events.indexOf('overflow:' + w) && events.indexOf('overflow:' + w) < events.indexOf('errors:' + w) && events.indexOf('errors:' + w) < events.indexOf('capture:' + w));
         } else { assert.ok(error, scenario); assert.equal(report.screenshots.length, scenario.startsWith('late-') ? 1 : 0); assert.equal(events.filter(e => e.startsWith('open:')).length, scenario.startsWith('late-') ? 2 : 1); }
+    });
+});
+
+// These component cases execute actual Source callbacks with simulated DOM effects;
+// only Root's native run can establish computed flex layout.
+test('Chat pane effect keeps newest-first scrolling local on mount history and message updates', async () => {
+    const ts = await import('typescript'), { runInNewContext } = await import('node:vm'), React = await import('react');
+    const text = readFileSync(new URL('../src/components/ChatPanel.tsx', import.meta.url), 'utf8');
+    const tree = ts.createSourceFile('ChatPanel.tsx', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const declarations = tree.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === 'ChatPanel');
+    assert.equal(declarations.length, 1);
+    const source = ts.transpileModule(declarations[0].getText(tree).replace(/^export /, ''), { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText;
+    for (const phase of ['mount', 'history', 'message']) {
+        let stateIndex = 0, ancestorScrolls = 0; const local: any[] = [], effects: { callback: Function; deps: unknown[] }[] = [], memos: any[] = [];
+        const history = phase === 'mount' ? [] : [{ id: 'old', role: 'assistant', agent: 'main', text: 'Old history', ts: 10, done: true }, { id: 'new', role: 'user', agent: 'main', text: 'New history', ts: 20, done: true }];
+        const component = runInNewContext(source + '\nChatPanel', {
+            React, AGENT_MAP: { main: { name: 'Arya', emoji: 'A' } }, renderMarkdown: (s: string) => s,
+            useState: () => [[ '', [], history, false ][stateIndex++], () => {}],
+            useRef: (value: any) => ({ current: value }), useEffect: (callback: Function, deps: unknown[]) => effects.push({ callback, deps }),
+            useMemo: (fn: Function) => { const value = fn(); memos.push(value); return value; },
+        });
+        const events = phase === 'message' ? [{ event: 'chat', payload: { sessionKey: 'agent:main', runId: 'stream', state: 'final', message: { role: 'assistant', timestamp: 30, content: [{ text: 'Newest event' }] } } }] : [];
+        const output = component({ events, onSend() {}, connected: true, selectedAgent: 'main' });
+        const visit = (node: any) => {
+            if (!node || typeof node !== 'object') return;
+            if (Array.isArray(node)) return node.forEach(visit);
+            if (node.props?.ref) node.props.ref.current = {
+                scrollIntoView: () => { ancestorScrolls++; },
+                scrollTo: (args: any) => { assert.equal(node.props.className, 'chat-panel__messages'); local.push(JSON.parse(JSON.stringify(args))); },
+            };
+            visit(node.props?.children);
+        };
+        visit(output);
+        // Select the actual effect that depends on the actual merged message list;
+        // never run the network-loading effect or substitute a rewritten scroll callback.
+        const scrollEffects = effects.filter(e => e.deps.length === 1 && e.deps[0] === memos[1]);
+        assert.equal(scrollEffects.length, 1); scrollEffects[0].callback();
+        assert.equal(ancestorScrolls, 0, phase + ': must not move parent main or document');
+        assert.deepEqual(local, [{ top: 0, behavior: 'smooth' }]);
+        assert.deepEqual(Array.from(memos[1], (m: any) => m.id), phase === 'mount' ? [] : phase === 'history' ? ['new', 'old'] : ['stream', 'new', 'old']);
+    }
+});
+
+test('Workflows actual SSR distinguishes observed empty stale missing and populated collections', async (t) => {
+    const React = await import('react'), { renderToStaticMarkup } = await import('react-dom/server');
+    const { Workflows } = await import('../src/pages/Workflows.tsx'), { useAppStore } = await import('../src/store/appStore.ts');
+    const initial = useAppStore.getInitialState(), originalInitial = { ...initial }, previous = useAppStore.getState();
+    const observed = { lastAttemptAt: 1000, observedAt: 1000, errorAt: null, errorCode: null, inFlight: false, stale: false, ownership: 'active' as const };
+    try {
+        for (const scenario of ['null', 'missing-runs', 'missing-workflows', 'empty', 'stale-empty', 'empty-with-runs', 'populated']) await t.test(scenario, () => {
+            const workflows = ['null', 'missing-workflows'].includes(scenario) ? null : scenario === 'populated' ? [{ id: 'wf', name: 'Observed workflow', steps: [] }] : [];
+            const runs = ['null', 'missing-runs'].includes(scenario) ? null : scenario === 'empty-with-runs' ? [{ id: 'r', workflow: 'wf', status: 'completed' }] : [];
+            const meta = scenario === 'stale-empty' ? { ...observed, stale: true, errorAt: 2000, errorCode: 'FETCH_FAILED' as const } : observed;
+            const state = { ...previous, workflows, runs, sync: { ...previous.sync, workflows: meta, runs: meta } } as any;
+            // Zustand closes over its original initial snapshot for SSR; mutate only this
+            // captured test snapshot and restore every field in finally.
+            Object.assign(initial, state);
+            const html = renderToStaticMarkup(React.createElement(Workflows));
+            assert.match(html, /START RUN/);
+            if (workflows === null || runs === null) {
+                assert.match(html, /Workflow board unavailable until both collections are observed/);
+                assert.doesNotMatch(html, /No workflows in the last observed collection/);
+            } else if (scenario === 'populated') {
+                assert.match(html, /Observed workflow/); assert.match(html, /IDLE/);
+                assert.doesNotMatch(html, /No workflows in the last observed collection|Workflow board unavailable/);
+            } else {
+                assert.match(html, /role="status">No workflows in the last observed collection\./);
+                assert.doesNotMatch(html, /Workflow board unavailable|No runs/);
+                if (scenario === 'stale-empty') assert.match(html, /Stale \(FETCH_FAILED\)/);
+            }
+        });
+    } finally { Object.assign(initial, originalInitial); useAppStore.setState(previous, true); }
+});
+
+async function chatWorkflowsLoadedCallback(page: any) {
+    const ts = await import('typescript'), { runInNewContext } = await import('node:vm');
+    const text = readFileSync(new URL('../scripts/ui-regression-fixtures.mjs', import.meta.url), 'utf8');
+    const tree = ts.createSourceFile('fixtures.mjs', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const found: any[] = [];
+    const visit = (node: any) => { if (ts.isVariableDeclaration(node) && node.name.getText(tree) === 'loaded') found.push(node); ts.forEachChild(node, visit); };
+    visit(tree); assert.equal(found.length, 1);
+    return runInNewContext('(' + found[0].initializer.getText(tree) + ')', { page, URL, ORIGIN: 'http://127.0.0.1:13082', assert: (ok: unknown, code: string) => assert.ok(ok, code) });
+}
+
+test('Chat and Workflows loaded callback refuses hidden controls offscreen composer and absent empty guidance', async (t) => {
+    const { runInNewContext } = await import('node:vm');
+    for (const scenario of ['fit', 'fit-768', 'fit-1440', 'online', 'hidden-heading', 'duplicate-heading', 'hidden-status', 'invalid-status', 'bottom-composer', 'outer-scroll', 'loading', 'delayed-fit', 'delayed-overflow', 'missing-empty', 'wrong-empty', 'workflows-fit']) await t.test(scenario, async () => {
+        const route = ['missing-empty', 'wrong-empty', 'workflows-fit'].includes(scenario) ? '/workflows' : '/chat';
+        const width = scenario === 'fit-768' ? 768 : scenario === 'fit-1440' ? 1440 : 390;
+        const nodes: any[] = [];
+        const add = (selector: string, text: string, top: number, bottom: number) => { const node: any = { selector, textContent: text, hidden: false, scrollTop: 0, getBoundingClientRect: () => ({ top, bottom, left: 8, right: width - 8, width: width - 16, height: bottom - top }), querySelectorAll: (s: string) => nodes.filter(n => n.selector === s) }; nodes.push(node); return node; };
+        const main = add('.layout__content', '', 200, 900); main.scrollTop = scenario === 'outer-scroll' ? 140 : 0;
+        add('.chat-page', '', 208, 892);
+        const title = add('.chat-page h2', 'COMMS', 208, 235); title.hidden = scenario === 'hidden-heading';
+        if (scenario === 'duplicate-heading') add('.chat-page h2', 'COMMS', 240, 260);
+        add('.chat-page > button', 'Show Progress', 250, 290);
+        add('.chat-panel__agent-info', 'Arya', 304, 330);
+        const status = add('.chat-panel__status', scenario === 'invalid-status' ? 'READY' : scenario === 'online' ? 'ONLINE' : 'OFFLINE', 304, 330); status.hidden = scenario === 'hidden-status';
+        add('.chat-panel__input input', '', 850, ['bottom-composer', 'delayed-overflow'].includes(scenario) ? 916 : 882);
+        add('.chat-panel__input button', 'SEND', 850, ['bottom-composer', 'delayed-overflow'].includes(scenario) ? 916 : 882);
+        add('.chat-panel__empty', 'No messages with Arya yet Send a message to start a conversation', 400, 500);
+        if (['loading', 'delayed-fit', 'delayed-overflow'].includes(scenario)) add('.chat-panel__loading', 'Loading history...', 350, 380);
+        if (scenario !== 'missing-empty') add('.workflows-page [role="status"]', scenario === 'wrong-empty' ? 'Workflow board unavailable until both collections are observed.' : 'No workflows in the last observed collection.', 300, 330);
+        const globals = { window: { innerHeight: 900 }, document: { querySelector: (s: string) => nodes.find(n => n.selector === s) ?? null, querySelectorAll: (s: string) => nodes.filter(n => n.selector === s) }, getComputedStyle: (node: any) => ({ display: node.hidden ? 'none' : 'block', visibility: 'visible' }) };
+        let currentUrl = '', readiness = 0, geometry = 0;
+        let release!: () => void, arrived!: () => void;
+        const waiting = new Promise<void>(resolve => { arrived = resolve; }), released = new Promise<void>(resolve => { release = resolve; });
+        const page = { goto: async (url: string) => { currentUrl = url; }, url: () => currentUrl,
+            locator: (selector: string) => ({ waitFor: async () => {}, innerText: async () => 'Simulated loaded body long enough for the actual existing root readability check.' }),
+            waitForFunction: async (fn: Function) => {
+                readiness++;
+                if (scenario.startsWith('delayed-')) { assert.equal(runInNewContext('(' + fn.toString() + ')()', globals), false); arrived(); await released; }
+                if (!runInNewContext('(' + fn.toString() + ')()', globals)) throw Error('simulated readiness timeout');
+            },
+            evaluate: async (fn: Function) => { geometry++; return runInNewContext('(' + fn.toString() + ')()', globals); },
+        };
+        const loaded = await chatWorkflowsLoadedCallback(page);
+        const running = loaded(route);
+        if (scenario.startsWith('delayed-')) { await waiting; assert.equal(geometry, 0, 'placeholder cannot qualify geometry'); nodes.find(n => n.selector === '.chat-panel__loading').hidden = true; release(); }
+        if (['fit', 'fit-768', 'fit-1440', 'online', 'delayed-fit', 'workflows-fit'].includes(scenario)) { await running; assert.ok(readiness > 0, 'must inspect actual mounted readiness before capture'); }
+        else await assert.rejects(running, /UI_CHAT_VIEWPORT|simulated readiness timeout/);
     });
 });

@@ -53,7 +53,9 @@ export function Workflows() {
 
       <p role="status">Workflows: {dataSyncMessage(sync?.workflows)} · Runs: {dataSyncMessage(sync?.runs)}</p>
       {workflows !== null && runs !== null
-        ? <WorkflowKanban workflows={workflows} runs={runs} />
+        ? workflows.length === 0
+          ? <p role="status">No workflows in the last observed collection.</p>
+          : <WorkflowKanban workflows={workflows} runs={runs} />
         : <p role="status">Workflow board unavailable until both collections are observed.</p>}
 
       {showModal && (

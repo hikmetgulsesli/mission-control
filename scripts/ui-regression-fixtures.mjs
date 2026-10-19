@@ -648,7 +648,49 @@ async function runCatalog({ browser, state, store, measured, control, schemas })
         });
         assert(overflow.count === 0, 'UI_HORIZONTAL_OVERFLOW ' + JSON.stringify(overflow));
     };
-    const loaded = async (route) => { await page.goto(ORIGIN + route, { waitUntil: 'networkidle', timeout: 15000 }); await page.locator('#root').waitFor({ state: 'visible' }); await page.locator('.page-loading').waitFor({ state: 'hidden' }); assert(new URL(page.url()).pathname === route, 'UI_UNEXPECTED_REDIRECT'); assert((await page.locator('body').innerText()).trim().length > 50, 'UI_EMPTY_PAGE'); };
+    const loaded = async (route) => {
+        await page.goto(ORIGIN + route, { waitUntil: 'networkidle', timeout: 15000 });
+        await page.locator('#root').waitFor({ state: 'visible' });
+        await page.locator('.page-loading').waitFor({ state: 'hidden' });
+        assert(new URL(page.url()).pathname === route, 'UI_UNEXPECTED_REDIRECT');
+        assert((await page.locator('body').innerText()).trim().length > 50, 'UI_EMPTY_PAGE');
+        if (route === '/chat') {
+            await page.waitForFunction(() => {
+                const visible = element => { const rect = element.getBoundingClientRect(), style = getComputedStyle(element); return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden'; };
+                const empty = Array.from(document.querySelectorAll('.chat-panel__empty'));
+                return !Array.from(document.querySelectorAll('.chat-panel__loading')).some(visible)
+                    && empty.length === 1 && visible(empty[0])
+                    && empty[0].textContent.includes('No messages with Arya yet')
+                    && empty[0].textContent.includes('Send a message to start a conversation');
+            });
+            assert(await page.evaluate(() => {
+                const main = document.querySelector('.layout__content');
+                if (!main || Math.abs(main.scrollTop) > 1) return false;
+                const bounds = main.getBoundingClientRect();
+                const expected = [
+                    ['.chat-page h2', 'COMMS'], ['.chat-page > button', 'Show Progress'],
+                    ['.chat-panel__agent-info', 'Arya'], ['.chat-panel__status', null],
+                    ['.chat-panel__input input', null], ['.chat-panel__input button', 'SEND'],
+                ];
+                return expected.every(([selector, text]) => {
+                    const elements = Array.from(document.querySelectorAll(selector));
+                    if (elements.length !== 1) return false;
+                    const element = elements[0], rect = element.getBoundingClientRect(), style = getComputedStyle(element);
+                    return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden'
+                        && rect.top >= Math.max(0, bounds.top) - 1 && rect.bottom <= Math.min(window.innerHeight, bounds.bottom) + 1
+                        && rect.left >= bounds.left - 1 && rect.right <= bounds.right + 1
+                        && (selector !== '.chat-panel__status' || /^(ONLINE|OFFLINE)$/.test(element.textContent.trim()))
+                        && (text === null || element.textContent.trim().includes(text));
+                });
+            }), 'UI_CHAT_VIEWPORT');
+        }
+        if (route === '/workflows') await page.waitForFunction(() => {
+            const matches = Array.from(document.querySelectorAll('.workflows-page [role="status"]')).filter(element => element.textContent.trim() === 'No workflows in the last observed collection.');
+            if (matches.length !== 1) return false;
+            const rect = matches[0].getBoundingClientRect(), style = getComputedStyle(matches[0]);
+            return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+        });
+    };
     try {
         for (const v of VIEWPORTS) {
             if (stopped || cancellation())
