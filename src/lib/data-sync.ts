@@ -29,7 +29,7 @@ export function dataSyncKeysForPath(pathname: string): DataSyncKey[] {
 /** Fixed UI copy: never expose a raw upstream exception/body. */
 export function dataSyncMessage(meta?: DataSyncMetadata): string {
   if (!meta || meta.observedAt === null) return meta?.errorCode ? 'Unavailable (FETCH_FAILED)' : 'Loading / unknown';
-  const receipt = `Last HTTP receipt ${new Date(meta.observedAt).toLocaleTimeString()}`;
+  const receipt = `Last received ${new Date(meta.observedAt).toLocaleTimeString()}`;
   if (meta.stale) return `Stale${meta.errorCode ? ' (FETCH_FAILED)' : meta.ownership === 'paused' ? ' (paused)' : meta.ownership === 'unselected' ? ' (not selected)' : ''} · ${receipt}`;
   return `${meta.inFlight ? 'Refreshing · ' : ''}${receipt}`;
 }

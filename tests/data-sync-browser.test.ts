@@ -182,6 +182,25 @@ test('real consumers distinguish first/partial failure, retained stale values an
     assert.match(await p.locator('.af-page').innerText(), /Alerts.*unavailable/i);
     assert.equal(await p.locator('.csb__pill--ok').count(), 0, 'unknown alerts must never claim OK');
     assert.match(await p.locator('.af-page').innerText(), /Activity.*unavailable/i);
+    const compactCards = p.locator('.af-agent-card');
+    assert.equal(await compactCards.count(), 14, 'all catalog defaults remain visible without runtime agents');
+    assert.equal(await compactCards.locator('.af-agent-card__provenance').filter({ hasText: /^Static default$/ }).count(), 14);
+    assert.equal(await compactCards.locator('.af-agent-card__provider').filter({ hasText: /^Provider: unknown$/ }).count(), 14, 'catalog model prefixes cannot invent a provider');
+    for (const card of await compactCards.all()) {
+        assert.equal(await card.evaluate(element => {
+            let opacity = 1;
+            for (let node: Element | null = element; node; node = node.parentElement) opacity *= Number(getComputedStyle(node).opacity);
+            return opacity;
+        }), 1, 'never-used cards retain full computed opacity through their ancestors');
+        for (const selector of ['.af-agent-card__name', '.af-agent-card__model', '.af-agent-card__badge', '.af-agent-card__provenance']) {
+            const label = card.locator(selector);
+            assert.equal(await label.isVisible(), true);
+            assert.equal(await label.evaluate(element => element.scrollWidth <= element.clientWidth), true, `${selector} must fit or wrap`);
+        }
+        assert.match(await card.locator('.af-agent-card__model').evaluate(element => getComputedStyle(element).fontFamily), /mono/i);
+        assert.doesNotMatch(await card.locator('.af-agent-card__provenance').evaluate(element => getComputedStyle(element).fontFamily), /mono/i);
+    }
+    assert.match(await p.locator('.af-page').innerText(), /Last received/);
     await h.shot('partial');
     await h.nav('/workflows');
     await p.waitForTimeout(200);
