@@ -16,6 +16,7 @@ const BEHAVIORS = ['office.persist', 'navigation.perf-redirect', 'navigation.d-p
 const routeId = r => r === '/' ? 'home' : r.slice(1).replaceAll('/', '-');
 const ASSERTIONS = VIEWPORTS.flatMap(v => ROUTES.flatMap(r => ['loaded', 'overflow', 'fonts', 'console-network'].map(s => `page.${routeId(r)}.${v.width}.${s}`))).concat(VIEWPORTS.flatMap(v => [LEGACY, V3].flatMap(id => TABS.map(tab => `run.${id}.${v.width}.${tab.toLowerCase().replaceAll(' ', '-')}`))), BEHAVIORS);
 const AGENTS = Array.from({ length: 14 }, (_, i) => ({ id: 'fixture-agent-' + (i + 1), name: 'Fixture agent ' + (i + 1), identityName: 'Fixture agent ' + (i + 1), identityEmoji: '🤖', model: 'fixture-local', workspace: '/fixture', bindings: 0, isDefault: i === 0 }));
+const AVATARS = AGENTS.map(agent => ({ path: `/avatars/${agent.id}.svg`, contentType: 'image/svg+xml', body: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><title>${agent.name}</title><rect width="64" height="64" rx="12" fill="#243247"/><rect x="12" y="18" width="40" height="32" rx="8" fill="#c4d9ef"/><circle cx="24" cy="32" r="4" fill="#243247"/><circle cx="40" cy="32" r="4" fill="#243247"/><path d="M24 42h16M32 18v-6" stroke="#243247" stroke-width="3"/></svg>\n` }));
 const METRICS = { ram: { source: 'fixture', observedAt: AT, status: 'available', total: 16, used: 0, percent: 0, semantics: 'total-os.freemem' }, cpu: { source: 'fixture', observedAt: AT, status: 'unknown', percent: null }, disk: { source: 'fixture', observedAt: AT, status: 'available', total: 100, used: 0, percent: 0, path: '/fixture', mount: '/fixture', totalBytes: 100000000000, usedBytes: 0, freeBytes: 100000000000 }, load: 0 };
 const RUNS = [{ id: LEGACY, runNumber: 1, workflow: 'fixture-legacy', task: 'Legacy fixture', status: 'completed', updatedAt: AT, steps: [], storyCount: 1, storiesDone: 1 }, { id: V3, runNumber: 2, workflow: 'fixture-v3', task: 'V3 fixture', status: 'completed', updatedAt: AT, steps: [], storyCount: 1, storiesDone: 1 }];
 const RULE = { id: 'fixture-rule', title: 'Fixture rule', content: 'Keep failure evidence.', category: 'general', project_type: 'general', severity: 'mandatory', applies_to: 'all', readonly: false, enabled: true, stack_pack_ids: [] };
@@ -40,7 +41,7 @@ const CONVERGENCE_PREFLIGHT_CHECKS = [
     ['execution_profile', 'EVAL_EXECUTION_PROFILE_PINNED'],
     ['result_store', 'EVAL_RESULT_STORES_READY'],
 ].map(([id, code]) => ({ id, status: 'pass', code }));
-const DATA = { controls: { activationChecks: ACTIVATION_CHECKS, convergencePreflightChecks: CONVERGENCE_PREFLIGHT_CHECKS }, agents: AGENTS, metrics: METRICS, runs: RUNS, rule: RULE, history: HISTORY, trending: [{ name: 'A101', description: 'A101 shopping application', developer: 'Fixture', category: 'Shopping' }] };
+const DATA = { controls: { activationChecks: ACTIVATION_CHECKS, convergencePreflightChecks: CONVERGENCE_PREFLIGHT_CHECKS }, agents: AGENTS, avatars: AVATARS, metrics: METRICS, runs: RUNS, rule: RULE, history: HISTORY, trending: [{ name: 'A101', description: 'A101 shopping application', developer: 'Fixture', category: 'Shopping' }] };
 export const UI_REGRESSION_FIXTURE_V1 = Object.freeze({ fixtureVersion: 'ui-regression-owned-v1', fixtureHash: uiHashV1(uiCanonicalV1({ data: DATA, routes: ROUTES, viewports: VIEWPORTS, tabs: TABS, assertionIds: ASSERTIONS })), assertionIds: Object.freeze(ASSERTIONS) });
 const assert = (condition, code = 'UI_ASSERTION_FAILED') => {
     if (!condition)
@@ -289,6 +290,11 @@ export async function createUiRegressionFixtureSessionV1({ buildDir, tempRoot, c
                 res.writeHead(status, { 'Content-Type': 'application/json' }).end(JSON.stringify(output));
                 return;
             }
+            const fixtureAsset = AVATARS.find(asset => asset.path === req.url);
+            if (req.method === 'GET' && fixtureAsset) {
+                res.writeHead(200, { 'Content-Type': fixtureAsset.contentType }).end(fixtureAsset.body);
+                return;
+            }
             const name = 'dist' + url.pathname, asset = measured.entries.get(name) ?? ((ROUTES.includes(url.pathname) || url.pathname === '/perf') ? measured.entries.get('dist/index.html') : null);
             if (req.method !== 'GET' || !asset) {
                 state.unexpected.push({ method: req.method, path: url.pathname });
@@ -357,7 +363,8 @@ async function installFences(context, state, measured, errors) {
     });
     await context.route('**/*', async (route) => {
         const request = route.request(), url = new URL(request.url());
-        if (url.origin !== ORIGIN || !['http:'].includes(url.protocol) || (!url.pathname.startsWith('/api/') && !measured.entries.has('dist' + url.pathname) && !ROUTES.includes(url.pathname) && url.pathname !== '/perf')) {
+        const fixtureAsset = request.method() === 'GET' && AVATARS.some(asset => request.url() === ORIGIN + asset.path);
+        if (url.origin !== ORIGIN || !['http:'].includes(url.protocol) || (!fixtureAsset && !url.pathname.startsWith('/api/') && !measured.entries.has('dist' + url.pathname) && !ROUTES.includes(url.pathname) && url.pathname !== '/perf')) {
             state.unexpected.push({ method: request.method(), path: 'denied-origin-or-route' });
             await route.abort('blockedbyclient');
         }

@@ -512,3 +512,92 @@ test('review I3 actual broker pre-ready cancellation ACK precedes its matching o
             }
         });
 });
+
+test('review fix3 fourteen deterministic avatar assets are served only at exact GET targets', async (t) => {
+    const f = workspace();
+    const { createUiRegressionFixtureSessionV1, UI_REGRESSION_FIXTURE_V1 } = await load();
+    assert.equal(UI_REGRESSION_FIXTURE_V1.fixtureVersion, 'ui-regression-owned-v1');
+    assert.equal(UI_REGRESSION_FIXTURE_V1.fixtureHash, '2027075249626adb6f803b9d2a3139500fb262de446f002bd82ca98598aa1c1d');
+    assert.equal(UI_REGRESSION_FIXTURE_V1.assertionIds.length, 316);
+    assert.equal(createHash('sha256').update(JSON.stringify(UI_REGRESSION_FIXTURE_V1.assertionIds)).digest('hex'), '4ded731c52c60105daa60639aa64683b68d1d3f22e9c3e685bb794b67e8ba88d');
+    const { request } = await import('node:http');
+    const get = (target: string, method = 'GET') => new Promise<{ status: number; type: string; body: Buffer }>((resolve, reject) => {
+        const req = request({ host: '127.0.0.1', port: 13082, path: target, method, agent: false }, res => {
+            const parts: Buffer[] = [];
+            res.on('data', part => parts.push(part));
+            res.once('error', reject);
+            res.once('end', () => resolve({ status: res.statusCode!, type: String(res.headers['content-type']), body: Buffer.concat(parts) }));
+        });
+        req.once('error', reject);
+        req.end();
+    });
+    let session;
+    try {
+        session = await createUiRegressionFixtureSessionV1(f);
+        const agents = JSON.parse((await get('/api/agents')).body.toString());
+        assert.equal(agents.length, 14);
+        await t.test('all fourteen exact paths return repeatable SVG bytes and MIME', async () => {
+            const goldenHashes = [
+                'e8ddf590349ca041078f5d1c7ed625faad25127ec8a1eab1b8888b3ad7110ff8',
+                '022d1b3fdbc4a8c5210840409f4a36b68b028a4e1d9e057553907d0392455ea4',
+                'bc11d4e196692d3cb0870c3eca4fbdf6a81128e80d5b7f03b918cc8a5cd4ac48',
+                '55b56f44964b7c48cd5e1f478073ef3d6516138f3d0f93e9d5df6ae68c90091c',
+                'bd31a4ff9fc54c033ee67cb495c8f94b82affb8757254fc1d9cc6455bc912872',
+                '77fc7526e6dd1d1b540d6faa1859abde1abedb1c494aa0b7342419785dcd9425',
+                '0977904256d89747e6f5b56e4b9bdde229ef0067c67fac5a7fb5a00b1ca25e35',
+                '9be4cdb4d6bf7cd4fab7768d9cb13059c8caaa93ee4ba3dc6f803040d0d41b3a',
+                'bb9c539c2d89b1a41b53673a5a282b0437b0857b4a16d8f00c6ac1d1cecf7e41',
+                '0da9b1093bf8b034e473b76e4fc8240ee49c40a9873e5b3c275247fb4a3ffbd3',
+                'eaa3cf3cab3866e670369c698cd4ed17100d51602760beedca67d22f83f49a6b',
+                'f49df130ac69d101c3579e087d0431abdcce3e31fd863066adcc992caae7dce8',
+                'a57f92344309271a11c799b3f1729dbd332d77ae060e6ac5ea82d44325ec4c33',
+                '61515fef01e45f8d54952170b57bfa15819680ca40258d44907850a82ea40ad6',
+            ];
+            for (const agent of agents) {
+                const target = '/avatars/' + agent.id + '.svg';
+                const first = await get(target), second = await get(target);
+                assert.equal(first.status, 200, target);
+                assert.equal(first.type, 'image/svg+xml');
+                assert.deepEqual(second, first);
+                assert.match(first.body.toString(), /^<svg xmlns="http:\/\/www.w3.org\/2000\/svg"/);
+                assert.ok(first.body.includes(Buffer.from('<title>' + agent.name + '</title>')));
+                assert.doesNotMatch(first.body.toString(), /<(?:script|image|foreignObject)\b|href=|url\(/);
+                assert.equal(createHash('sha256').update(first.body).digest('hex'), goldenHashes[agents.indexOf(agent)]);
+                assert.equal(first.body.length, 371 + String(agents.indexOf(agent) + 1).length);
+            }
+        });
+        await t.test('unknown mutations traversal aliases and foreign origins remain visible refusals', async () => {
+            const before = session.unexpectedRequests.length;
+            const bad: [string, string][] = [
+                ['/avatars/fixture-agent-15.svg', 'GET'], ['/avatars/fixture-agent-1.svg', 'POST'],
+                ['/avatars/x/../fixture-agent-1.svg', 'GET'], ['/avatars/%2e/fixture-agent-1.svg', 'GET'],
+                ['/avatars/fixture-agent-1.svg?extra=1', 'GET'], ['http://foreign.invalid/avatars/fixture-agent-1.svg', 'GET'],
+            ];
+            for (const [target, method] of bad) assert.equal((await get(target, method)).status, 403, target);
+            assert.equal(session.unexpectedRequests.length - before, bad.length);
+        });
+    } finally {
+        if (session) await session.close();
+        rmSync(f.root, { recursive: true, force: true });
+    }
+});
+test('review fix3 installed browser fence permits exactly fourteen GET avatars and retains denied requests', async () => {
+    const f = workspace();
+    const { runUiRegressionV1 } = await load();
+    let fence: any;
+    const cases: [string, string, string][] = Array.from({ length: 14 }, (_, i) => ['http://127.0.0.1:13082/avatars/fixture-agent-' + (i + 1) + '.svg', 'GET', 'continue']);
+    cases.push(['http://127.0.0.1:13082/avatars/fixture-agent-15.svg', 'GET', 'abort'], ['http://127.0.0.1:13082/avatars/fixture-agent-1.svg', 'POST', 'abort'], ['http://127.0.0.1:13082/avatars/x/../fixture-agent-1.svg', 'GET', 'abort'], ['http://127.0.0.1:13082/avatars/fixture-agent-1.svg?extra=1', 'GET', 'abort'], ['http://foreign.invalid/avatars/fixture-agent-1.svg', 'GET', 'abort']);
+    const actual: string[] = [];
+    const page = { on() { }, setDefaultTimeout() { }, goto: async () => {
+        for (const [url, method] of cases) await fence({ request: () => ({ url: () => url, method: () => method }), continue: async () => { actual.push('continue'); }, abort: async () => { actual.push('abort'); } });
+        throw Error('intentional component stop after route probes');
+    }, screenshot: async () => Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0]), url: () => 'http://127.0.0.1:13082/', close: async () => { } };
+    const browser = { newContext: async () => ({ route: async (_pattern: string, callback: any) => { fence = callback; }, routeWebSocket: async () => { }, addInitScript: async () => { }, on() { }, newPage: async () => page, close: async () => { } }) };
+    try {
+        const result = await runUiRegressionV1({ ...f, browser });
+        assert.equal(result.report.outcome, 'fail');
+        assert.deepEqual(actual, cases.map(row => row[2]));
+        const diagnostics = result.diagnosticHashes.map(hash => JSON.parse(readFileSync(path.join(f.tempRoot, 'artifacts', hash + '.json'), 'utf8')));
+        assert.deepEqual(diagnostics[0].requests, cases.filter(row => row[2] === 'abort').map(row => ({ method: row[1], path: 'denied-origin-or-route' })));
+    } finally { rmSync(f.root, { recursive: true, force: true }); }
+});
