@@ -245,7 +245,7 @@ const rowReadSql = (name, sample, order) => {
 const SQL_RECIPES = freeze([
     ['begin', 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY'],
     ['statement_timeout', "SET LOCAL statement_timeout = '5s'"],
-    ['identity', `SELECT current_database()::text AS database,current_user::text AS "currentUser",session_user::text AS "sessionUser",inet_server_addr()::text AS host,inet_server_port() AS port,current_setting('server_version_num')::int AS "serverVersionNum",to_char(pg_postmaster_start_time() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "serverStartedAt",pg_backend_pid() AS "backendPid",to_char(a.backend_start AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "backendStartedAt",current_setting('application_name') AS "applicationName" FROM pg_catalog.pg_stat_activity a WHERE a.pid=pg_backend_pid()`],
+    ['identity', `SELECT current_database()::text AS database,current_user::text AS "currentUser",session_user::text AS "sessionUser",host(inet_server_addr()) AS host,inet_server_port() AS port,current_setting('server_version_num')::int AS "serverVersionNum",to_char(pg_postmaster_start_time() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "serverStartedAt",pg_backend_pid() AS "backendPid",to_char(a.backend_start AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "backendStartedAt",current_setting('application_name') AS "applicationName" FROM pg_catalog.pg_stat_activity a WHERE a.pid=pg_backend_pid()`],
     ['settings', `SELECT current_database()::text AS database,current_setting('default_transaction_read_only') AS "defaultTransactionReadOnly",current_setting('lo_compat_privileges')::boolean AS "loCompatPrivileges",pg_is_in_recovery() AS recovery LIMIT 4097`],
     ['current_pair', `SELECT (SELECT jsonb_agg(to_jsonb(t)) FROM (SELECT singleton_key,current_revision::text AS revision,phase,activation_ref,activation_hash,head_ref,head_hash FROM public.internal_production_owner_producer_manifest_set_current_v1 LIMIT 2) t) AS current,(SELECT jsonb_agg(to_jsonb(t)) FROM (SELECT * FROM public.internal_production_owner_producer_manifest_set_activations_v1 LIMIT 2) t) AS activations,(SELECT jsonb_agg(to_jsonb(t)) FROM (SELECT * FROM public.internal_production_owner_producer_manifest_activation_heads_v1 LIMIT 2) t) AS heads`],
     ['optional_step_metrics', "SELECT to_regclass('public.step_metrics')::text AS relation"],
@@ -1556,7 +1556,8 @@ function prepareTask4ServerV1(context, state) {
 
 function task4RecordFailureV1(state, error, cleanup = false) {
     const allowed = ['TASK4_ASSERTION_FAILED', 'TASK4_DATABASE_REFUSED', 'TASK4_BINDING_REFUSED', 'TASK4_SOURCE_DRIFT', 'TASK4_NETWORK_REFUSED',
-        'TASK4_RESOURCE_REFUSED', 'TASK4_CANCELLED', 'TASK4_QUALIFICATION_ASSERTION_FAILURE', 'TASK4_CLEANUP_UNKNOWN', 'TASK4_INTEGRITY_FAILED', 'TASK4_RESULT_PUBLICATION_FAILED'];
+        'TASK4_RESOURCE_REFUSED', 'TASK4_CANCELLED', 'TASK4_QUALIFICATION_ASSERTION_FAILURE', 'TASK4_CLEANUP_UNKNOWN', 'TASK4_INTEGRITY_FAILED', 'TASK4_RESULT_PUBLICATION_FAILED',
+        'TASK4_RUNNER_TIMEOUT', 'TASK4_PREPARATION_TIMEOUT', 'TASK4_RUNNER_CLOSED_BEFORE_REQUEST'];
     const code = allowed.includes(error?.message) ? error.message : cleanup ? 'TASK4_CLEANUP_UNKNOWN' : 'TASK4_INTEGRITY_FAILED';
     if (!state.errors.includes(code) && state.errors.length < 16) state.errors.push(code);
     if (cleanup || code === 'TASK4_CLEANUP_UNKNOWN') state.cleanupUnknown = true;
@@ -1860,19 +1861,30 @@ async function task4PostgresCensusV1(context, state, after) {
         return { rows, metadataHash: hash(raw), observedAtMs };
     };
     if (!after) {
-        requireValue(!state.pgCohort, 'TASK4_CLEANUP_UNKNOWN'); const first = await snapshot('before');
-        const rows = first.rows, root = rows.find(row => row.pid === owner.pid);
-        requireValue(root && ['pid', 'ppid', 'pgid', 'uid', 'startedAt'].every(key => root[key] === owner[key]), 'TASK4_BINDING_REFUSED');
-        const ids = new Set([owner.pid]); let changed = true;
-        while (changed) { changed = false; for (const row of rows) if (ids.has(row.ppid) && !ids.has(row.pid)) { ids.add(row.pid); changed = true; } requireValue(ids.size <= 256, 'TASK4_CLEANUP_UNKNOWN'); }
-        const retained = [];
-        for (const row of rows.filter(row => ids.has(row.pid))) {
-            requireValue(row.uid === context.owner.uid && row.pgid === owner.pgid, 'TASK4_BINDING_REFUSED');
-            const observed = await context.modules.native.observeUiProcessV1(row.pid); context.check();
-            requireValue(['pid', 'ppid', 'pgid', 'uid', 'startedAt'].every(key => row[key] === observed[key]), 'TASK4_BINDING_REFUSED');
-            retained.push({ ...row, executable: observed.executable, commandHash: hash(observed.rawArgs) });
-        }
-        state.pgCohort = retained; return;
+        requireValue(!state.pgCohort, 'TASK4_CLEANUP_UNKNOWN');
+        const fields = ['pid', 'ppid', 'pgid', 'uid', 'startedAt'];
+        const select = rows => {
+            const root = rows.find(row => row.pid === owner.pid);
+            requireValue(root && fields.every(key => root[key] === owner[key]), 'TASK4_BINDING_REFUSED');
+            const ids = new Set([owner.pid]); let changed = true;
+            while (changed) { changed = false; for (const row of rows) if (ids.has(row.ppid) && !ids.has(row.pid)) { ids.add(row.pid); changed = true; } requireValue(ids.size <= 256, 'TASK4_CLEANUP_UNKNOWN'); }
+            return rows.filter(row => ids.has(row.pid)).sort((a, b) => a.pid - b.pid);
+        };
+        const bind = async rows => {
+            const retained = [];
+            for (const row of rows) {
+                requireValue(row.uid === context.owner.uid, 'TASK4_BINDING_REFUSED');
+                const observed = await context.modules.native.observeUiProcessV1(row.pid); context.check();
+                requireValue(fields.every(key => row[key] === observed[key]) && observed.executable === owner.executable, 'TASK4_BINDING_REFUSED');
+                retained.push({ ...row, executable: observed.executable, commandHash: hash(observed.rawArgs) });
+            }
+            return retained;
+        };
+        const first = select((await snapshot('before-1')).rows);
+        state.pgCohort = await bind(first);
+        const second = select((await snapshot('before-2')).rows);
+        requireValue(task4CanonicalV1(first) === task4CanonicalV1(second), 'TASK4_BINDING_REFUSED');
+        await bind(second); return;
     }
     requireValue(Array.isArray(state.pgCohort) && state.pgCohort.length > 0 && state.pgCohort.some(row => row.pid === owner.pid), 'TASK4_CLEANUP_UNKNOWN');
     const absent = [];

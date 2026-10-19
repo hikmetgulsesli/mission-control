@@ -244,6 +244,9 @@ test('Task4 observer records actual fixed queries, current pair and settlement b
     const m = await load(), ready = JSON.parse(GOLDEN_READY);
     ready.fixture.seedDigest = hash(GOLDEN_SEED); ready.fixture.privilegeDigest = hash(GOLDEN_GRANTS);
     const pair = currentPairRows(m, ready), recipes = m.task4ObserverSqlRecipesV1();
+    const identityRecipe = recipes.find((recipe: any) => recipe.queryId === 'identity');
+    assert.equal(identityRecipe.statement, `SELECT current_database()::text AS database,current_user::text AS "currentUser",session_user::text AS "sessionUser",host(inet_server_addr()) AS host,inet_server_port() AS port,current_setting('server_version_num')::int AS "serverVersionNum",to_char(pg_postmaster_start_time() AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "serverStartedAt",pg_backend_pid() AS "backendPid",to_char(a.backend_start AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS "backendStartedAt",current_setting('application_name') AS "applicationName" FROM pg_catalog.pg_stat_activity a WHERE a.pid=pg_backend_pid()`);
+
     const rows = rawDatabaseRows(); rows.current_pair = pair.rows; rows.optional_step_metrics = [{ relation: null }];
     rows.identity = [{ database: ready.database.name, currentUser: ready.database.role, sessionUser: ready.database.role,
         host: '127.0.0.1', port: ready.setup.postgres.port, serverVersionNum: 170010, serverStartedAt: ready.setup.postgres.serverStartedAt,
@@ -271,6 +274,11 @@ test('Task4 observer records actual fixed queries, current pair and settlement b
     }
     for (const [name, mutate] of [
         ['wrong database', (data: any) => { data.identity[0].database = 'postgres'; }],
+        ['wrong host 127.0.0.1/32', (data: any) => { data.identity[0].host = '127.0.0.1/32'; }],
+        ['wrong host localhost', (data: any) => { data.identity[0].host = 'localhost'; }],
+        ['wrong host ::1', (data: any) => { data.identity[0].host = '::1'; }],
+        ['wrong host 127.0.0.2', (data: any) => { data.identity[0].host = '127.0.0.2'; }],
+        ['wrong host None', (data: any) => { data.identity[0].host = null; }],
         ['unavailable optional relation invented', (data: any) => { data.optional_step_metrics[0].relation = 'step_metrics'; }],
         ['crossed current', (data: any) => { data.current_pair[0].current[0].head_hash = 'f'.repeat(64); }],
         ['duplicate singleton', (data: any) => { data.current_pair[0].current.push(data.current_pair[0].current[0]); }],
@@ -1253,7 +1261,7 @@ test('Task4 postmaster controller requires original exit and close plus retained
     const ts = await import('typescript'), vm = await import('node:vm'), path = await import('node:path'), { EventEmitter } = await import('node:events');
     const text = readFileSync(new URL('../scripts/render-smoke-owned-fixture.mjs', import.meta.url), 'utf8'), ast = ts.createSourceFile('fixture.mjs', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
     const nodes = ast.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === 'createTask4PostmasterV1'); assert.equal(nodes.length, 1);
-    for (const fault of [null, 'owner', 'close', 'cohort', 'listener']) await t.test(fault ?? 'closed', async () => {
+    for (const fault of [null, 'owner', 'pre_census', 'close', 'cohort', 'listener']) await t.test(fault ?? 'closed', async () => {
         const events: string[] = [], owner = { pid: 41002, ppid: 41001 }, child: any = new EventEmitter(); child.pid = owner.pid;
         child.kill = (signal: string) => { events.push(signal); return true; }; const state: any = { root: { value: { path: '/private/task4' }, check() {} } };
         const original = { ended: () => false, wait: async () => { events.push('exit_close'); if (fault === 'close') throw Error('unknown'); return { code: 0, signal: null, exitObserved: true, closeObserved: true }; } };
@@ -1261,13 +1269,13 @@ test('Task4 postmaster controller requires original exit and close plus retained
             spawn: (exe: string, argv: string[], options: any) => { assert.equal(exe, '/Users/setrox/ai/setrox/.task4-toolchain-v1/Cellar/postgresql@17/17.10/bin/postgres'); assert.equal(options.stdio[2], 10); return child; },
             retainTask4ChildV1: () => original, task4ObservePostmasterV1: async () => { if (fault === 'owner' && events.includes('observed')) throw Error('changed'); events.push('observed'); return owner; },
             task4OuterListenerV1: async () => fault === 'listener' ? 'listening' : 'absent',
-            task4PostgresCensusV1: async (_c: any, _s: any, after: boolean) => { events.push(after ? 'absent' : 'census'); if (after && fault === 'cohort') throw Error('retained'); },
+            task4PostgresCensusV1: async (_c: any, _s: any, after: boolean) => { events.push(after ? 'absent' : 'census'); if (!after && fault === 'pre_census') throw Error('unstable'); if (after && fault === 'cohort') throw Error('retained'); },
             task4CanonicalV1: JSON.stringify, task4FileSnapshotV1: () => ({ hash: 'pg' }), requireValue: (v: any, c: string) => { if (!v) throw Error(c); } };
         const fn = vm.compileFunction(nodes[0].getText(ast) + '\nreturn createTask4PostmasterV1;', Object.keys(bindings))(...Object.values(bindings));
         const controller = fn({ check() {} }, state, { postgres: ['-D', '/private/task4/postgres-data'], env: {} });
         assert.equal(state.postgres, controller); await controller.observe();
         if (fault) { await assert.rejects(controller.close()); assert.equal(controller.settlement(), null); } else { await controller.close(); assert.ok(events.indexOf('census') < events.indexOf('SIGTERM')); assert.ok(events.indexOf('exit_close') < events.indexOf('absent')); assert.ok(controller.settlement()); }
-        if (fault === 'owner') assert.ok(!events.includes('SIGTERM'));
+        if (fault === 'owner' || fault === 'pre_census') assert.ok(!events.includes('SIGTERM'));
     });
 });
 
@@ -1276,18 +1284,44 @@ test('Task4 PostgreSQL census parses complete raw snapshots and rejects retained
     const { parseUiMetadataSnapshotV1 } = await import('../scripts/ui-regression-lifecycle.mjs');
     const text = readFileSync(new URL('../scripts/render-smoke-owned-fixture.mjs', import.meta.url), 'utf8'), ast = ts.createSourceFile('fixture.mjs', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
     const nodes = ast.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === 'task4PostgresCensusV1'); assert.equal(nodes.length, 1);
-    for (const fault of [null, 'retained', 'foreign', 'malformed']) await t.test(fault ?? 'absent', async () => {
-        const owner = { pid: 41002, ppid: 41001, uid: 501, pgid: 41001, startedAt: '2026-10-19T09:00:00.000Z' }, writes: any[] = []; let reads = 0, clock = 1000;
-        const before = '41002 41001 41001 501 Mon Oct 19 09:00:00 2026\n41003 41002 41001 ' + (fault === 'foreign' ? '502' : '501') + ' Mon Oct 19 09:00:00 2026\n' + Array.from({ length: 600 }, (_, i) => `${50000+i} 1 1 501 Mon Oct 19 08:00:00 2026\n`).join('');
+    const faults = [null, 'retained', 'retained_parent', 'malformed', 'foreign', 'executable', 'second_executable', 'added', 'removed', 'cap',
+        ...['pid','ppid','pgid','uid','startedAt'].map(k => 'observe_' + k), ...['pid','ppid','pgid','uid','startedAt'].map(k => 'second_' + k)];
+    for (const fault of faults) await t.test(fault ?? 'independent groups absent', async () => {
+        const owner = { pid: 41002, ppid: 41001, uid: 501, pgid: 41001, startedAt: '2026-10-19T09:00:00.000Z', executable: '/fixed/postgres' }, writes: any[] = [];
+        let reads = 0, clock = 1000, observations = 0;
+        const members = [owner, ...Array.from({ length: fault === 'cap' ? 256 : 5 }, (_, i) => ({ ...owner, pid: 41003+i, ppid: i === 4 ? 41003 : owner.pid, pgid: 41003+i }))];
+        if (fault === 'foreign') members[1].uid = 502;
+        const others = [{ ...owner, pid: 41001, ppid: 1 }, ...Array.from({ length: 600 }, (_, i) => ({ ...owner, pid: 50000+i, ppid: 1, pgid: 1 }))];
+        const line = (row: any) => `${row.pid} ${row.ppid} ${row.pgid} ${row.uid} Mon Oct 19 09:00:${row.startedAt.endsWith('01.000Z') ? '01' : '00'} 2026\n`;
+        const raw = (rows: any[]) => rows.map(line).join(''), before = raw([...members,...others]);
+        const second = structuredClone(members);
+        if (fault === 'added') second.push({ ...owner, pid: 42000, ppid: owner.pid, pgid: 42000 });
+        if (fault === 'removed') second.pop();
+        if (fault?.startsWith('second_') && fault !== 'second_executable') {
+            const key = fault.slice(7); (second[1] as any)[key] = key === 'startedAt' ? '2026-10-19T09:00:01.000Z' : (second[1] as any)[key] + 10;
+        }
         const state: any = { root: { value: { path: '/private/task4' }, check() {} }, postgres: { owner } };
-        const context = { owner: { uid: 501 }, check() {}, modules: { native: { createUiPsReaderV1: () => async () => { reads++; return reads === 1 || fault === 'retained' ? before : fault === 'malformed' ? 'partial' : '1 0 1 0 Mon Oct 19 08:00:00 2026\n'; }, parseUiMetadataSnapshotV1,
-            observeUiProcessV1: async (pid: number) => ({ ...owner, pid, ppid: pid === 41002 ? 41001 : 41002, executable: '/pg', rawArgs: 'pg' }) } } };
+        const context = { owner: { uid: 501 }, check() {}, modules: { native: {
+            createUiPsReaderV1: () => async () => { reads++;
+                if (reads === 1) return before; if (reads === 2) return raw([...second,...others]);
+                return fault === 'retained' ? before : fault === 'retained_parent' ? raw([{ ...owner, pid: 49999, ppid: 41003 },...others]) : fault === 'malformed' ? 'partial' : raw(others);
+            }, parseUiMetadataSnapshotV1,
+            observeUiProcessV1: async (pid: number) => { observations++; const member = members.find(row => row.pid === pid); assert.ok(member); const result: any = { ...member, rawArgs: 'postgres process ' + pid };
+                if (pid === 41003) {
+                    if (fault === 'executable' || fault === 'second_executable' && reads === 2) result.executable = '/foreign/postgres';
+                    if (fault?.startsWith('observe_')) { const key = fault.slice(8); result[key] = key === 'startedAt' ? '2026-10-19T09:00:01.000Z' : result[key] + 1; }
+                }
+                return result;
+            }
+        } } };
         const bindings = { path, Date: class extends Date { static now() { return clock; } }, hash, task4CanonicalV1: m.task4CanonicalV1,
             task4PrivateBytesV1: (_p: string, n: string, b: Buffer) => { writes.push({ n, value: n.endsWith('.log') ? b.toString() : JSON.parse(b.toString()) }); return { sha256: hash(b), bytes: b.length }; },
-            task4WaitV1: async (ms: number) => { clock += ms; }, requireValue: (v: any, c: string) => { if (!v) throw Error(c); } };
+            task4WaitV1: async (ms: number) => { assert.equal(ms, 100); clock += ms; }, requireValue: (v: any, c: string) => { if (!v) throw Error(c); } };
         const fn = vm.compileFunction(nodes[0].getText(ast) + '\nreturn task4PostgresCensusV1;', Object.keys(bindings))(...Object.values(bindings));
-        if (fault === 'foreign') { await assert.rejects(fn(context, state, false)); return; }
-        await fn(context, state, false); assert.equal(state.pgCohort.length, 2); assert.equal(writes[0].value, before); assert.equal(writes[1].value.raw.sha256, hash(before));
+        if (fault && !['retained','retained_parent','malformed'].includes(fault)) { await assert.rejects(fn(context, state, false)); assert.equal(state.pgAbsence, undefined); return; }
+        await fn(context, state, false); assert.equal(reads, 2); assert.equal(observations, 12); assert.equal(state.pgCohort.length, 6);
+        assert.deepEqual(state.pgCohort.map((row: any) => row.pgid), members.map(row => row.pgid));
+        assert.equal(writes[0].value, before); assert.equal(writes[1].value.raw.sha256, hash(before));
         if (fault) await assert.rejects(fn(context, state, true)); else { await fn(context, state, true); assert.equal(state.pgAbsence.length, 2); assert.ok(state.pgAbsence[1].observedAtMs - state.pgAbsence[0].observedAtMs >= 100); }
     });
 });
@@ -1677,4 +1711,21 @@ test('Task4 original child permits fixed whole-runner cap but still refuses over
     let settled = false; const pending = original.wait(1200000).then(value => { settled = true; return value; });
     child.emit('exit', 1, null); await Promise.resolve(); assert.equal(settled, false);
     child.emit('close', 1, null); assert.deepEqual(await pending, { code: 1, signal: null, exitObserved: true, closeObserved: true });
+});
+
+
+test('Task4 failure normalizer preserves only the three fixed phase codes and keeps unknown text redacted', async () => {
+    const ts = await import('typescript'), vm = await import('node:vm');
+    const text = readFileSync(new URL('../scripts/render-smoke-owned-fixture.mjs', import.meta.url), 'utf8'), ast = ts.createSourceFile('owned.mjs', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const nodes = ast.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === 'task4RecordFailureV1'); assert.equal(nodes.length, 1);
+    const fn = vm.compileFunction(nodes[0].getText(ast) + '\nreturn task4RecordFailureV1;')();
+    for (const code of ['TASK4_RUNNER_TIMEOUT','TASK4_PREPARATION_TIMEOUT','TASK4_RUNNER_CLOSED_BEFORE_REQUEST']) for (const cleanup of [false,true]) {
+        const state = { errors: [], integrity: 'verified', cleanupUnknown: false }; fn(state, Error(code), cleanup); fn(state, Error(code), cleanup);
+        assert.deepEqual(state.errors, [code]); assert.equal(state.integrity, 'verified'); assert.equal(state.cleanupUnknown, cleanup);
+    }
+    for (const message of ['private untrusted error', 'TASK4_PREPARATION_TIMEOUT suffix', 'TASK4_RUNNER_OTHER']) for (const cleanup of [false,true]) {
+        const state = { errors: [], integrity: 'verified', cleanupUnknown: false }; fn(state, Error(message), cleanup);
+        assert.deepEqual(state.errors, [cleanup ? 'TASK4_CLEANUP_UNKNOWN' : 'TASK4_INTEGRITY_FAILED']); assert.equal(state.cleanupUnknown, cleanup);
+        assert.equal(state.integrity, cleanup ? 'verified' : 'failed');
+    }
 });
