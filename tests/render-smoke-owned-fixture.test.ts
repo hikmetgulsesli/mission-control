@@ -354,17 +354,18 @@ async function task4ProbeProgram() {
 test('Task4 fixed probe waits for original fd3 and each socket close; simulated OS denial only', async (t) => {
     const program = await task4ProbeProgram(), { EventEmitter } = await import('node:events'), vm = await import('node:vm');
     for (const deniedCode of ['EPERM', 'EACCES', 'ECONNREFUSED', 'ETIMEDOUT']) await t.test(deniedCode, async () => {
-        const latch = new EventEmitter() as any, sockets: any[] = [], output: string[] = []; let exitCode = 0;
+        const latch = new EventEmitter() as any, sockets: any[] = [], output: string[] = [], ready: Buffer[] = []; let exitCode = 0, readyClosed = false;
         latch.destroy = () => {};
         const runtime = { argv: ['/fixed/node', '15433', '15434'], stdout: { write(value: string) { output.push(value); } },
             get exitCode() { return exitCode; }, set exitCode(value: number) { exitCode = value; } };
         const require = (name: string) => {
-            if (name === 'node:fs') return { createReadStream(_file: unknown, options: any) { assert.deepEqual(JSON.parse(JSON.stringify(options)), { fd: 3, autoClose: true }); return latch; } };
+            if (name === 'node:fs') return { createReadStream(_file: unknown, options: any) { assert.deepEqual(JSON.parse(JSON.stringify(options)), { fd: 3, autoClose: true }); return latch; }, writeSync(fd: number, bytes: Buffer) { assert.equal(fd, 4); assert.equal(latch.listenerCount('close'), 1); ready.push(Buffer.from(bytes)); return bytes.length; }, closeSync(fd: number) { assert.equal(fd, 4); readyClosed = true; } };
             if (name === 'node:net') return { createConnection(options: any) { assert.equal(options.host, '127.0.0.1'); assert.equal(options.port, 15433 + sockets.length);
                 const socket = new EventEmitter() as any; socket.destroy = () => { socket.destroyed = true; }; sockets.push(socket); return socket; } };
             throw new Error('unexpected import');
         };
         vm.runInNewContext(program, { require, process: runtime, Buffer, Date, setTimeout, clearTimeout });
+        assert.deepEqual(ready, [Buffer.concat([Buffer.from('task4-probe-ready'), Buffer.from([10])])]); assert.equal(readyClosed, true);
         assert.equal(sockets.length, 0);
         latch.emit('data', Buffer.from('task4-probe-start\n')); latch.emit('end'); await Promise.resolve(); assert.equal(sockets.length, 0);
         latch.emit('close'); await Promise.resolve(); await Promise.resolve(); assert.equal(sockets.length, 1);
@@ -384,13 +385,44 @@ test('Task4 fixed probe waits for original fd3 and each socket close; simulated 
 
 test('Task4 fixed probe malformed or incomplete start never opens a socket', async (t) => {
     const program = await task4ProbeProgram(), { EventEmitter } = await import('node:events'), vm = await import('node:vm');
-    for (const value of ['task4-probe-start\nextra', 'task4-probe-start', '']) await t.test(JSON.stringify(value), async () => {
+    for (const value of ['task4-probe-start\nextra', 'task4-probe-start' + String.fromCharCode(92) + 'n', 'task4-probe-start', '']) await t.test(JSON.stringify(value), async () => {
         const latch = new EventEmitter() as any; latch.destroy = () => {}; let connections = 0;
         const runtime = { argv: ['/fixed/node', '15433', '15434'], stdout: { write() { assert.fail('no outcome on refused latch'); } }, exitCode: 0 };
-        vm.runInNewContext(program, { require(name: string) { return name === 'node:fs' ? { createReadStream() { return latch; } } : { createConnection() { connections++; } }; }, process: runtime, Buffer, Date, setTimeout, clearTimeout });
+        vm.runInNewContext(program, { require(name: string) { return name === 'node:fs' ? { createReadStream() { return latch; }, writeSync(_fd: number, bytes: Buffer) { return bytes.length; }, closeSync() {} } : { createConnection() { connections++; } }; }, process: runtime, Buffer, Date, setTimeout, clearTimeout });
         latch.emit('data', Buffer.from(value)); latch.emit('end'); latch.emit('close');
         await Promise.resolve(); await Promise.resolve(); assert.equal(connections, 0); assert.equal(runtime.exitCode, 1);
     });
+});
+
+test('Task4 exact probe readiness write failure and non-reset start expiry never connect', async (t) => {
+    const program=await task4ProbeProgram(),vm=await import('node:vm'),{EventEmitter}=await import('node:events');
+    for(const fault of ['short_write','write_error','close_error','start_timeout','start_error','start_close'])await t.test(fault,async()=>{
+        let callback:(()=>void)|null=null,connections=0,closed=0,destroyed=0;const events:string[]=[],latch:any=new EventEmitter();latch.destroy=()=>{destroyed++;};
+        const runtime={argv:['/fixed/node','15433','15434'],stdout:{write(){assert.fail('no output');}},exitCode:0};
+        vm.runInNewContext(program,{Buffer,Date,process:runtime,setTimeout:(fn:()=>void,ms:number)=>{assert.equal(ms,5000);assert.equal(callback,null);callback=fn;events.push('timer');return 1;},clearTimeout:()=>{callback=null;},require:(name:string)=>name==='node:fs'?{
+            createReadStream:()=>latch,writeSync:(fd:number,b:Buffer)=>{assert.equal(fd,4);events.push('ready');assert.equal(latch.listenerCount('close'),1);assert.equal(b.at(-1),10);if(fault==='write_error')throw Error('write');return fault==='short_write'?17:b.length;},
+            closeSync:(fd:number)=>{assert.equal(fd,4);closed++;if(fault==='close_error')throw Error('close');}
+        }:{createConnection:()=>{connections++;throw Error('must remain latched');}}});
+        assert.deepEqual(events,['timer','ready']);
+        if(fault==='start_timeout'){const fire=callback as unknown as ()=>void;fire();latch.emit('close');}
+        if(fault==='start_error'){latch.emit('error',Error('private'));latch.emit('close');}
+        if(fault==='start_close')latch.emit('close');
+        await Promise.resolve();await Promise.resolve();assert.equal(runtime.exitCode,1);assert.equal(connections,0);assert.equal(callback,null);
+        if(['short_write','write_error','close_error','start_timeout'].includes(fault))assert.ok(destroyed>0);
+        if(fault==='short_write'||fault==='write_error')assert.equal(closed,0);
+    });
+});
+
+test('Task4 exact probe program consumes byte10 START and emits only byte10-terminated final JSON', async () => {
+    const program=await task4ProbeProgram(),vm=await import('node:vm'),{EventEmitter}=await import('node:events');
+    const latch:any=new EventEmitter(),sockets:any[]=[],output:string[]=[];latch.destroy=()=>{};const timers=new Set<()=>void>();
+    const runtime={argv:['/fixed/node','15433','15434'],stdout:{write:(value:string)=>output.push(value)},exitCode:0};
+    vm.runInNewContext(program,{Buffer,Date,process:runtime,setTimeout:(fn:()=>void)=>{timers.add(fn);return fn;},clearTimeout:(fn:()=>void)=>timers.delete(fn),require:(name:string)=>name==='node:fs'?{
+        createReadStream:()=>latch,writeSync:(_fd:number,bytes:Buffer)=>bytes.length,closeSync:()=>{}
+    }:{createConnection:()=>{const socket:any=new EventEmitter();socket.destroy=()=>{};sockets.push(socket);return socket;}}});
+    latch.emit('data',Buffer.concat([Buffer.from('task4-probe-start'),Buffer.from([10])]));latch.emit('end');latch.emit('close');await Promise.resolve();await Promise.resolve();
+    assert.equal(sockets.length,1,'real LF START must release actual extracted program');sockets[0].emit('connect');sockets[0].emit('close');await Promise.resolve();await Promise.resolve();sockets[1].emit('error',{code:'EPERM'});sockets[1].emit('close');await Promise.resolve();await Promise.resolve();
+    assert.equal(output.length,1);assert.equal(Buffer.from(output[0]).at(-1),10);assert.doesNotThrow(()=>JSON.parse(output[0]));assert.equal(timers.size,0);
 });
 
 test('Task4 original outer command has only four exact scenario forms', async () => {
@@ -1467,24 +1499,66 @@ test('Task4 outer probe authenticates request ancestry, fixed policy and referen
     });
 });
 
-test('Task4 original probe remains fd3 latched until observed owner and preserves failed original completion without signals', async (t) => {
-    const ts = await import('typescript'), vm = await import('node:vm'), path = await import('node:path'), m = await load();
+test('Task4 original probe remains fd3 latched until READY and observed owner; original failure custody is preserved', async (t) => {
+    const ts = await import('typescript'), vm = await import('node:vm'), path = await import('node:path'), { EventEmitter } = await import('node:events');
     const text = readFileSync(new URL('../scripts/render-smoke-owned-fixture.mjs', import.meta.url), 'utf8'), ast = ts.createSourceFile('fixture.mjs', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
-    const nodes = ast.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === 'executeTask4ProbeV1'); assert.equal(nodes.length, 1);
-    for (const fault of [null, 'owner', 'output', 'close']) await t.test(fault ?? 'complete', async () => {
+    const nodes = ast.statements.filter(n => ts.isFunctionDeclaration(n) && ['executeTask4ProbeV1','readTask4ProbeReadyV1'].includes(n.name?.text ?? ''));
+    for (const fault of [null, 'owner', 'output', 'close', 'early_close', 'deadline', 'post_bind_deadline', 'post_bind_close', 'ready_publish']) await t.test(fault ?? 'complete', async () => {
         const events: string[] = [], ready = JSON.parse(GOLDEN_READY), owner = { ...ready.setup.owner, pid: 41009, ppid: ready.setup.owner.pid };
+        let clock = 1000, ended = false, settle!: (value: any) => void; const terminal = new Promise(resolve => { settle = resolve; });
+        const child: any = new EventEmitter(), pipe: any = new EventEmitter(); child.pid = owner.pid; child.stdio = [null,null,null,{},pipe];
+        pipe.destroy = () => { events.push('ready_destroy'); };
+        const timers = new Map<number, () => void>(); let timerId = 0;
         const allowed = { startedAt: '2026-10-19T09:00:02.000Z', finishedAt: '2026-10-19T09:00:02.010Z', outcome: 'connected', errno: null }, denied = { ...allowed, startedAt: '2026-10-19T09:00:02.011Z', finishedAt: '2026-10-19T09:00:02.020Z', outcome: 'denied', errno: fault === 'output' ? 'ECONNREFUSED' : 'EPERM' };
-        const stdout = JSON.stringify({ schema: 'mission-control.task4-policy-probe-output.v1', allowed, denied }) + '\n';
-        const bindings = { path, hash, TASK4_POLICY_PROBE_PROGRAM: 'fixed-program',
-            spawn: (exe: string, args: string[], options: any) => { events.push('spawn'); assert.equal(exe, '/usr/bin/sandbox-exec'); assert.equal(args.at(-2), '15433'); assert.equal(args.at(-1), '15434'); assert.deepEqual(options.stdio, ['ignore', 'pipe', 'pipe', 'pipe']); return { pid: owner.pid, stdio: [null, null, null, {}] }; },
-            retainTask4ChildV1: () => ({ wait: async () => { events.push('exit_close'); if (fault === 'close') throw Error('close'); return { code: 0, signal: null, exitObserved: true, closeObserved: true }; }, originals: () => ({ stdout, stderr: '', stdoutHash: hash(stdout), stderrHash: hash('') }) }),
-            bindTask4ProcessV1: () => { events.push('observed'); if (fault === 'owner') throw Error('owner'); return owner; },
-            task4WriteOriginalV1: async (_s: any, bytes: Buffer) => { assert.equal(bytes.toString(), 'task4-probe-start\n'); events.push('latch'); }, task4SaveOriginalV1: () => events.push('saved'),
+        const stdout = JSON.stringify({ schema: 'mission-control.task4-policy-probe-output.v1', allowed, denied }) + String.fromCharCode(10);
+        const bindings = { path, Buffer, hash, Date: class extends Date { static now() { return clock; } },
+            setTimeout: (fn: () => void, ms: number) => { assert.equal(ms, 5000); timers.set(++timerId,fn); return timerId; }, clearTimeout: (id: number) => timers.delete(id), TASK4_POLICY_PROBE_PROGRAM: await task4ProbeProgram(),
+            spawn: (exe: string, args: string[], options: any) => { events.push('spawn'); assert.equal(exe, '/usr/bin/sandbox-exec'); assert.equal(args.at(-2), '15433'); assert.equal(args.at(-1), '15434'); assert.deepEqual(options.stdio,['ignore','pipe','pipe','pipe','pipe']); return child; },
+            retainTask4ChildV1: () => ({ wait: (ms: number) => { assert.equal(ms, 15000); events.push('wait'); return terminal; }, ended: () => ended, originals: () => ({ stdout, stderr: '', stdoutHash: hash(stdout), stderrHash: hash('') }) }),
+            bindTask4ProcessV1: () => { events.push('bound'); if (fault === 'owner') throw Error('owner'); if (fault === 'post_bind_deadline') clock=16000; if (fault === 'post_bind_close') ended=true; return owner; },
+            task4WriteOriginalV1: async (_s: any, bytes: Buffer) => { assert.deepEqual(bytes, Buffer.concat([Buffer.from('task4-probe-start'), Buffer.from([10])])); events.push('start'); }, task4SaveOriginalV1: () => events.push('saved'),
+            task4PrivateBytesV1: (_dir: string, name: string, bytes: Buffer) => { assert.equal(name, 'probe.ready-prefix.log'); assert.ok(bytes.length <= 19); events.push('ready_saved'); if(fault==='ready_publish')throw Error('publication'); },
             keys: (v: any, e: string) => assert.deepEqual(Object.keys(v).sort(), e.split(' ').sort()), date: () => {}, requireValue: (v: any, c: string) => { if (!v) throw Error(c); } };
-        const fn = vm.compileFunction(nodes[0].getText(ast) + '\nreturn executeTask4ProbeV1;', Object.keys(bindings))(...Object.values(bindings));
-        const state: any = { root: { value: ready.setup.resourceRoot }, canary: { port: 15434 } }, context = { node: '/fixed/node', nodeHash: 'a'.repeat(64), owner: ready.setup.owner, check() {}, modules: { native: { observeUiProcessV1: async () => ({}) } } };
-        if (fault) await assert.rejects(fn(context, state, { mock: { port: 15433 } })); else { const value = await fn(context, state, { mock: { port: 15433 } }); assert.equal(value.denied.errno, 'EPERM'); assert.ok(events.indexOf('observed') < events.indexOf('latch')); }
-        assert.ok(state.probeOriginal); assert.ok(events.includes('exit_close')); if (fault === 'owner') assert.ok(!events.includes('latch'));
+        const fn = vm.compileFunction(nodes.map(n=>n.getText(ast)).join('\n') + '\nreturn executeTask4ProbeV1;', Object.keys(bindings))(...Object.values(bindings));
+        const state: any = { root: { value: ready.setup.resourceRoot }, canary: { port: 15434 } }, context = { node: '/fixed/node', nodeHash: 'a'.repeat(64), owner: ready.setup.owner, check() {}, modules: { native: { observeUiProcessV1: async () => { events.push('observe'); return {}; } } } };
+        const pending = fn(context, state, { mock: { port: 15433 } }); let resolved = false; const result = pending.then((value: any) => { resolved = true; return { value, error: null }; }, (error: Error) => { resolved = true; return { value: null, error }; });
+        await Promise.resolve(); assert.ok(!events.includes('observe')); assert.ok(!events.includes('start'));
+        if (fault === 'early_close') { ended = true; child.emit('close', 1, null); }
+        else { pipe.emit('data', Buffer.from('task4-probe-')); pipe.emit('data', Buffer.concat([Buffer.from('ready'),Buffer.from([10])])); pipe.emit('end'); await Promise.resolve(); assert.ok(!events.includes('observe')); if (fault === 'deadline') clock = 6000; pipe.emit('close'); }
+        for (let i=0;i<8;i++) await Promise.resolve();
+        assert.equal(resolved, false, 'failure still awaits the same original');
+        if (['early_close','deadline'].includes(fault ?? '')) assert.ok(!events.includes('observe'));
+        else assert.ok(events.includes('observe'));
+        if (fault === 'owner' || fault === 'early_close' || fault === 'deadline' || fault === 'post_bind_deadline' || fault === 'post_bind_close') assert.ok(!events.includes('start')); else assert.ok(events.indexOf('bound') < events.indexOf('start'));
+        ended = true; settle(fault === 'close' ? Promise.reject(Error('close')) : { code: fault === 'early_close' ? 1 : 0, signal: null, exitObserved: true, closeObserved: true });
+        const completed = await result; if (fault) assert.ok(completed.error); else assert.equal(completed.value.denied.errno, 'EPERM');
+        assert.ok(events.includes('saved')); assert.ok(events.includes('ready_saved')); assert.equal(timers.size,0);
+        for (const name of ['data','end','close','error']) assert.equal(pipe.listenerCount(name),0);
+        assert.equal(child.listenerCount('close'),0);
+    });
+});
+
+test('Task4 READY reader requires exact bounded bytes end close and original deadline, with no late continuation', async (t) => {
+    const ts = await import('typescript'), vm = await import('node:vm'), { EventEmitter } = await import('node:events');
+    const text=readFileSync(new URL('../scripts/render-smoke-owned-fixture.mjs',import.meta.url),'utf8'), ast=ts.createSourceFile('owned.mjs',text,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS);
+    const nodes=ast.statements.filter(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='readTask4ProbeReadyV1'); assert.equal(nodes.length,1);
+    for(const fault of [null,'wrong','partial','extra','duplicate','backslash','close_only','error','timeout','early_close','deadline','already_closed','missing_pipe']) await t.test(fault ?? 'fragmented',async()=>{
+        let clock=1000,ended=fault==='already_closed', timer: (()=>void)|null=null, continuation=0; const child:any=new EventEmitter(),pipe:any=new EventEmitter(); child.stdio=[null,null,null,null,fault==='missing_pipe'?null:pipe]; pipe.destroy=()=>{};
+        const bindings={Buffer,Date:class extends Date{static now(){return clock;}},setTimeout:(fn:()=>void,ms:number)=>{assert.equal(ms,5000);timer=fn;return 1;},clearTimeout:()=>{timer=null;}};
+        const fn=vm.compileFunction(nodes[0].getText(ast)+'\nreturn readTask4ProbeReadyV1;',Object.keys(bindings))(...Object.values(bindings));
+        const reader=fn(child,{ended:()=>ended},6000);const pending=reader.wait.then(()=>{continuation++;return null;},(e:Error)=>e);
+        const token=Buffer.concat([Buffer.from('task4-probe-ready'),Buffer.from([10])]);
+        if(fault==='timeout'){clock=6000; const fire=timer as unknown as ()=>void;fire();}
+        else if(fault==='early_close'){ended=true;child.emit('close');}
+        else if(fault==='error')pipe.emit('error',Error('private'));
+        else if(fault==='close_only')pipe.emit('close');
+        else if(fault!=='already_closed'&&fault!=='missing_pipe'){
+            const bytes=fault==='wrong'?Buffer.from('not-ready'):fault==='partial'?token.subarray(0,17):fault==='extra'?Buffer.concat([token,Buffer.from('x')]):fault==='duplicate'?Buffer.concat([token,token]):fault==='backslash'?Buffer.from('task4-probe-ready\\n'):token;
+            pipe.emit('data',bytes.subarray(0,5));pipe.emit('data',bytes.subarray(5));await Promise.resolve();assert.equal(continuation,0);pipe.emit('end');await Promise.resolve();assert.equal(continuation,0);if(fault==='deadline')clock=6000;pipe.emit('close');
+        }
+        const error=await pending;if(fault)assert.equal(error?.message,'TASK4_NETWORK_REFUSED');else assert.equal(error,null);
+        assert.equal(timer,null);for(const name of ['data','end','close','error'])assert.equal(pipe.listenerCount(name),0);assert.equal(child.listenerCount('close'),0);
+        const retained=reader.bytes();assert.ok(retained.length<=19);pipe.emit('data',token);pipe.emit('end');pipe.emit('close');assert.deepEqual(reader.bytes(),retained);assert.equal(continuation,fault?0:1);
     });
 });
 

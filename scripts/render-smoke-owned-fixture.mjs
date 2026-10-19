@@ -574,8 +574,8 @@ export function task4MockResponseV1(method, target, sourceSha) {
     return freeze({ status, contentType: 'application/json; charset=utf-8', body: task4CanonicalV1(body) });
 }
 
-// Original outer launches this exact one-line program and releases fd3 only after OS identity capture.
-const TASK4_POLICY_PROBE_PROGRAM = "'use strict'; const fs=require('node:fs'),net=require('node:net'); const ports=process.argv.slice(1); const valid=ports.length===2&&ports.every(v=>/^[1-9][0-9]{3,4}$/.test(v)&&Number(v)<=65535)&&ports[0]!==ports[1]; const start=()=>new Promise((resolve,reject)=>{ const stream=fs.createReadStream(null,{fd:3,autoClose:true}); let body='',ended=false,failed=false; const timer=setTimeout(()=>{failed=true;stream.destroy();reject(Error('start'));},5000); stream.on('data',chunk=>{body+=chunk.toString('utf8');if(body.length>18){failed=true;stream.destroy();}}); stream.on('error',()=>{failed=true;}); stream.once('end',()=>{ended=true;}); stream.once('close',()=>{clearTimeout(timer);if(!failed&&ended&&body==='task4-probe-start\\n')resolve();else reject(Error('start'));}); }); const connect=port=>new Promise(resolve=>{ const startedAt=new Date().toISOString(); let connected=false,errno=null,timedOut=false; const socket=net.createConnection({host:'127.0.0.1',port:Number(port)}); const timer=setTimeout(()=>{timedOut=true;errno='ETIMEDOUT';socket.destroy();},3000); socket.once('connect',()=>{connected=true;socket.destroy();}); socket.on('error',error=>{errno=typeof error.code==='string'&&/^[A-Z0-9_]{1,32}$/.test(error.code)?error.code:'UNKNOWN';socket.destroy();}); socket.once('close',()=>{clearTimeout(timer);resolve({startedAt,finishedAt:new Date().toISOString(),outcome:!timedOut&&connected&&errno===null?'connected':!connected&&['EPERM','EACCES'].includes(errno)?'denied':'unknown',errno});}); }); (async()=>{if(!valid)throw Error('argv');await start();const allowed=await connect(ports[0]),denied=await connect(ports[1]);process.stdout.write(JSON.stringify({schema:'mission-control.task4-policy-probe-output.v1',allowed,denied})+'\\n');process.exitCode=allowed.outcome==='connected'&&denied.outcome==='denied'?0:1;})().catch(()=>{process.exitCode=1;});";
+// Original outer requires private fd4 READY/EOF, then exact OS identity, before releasing fd3 START.
+const TASK4_POLICY_PROBE_PROGRAM = "'use strict'; const fs=require('node:fs'),net=require('node:net'); const ports=process.argv.slice(1); const valid=ports.length===2&&ports.every(v=>/^[1-9][0-9]{3,4}$/.test(v)&&Number(v)<=65535)&&ports[0]!==ports[1]; const start=()=>new Promise((resolve,reject)=>{ const stream=fs.createReadStream(null,{fd:3,autoClose:true}); let body='',ended=false,failed=false; const timer=setTimeout(()=>{failed=true;stream.destroy();reject(Error('start'));},5000); stream.on('data',chunk=>{body+=chunk.toString('utf8');if(body.length>18){failed=true;stream.destroy();}}); stream.on('error',()=>{failed=true;}); stream.once('end',()=>{ended=true;}); stream.once('close',()=>{clearTimeout(timer);if(!failed&&ended&&body==='task4-probe-start\\n')resolve();else reject(Error('start'));}); try{const ready=Buffer.from('task4-probe-ready\\n');if(fs.writeSync(4,ready)!==18)throw Error('ready');fs.closeSync(4);}catch{failed=true;clearTimeout(timer);stream.destroy();reject(Error('start'));} }); const connect=port=>new Promise(resolve=>{ const startedAt=new Date().toISOString(); let connected=false,errno=null,timedOut=false; const socket=net.createConnection({host:'127.0.0.1',port:Number(port)}); const timer=setTimeout(()=>{timedOut=true;errno='ETIMEDOUT';socket.destroy();},3000); socket.once('connect',()=>{connected=true;socket.destroy();}); socket.on('error',error=>{errno=typeof error.code==='string'&&/^[A-Z0-9_]{1,32}$/.test(error.code)?error.code:'UNKNOWN';socket.destroy();}); socket.once('close',()=>{clearTimeout(timer);resolve({startedAt,finishedAt:new Date().toISOString(),outcome:!timedOut&&connected&&errno===null?'connected':!connected&&['EPERM','EACCES'].includes(errno)?'denied':'unknown',errno});}); }); (async()=>{if(!valid)throw Error('argv');await start();const allowed=await connect(ports[0]),denied=await connect(ports[1]);process.stdout.write(JSON.stringify({schema:'mission-control.task4-policy-probe-output.v1',allowed,denied})+'\\n');process.exitCode=allowed.outcome==='connected'&&denied.outcome==='denied'?0:1;})().catch(()=>{process.exitCode=1;});";
 
 export function task4ScenarioV1(command, node, root) {
     absolutePath(node); absolutePath(root);
@@ -2051,23 +2051,56 @@ async function authenticateTask4ProbeRequestV1(context, state, request) {
     hex(intent.environmentHash); context.check(); return { request, binding, inner, fixture, mock, intent };
 }
 
+function readTask4ProbeReadyV1(child, original, deadline) {
+    const stream = child.stdio[4], chunks = []; let size = 0, ended = false, settled = false, timer;
+    const wait = new Promise((resolve, reject) => {
+        if (!stream) { settled = true; reject(Error('TASK4_NETWORK_REFUSED')); return; }
+        const finish = success => {
+            if (settled) return; settled = true; clearTimeout(timer);
+            for (const [name, handler] of [['data', data], ['end', end], ['close', close], ['error', error]]) stream.removeListener(name, handler);
+            child.removeListener('close', originalClose);
+            if (success) resolve(); else { stream.destroy(); reject(Error('TASK4_NETWORK_REFUSED')); }
+        };
+        const data = chunk => {
+            if (settled) return;
+            if (ended || !Buffer.isBuffer(chunk)) return finish(false);
+            const keep = Math.max(0, 19 - size); chunks.push(Buffer.from(chunk.subarray(0, keep))); size += chunk.length;
+            if (size > 18) finish(false);
+        };
+        const end = () => { ended = true; stream.destroy(); };
+        const close = () => finish(ended && Date.now() < deadline && !original.ended()
+            && Buffer.concat(chunks).equals(Buffer.from('task4-probe-ready\n')));
+        const error = () => finish(false), originalClose = () => finish(false);
+        stream.on('data', data); stream.once('end', end); stream.once('close', close); stream.once('error', error); child.once('close', originalClose);
+        if (original.ended() || Date.now() >= deadline) finish(false);
+        else timer = setTimeout(() => finish(false), deadline - Date.now());
+    });
+    return { wait, bytes: () => Buffer.concat(chunks) };
+}
+
 async function executeTask4ProbeV1(context, state, authenticated) {
     const root = state.root.value.path, program = TASK4_POLICY_PROBE_PROGRAM, ports = [String(authenticated.mock.port), String(state.canary.port)];
+    const startedAt = Date.now(), deadline = startedAt + 15000;
     const child = spawn('/usr/bin/sandbox-exec', ['-f', path.join(root, 'server-launch-policy.sb'), context.node, '-e', program, ...ports],
-        { cwd: root, detached: false, stdio: ['ignore', 'pipe', 'pipe', 'pipe'], env: { HOME: path.join(root, 'home'), TMPDIR: path.join(root, 'tmp'),
+        { cwd: root, detached: false, stdio: ['ignore', 'pipe', 'pipe', 'pipe', 'pipe'], env: { HOME: path.join(root, 'home'), TMPDIR: path.join(root, 'tmp'),
             PATH: '/usr/bin:/bin', LANG: 'C', LC_ALL: 'C', TZ: 'UTC' } });
-    const original = retainTask4ChildV1(child, 1024), terminal = original.wait(15000).then(value => ({ value, error: null }), error => ({ value: null, error }));
+    const original = retainTask4ChildV1(child, 1024), terminal = original.wait(Math.max(1, deadline - Date.now())).then(value => ({ value, error: null }), error => ({ value: null, error }));
     state.probeOriginal = { child, original, owner: null, exit: null };
+    const readiness = readTask4ProbeReadyV1(child, original, startedAt + 5000);
     let firstError = null;
     try {
-        requireValue(Number.isSafeInteger(child.pid), 'TASK4_NETWORK_REFUSED');
+        await readiness.wait; context.check();
+        requireValue(Number.isSafeInteger(child.pid) && !original.ended() && Date.now() < startedAt + 5000, 'TASK4_NETWORK_REFUSED');
         const observed = await context.modules.native.observeUiProcessV1(child.pid); context.check();
         state.probeOriginal.owner = bindTask4ProcessV1(observed, { pid: child.pid, ppid: context.owner.pid, uid: context.owner.uid,
             executable: context.node, executableHash: context.nodeHash, rawArgs: [context.node, '-e', program, ...ports].join(' ') });
+        requireValue(!original.ended() && Date.now() < deadline, 'TASK4_NETWORK_REFUSED');
         await task4WriteOriginalV1(child.stdio[3], Buffer.from('task4-probe-start\n'));
     } catch (error) { firstError = error; }
     const completed = await terminal; state.probeOriginal.exit = completed.value;
-    const raw = original.originals(); task4SaveOriginalV1(context, 'probe', raw); context.check();
+    const raw = original.originals();
+    try { task4PrivateBytesV1(path.join(root, 'outer/originals'), 'probe.ready-prefix.log', readiness.bytes()); } catch (error) { firstError ??= error; }
+    task4SaveOriginalV1(context, 'probe', raw); context.check();
     if (firstError) throw firstError; if (completed.error) throw completed.error;
     const exit = completed.value;
     requireValue(exit.code === 0 && exit.signal === null && exit.exitObserved && exit.closeObserved && raw.stderr === ''
