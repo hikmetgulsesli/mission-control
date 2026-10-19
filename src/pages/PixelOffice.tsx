@@ -2,7 +2,7 @@ import { dataSyncMessage, initialDataSyncState, type DataSyncMetadata } from '..
 import { useEffect, useRef, useState } from 'react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import { PixelOfficeEngine, OfficeAgentState } from '../lib/pixelOffice';
+import { PixelOfficeEngine, OFFICE_ROLE_IDS, type OfficeAgentState, type OfficeMappingObservation } from '../lib/pixelOffice';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { AGENT_MAP } from '../lib/constants';
 import { api } from '../lib/api';
@@ -107,7 +107,16 @@ export function PixelOffice({ visible }: Props) {
         if (!mounted) return;
         if (!Array.isArray(data?.agents)) throw new Error('FETCH_FAILED');
 
-        const agents = data.agents as OfficeAgentState[];
+        const agents: OfficeAgentState[] = [];
+        const seen = new Set<string>();
+        for (const agent of data.agents) {
+          if (!agent || typeof agent.id !== 'string' || typeof agent.activity !== 'string'
+            || (agent.status !== 'working' && agent.status !== 'idle')) throw new Error('FETCH_FAILED');
+          if (!OFFICE_ROLE_IDS.includes(agent.id)) continue;
+          if (seen.has(agent.id)) throw new Error('FETCH_FAILED');
+          seen.add(agent.id);
+          agents.push({ id: agent.id, status: agent.status, activity: agent.activity });
+        }
         setAgentStates(agents);
 
         // Handoff detection
@@ -208,6 +217,16 @@ export function PixelOffice({ visible }: Props) {
   const agentInfo = chatOverlay ? AGENT_MAP[chatOverlay.agent] : null;
   const workingAgents = agentStates.filter(a => a.status === 'working');
   const idleAgents = agentStates.filter(a => a.status === 'idle');
+  const known = statusSync.observedAt !== null;
+  const mappingState: OfficeMappingObservation['state'] = !known
+    ? (statusSync.errorCode ? 'unavailable' : 'unknown')
+    : statusSync.stale ? 'stale' : 'fresh';
+  const mappedCount = known ? workingAgents.length : null;
+  useEffect(() => {
+    engineRef.current?.setMappingObservation({ state: mappingState, mappedCount });
+  }, [mappingState, mappedCount]);
+  const countLabel = (count: number) => !known ? 'unknown'
+    : mappingState === 'stale' ? `stale: ${count}` : String(count);
 
   return (
     <div className="pixel-office">
@@ -224,10 +243,12 @@ export function PixelOffice({ visible }: Props) {
         </div>
       )}
 
+      <p>Static role catalog — workflow mapping visualization; animations are illustrative.</p>
+      <p>Mappings describe returned running workflows and steps, not worker ownership. Receipt time does not verify upstream freshness.</p>
       <p role="status">Office: {dataSyncMessage(statusSync)}</p>
       <div className="office-info">
         <div className="office-info__col">
-          <h4 className="office-info__title">WORKING ({statusSync.observedAt === null ? 'unknown' : workingAgents.length})</h4>
+          <h4 className="office-info__title">Mapped workflow roles ({countLabel(workingAgents.length)})</h4>
           {workingAgents.map(a => {
             const meta = AGENT_MAP[a.id];
             return (
@@ -238,11 +259,13 @@ export function PixelOffice({ visible }: Props) {
               </div>
             );
           })}
-          {workingAgents.length === 0 && <div className="office-info__empty">{statusSync.observedAt === null ? 'Status unknown' : 'All idle'}</div>}
+          {workingAgents.length === 0 && <div className="office-info__empty">{!known ? 'Mapping status unknown'
+            : mappingState === 'stale' ? 'No observed workflow mappings in retained snapshot'
+            : 'No observed workflow mappings in returned runs'}</div>}
         </div>
 
         <div className="office-info__col">
-          <h4 className="office-info__title">IDLE ({statusSync.observedAt === null ? 'unknown' : idleAgents.length})</h4>
+          <h4 className="office-info__title">No observed workflow mapping ({countLabel(idleAgents.length)})</h4>
           {idleAgents.map(a => {
             const meta = AGENT_MAP[a.id];
             return (

@@ -1,23 +1,11 @@
 import { Router } from 'express';
-import { existsSync, readdirSync, statSync } from 'fs';
-import { join } from 'path';
-
-import { cached } from '../utils/cache.js';
 import { getRuns } from '../utils/setfarm.js';
 import { STEP_MAPPING } from '../shared/agents.js';
-import { PATHS } from '../config.js';
 
 const router = Router();
 
 // Setfarm step agent → named agent mapping
 // Lives here so setfarm updates don't break it
-
-// Cron-based agent activity
-const CRON_AGENTS: Record<string, string[]> = {
-  'daily-standup': ['lux'],
-};
-
-const SESSIONS_BASE = PATHS.agentsDir;
 
 interface AgentStatus {
   id: string;
@@ -25,70 +13,27 @@ interface AgentStatus {
   activity: string;
 }
 
-// Check if an agent has recent session activity (< 2 minutes)
-function getSessionActivity(agentId: string): string | null {
-  const dir = agentId === 'main' ? 'main' : agentId;
-  const sessionsDir = join(SESSIONS_BASE, dir, 'sessions');
-  if (!existsSync(sessionsDir)) return null;
-  try {
-    const files = readdirSync(sessionsDir)
-      .filter((f: string) => f.endsWith('.jsonl'))
-      .map((f: string) => ({ name: f, mtime: statSync(join(sessionsDir, f)).mtimeMs }))
-      .sort((a, b) => b.mtime - a.mtime);
-    if (files.length === 0) return null;
-    const minutesAgo = (Date.now() - files[0].mtime) / 60_000;
-    if (minutesAgo < 2) return 'active session';
-  } catch { /* ignore */ }
-  return null;
-}
-
 async function getOfficeStatus(): Promise<{ agents: AgentStatus[]; timestamp: number }> {
   const allAgents = ['main', 'koda', 'flux', 'atlas', 'iris', 'sentinel', 'cipher', 'lux', 'nexus', 'prism'];
+  const runs = await getRuns();
+  if (!Array.isArray(runs)) throw new Error('OFFICE_STATUS_UNAVAILABLE');
   const working = new Map<string, string>();
-
-  // Arya always working (CEO)
-  working.set('main', 'CEO orchestration');
-
-  // Source 1: Setfarm pipeline step mapping
-  try {
-    const runs = (await getRuns()) as any[];
-    const activeRuns = runs.filter((r: any) => r.status === 'running');
-
-    for (const run of activeRuns) {
-      const workflowId = run.workflow_id || run.workflow || '';
-      const mapping = STEP_MAPPING[workflowId];
-      if (!mapping) continue;
-
-      const steps = run.steps || [];
-      for (const step of steps) {
-        if (step.status !== 'running') continue;
-        const stepId = step.step_id || step.id || '';
-        const agents = mapping[stepId];
-        if (!agents) continue;
-
-        for (const agentId of agents) {
-          working.set(agentId, `${stepId} (${workflowId})`);
-        }
-      }
-
-      // Check cron-based agents
-      const cronAgents = CRON_AGENTS[workflowId];
-      if (cronAgents) {
-        for (const agentId of cronAgents) {
-          working.set(agentId, workflowId);
-        }
-      }
-    }
-  } catch {
-    // If setfarm is down, only Arya shows as working
-  }
-
-  // Source 2: Session file activity (catches direct interactions via Discord/WhatsApp/Telegram)
-  for (const agentId of allAgents) {
-    if (working.has(agentId)) continue; // Already marked working by setfarm
-    const sessionActivity = getSessionActivity(agentId);
-    if (sessionActivity) {
-      working.set(agentId, sessionActivity);
+  for (const run of runs) {
+    if (!run || typeof run !== 'object' || typeof run.status !== 'string')
+      throw new Error('OFFICE_STATUS_UNAVAILABLE');
+    if (run.status !== 'running') continue;
+    if (run.steps !== undefined && !Array.isArray(run.steps))
+      throw new Error('OFFICE_STATUS_UNAVAILABLE');
+    const workflowId = run.workflow_id || run.workflow || '';
+    const mapping = STEP_MAPPING[workflowId];
+    if (!mapping) continue;
+    for (const step of run.steps || []) {
+      if (!step || typeof step !== 'object' || typeof step.status !== 'string')
+        throw new Error('OFFICE_STATUS_UNAVAILABLE');
+      if (step.status !== 'running') continue;
+      const stepId = step.step_id || step.id || '';
+      for (const id of mapping[stepId] || [])
+        working.set(id, `Mapped running step: ${stepId} (${workflowId})`);
     }
   }
 
@@ -103,10 +48,9 @@ async function getOfficeStatus(): Promise<{ agents: AgentStatus[]; timestamp: nu
 
 router.get('/office/status', async (_req, res) => {
   try {
-    const data = await cached('office-status', 5_000, getOfficeStatus);
-    res.json(data);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Office status failed' });
+    res.json(await getOfficeStatus());
+  } catch {
+    res.status(503).json({ error: 'OFFICE_STATUS_UNAVAILABLE' });
   }
 });
 
