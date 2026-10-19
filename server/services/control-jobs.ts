@@ -402,7 +402,15 @@ export function createControlJobsV1({ root, selected, worker }: {
             revision: number;
         }) => x.jobId === e.receipt.jobId && x.revision === e.receipt.revision);
     }
-    function projection(e: Entry): ControlJobReceiptV1 { const r = e.receipt; const s = live.get(r.jobId); return unresolvedPublication(e) || (!terminal(r) && (!e.published || !s || s.unknown)) ? { ...r, state: 'ownership_unknown', phase: 'ownership_unknown', code: 'CONTROL_CUSTODY_UNCERTAIN' } : structuredClone(r); }
+    function projection(e: Entry): ControlJobReceiptV1 {
+        const r = e.receipt, s = live.get(r.jobId);
+        const uncertain = unresolvedPublication(e);
+        if (uncertain || (!terminal(r) && (!e.published || !s || s.unknown)))
+            return { ...r, state: 'ownership_unknown', phase: 'ownership_unknown',
+                code: uncertain || s ? 'CONTROL_CUSTODY_UNCERTAIN' : 'CONTROL_CHANNEL_UNAVAILABLE',
+                finishedAt: null, reportRefs: {} };
+        return structuredClone(r);
+    }
     function revise(e: Entry, patch: Partial<ControlJobReceiptV1>) { e.receipt = selected.schemas.ControlJobReceiptV1Schema.parse({ ...e.receipt, ...patch, revision: e.receipt.revision + 1, updatedAt: new Date().toISOString() }); }
     function record(e: Entry) { const dir = path.join(root, 'jobs', e.receipt.jobId); exclusive(path.join(dir, 'receipt-' + String(e.receipt.revision).padStart(20, '0') + '.json'), { receipt: e.receipt, mapping: e.frames.at(-1) ?? null }); }
     function sign(s: Live, body: Readonly<Record<string, unknown>>) { return selected.channel.signWorkerChannelFrameV1({ binding: s.binding, direction: 'broker_to_worker', sequence: ++s.brokerSequence, body, nonce: s.nonce }); }
@@ -676,7 +684,7 @@ export function createControlJobsV1({ root, selected, worker }: {
             const entry = jobId ? index.jobs.find(x => x.receipt.jobId === jobId) : index.jobs.at(-1);
             if (jobId && !entry)
                 fail('CONTROL_JOB_NOT_FOUND');
-            const refs = entry?.receipt.reportRefs ?? {};
+            const refs = entry ? projection(entry).reportRefs : {};
             const expected = { selectionHash: entry?.receipt.selectionHash ?? selected.selectionHash, sourceSha: entry?.receipt.sourceSha ?? selected.sourceSha, releaseSha: entry?.receipt.sourceSha ?? selected.releaseSha, suiteHash: entry?.receipt.suiteHash ?? selected.suiteHash, refs };
             const evidence = selected.schemas.ControlEvidenceProjectionV1Schema.parse(await selected.readEvidence(expected));
             await guard();

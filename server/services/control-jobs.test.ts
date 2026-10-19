@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test, mock } from 'node:test';
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { mkdtempSync, realpathSync, mkdirSync, readFileSync, readdirSync, writeFileSync, existsSync, chmodSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -55,6 +57,7 @@ test('durable launch replay survives restart and never respawns; different kind 
     const r = await reopened.create(f.request);
     assert.equal(r.receipt.jobId, a.receipt.jobId);
     assert.equal(r.receipt.state, 'ownership_unknown');
+    assert.equal(r.receipt.code, 'CONTROL_CHANNEL_UNAVAILABLE');
     assert.equal(r.receipt.revision, a.receipt.revision);
     assert.equal(f.starts, 1);
     await assert.rejects(() => reopened.create({ ...f.request, kind: 'convergence_full8' }), /CONTROL_IDEMPOTENCY_CONFLICT/);
@@ -251,12 +254,19 @@ test('foreign full8 case IDs are fenced even with a valid original-channel MAC',
     assert.equal((await f.jobs.get(a.receipt.jobId))!.state, 'ownership_unknown');
 });
 test('lost final ACK after durable commit retains terminal receipt across broker restart', async () => {
-    const f = fixture({ failTerminalAck: true });
-    const a = await f.jobs.create(f.request);
-    await f.frame(1, { type: 'ready', owner: f.owner, journal: null });
-    await f.frame(2, { type: 'final_closed', journal: null, closureHash: '3'.repeat(64), outcome: 'blocked', code: 'CONTROL_JOB_BLOCKED', completedCases: 0, reportRefs: {}, finalization: 'never_reserved' });
-    assert.equal((await f.jobs.get(a.receipt.jobId))!.state, 'blocked');
-    assert.equal((await createControlJobsV1({ root: f.root, selected: f.selected, worker: f.worker }).get(a.receipt.jobId))!.state, 'blocked');
+    for (const completed of [false, true]) {
+        const f = fixture({ failTerminalAck: true });
+        const a = await f.jobs.create(f.request);
+        await f.frame(1, { type: 'ready', owner: f.owner, journal: null });
+        const reportRefs = completed ? { activationHash: '4'.repeat(64) } : {};
+        await f.frame(2, { type: 'final_closed', journal: completed ? { revision: 1, hash: '2'.repeat(64) } : null, closureHash: '3'.repeat(64), outcome: completed ? 'completed' : 'blocked', code: completed ? null : 'CONTROL_JOB_BLOCKED', completedCases: 0, reportRefs, finalization: completed ? 'no_promotion' : 'never_reserved' });
+        const receipt = await f.jobs.get(a.receipt.jobId);
+        assert.equal(receipt!.state, completed ? 'completed' : 'blocked');
+        assert.ok(receipt!.finishedAt);
+        assert.deepEqual(receipt!.reportRefs, reportRefs);
+        assert.equal(existsSync(path.join(f.root, 'mutation.lock')), false);
+        assert.deepEqual(await createControlJobsV1({ root: f.root, selected: f.selected, worker: f.worker }).get(a.receipt.jobId), receipt);
+    }
 });
 test('cancel before ready queues exactly once and original never-reserved final settles it', async () => {
     const f = fixture();
@@ -296,3 +306,97 @@ test('different cancel keys bind exact retry bodies durably without a second can
     assert.deepEqual((await createControlJobsV1({ root: f.root, selected: f.selected, worker: f.worker }).cancel(a.receipt.jobId, second)).receipt, receipt.receipt);
     assert.equal(f.outgoing.filter(x => x.body.type === 'cancel').length, 1);
 });
+
+// Fail the actual directory fsync only after the real index rename has exposed
+// the terminal candidate. No production fault hook or synthetic lock is used.
+async function failTerminalPublication(root: string, publish: () => Promise<unknown>) {
+    const original = fs.fsyncSync;
+    let injected = false;
+    const fault = mock.method(fs, 'fsyncSync', (fd: number) => {
+        if (!injected && fs.fstatSync(fd).isDirectory()
+            && JSON.parse(readFileSync(path.join(root, 'index.json'), 'utf8')).jobs.at(-1)?.receipt.finishedAt) {
+            injected = true;
+            throw new Error('injected directory fsync failure after terminal index rename');
+        }
+        return original(fd);
+    });
+    syncBuiltinESMExports();
+    try { await publish(); }
+    finally { fault.mock.restore(); syncBuiltinESMExports(); }
+    assert.equal(injected, true);
+    assert.equal(existsSync(path.join(root, 'mutation.lock')), true);
+}
+for (const ui of [false, true]) {
+    test(`post-rename terminal fsync failure hides ${ui ? 'UI screenshots' : 'SF evidence'} on reopen and retains independent history`, async t => {
+        const f = fixture({ ui });
+        const historyHash = '1'.repeat(64), finalHash = '4'.repeat(64);
+        const reads: any[] = [];
+        const selected = { ...f.selected, readEvidence: async (input: any) => {
+            reads.push(input);
+            const h = input.refs.activationHash;
+            return { activation: { availability: { state: h ? 'available' : 'unconfigured', code: null }, report: h ? { hash: h, status: 'pass', protocol: 'v3', compatibility: 'current', observedAt: null, checks: [] } : null }, evaluation: { availability: { state: 'unconfigured', code: null }, report: null } };
+        } };
+        const jobs = createControlJobsV1({ root: f.root, selected, worker: f.worker });
+        await jobs.registerHistoricalControlEvidenceV1({ selectionHash: selected.selectionHash, sourceSha: selected.sourceSha, refs: { activationHash: historyHash } });
+        const a = await jobs.create(f.request);
+        await f.frame(1, ui ? { type: 'ui_ready', owner: f.owner, fixtureVersion: 'v1', fixtureHash: '6'.repeat(64), plannedAssertions: 2 } : { type: 'ready', owner: f.owner, journal: null });
+        const retained = new Map<string, Buffer>();
+        let body: any = { type: 'final_closed', journal: { revision: 1, hash: '2'.repeat(64) }, closureHash: '3'.repeat(64), outcome: 'completed', code: null, completedCases: 0, reportRefs: { activationHash: finalHash }, finalization: 'no_promotion' };
+        if (ui) {
+            const artifacts = path.join(f.root, 'jobs', a.receipt.jobId, 'ui-worker', 'artifacts');
+            mkdirSync(artifacts, { recursive: true, mode: 0o700 });
+            const retain = (name: string, bytes: Buffer) => { const file = path.join(artifacts, name); writeFileSync(file, bytes, { mode: 0o600 }); retained.set(file, bytes); };
+            const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]), screenshotHash = controlHashV1(png);
+            retain(screenshotHash + '.png', png);
+            const report = { schema: 'mission-control.ui-regression.v1', mcSourceSha: selected.mcSourceSha, mcBuildHash: selected.mcBuildHash, fixtureVersion: 'v1', fixtureHash: '6'.repeat(64), startedAt: '2026-10-19T10:00:00.000Z', finishedAt: '2026-10-19T10:00:01.000Z', outcome: 'pass', assertions: [{ id: 'home.loaded', status: 'pass', code: null }, { id: 'controls.replay', status: 'pass', code: null }], screenshots: [{ captureId: 'home-390', route: '/', viewport: { width: 390, height: 800 }, sha256: screenshotHash }] };
+            const reportBytes = controlBytesV1(report), uiReportHash = controlHashV1(reportBytes);
+            retain(uiReportHash + '.json', reportBytes);
+            const proof = { schema: 'mission-control.ui-regression-cleanup.v1', jobId: a.receipt.jobId, intentHash: controlHashV1(readFileSync(path.join(f.root, 'jobs', a.receipt.jobId, 'intent.json'))), ownerHash: channel.hashObservedControlWorkerOwnerV1(f.owner), mcSourceSha: selected.mcSourceSha, mcBuildHash: selected.mcBuildHash, fixtureHash: '6'.repeat(64), uiReportHash, server: 'closed', browser: 'closed', children: [] };
+            const proofBytes = controlBytesV1(proof), cleanupHash = controlHashV1(proofBytes);
+            retain(cleanupHash + '.json', proofBytes);
+            body = { type: 'ui_final', uiReportHash, cleanupHash, ownedCleanup: 'confirmed', outcome: 'completed', code: null, completedAssertions: 2, plannedAssertions: 2 };
+        }
+        await failTerminalPublication(f.root, () => f.frame(2, body));
+        assert.equal(f.outgoing.filter(x => x.body.type === 'ack' && x.body.receipt.finishedAt).length, 0);
+        await assert.rejects(() => jobs.get(a.receipt.jobId), /CONTROL_STORE_UNCERTAIN/);
+        const indexFile = path.join(f.root, 'index.json');
+        const indexBytes = readFileSync(indexFile);
+        const candidate = JSON.parse(indexBytes.toString()).jobs.at(-1).receipt;
+        assert.equal(candidate.state, 'completed');
+        assert.ok(candidate.finishedAt);
+        assert.equal(Object.keys(candidate.reportRefs).length, 1);
+        const reopened = createControlJobsV1({ root: f.root, selected, worker: f.worker });
+        await t.test('receipt, list and idempotent replay hide terminal fields at the existing revision', async () => {
+            const replay = await reopened.create(f.request);
+            for (const receipt of [await reopened.get(a.receipt.jobId), (await reopened.list(50))[0], replay.receipt]) {
+                assert.equal(receipt!.state, 'ownership_unknown');
+                assert.equal(receipt!.code, 'CONTROL_CUSTODY_UNCERTAIN');
+                assert.equal(receipt!.revision, candidate.revision);
+                assert.equal(receipt!.finishedAt, null);
+                assert.deepEqual(receipt!.reportRefs, {});
+            }
+            assert.equal(replay.replay, true);
+            assert.equal(f.starts, 1);
+        });
+        await t.test('job-specific and latest evidence withhold final refs but preserve validated history', async () => {
+            reads.length = 0;
+            for (const jobId of [a.receipt.jobId, undefined]) {
+                const envelope = await reopened.evidence(jobId) as any;
+                assert.equal(envelope.evidence.activation.report, null);
+                assert.equal(envelope.evidence.ui.report, null);
+                assert.equal(envelope.evidence.ui.availability.state, 'unconfigured');
+                assert.equal(envelope.history.length, 1);
+                assert.equal(envelope.history[0].evidence.activation.report.hash, historyHash);
+            }
+            assert.deepEqual(reads.map(x => x.refs), [{}, { activationHash: historyHash }, {}, { activationHash: historyHash }]);
+        });
+        if (ui)
+            await t.test('retained screenshot is unavailable until definite publication', async () => {
+                await assert.rejects(() => reopened.screenshot(a.receipt.jobId, 'home-390'), /CONTROL_SCREENSHOT_NOT_FOUND/);
+            });
+        assert.deepEqual(readFileSync(indexFile), indexBytes);
+        assert.equal(existsSync(path.join(f.root, 'mutation.lock')), true);
+        for (const [file, bytes] of retained)
+            assert.deepEqual(readFileSync(file), bytes);
+    });
+}
