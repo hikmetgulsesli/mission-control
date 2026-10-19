@@ -83,8 +83,8 @@ export function reconcileUiFixtureDiagnosticsV1({ assertionId, errors, requestFa
             assert(assertionId === 'controls.lost-response-reload-idempotency' && fault.method === 'POST' && fault.url === ORIGIN + '/api/controls/jobs' && /^[a-f0-9-]{36}$/.test(fault.idempotencyKey) && [JOB_A, JOB_B].includes(fault.acceptedJobId), 'UI_BROWSER_ERRORS');
         else
             assert(fault.kind === 'rules_503' && ((assertionId === 'rules.draft-503' && fault.method === 'POST' && fault.url === ORIGIN + '/api/rules') || (assertionId === 'rules.delete-confirmation-503' && fault.method === 'DELETE' && fault.url === ORIGIN + '/api/rules/fixture-rule')), 'UI_BROWSER_ERRORS');
-        const matches = remainingRequests.filter(event => ['assertionId', 'requestIdentity', 'method', 'url', 'bodyHash'].every(key => event[key] === fault[key]) && (lost ? event.kind === 'requestfailed' && event.errorText === 'net::ERR_EMPTY_RESPONSE' : event.kind === 'response' && event.status === 503));
-        const text = lost ? 'Failed to load resource: net::ERR_EMPTY_RESPONSE' : 'Failed to load resource: the server responded with a status of 503 (Service Unavailable)';
+        const matches = remainingRequests.filter(event => ['assertionId', 'requestIdentity', 'method', 'url', 'bodyHash'].every(key => event[key] === fault[key]) && (lost ? event.kind === 'requestfailed' && event.errorText === 'net::ERR_CONTENT_LENGTH_MISMATCH' : event.kind === 'response' && event.status === 503));
+        const text = lost ? 'Failed to load resource: net::ERR_CONTENT_LENGTH_MISMATCH' : 'Failed to load resource: the server responded with a status of 503 (Service Unavailable)';
         const consoles = remainingErrors.filter(error => error.kind === 'console' && error.assertionId === assertionId && error.url === fault.url && error.text === text);
         assert(matches.length === 1 && consoles.length === 1, 'UI_BROWSER_ERRORS');
         remainingRequests.splice(remainingRequests.indexOf(matches[0]), 1);
@@ -156,7 +156,7 @@ function evidence(variant = 'planned') {
     return { schema: 'mission-control.controls-evidence-envelope.v1', selectionHash: SELECTION, evidence: current, history: [{ id: '1'.repeat(64), sourceSha: '2'.repeat(40), evidence: { activation: { ...activation, report: { ...activation.report, compatibility: 'historical' } }, evaluation: { availability: { state: 'available', code: null }, report: { ...report, compatibility: 'historical', qualification: 'historical' } } } }] };
 }
 function receipt(id, body) { return { schema: 'mission-control.control-job.v1', jobId: id, kind: body.kind, revision: 1, selectionHash: body.expectedSelectionHash, sourceSha: SOURCE, mcSourceSha: SOURCE, mcBuildHash: BUILD, suiteHash: body.kind === 'convergence_full8' ? 'f'.repeat(64) : null, state: 'running', requestedAt: AT, startedAt: AT, updatedAt: AT, finishedAt: null, phase: 'running', code: null, currentCaseId: null, ownedRunId: null, completedCases: 1, plannedCases: body.kind === 'convergence_full8' ? 8 : body.kind === 'ui_regression' ? ASSERTIONS.length : 6, reportRefs: {}, cancelRequested: false }; }
-function createFixtureState() { return { unexpected: [], activeAssertion: null, browserRequests: [], requestFailures: [], intentionalFaults: [], jobs: new Map(), launches: new Map(), launchBodies: [], evidence: evidence(), history: HISTORY, holdHistory: null, holdLaunch: null, loseNextLaunch: false, cancelSettled: false, requests: [], pendingResponses: new Set() }; }
+function createFixtureState() { return { unexpected: [], activeAssertion: null, browserRequests: [], browserResponses: [], requestFailures: [], intentionalFaults: [], jobs: new Map(), launches: new Map(), launchBodies: [], evidence: evidence(), history: HISTORY, holdHistory: null, holdLaunch: null, loseNextLaunch: false, cancelSettled: false, requests: [], pendingResponses: new Set() }; }
 async function fixtureResponse(state, method, url, body, rawTarget) {
     const p = url.pathname;
     state.requests.push({ method, path: p });
@@ -314,7 +314,11 @@ export async function createUiRegressionFixtureSessionV1({ buildDir, tempRoot, c
                     state.intentionalFaults.push({ ...candidates[0], kind: intentionalFault, ...(intentionalFault === 'lost_response' ? { acceptedJobId: value.acceptedJobId, idempotencyKey: value.idempotencyKey } : {}) });
                 }
                 if (value?.__fixtureDisconnect) {
-                    res.destroy();
+                    // Commit a response prefix before orderly EOF: the accepted receipt is lost,
+                    // but this cannot be mistaken for a connection closed before any response.
+                    res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': '2', Connection: 'close' });
+                    const socket = res.socket;
+                    res.write('{', () => socket.end());
                     return;
                 }
                 const status = value?.__fixtureStatus ?? 200;
@@ -390,6 +394,11 @@ async function installFences(context, state, measured, errors) {
     });
     context.on('requestfailed', request => state.requestFailures.push({ ...requests.get(request), kind: 'requestfailed', errorText: request.failure()?.errorText }));
     context.on('response', response => {
+        const observation = requests.get(response.request());
+        if (observation?.assertionId === 'controls.lost-response-reload-idempotency' && observation.method === 'POST' && observation.url === ORIGIN + '/api/controls/jobs') {
+            state.browserResponses.push({ ...observation, status: response.status() });
+            state.browserResponses = state.browserResponses.slice(-4);
+        }
         if (response.status() >= 400)
             state.requestFailures.push({ ...requests.get(response.request()), kind: 'response', status: response.status() });
     });
@@ -475,7 +484,30 @@ async function runCatalog({ browser, state, store, measured, control, schemas })
         state.activeAssertion = null;
         report.assertions.push({ id, status: failure ? 'fail' : 'pass', code: failure ? 'UI_ASSERTION_FAILED' : null });
         if (failure) {
-            diagnostics.push(store.json({ schema: 'mission-control.ui-assertion-diagnostic.v1', assertionId: id, message: String(failure?.message ?? failure).slice(0, 4096), console: errors.slice(-50), requests: state.unexpected.slice(-50), requestFailures: state.requestFailures.slice(-50), intentionalFaults: state.intentionalFaults.slice(-5) }));
+            let controlsFailure;
+            if (id === 'controls.lost-response-reload-idempotency') {
+                let ui = { state: 'unavailable' }, observationTimer;
+                try {
+                    ui = await Promise.race([page.evaluate(() => {
+                        const root = document.querySelector('main.controls');
+                        if (!root) return { state: 'unavailable' };
+                        const buttons = Array.from(root.querySelectorAll('.controls__actions button')).filter(button => ['Working…', 'Start manual check', 'Retry same request'].includes(button.textContent.trim()));
+                        const alerts = Array.from(root.querySelectorAll(':scope > .controls__alert[role="alert"]'));
+                        const notices = Array.from(root.querySelectorAll(':scope > .controls__notice[role="status"]'));
+                        const jobs = Array.from(root.querySelectorAll('section[aria-label="Owned progress"] .controls__facts > div')).filter(row => row.querySelector('dt')?.textContent.trim() === 'Job');
+                        const job = jobs.length === 1 ? jobs[0].querySelector('dd code')?.textContent.trim() : null;
+                        return { state: 'observed', busy: buttons.length === 1 ? buttons[0].textContent.trim() === 'Working…' : null,
+                            alert: alerts.length === 0 ? 'none' : alerts.length !== 1 ? 'ambiguous' : alerts[0].textContent.startsWith('Launch status unknown:') ? 'launch_unknown' : 'other',
+                            notice: notices.length === 0 ? 'none' : notices.length !== 1 ? 'ambiguous' : notices[0].textContent.trim() === 'Existing request reconnected.' ? 'reconnected' : notices[0].textContent.trim() === 'Check accepted.' ? 'accepted' : 'other',
+                            selectedJobId: typeof job === 'string' && /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(job) ? job : null };
+                    }), new Promise(resolve => { observationTimer = setTimeout(() => resolve({ state: 'timed_out' }), 1000); })]);
+                } catch { /* Closed/unavailable DOM is diagnostic uncertainty, never success. */ }
+                finally { clearTimeout(observationTimer); }
+                const matched = event => event.assertionId === id && event.method === 'POST' && event.url === ORIGIN + '/api/controls/jobs' && state.browserRequests.some(request => ['assertionId', 'requestIdentity', 'method', 'url', 'bodyHash'].every(key => request[key] === event[key]));
+                controlsFailure = { launchAttempts: state.launchBodies.slice(-4).map(body => ({ bodyHash: uiHashV1(Buffer.from(JSON.stringify(body))), idempotencyKey: body.idempotencyKey, jobId: state.launches.get(body.idempotencyKey)?.id ?? null })),
+                    responses: state.browserResponses.filter(matched).slice(-4), requestFailures: state.requestFailures.filter(matched).slice(-4), ui };
+            }
+            diagnostics.push(store.json({ schema: 'mission-control.ui-assertion-diagnostic.v1', assertionId: id, message: String(failure?.message ?? failure).slice(0, 4096), console: errors.slice(-50), requests: state.unexpected.slice(-50), requestFailures: state.requestFailures.slice(-50), intentionalFaults: state.intentionalFaults.slice(-5), ...(controlsFailure ? { controlsFailure } : {}) }));
             report.outcome = 'fail';
             stopped = true;
         }
@@ -499,6 +531,7 @@ async function runCatalog({ browser, state, store, measured, control, schemas })
         viewport = { width, height: 900 };
         errors = [];
         state.browserRequests = [];
+        state.browserResponses = [];
         state.requestFailures = [];
         state.intentionalFaults = [];
         context = await browser.newContext({ viewport, serviceWorkers: 'block', acceptDownloads: false });

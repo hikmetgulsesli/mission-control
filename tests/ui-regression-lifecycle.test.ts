@@ -187,6 +187,8 @@ async function simulatedReviewNative(options: {
     declarationDuringClose?: string;
     nativeUid?: string;
     foreignMetadataRow?: string;
+    closeFailure?: string;
+    diagnosticPublicationFailure?: boolean;
 } = {}) {
     const { EventEmitter } = await import('node:events');
     const { PassThrough } = await import('node:stream');
@@ -197,13 +199,18 @@ async function simulatedReviewNative(options: {
     let now = 1792404000000, alive = false, cancelled = false, child: any, argv: string[] = [];
     const endpoint = 'ws://127.0.0.1:49152/devtools/browser/abc-123';
     const chunks = [...(options.chunks ?? ['DevTools listening on ' + endpoint + '\n'])];
+    let closeArmed = false;
+    const closeError = new Error(options.closeFailure === 'pre_close_census' ? 'UI_OS_OBSERVATION_INVALID' : 'private endpoint/environment must not be retained');
+    const failAt = (phase: string) => { calls.push(phase); if (closeArmed && options.closeFailure === phase) throw closeError; };
     const browser = new EventEmitter() as any;
-    browser.contexts = () => [];
+    browser.contexts = () => closeArmed ? [{ close: async () => { failAt('context_close'); } }] : [];
     browser.isConnected = () => alive;
-    browser.newBrowserCDPSession = async () => ({ send: async () => { calls.push('Browser.close'); if (options.declarationDuringClose)
-            child.stderr.write(options.declarationDuringClose); alive = false; child.emit('exit', 0, null); child.emit('close', 0, null); browser.emit('disconnected'); } });
-    browser.close = async () => { calls.push('client.close'); };
-    const lifecycle = createUiNativeLifecycleV1({ store: { ...store, record(name: string, value: any) {
+    browser.newBrowserCDPSession = async () => { failAt('cdp_session'); return { send: async () => { failAt('native_close'); calls.push('Browser.close'); if (options.declarationDuringClose)
+            child.stderr.write(options.declarationDuringClose); alive = false; child.emit('exit', 0, null); if (options.closeFailure !== 'original_exit_close') child.emit('close', 0, null); browser.emit('disconnected'); } }; };
+    browser.close = async () => { failAt('client_close'); calls.push('client.close'); if (options.closeFailure === 'original_exit_close') { await Promise.resolve(); now += 30001; } };
+    const lifecycle = createUiNativeLifecycleV1({ store: { ...store, json(value: any) { if (options.diagnosticPublicationFailure) throw Error('diagnostic publication failed'); return store.json(value); }, record(name: string, value: any) {
+                if (name.endsWith('.settled.json')) failAt('settlement_publish');
+                if (name.endsWith('.closed.json')) failAt('closed_publish');
                 calls.push(name.split('/').at(-1)!.slice(37));
                 const leaf = name.endsWith('.intent.json') ? 'intent' : name.endsWith('.not-started.json') ? 'not-started' : 'other';
                 if (options.publication === leaf + '-before')
@@ -220,6 +227,8 @@ async function simulatedReviewNative(options: {
         clock: () => now, sleep: async (ms: number) => { now += ms; if (chunks.length && child)
             child.stderr.write(chunks.shift()); },
         ps: async (args: string[]) => {
+            if (args.includes('-A') && closeArmed) failAt(alive ? 'pre_close_census' : 'post_close_census');
+            if (!args.includes('-A') && closeArmed) failAt('pre_close_observe');
             if (args.includes('-A'))
                 return ` ${process.pid} 1 100 ${process.getuid!()} Mon Oct 19 10:00:00 2026    \n` + (options.foreignMetadataRow ?? '') + (alive ? ` ${pid} ${process.pid} ${pid} ${options.nativeUid ?? process.getuid!()} Mon Oct 19 10:00:00 2026    \n` : '');
             if (args.at(-1) === 'comm=')
@@ -230,7 +239,7 @@ async function simulatedReviewNative(options: {
             child.stderr.write(chunks.shift()); }); return child; },
         connectOverCDP: async (url: string) => { assert.equal(url, endpoint); assert.equal(chunks.length, 0, 'connect only after complete endpoint newline'); calls.push('connect'); return browser; },
     });
-    return { lifecycle, root, calls, stderr: (value: string) => child.stderr.write(value), dispose() { rmSync(root, { recursive: true, force: true }); } };
+    return { lifecycle, root, calls, closeError, armClose() { closeArmed = true; }, stderr: (value: string) => child.stderr.write(value), dispose() { rmSync(root, { recursive: true, force: true }); } };
 }
 test('review I2 publication uncertainty cannot produce definite never-invoked cleanup', async (t) => {
     for (const publication of ['intent-before', 'intent-after', 'not-started-before', 'not-started-after'])
@@ -349,6 +358,68 @@ test('review fix2 foreign UID remains in complete census and cannot become the o
             assert.ok(!h.calls.includes('connect'));
             const { readdirSync } = await import('node:fs');
             assert.ok(!readdirSync(path.join(h.root, 'children')).some(name => /\.(observed|settled|closed)\.json$/.test(name)));
+        } finally { h.dispose(); }
+    });
+});
+
+
+// Simulated OS/native effects; strict ownership parsers and real immutable publication remain active.
+test('native close failure retains its fixed phase without changing refusal or masking original error', async (t) => {
+    const { readdirSync } = await import('node:fs');
+    for (const phase of ['pre_close_census', 'pre_close_observe', 'context_close', 'cdp_session', 'native_close', 'client_close', 'original_exit_close', 'post_close_census', 'settlement_publish', 'closed_publish']) await t.test(phase, async () => {
+        const h = await simulatedReviewNative({ closeFailure: phase });
+        const lines: string[] = [];
+        const stderr = t.mock.method(process.stderr, 'write', (bytes: any) => { lines.push(String(bytes)); return true; });
+        try {
+            await h.lifecycle.launch(); h.armClose();
+            let caught: any;
+            try { await h.lifecycle.close(); } catch (error) { caught = error; }
+            assert.ok(caught);
+            if (phase !== 'original_exit_close') assert.equal(caught, h.closeError, 'same original exception must survive diagnostics');
+            const files = readdirSync(path.join(h.root, 'artifacts'));
+            assert.equal(files.length, 1, 'failure must be retained as an immutable diagnostic');
+            const bytes = readFileSync(path.join(h.root, 'artifacts', files[0]));
+            assert.equal(files[0], createHash('sha256').update(bytes).digest('hex') + '.json');
+            assert.equal(statSync(path.join(h.root, 'artifacts', files[0])).mode & 0o777, 0o600);
+            const diagnostic = JSON.parse(bytes.toString());
+            assert.equal(diagnostic.schema, 'mission-control.ui-native-close-diagnostic.v1');
+            assert.equal(diagnostic.phase, phase === 'pre_close_observe' ? 'pre_close_census' : phase);
+            assert.deepEqual(diagnostic.observation, ['pre_close_census', 'post_close_census', 'settlement_publish', 'closed_publish'].includes(phase) ? { operation: 'snapshot', pid: null } : { operation: 'observe', pid: 23456 });
+            assert.equal(diagnostic.errorCode, phase === 'pre_close_census' ? 'UI_OS_OBSERVATION_INVALID' : phase === 'original_exit_close' ? 'UI_CLEANUP_UNKNOWN' : 'UI_NATIVE_OPERATION_FAILED');
+            assert.equal(diagnostic.unknown, true); assert.equal(diagnostic.cohortCount, 1);
+            assert.equal(diagnostic.rootOwner.pid, 23456);
+            assert.match(diagnostic.lastSuccessfulCensus.metadataHash, /^[a-f0-9]{64}$/);
+            assert.equal(diagnostic.lastSuccessfulCensus.rowCount, ['settlement_publish', 'closed_publish'].includes(phase) ? 1 : 2);
+            assert.equal(diagnostic.publicationUncertain, ['settlement_publish', 'closed_publish'].includes(phase));
+            assert.equal(diagnostic.rootCloseObserved, !['pre_close_census', 'pre_close_observe', 'context_close', 'cdp_session', 'native_close', 'original_exit_close'].includes(phase));
+            assert.ok(bytes.length < 4096); assert.ok(!bytes.includes(Buffer.from('private endpoint/environment')));
+            assert.ok(!bytes.includes(Buffer.from('ws://'))); assert.ok(!bytes.includes(Buffer.from('--headless')));
+            assert.deepEqual(lines.map(line => JSON.parse(line)), [{ code: 'UI_NATIVE_CLOSE_FAILED', diagnosticHash: files[0].slice(0, -5) }]);
+            const leaves = readdirSync(path.join(h.root, 'children'));
+            assert.ok(!leaves.some(name => name.endsWith('.closed.json')));
+            assert.equal(leaves.some(name => name.endsWith('.settled.json')), phase === 'closed_publish');
+            if (['pre_close_census', 'pre_close_observe', 'context_close', 'cdp_session', 'native_close'].includes(phase)) assert.ok(!h.calls.includes('Browser.close'));
+            if (phase === 'pre_close_census') assert.ok(!h.calls.includes('context_close'));
+            if (phase === 'context_close') assert.ok(!h.calls.includes('cdp_session'));
+        } finally { stderr.mock.restore(); h.dispose(); }
+    });
+    await t.test('diagnostic publication failure preserves original refusal and emits no invented hash', async () => {
+        const h = await simulatedReviewNative({ closeFailure: 'native_close', diagnosticPublicationFailure: true });
+        const lines: string[] = [], stderr = t.mock.method(process.stderr, 'write', (bytes: any) => { lines.push(String(bytes)); return true; });
+        try {
+            await h.lifecycle.launch(); h.armClose();
+            await assert.rejects(h.lifecycle.close(), error => error === h.closeError);
+            assert.deepEqual(readdirSync(path.join(h.root, 'artifacts')), []);
+            assert.deepEqual(lines.map(line => JSON.parse(line)), [{ code: 'UI_NATIVE_CLOSE_DIAGNOSTIC_PUBLICATION_FAILED' }]);
+            assert.ok(!readdirSync(path.join(h.root, 'children')).some(name => /\.(settled|closed)\.json$/.test(name)));
+        } finally { stderr.mock.restore(); h.dispose(); }
+    });
+    await t.test('successful original close retains existing ledger and no failure diagnostic', async () => {
+        const h = await simulatedReviewNative();
+        try {
+            await h.lifecycle.launch(); h.armClose();
+            assert.equal((await h.lifecycle.close()).browser, 'closed');
+            assert.deepEqual(readdirSync(path.join(h.root, 'artifacts')), []);
         } finally { h.dispose(); }
     });
 });

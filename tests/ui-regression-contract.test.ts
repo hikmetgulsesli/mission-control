@@ -179,8 +179,8 @@ test('intentional fixture diagnostics pair one exact named request and reject mi
     const { reconcileUiFixtureDiagnosticsV1 } = await load();
     const identity = { assertionId: 'controls.lost-response-reload-idempotency', requestIdentity: 'request-42', method: 'POST', url: 'http://127.0.0.1:13082/api/controls/jobs', bodyHash: 'a'.repeat(64) };
     const fault = { ...identity, kind: 'lost_response', idempotencyKey: '018d819f-0a78-7d38-bb1f-0195b029ddad', acceptedJobId: '018d819f-0a78-7d38-bb1f-0195b029ddaf' };
-    const error = { kind: 'console', text: 'Failed to load resource: net::ERR_EMPTY_RESPONSE', url: identity.url, assertionId: identity.assertionId };
-    const event = { ...identity, kind: 'requestfailed', errorText: 'net::ERR_EMPTY_RESPONSE' };
+    const error = { kind: 'console', text: 'Failed to load resource: net::ERR_CONTENT_LENGTH_MISMATCH', url: identity.url, assertionId: identity.assertionId };
+    const event = { ...identity, kind: 'requestfailed', errorText: 'net::ERR_CONTENT_LENGTH_MISMATCH' };
     const input = { assertionId: identity.assertionId, errors: [error], requestFailures: [event], faults: [fault] };
     assert.equal(reconcileUiFixtureDiagnosticsV1(input).length, 1);
     for (const changes of [
@@ -1204,5 +1204,182 @@ test('metrics behavior distinguishes exact scoped zero and unavailable values', 
             await assert.rejects(run(), /UI_METRIC_VALUES_MISMATCH/);
             assert.ok(evaluations > 0, 'refusal must come from the actual scoped DOM callback');
         }
+    });
+});
+
+
+// Only the fixed private declarations/server callback are evaluated; real HTTP owns 13082.
+test('accepted lost-response HTTP fault delivers one incomplete byte before explicit same-key replay', async () => {
+    const ts = await import('typescript'), { runInNewContext } = await import('node:vm');
+    const { request } = await import('node:http');
+    const { uiCanonicalV1, uiHashV1 } = await import('../scripts/ui-regression-lifecycle.mjs');
+    const source = readFileSync(new URL('../scripts/ui-regression-fixtures.mjs', import.meta.url), 'utf8');
+    const ast = ts.createSourceFile('ui-regression-fixtures.mjs', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const declaration = (name: string) => {
+        const nodes = ast.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === name);
+        assert.equal(nodes.length, 1); return nodes[0];
+    };
+    const constants = ['ORIGIN', 'AT', 'JOB_A', 'JOB_B', 'SOURCE', 'BUILD'];
+    const declarations = ast.statements.filter(ts.isVariableStatement).flatMap(s => [...s.declarationList.declarations]);
+    const constantSource = constants.map(name => { const matches = declarations.filter(n => ts.isIdentifier(n.name) && n.name.text === name); assert.equal(matches.length, 1); return 'const ' + matches[0].getText(ast) + ';'; }).join('\n');
+    const callbacks: any[] = [];
+    const visit = (node: any) => { if (ts.isCallExpression(node) && node.expression.getText(ast) === 'createServer') callbacks.push(node.arguments[0]); ts.forEachChild(node, visit); };
+    visit(declaration('createUiRegressionFixtureSessionV1')); assert.equal(callbacks.length, 1);
+    const body = { kind: 'ui_regression', idempotencyKey: '018d819f-0a78-7d38-bb1f-0195b029ddad', expectedSelectionHash: 'c'.repeat(64) };
+    const bytes = Buffer.from(JSON.stringify(body)), target = 'http://127.0.0.1:13082/api/controls/jobs';
+    const state: any = { activeAssertion: 'controls.lost-response-reload-idempotency', jobs: new Map(), launches: new Map(), launchBodies: [], requests: [], unexpected: [], intentionalFaults: [], evidence: { selectionHash: body.expectedSelectionHash }, loseNextLaunch: true,
+        browserRequests: [{ assertionId: 'controls.lost-response-reload-idempotency', requestIdentity: 'request-1', method: 'POST', url: target, bodyHash: uiHashV1(bytes) }] };
+    const callback = runInNewContext(constantSource + '\n' + declaration('receipt').getText(ast) + '\n' + declaration('fixtureResponse').getText(ast) + '\n(' + callbacks[0].getText(ast) + ')', { state, assert, uiCanonicalV1, uiHashV1, Buffer, URL, ASSERTIONS: { length: 316 }, FIXED_GETS: [] });
+    const server = createServer(callback), sockets = new Set<any>();
+    server.on('connection', socket => { sockets.add(socket); socket.once('close', () => sockets.delete(socket)); });
+    await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(13082, '127.0.0.1', resolve); });
+    const post = () => new Promise<any>((resolve, reject) => {
+        const req = request(target, { method: 'POST', agent: false, headers: { 'Content-Type': 'application/json', 'Content-Length': bytes.length } }, response => {
+            const parts: Buffer[] = [];
+            response.on('data', part => parts.push(part));
+            response.on('error', () => {});
+            response.once('close', () => resolve({ status: response.statusCode, headers: response.headers, complete: response.complete, bytes: Buffer.concat(parts) }));
+        });
+        req.once('error', reject); req.end(bytes);
+    });
+    try {
+        const first = await post();
+        assert.equal(first.status, 200); assert.equal(first.headers['content-type'], 'application/json');
+        assert.equal(first.headers['content-length'], '2'); assert.equal(first.headers.connection, 'close');
+        assert.equal(first.bytes.toString(), '{'); assert.equal(first.complete, false);
+        assert.equal(state.jobs.size, 1); assert.equal(state.intentionalFaults.length, 1);
+        assert.equal(state.intentionalFaults[0].bodyHash, uiHashV1(bytes));
+        const replay = await post(), value = JSON.parse(replay.bytes.toString());
+        assert.equal(replay.complete, true); assert.equal(value.replay, true);
+        assert.equal(value.receipt.jobId, '018d819f-0a78-7d38-bb1f-0195b029ddaf');
+        assert.equal(state.jobs.size, 1); assert.equal(state.launchBodies.length, 2);
+        assert.equal(uiCanonicalV1(state.launchBodies[0]), uiCanonicalV1(state.launchBodies[1]));
+        assert.equal(state.unexpected.length, 0);
+    } finally {
+        const closing = new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+        const closed = [...sockets].map(socket => new Promise<void>(resolve => socket.once('close', resolve)));
+        for (const socket of sockets) socket.destroy();
+        await Promise.all([closing, ...closed]); assert.equal(sockets.size, 0);
+    }
+});
+
+// Exercise the actual failure-publication callback and its raw DOM callback; no browser effects.
+test('lost-response failure retains bounded matched transport and classified Controls state', async (t) => {
+    const ts = await import('typescript'), { runInNewContext } = await import('node:vm');
+    const { createUiArtifactStoreV1, uiHashV1 } = await import('../scripts/ui-regression-lifecycle.mjs');
+    const source = readFileSync(new URL('../scripts/ui-regression-fixtures.mjs', import.meta.url), 'utf8');
+    const ast = ts.createSourceFile('ui-regression-fixtures.mjs', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const catalogs = ast.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === 'runCatalog'); assert.equal(catalogs.length, 1);
+    const checks: any[] = [];
+    const visit = (node: any) => { if (ts.isVariableDeclaration(node) && node.name.getText(ast) === 'check') checks.push(node); ts.forEachChild(node, visit); };
+    visit(catalogs[0]); assert.equal(checks.length, 1);
+    for (const scenario of ['pending', 'replayed', 'rejected', 'unavailable', 'timed-out', 'other-assertion']) await t.test(scenario, async () => {
+        const f = workspace(), store = createUiArtifactStoreV1(f.tempRoot), diagnostics: string[] = [];
+        const id = 'controls.lost-response-reload-idempotency', jobId = '018d819f-0a78-7d38-bb1f-0195b029ddaf';
+        const body = { kind: 'ui_regression', expectedSelectionHash: 'c'.repeat(64), idempotencyKey: '018d819f-0a78-7d38-bb1f-0195b029ddad' };
+        const observation = { assertionId: id, requestIdentity: 'request-6', method: 'POST', url: 'http://127.0.0.1:13082/api/controls/jobs', bodyHash: uiHashV1(Buffer.from(JSON.stringify(body))) };
+        const state: any = { activeAssertion: null, launchBodies: Array.from({ length: 6 }, () => ({ ...body })), launches: new Map([[body.idempotencyKey, { id: jobId, body }]]),
+            unexpected: [], requestFailures: scenario === 'rejected' ? [{ ...observation, kind: 'requestfailed', errorText: 'net::ERR_CONTENT_LENGTH_MISMATCH' }] : [], intentionalFaults: [], browserRequests: [observation],
+            browserResponses: [{ ...observation, status: 200 }, { ...observation, method: 'GET', status: 503 }, { ...observation, requestIdentity: 'unrelated', status: 201 }] };
+        let evaluations = 0, releaseLate!: (value: any) => void;
+        const lateResult = new Promise(resolve => { releaseLate = resolve; });
+        const scheduled: number[] = [], timers = new Set<any>();
+        const node = (textContent: string) => ({ textContent });
+        const jobRow = { querySelector: (selector: string) => node(selector === 'dt' ? 'Job' : jobId) };
+        const controls = { querySelectorAll: (selector: string) => {
+            if (selector === '.controls__actions button') return [node(scenario === 'pending' ? 'Working…' : 'Retry same request')];
+            if (selector === ':scope > .controls__alert[role="alert"]') return scenario === 'rejected' ? [node('Launch status unknown: private detail must not be retained')] : [];
+            if (selector === ':scope > .controls__notice[role="status"]') return scenario === 'replayed' ? [node('Existing request reconnected.')] : [];
+            if (selector === 'section[aria-label="Owned progress"] .controls__facts > div') return scenario === 'replayed' ? [jobRow] : [];
+            throw Error('unexpected diagnostic selector ' + selector);
+        } };
+        const page = { evaluate: async (callback: Function) => { evaluations++; if (scenario === 'unavailable') throw Error('closed page'); if (scenario === 'timed-out') return lateResult; return runInNewContext('(' + callback.toString() + ')()', { document: { querySelector: (selector: string) => { assert.equal(selector, 'main.controls'); return controls; } } }); } };
+        const report = { assertions: [], screenshots: [], outcome: 'incomplete' };
+        const check = runInNewContext('let stopped=false; const ' + checks[0].getText(ast) + '; check;', { state, store, diagnostics, page, report, errors: [], control: null, cancellation: () => false, ORIGIN: 'http://127.0.0.1:13082', uiHashV1, Buffer, ASSERTIONS: { length: 316 }, setTimeout: (callback: Function, ms: number) => { scheduled.push(ms); const timer = setTimeout(callback, ms); timers.add(timer); return timer; }, clearTimeout: (timer: any) => { clearTimeout(timer); timers.delete(timer); } });
+        const started = Date.now();
+        const running = check(scenario === 'other-assertion' ? 'metrics.zero-unknown' : id, async () => { throw Error('original assertion timeout'); });
+        let watchdog: any;
+        try {
+            const outcome = await Promise.race([running, new Promise(resolve => { watchdog = setTimeout(() => resolve('diagnostic-stalled'), 1600); })]);
+            assert.equal(outcome, false, 'optional observation must not prevent failed candidate/cleanup continuation');
+            assert.deepEqual(scheduled, scenario === 'other-assertion' ? [] : [1000]);
+            assert.equal(timers.size, 0, 'observation timer cleared on every settlement path');
+            if (scenario === 'timed-out') assert.ok(Date.now() - started >= 900 && Date.now() - started < 1600);
+            assert.equal(diagnostics.length, 1);
+            const diagnostic = JSON.parse(readFileSync(path.join(f.tempRoot, 'artifacts', diagnostics[0] + '.json'), 'utf8'));
+            assert.equal(diagnostic.message, 'original assertion timeout');
+            if (scenario === 'other-assertion') { assert.equal(diagnostic.controlsFailure, undefined); assert.equal(evaluations, 0); return; }
+            const evidence = diagnostic.controlsFailure;
+            assert.ok(evidence, 'lost-response diagnostic must retain the missing transport/UI distinction');
+            assert.equal(evidence.launchAttempts.length, 4);
+            assert.deepEqual(evidence.launchAttempts[0], { bodyHash: observation.bodyHash, idempotencyKey: body.idempotencyKey, jobId });
+            assert.deepEqual(evidence.responses, [{ ...observation, status: 200 }]);
+            assert.deepEqual(evidence.requestFailures, state.requestFailures);
+            assert.equal(evaluations, 1);
+            if (['unavailable', 'timed-out'].includes(scenario)) assert.deepEqual(evidence.ui, { state: scenario === 'timed-out' ? 'timed_out' : 'unavailable' });
+            else assert.deepEqual(evidence.ui, { state: 'observed', busy: scenario === 'pending', alert: scenario === 'rejected' ? 'launch_unknown' : 'none', notice: scenario === 'replayed' ? 'reconnected' : 'none', selectedJobId: scenario === 'replayed' ? jobId : null });
+            assert.ok(!JSON.stringify(evidence).includes('private detail'));
+            const retained = readFileSync(path.join(f.tempRoot, 'artifacts', diagnostics[0] + '.json'));
+            const priorReport = JSON.stringify(report);
+            releaseLate({ state: 'observed', notice: 'late fabricated success' });
+            await new Promise(resolve => setImmediate(resolve));
+            assert.deepEqual(readFileSync(path.join(f.tempRoot, 'artifacts', diagnostics[0] + '.json')), retained);
+            assert.equal(JSON.stringify(report), priorReport, 'late observation cannot replace the failed candidate');
+        } finally { clearTimeout(watchdog); releaseLate({ state: 'unavailable' }); await running; for (const timer of timers) clearTimeout(timer); rmSync(f.root, { recursive: true, force: true }); }
+    });
+});
+
+test('lost-response fence retains only four exact POST response observations for the named assertion', async () => {
+    const ts = await import('typescript'), { runInNewContext } = await import('node:vm');
+    const { uiHashV1 } = await import('../scripts/ui-regression-lifecycle.mjs');
+    const source = readFileSync(new URL('../scripts/ui-regression-fixtures.mjs', import.meta.url), 'utf8');
+    const ast = ts.createSourceFile('ui-regression-fixtures.mjs', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const declarations = ast.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === 'installFences'); assert.equal(declarations.length, 1);
+    const install = runInNewContext('(' + declarations[0].getText(ast) + ')', { uiHashV1, Buffer, ORIGIN: 'http://127.0.0.1:13082' });
+    const handlers: Record<string, Function> = {}, state: any = { activeAssertion: 'controls.lost-response-reload-idempotency', browserRequests: [], browserResponses: [], requestFailures: [] };
+    await install({ on: (name: string, handler: Function) => { handlers[name] = handler; }, route: async () => {}, routeWebSocket: async () => {}, addInitScript: async () => {} }, state, {}, []);
+    const emit = (method: string, url: string, status: number) => { const request = { method: () => method, url: () => url, postDataBuffer: () => Buffer.from('{}') }; handlers.request(request); handlers.response({ request: () => request, status: () => status }); };
+    for (let i = 0; i < 6; i++) emit('POST', 'http://127.0.0.1:13082/api/controls/jobs', 200);
+    emit('GET', 'http://127.0.0.1:13082/api/controls/jobs', 200);
+    emit('POST', 'http://127.0.0.1:13082/api/controls/other', 200);
+    state.activeAssertion = 'controls.cancel-owned-settlement'; emit('POST', 'http://127.0.0.1:13082/api/controls/jobs', 200);
+    assert.equal(state.browserResponses.length, 4);
+    assert.deepEqual(Array.from(state.browserResponses, (event: any) => event.requestIdentity), ['request-3', 'request-4', 'request-5', 'request-6']);
+    assert.ok(state.browserResponses.every((event: any) => event.status === 200 && event.bodyHash === uiHashV1(Buffer.from('{}'))));
+});
+
+test('lost-response behavior waits for rejection then reloads and manually reuses the original pending request', async (t) => {
+    const ts = await import('typescript'), { runInNewContext } = await import('node:vm');
+    const { uiCanonicalV1 } = await import('../scripts/ui-regression-lifecycle.mjs');
+    const source = readFileSync(new URL('../scripts/ui-regression-fixtures.mjs', import.meta.url), 'utf8');
+    const ast = ts.createSourceFile('ui-regression-fixtures.mjs', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const declarations = ['behavior', 'controlReady', 'confirmLaunch'].map(name => { const nodes = ast.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === name); assert.equal(nodes.length, 1); return nodes[0].getText(ast); }).join('\n');
+    const job = '018d819f-0a78-7d38-bb1f-0195b029ddaf';
+    const behavior = runInNewContext(declarations + '\nbehavior', { assert, JOB_A: job, uiCanonicalV1 });
+    for (const scenario of ['delayed-rejection', 'missing-alert', 'changed-key', 'duplicate-job']) await t.test(scenario, async () => {
+        const state: any = { jobs: new Map(), launches: new Map(), launchBodies: [] }, events: string[] = [];
+        const body = { kind: 'ui_regression', expectedSelectionHash: 'c'.repeat(64), idempotencyKey: '018d819f-0a78-7d38-bb1f-0195b029ddad' };
+        let launched = 0, arrived!: () => void, release!: () => void;
+        const waiting = new Promise<void>(r => { arrived = r; }), rejected = new Promise<void>(r => { release = r; });
+        const page = {
+            evaluate: async (callback: Function) => runInNewContext('(' + callback.toString() + ')()', { localStorage: { clear() { events.push('clear'); } } }),
+            getByLabel: (label: string) => label === 'Check' ? { selectOption: async (kind: string) => assert.equal(kind, 'ui_regression') } : { check: async () => { events.push('confirm'); } },
+            getByRole: (role: string, options: any) => {
+                if (role === 'alert') return { waitFor: async () => { events.push('wait-alert'); arrived(); await rejected; if (scenario === 'missing-alert') throw Error('alert timeout'); events.push('alert'); } };
+                if (role === 'region') return { innerText: async () => job };
+                if (options.name instanceof RegExp || options.name?.source) return { click: async () => { launched++; events.push('launch'); state.launchBodies.push({ ...body, ...(launched === 2 && scenario === 'changed-key' ? { idempotencyKey: '018d819f-0a78-7d38-bb1f-0195b029ddac' } : {}) }); state.jobs.set(job, {}); if (launched === 2 && scenario === 'duplicate-job') state.jobs.set('second', {}); } };
+                return { waitFor: async () => {} };
+            },
+            getByText: () => ({ waitFor: async () => { assert.equal(launched, 2); events.push('reconnected'); } }),
+            reload: async () => { assert.ok(events.includes('alert')); events.push('reload'); }, waitForFunction: async () => {},
+        };
+        const running = behavior('controls.lost-response-reload-idempotency', { state, page, loaded: async () => {}, capture: async () => {} }).then(() => null, (error: any) => error);
+        try {
+            const waited = await Promise.race([waiting.then(() => true), running.then(() => false)]);
+            assert.equal(waited, true); assert.deepEqual(events, ['clear', 'confirm', 'launch', 'wait-alert']);
+            release(); const error = await running;
+            if (scenario === 'delayed-rejection') { assert.equal(error, null); assert.deepEqual(events, ['clear', 'confirm', 'launch', 'wait-alert', 'alert', 'reload', 'confirm', 'launch', 'reconnected']); }
+            else { assert.ok(error); if (scenario === 'missing-alert') { assert.equal(launched, 1); assert.ok(!events.includes('reload')); } }
+        } finally { release(); await running; }
     });
 });

@@ -261,7 +261,7 @@ export function createUiNativeLifecycleV1(input, effects = {}) {
     let resolveExit, resolveClose;
     const exitPromise = new Promise(resolve => { resolveExit = resolve; }), closePromise = new Promise(resolve => { resolveClose = resolve; });
     const cohort = new Map();
-    let initialContexts = new Set();
+    let initialContexts = new Set(), lastSuccessfulCensus = null, observation = null;
     const base = { jobId, intentHash };
     const record = (name, value) => {
         try {
@@ -299,9 +299,15 @@ export function createUiNativeLifecycleV1(input, effects = {}) {
             }
         }
     };
-    const snapshot = async () => { const raw = await readPs(['-ww', '-A', '-o', 'pid=', '-o', 'ppid=', '-o', 'pgid=', '-o', 'uid=', '-o', 'lstart=']); return { rows: parseUiMetadataSnapshotV1(raw), capturedAt: new Date(clock()).toISOString(), metadataHash: uiHashV1(raw) }; };
+    const snapshot = async () => {
+        observation = { operation: 'snapshot', pid: null };
+        const raw = await readPs(['-ww', '-A', '-o', 'pid=', '-o', 'ppid=', '-o', 'pgid=', '-o', 'uid=', '-o', 'lstart=']);
+        const result = { rows: parseUiMetadataSnapshotV1(raw), capturedAt: new Date(clock()).toISOString(), metadataHash: uiHashV1(raw) };
+        lastSuccessfulCensus = { capturedAt: result.capturedAt, metadataHash: result.metadataHash, rowCount: result.rows.length };
+        return result;
+    };
     const native = p => ({ kind: 'native_browser', pid: p.pid, processStartedAt: p.startedAt, processGroupId: p.pgid, source: 'observed_os', executable: p.executable, commandHash: uiHashV1(p.rawArgs) });
-    const observe = async (pid) => observeUiProcessV1(pid, readPs);
+    const observe = async (pid) => { observation = { operation: 'observe', pid }; return observeUiProcessV1(pid, readPs); };
     const retain = p => {
         if (p.uid !== uid() || p.executable !== descriptor.executable || p.pgid !== rootOwner.processGroupId)
             fail('UI_COHORT_UNKNOWN');
@@ -447,28 +453,37 @@ export function createUiNativeLifecycleV1(input, effects = {}) {
                 return { browser: 'not_started', children: spawnId ? [{ spawnId, owner: null, state: 'not_started' }] : [] };
             }
             const deadline = clock() + 30000;
+            let phase = 'ownership_precondition';
             try {
                 if (!child || !rootOwner || !observedHash || !browser)
                     fail('UI_CLEANUP_UNKNOWN');
+                phase = 'pre_close_census';
                 await bounded(inspect(), deadline);
+                phase = 'context_close';
                 for (const context of browser.contexts())
                     if (!initialContexts.has(context))
                         await bounded(context.close(), deadline);
+                phase = 'cdp_session';
                 const session = await bounded(browser.newBrowserCDPSession(), deadline);
                 try {
+                    phase = 'native_close';
                     await bounded(session.send('Browser.close'), deadline);
                 }
                 catch (error) {
                     if (!/Target page, context or browser has been closed|Target closed|Browser closed|Connection closed/i.test(String(error?.message)))
                         throw error;
                 }
+                phase = 'client_close';
                 await bounded(browser.close(), deadline);
+                phase = 'original_exit_close';
                 await bounded(Promise.all([exitPromise, closePromise]), deadline);
+                phase = 'settlement_guards';
                 if (!browser.isConnected())
                     transportClosed = true;
                 if (!exitObserved || !closeObserved || !transportClosed || streamFault || endpointFault || stderr.slice(stderrOffset).includes('DevTools listening') || unknown)
                     fail('UI_CLEANUP_UNKNOWN');
                 const empty = [];
+                phase = 'post_close_census';
                 while (empty.length < 2) {
                     if (clock() >= deadline)
                         fail('UI_CLEANUP_UNKNOWN');
@@ -483,14 +498,31 @@ export function createUiNativeLifecycleV1(input, effects = {}) {
                     if (empty.length === 1)
                         await sleep(100);
                 }
+                phase = 'settlement_guards';
                 if (streamFault || endpointFault || publicationUncertain || unknown)
                     fail('UI_CLEANUP_UNKNOWN');
+                phase = 'settlement_publish';
                 const settlementHash = record(`children/${spawnId}.settled.json`, { schema: 'mission-control.ui-worker-child-settled.v1', ...base, spawnId, observedHash, method: 'owned-child-process-group-v1', rootExit, rootExitObserved: true, rootCloseObserved: true, transport: 'closed', cohort: [...cohort.values()].sort((a, b) => a.owner.pid - b.owner.pid || a.owner.processStartedAt.localeCompare(b.owner.processStartedAt) || a.owner.commandHash.localeCompare(b.owner.commandHash)), emptyCensuses: empty });
+                phase = 'closed_publish';
                 record(`children/${spawnId}.closed.json`, { schema: 'mission-control.ui-worker-child-closed.v1', ...base, spawnId, observedHash, settlementHash, close: 'confirmed' });
                 return { browser: 'closed', children: [{ spawnId, owner: rootOwner, state: 'closed' }] };
             }
             catch (error) {
                 unknown = true;
+                // Diagnostic only: no new observation, close attempt, or settlement authority.
+                let line;
+                try {
+                    const knownCodes = ['UI_OS_OBSERVATION_INVALID', 'UI_COHORT_UNKNOWN', 'UI_COHORT_IDENTITY_CHANGED', 'UI_COHORT_OVERFLOW', 'UI_CLEANUP_UNKNOWN', 'UI_PRIVATE_PATH_UNSAFE', 'UI_PRIVATE_PATH_CHANGED', 'UI_FILE_UNSAFE', 'UI_FILE_CHANGED', 'UI_ARTIFACT_OVERFLOW', 'UI_ARTIFACT_CONFLICT', 'UI_ARTIFACT_UNSAFE', 'UI_RECORD_NAME_INVALID'];
+                    const at = clock();
+                    const diagnosticHash = store.json({ schema: 'mission-control.ui-native-close-diagnostic.v1', ...base, ownerHash, spawnId: spawnId ?? null, launchIntentHash: launchIntentHash ?? null, observedHash: observedHash ?? null,
+                        phase, errorCode: knownCodes.includes(error?.message) ? error.message : 'UI_NATIVE_OPERATION_FAILED', capturedAt: new Date(at).toISOString(), deadline, elapsedMs: at - (deadline - 30000),
+                        rootOwner: rootOwner ?? null, cohortCount: cohort.size, rootExitObserved: exitObserved, rootCloseObserved: closeObserved, transportClosed, streamFault, endpointFault, publicationUncertain, unknown, observation, lastSuccessfulCensus });
+                    line = { code: 'UI_NATIVE_CLOSE_FAILED', diagnosticHash };
+                }
+                catch {
+                    line = { code: 'UI_NATIVE_CLOSE_DIAGNOSTIC_PUBLICATION_FAILED' };
+                }
+                try { process.stderr.write(JSON.stringify(line) + '\n'); } catch { /* The original refusal remains authoritative. */ }
                 throw error;
             }
         },
