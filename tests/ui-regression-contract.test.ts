@@ -1175,6 +1175,106 @@ test('agent panel waits for loaded idle DOM before capture and Escape', async (t
     });
 });
 
+// URL arrival and form rendering are independent; execute the actual clone behavior and DOM predicate.
+test('PRD clone waits for exact description before History and preserves the clone afterward', async (t) => {
+    const ts = await import('typescript');
+    const { runInNewContext } = await import('node:vm');
+    const source = readFileSync(new URL('../scripts/ui-regression-fixtures.mjs', import.meta.url), 'utf8');
+    const parsed = ts.createSourceFile('ui-regression-fixtures.mjs', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const declarations = parsed.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === 'behavior');
+    const assertions = parsed.statements.filter(ts.isVariableStatement).flatMap(statement => [...statement.declarationList.declarations]).filter(declaration => ts.isIdentifier(declaration.name) && declaration.name.text === 'assert');
+    assert.equal(declarations.length, 1); assert.equal(assertions.length, 1);
+    const behavior = runInNewContext('const ' + assertions[0].getText(parsed) + '; (' + declarations[0].getText(parsed) + ')');
+    for (const scenario of ['delayed-empty', 'delayed-previous', 'wrong', 'missing', 'ambiguous', 'changed-after-History']) await t.test(scenario, async () => {
+        // These raw DOM values deliberately do not come from the fixture's expected-value source.
+        let textareas = scenario === 'missing' ? [] : scenario === 'ambiguous'
+            ? [{ value: 'A101 shopping application' }, { value: 'A101 shopping application' }]
+            : [{ value: scenario === 'delayed-empty' ? '' : scenario === 'changed-after-History' ? 'A101 shopping application' : 'Old history description' }];
+        const events: string[] = [], descriptionReads: string[] = [];
+        let arrived!: () => void, release!: () => void;
+        const waitArrived = new Promise<void>(resolve => { arrived = resolve; });
+        const renderReleased = new Promise<void>(resolve => { release = resolve; });
+        const document = { querySelectorAll: (selector: string) => {
+            assert.equal(selector, 'textarea[placeholder="Project description, requests, details..."]');
+            return textareas;
+        } };
+        const evaluate = (callback: Function) => runInNewContext('(' + callback.toString() + ')()', { document });
+        const page = {
+            getByRole: (role: string, options: { name: string; exact: boolean }) => {
+                assert.equal(role, 'button'); assert.equal(options.exact, true);
+                assert.ok(['Clone This', 'History'].includes(options.name));
+                return { click: async () => {
+                    events.push(options.name === 'Clone This' ? 'clone' : 'history');
+                    if (options.name === 'History' && scenario === 'changed-after-History') textareas = [{ value: 'Old history description' }];
+                } };
+            },
+            waitForURL: async (callback: Function) => {
+                assert.equal(callback(new URL('http://127.0.0.1:13082/prd?title=A101&description=A101+shopping+application')), true);
+                assert.equal(callback(new URL('http://127.0.0.1:13082/prd?title=Other')), false);
+                assert.equal(callback(new URL('http://127.0.0.1:13082/scrape?title=A101')), false);
+                events.push('url');
+            },
+            waitForFunction: async (callback: Function, arg: unknown, options: { timeout: number }) => {
+                assert.equal(arg, undefined); assert.equal(options.timeout, 8000);
+                if (scenario !== 'changed-after-History') {
+                    const ready = evaluate(callback);
+                    if (scenario === 'wrong') { const readyWhenDescriptionIsWrong = ready; assert.equal(readyWhenDescriptionIsWrong, false); }
+                    else if (scenario === 'missing') { const readyWhenTextareaIsMissing = ready; assert.equal(readyWhenTextareaIsMissing, false); }
+                    else if (scenario === 'ambiguous') { const readyWhenTextareaIsAmbiguous = ready; assert.equal(readyWhenTextareaIsAmbiguous, false); }
+                    else assert.equal(ready, false);
+                    arrived(); await renderReleased;
+                }
+                if (!evaluate(callback)) throw Error('simulated clone readiness timeout after 8000ms');
+                events.push('ready');
+            },
+            getByPlaceholder: (placeholder: string) => {
+                assert.equal(placeholder, 'Project description, requests, details...');
+                return { inputValue: async () => {
+                    const value = textareas[0]?.value ?? '';
+                    descriptionReads.push(value); events.push('read-description'); return value;
+                } };
+            },
+            locator: (selector: string) => {
+                if (selector === '.prd-history-item') return { first: () => ({ waitFor: async () => { events.push('history-item'); } }) };
+                assert.equal(selector, '.prd-modal__close');
+                return { click: async () => { events.push('close'); } };
+            },
+        };
+        const running = behavior('prd.clone-a101', { page,
+            loaded: async (route: string) => { assert.equal(route, '/scrape'); events.push('loaded-scrape'); },
+            capture: async () => { events.push('capture'); },
+        }).then(() => null, (error: Error) => error);
+        try {
+            if (scenario !== 'changed-after-History') {
+                const waitedBeforeRender = await Promise.race([waitArrived.then(() => true), running.then(() => false)]);
+                const beforeReleaseEvents = [...events];
+                const historyActionsBeforeReadiness = events.filter(event => event === 'history').length;
+                if (!waitedBeforeRender) t.diagnostic(JSON.stringify({ scenario, originalBehaviorError: (await running)?.message, descriptionReads, beforeReleaseEvents }));
+                assert.equal(waitedBeforeRender, true);
+                assert.deepEqual(beforeReleaseEvents, ['loaded-scrape', 'clone', 'url']);
+                assert.equal(historyActionsBeforeReadiness, 0);
+                assert.deepEqual(descriptionReads, []);
+                if (scenario.startsWith('delayed-')) textareas = [{ value: 'A101 shopping application' }];
+                release();
+            }
+            const error = await running;
+            if (scenario.startsWith('delayed-')) {
+                assert.equal(error, null);
+                assert.deepEqual(events, ['loaded-scrape', 'clone', 'url', 'ready', 'read-description', 'history', 'history-item', 'capture', 'close', 'read-description']);
+                assert.deepEqual(descriptionReads, ['A101 shopping application', 'A101 shopping application']);
+            } else if (scenario === 'changed-after-History') {
+                assert.equal(error?.message, 'UI_ASSERTION_FAILED');
+                assert.deepEqual(events, ['loaded-scrape', 'clone', 'url', 'ready', 'read-description', 'history', 'history-item', 'capture', 'close', 'read-description']);
+                assert.deepEqual(descriptionReads, ['A101 shopping application', 'Old history description']);
+            } else {
+                assert.equal(error?.message, 'simulated clone readiness timeout after 8000ms');
+                assert.deepEqual(events, ['loaded-scrape', 'clone', 'url']);
+                assert.deepEqual(descriptionReads, []);
+            }
+        } finally { release(); await running; }
+    });
+});
+
 // Raw DOM values are independent inputs; the actual private behavior/evaluate callbacks validate them.
 test('metrics behavior distinguishes exact scoped zero and unavailable values', async (t) => {
     const ts = await import('typescript');
