@@ -29,6 +29,7 @@ All paths below are relative to `/Users/setrox/ai/setrox/.worktrees/mission-cont
 
 | File | Responsibility |
 |---|---|
+| `server/services/control-ui-worker-protocol.ts` (new), `server/services/control-ui-worker-protocol.test.ts` (new) | Pure strict UI report/cleanup validators and private artifact bounds; no runtime/SQL import. |
 | `server/services/control-jobs.ts` (new) | Durable 0700/0600 intent/receipt/idempotency store, monotonic CAS, one active job, exact fixed child spawn and custody handshake, retained unknown ownership on restart. |
 | `server/services/controls-local-request.ts` (new) | Pure strict actual listener/socket/raw-header/Origin/body policy for POST/cancel. |
 | `server/services/control-evidence.ts` (new) | Fixed compiled Setfarm reader composition and source/build-compatible safe DTO; MC fixture report/screenshot manifest reader, bounded nonmutating reads. |
@@ -72,11 +73,23 @@ export type ControlEvidenceResponseV1 = ControlEvidenceProjectionV1 & Readonly<{
       viewport:{width:number;height:number}; sha256:string}[];
   }};
 }>;
-export interface ManualWorkerPortV1 {
-  startFixed(intent: ControlPrivateIntentV1, custody: ControlWorkerCustodyV1): Promise<{
-    pid: number; startedAt: string; executableHash: string;
-  }>;
-  requestOwnedCancellation(intent: ControlPrivateIntentV1): Promise<void>;
+type ManualWorkerEventsV1 = Readonly<{
+  onFrame(frame:unknown):Promise<void>;
+  onUnavailable(reason:'disconnect'|'exit'|'error'|'overflow'):Promise<void>;
+}>;
+type OriginalManualWorkerSessionV1 = Readonly<{
+  binding:WorkerChannelBindingV1;
+  originalChild:ObservedControlWorkerOwnerV1;
+  executableHash:string;
+  beginDelivery(events:ManualWorkerEventsV1):void;
+  send(frame:WorkerChannelEnvelopeV1):Promise<void>;
+}>;
+interface ManualWorkerPortV1 {
+  startFixed(input:Readonly<{
+    intent:ControlPrivateIntentV1;
+    custody:ControlWorkerCustodyV1;
+    binding:WorkerChannelBindingV1;
+  }>):Promise<OriginalManualWorkerSessionV1>;
 }
 export interface ControlJobsV1 {
   create(input: {kind: ControlJobKindV1; idempotencyKey: string;
@@ -106,7 +119,7 @@ The production `ManualWorkerPortV1` executes only the captured exact compiled SF
 
 ### Task 1: Durable broker, fixed composition and strict HTTP boundary
 
-**Files:** Create `server/services/control-jobs.ts`, `controls-local-request.ts`, `control-evidence.ts`, `server/routes/controls.ts`; modify `server/services/fresh-installation-runtime.ts`, `server/app.ts`; test matching `server/services/*.test.ts` and `server/routes/controls.test.ts`.
+**Files:** Create `server/services/control-jobs.ts`, `controls-local-request.ts`, `control-evidence.ts`, `control-ui-worker-protocol.ts`, `server/routes/controls.ts`; modify `server/services/fresh-installation-runtime.ts`, `server/app.ts`; test matching `server/services/*.test.ts` and `server/routes/controls.test.ts`.
 
 **Interfaces:** Consume paired SF fixed schemas, `readSelectedControlEvidenceV1(input)` and exact compiled worker `dist/cli/control-test-worker-v1.js`. Produce `ControlJobsV1` and GET/POST routes described above. The listener capability must be captured after `server.listen` by reading actual `server.address()`, not inferred from config or `req.socket.localAddress` alone. A production child receives nonce only over inherited IPC/descriptor and starts after durable intent and idempotency receipt publication. The private intent path is exactly selected `runtime/mission-control/controls/jobs/<jobId>/intent.json`, matching the SF spec registration reader; no caller path is accepted.
 
@@ -213,9 +226,9 @@ Add SSR cases for canonical “Why is it waiting?” from codes; advisory/fail/b
 
 ### Task 3: Isolated source-owned all-page UI regression and retained screenshots
 
-**Files:** Create `scripts/ui-regression.mjs`, `scripts/ui-regression-fixtures.mjs`; modify `package.json` with `test:ui`; test `tests/ui-regression-contract.test.ts`. Keep `scripts/render-smoke.mjs` and its six ordered routes/13081 unchanged.
+**Files:** Create `scripts/ui-regression.mjs`, `scripts/ui-regression-fixtures.mjs`; modify `package.json` with `test:ui`; test `tests/ui-regression-contract.test.ts`. Preserve existing render smoke six ordered routes/13081 and strict V3 gate; its owned-isolation setup belongs only to Task4 below.
 
-**Interfaces:** The broker launches this fixed MC worker only for `ui_regression` with private intent/custody. The worker emits a versioned `mission-control.ui-regression.v1` report containing `mcSourceSha`, loaded `mcBuildHash`, fixture version/hash, start/finish time, actual named assertion outcomes and screenshot manifest `{captureId,route,viewport,sha256}`. `control-evidence.ts` reads only a manifest-bound PNG by capture ID and verifies byte SHA; it never accepts a browser path.
+**Interfaces:** The broker launches only built `dist-server/scripts/ui-regression.mjs --job-id <uuid>` for `ui_regression` with pinned private intent fd4 and authenticated original fd3 custody, as the paired spec. Stock build copies the two source .mjs files under dist-server/scripts before existing content hashing; test:ui uses this built entry. No identity-validator bypass. This separate UI worker never calls SF reservation/closure; the accepted exact UI frame/report/owned-cleanup contract is binding. The worker emits a versioned `mission-control.ui-regression.v1` report containing `mcSourceSha`, loaded `mcBuildHash`, fixture version/hash, start/finish time, actual named assertion outcomes and screenshot manifest `{captureId,route,viewport,sha256}`. `control-evidence.ts` reads only a manifest-bound PNG by capture ID and verifies byte SHA; it never accepts a browser path.
 
 - [ ] **Step 1: Write RED fixture contract tests** for occupied port, environment stripping, network denial, owned child cleanup and report retention:
 
@@ -242,3 +255,18 @@ The two plans meet only through the fixed selected SF compiled schemas/reader/wo
 ## Paired private custody closure contract
 
 Follow the spec Private SF custody closure section. Publish exact immutable intent under canonical UUID job directory before one fixed spawn; retain current private sibling storage as MC-owned safe data (SF interprets only required intent leaf). Authenticate final SF custody closure acknowledgement through the existing private channel before terminal receipt; receipt state/exit alone never closes SF ownership. A blocked worker with proven never-reserved closure can finish while unrelated owners remain blocking. Crash before registration/closure remains unknown; GET/restart never publishes/adopts/deletes markers or respawns. Public receipt/request schemas and tokens are unchanged. Cover these exact broker cases in the mapped Task1 tests.
+
+## Accepted original-session private protocol
+
+Follow the paired spec Accepted private worker channel/journal and exact paired exports/UI lifecycle sections. Independent frame/journal/receipt counters, durable original-channel ACK mapping and cancellation latch, no restart adoption, UI vs SF final dispatch and fixed pure exports supersede earlier metadata-only port wording. MC alone writes receipts. Provisional reportRefs remains empty until definite SF release/closure final_closed or validated UI final report+owned-cleanup. Source-only fake effects do not qualify selected compiled execution. Root serializes paired ABI changes; MC never edits SF schema/guard sources.
+
+### Task 4: Owned isolation for existing built-server render smoke
+
+**Cause:** Source inspection in logs/2026-10-19-ui-implementation/render-smoke-owned-isolation-recipe-v1.md found inherited credentials/DB/default live upstreams, startup effects, missing actual private DB rows and upstream sealed-V3 fixture, plus missing outbound/CLI fencing. This root test setup fix is required for the existing UI acceptance gate, not a new product feature.
+
+**Files:** Modify `scripts/render-smoke.mjs` and `tests/render-smoke-response.test.ts`; create `scripts/render-smoke-owned-fixture.mjs`, `tests/render-smoke-owned-fixture.test.ts`, `tests/fixtures/render-smoke-product-authority.mjs`. Any production source/config/guard or other fixture change requires a concrete Root FileMap ruling before editing.
+
+- [ ] Read the exact owned-isolation recipe and current source, then write meaningful RED for inherited secret/selection/loader refusal, owned port/database/mock/CLI/network lifecycle and failure cleanup. Reuse/extract source-owned canonical sealed packet factory, do not fabricate production evidence.
+- [ ] Implement an explicit allowlist child environment and exclusive owned HOME/data/PG/mock/egress/CLI fixtures using existing supported setup. Never default to live5432/3080/3333/18789 or ambient credentials/selected installation. Refuse occupied resources, record exact owned lifecycle, retain failures and clean only positively owned test resources. Root supplies current protected owned-test input if needed. No helper/profile/role/runtime guard bypass.
+- [ ] Preserve exact ordered six routes and13081, compiled parser and actual MC-proxied sealed V3 packet for exact fixed run. Seed actual private run rows and source-valid200 snapshots; if exact404 behavior must be fixed, report evidence and Root expands Map before edit. Do not broaden expected failures silently or substitute13082 fake API results.
+- [ ] Run focused tests, Root stock build, then actual existing `npm run render:smoke` within proven owned isolation. Capture source/build/HTTP/DB/network/child/screenshot results and failure cleanup. This is built-server integration evidence, not live or selected runtime qualification. Independent review before delivery.
