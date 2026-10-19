@@ -5734,6 +5734,13 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.af-contract__item-owner {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  overflow: visible;
+  text-overflow: clip;
+}
 .af-contract__item-evidence,
 .af-contract__item-blocker {
   grid-column: 1 / -1;

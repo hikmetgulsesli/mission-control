@@ -1149,3 +1149,60 @@ test('agent panel waits for loaded idle DOM before capture and Escape', async (t
         } finally { release(); await running; }
     });
 });
+
+// Raw DOM values are independent inputs; the actual private behavior/evaluate callbacks validate them.
+test('metrics behavior distinguishes exact scoped zero and unavailable values', async (t) => {
+    const ts = await import('typescript');
+    const { runInNewContext } = await import('node:vm');
+    const source = readFileSync(new URL('../scripts/ui-regression-fixtures.mjs', import.meta.url), 'utf8');
+    const parsed = ts.createSourceFile('ui-regression-fixtures.mjs', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const declarations = parsed.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === 'behavior');
+    const assertions = parsed.statements.filter(ts.isVariableStatement).flatMap(statement => [...statement.declarationList.declarations]).filter(declaration => ts.isIdentifier(declaration.name) && declaration.name.text === 'assert');
+    assert.equal(declarations.length, 1); assert.equal(assertions.length, 1);
+    const behavior = runInNewContext('const ' + assertions[0].getText(parsed) + '; (' + declarations[0].getText(parsed) + ')');
+    for (const scenario of ['correct-unavailable', 'cpu-zero', 'unavailable-zero', 'wrong-known-zero', 'missing-label', 'duplicate-label', 'duplicate-value', 'duplicate-scope']) await t.test(scenario, async () => {
+        let route = '', evaluations = 0;
+        const visited: string[] = [];
+        const scopes: Record<string, string> = { '/ops': '.ops-page .system-metrics', '/costs': '.costs-page > .stat-cards', '/performance': '.performance-page > .stat-cards' };
+        const pairs: Record<string, string[][]> = {
+            '/ops': [['RAM used', '0GB / 16GB'], ['CPU', 'Unknown'], ['DISK', '0GB / 100GB · 0%'], ['LOAD', '0.00']],
+            '/costs': [['TODAY', '$0.00'], ['ALL TIME', '$0.00'], ['PROJECTED/MO', '$0'], ['SUBAGENT TODAY', '$0.00']],
+            '/performance': [['COST TODAY', 'Unavailable'], ['COST ALL TIME', '$0.00'], ['AGENTS', '0'], ['TOTAL SESSIONS', '0']],
+        };
+        if (scenario === 'cpu-zero') pairs['/ops'][1][1] = '0% / 100%';
+        if (scenario === 'unavailable-zero') pairs['/performance'][0][1] = '$0.00';
+        if (scenario === 'wrong-known-zero') pairs['/costs'][1][1] = '$1.00';
+        if (scenario === 'duplicate-label') pairs['/costs'][1][0] = 'TODAY';
+        const node = (textContent = ''): any => ({ textContent, getBoundingClientRect: () => ({ width: 180, height: 30 }) });
+        const dom = () => {
+            const metric = route === '/ops';
+            const rowSelector = metric ? ':scope > .metric-bar > .metric-bar__header' : ':scope > .stat-card';
+            const labelSelector = metric ? ':scope > .metric-bar__label' : ':scope > .stat-card__label';
+            const valueSelector = metric ? ':scope > .metric-bar__value' : ':scope > .stat-card__value';
+            const rows = pairs[route].map(([label, value], index) => ({ ...node(), querySelectorAll: (selector: string) => {
+                if (selector === labelSelector) return scenario === 'missing-label' && route === '/costs' && index === 1 ? [] : [node(label)];
+                if (selector === valueSelector) return scenario === 'duplicate-value' && route === '/costs' && index === 1 ? [node(value), node(value)] : [node(value)];
+                throw Error('unexpected row query: ' + selector);
+            } }));
+            const root = { ...node(), querySelectorAll: (selector: string) => { assert.equal(selector, rowSelector); return rows; } };
+            return { document: { querySelectorAll: (selector: string) => { assert.equal(selector, scopes[route]); return scenario === 'duplicate-scope' && route === '/costs' ? [root, root] : [root]; } }, getComputedStyle: () => ({ display: 'block', visibility: 'visible' }) };
+        };
+        const page = {
+            locator: (selector: string) => ({
+                waitFor: async ({ state }: { state: string }) => { assert.equal(selector, scopes[route]); assert.equal(state, 'visible'); },
+                // Prior global checks can see unrelated header/other-value decoys even when scoped data is wrong.
+                innerText: async () => selector === '.system-metrics' ? '0GB / 16GB Unknown 0.00' : scenario === 'correct-unavailable' && route === '/performance' ? 'COST TODAY Unavailable COST ALL TIME $0.00 AGENTS 0 TOTAL SESSIONS 0' : 'Unrelated header Unknown and unrelated $0',
+            }),
+            evaluate: async (callback: Function, argument: any) => { evaluations++; return runInNewContext('(' + callback.toString() + ')(input)', { ...dom(), input: argument }); },
+        };
+        const run = () => behavior('metrics.zero-unknown', { page, loaded: async (next: string) => { route = next; visited.push(next); } });
+        if (scenario === 'correct-unavailable') {
+            await run();
+            assert.deepEqual(visited, ['/ops', '/costs', '/performance']);
+            assert.equal(evaluations, 3);
+        } else {
+            await assert.rejects(run(), /UI_METRIC_VALUES_MISMATCH/);
+            assert.ok(evaluations > 0, 'refusal must come from the actual scoped DOM callback');
+        }
+    });
+});

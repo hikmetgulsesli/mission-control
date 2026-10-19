@@ -942,13 +942,35 @@ async function behavior(id, { page, context, state, loaded, capture }) {
         return;
     }
     if (id === 'metrics.zero-unknown') {
+        const checkValues = async (scope, rowSelector, labelSelector, valueSelector, expected) => {
+            await page.locator(scope).waitFor({ state: 'visible' });
+            assert(await page.evaluate(({ scope, rowSelector, labelSelector, valueSelector, expected }) => {
+                const visible = element => {
+                    const rect = element.getBoundingClientRect(), style = getComputedStyle(element);
+                    return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+                };
+                const scopes = document.querySelectorAll(scope);
+                if (scopes.length !== 1 || !visible(scopes[0]))
+                    return false;
+                const rows = Array.from(scopes[0].querySelectorAll(rowSelector)), seen = new Set();
+                return rows.length === expected.length && rows.every(row => {
+                    const labels = row.querySelectorAll(labelSelector), values = row.querySelectorAll(valueSelector);
+                    if (!visible(row) || labels.length !== 1 || values.length !== 1 || !visible(labels[0]) || !visible(values[0]))
+                        return false;
+                    const label = labels[0].textContent.trim(), value = values[0].textContent.trim();
+                    if (seen.has(label) || !expected.some(([name, amount]) => name === label && amount === value))
+                        return false;
+                    seen.add(label);
+                    return true;
+                }) && seen.size === expected.length;
+            }, { scope, rowSelector, labelSelector, valueSelector, expected }), 'UI_METRIC_VALUES_MISMATCH');
+        };
         await loaded('/ops');
-        const text = await page.locator('.system-metrics').innerText();
-        assert(text.includes('0GB / 16GB') && text.includes('Unknown') && text.includes('0.00'));
+        await checkValues('.ops-page .system-metrics', ':scope > .metric-bar > .metric-bar__header', ':scope > .metric-bar__label', ':scope > .metric-bar__value', [['RAM used', '0GB / 16GB'], ['CPU', 'Unknown'], ['DISK', '0GB / 100GB · 0%'], ['LOAD', '0.00']]);
         await loaded('/costs');
-        assert((await page.locator('body').innerText()).includes('$0'));
+        await checkValues('.costs-page > .stat-cards', ':scope > .stat-card', ':scope > .stat-card__label', ':scope > .stat-card__value', [['TODAY', '$0.00'], ['ALL TIME', '$0.00'], ['PROJECTED/MO', '$0'], ['SUBAGENT TODAY', '$0.00']]);
         await loaded('/performance');
-        assert((await page.locator('body').innerText()).includes('Unknown'));
+        await checkValues('.performance-page > .stat-cards', ':scope > .stat-card', ':scope > .stat-card__label', ':scope > .stat-card__value', [['COST TODAY', 'Unavailable'], ['COST ALL TIME', '$0.00'], ['AGENTS', '0'], ['TOTAL SESSIONS', '0']]);
         return;
     }
     if (id.startsWith('controls.')) {
