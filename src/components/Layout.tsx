@@ -7,21 +7,7 @@ import { ScanlineOverlay } from './ScanlineOverlay';
 import { TerminalDrawer } from './TerminalDrawer';
 import { PixelOffice } from '../pages/PixelOffice';
 import { useDataSync } from '../hooks/useDataSync';
-
-const KEY_MAP: Record<string, string | null> = {
-  '0': '/office',
-  '1': '/setfarm',
-  '2': '/chat',
-  '3': '/ops',
-  '4': '/costs',
-  '5': '/performance',
-  '6': '/projects',
-  '7': '/files',
-  '8': null, // shell toggle
-  '9': '/scrape',
-  'r': '/rules',
-  'l': '/live',
-};
+import { resolveNavigationShortcut } from '../lib/navigation';
 
 export function Layout() {
   const [shellOpen, setShellOpen] = useState(false);
@@ -39,19 +25,11 @@ export function Layout() {
         return;
       }
 
-      // Skip number shortcuts if user is typing in an input/textarea
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable) return;
-
-      if (e.key in KEY_MAP) {
-        e.preventDefault();
-        const route = KEY_MAP[e.key];
-        if (route === null) {
-          setShellOpen(o => !o);
-        } else {
-          navigate(route);
-        }
-      }
+      const shortcut = resolveNavigationShortcut(e);
+      if (!shortcut) return;
+      e.preventDefault();
+      if (shortcut.type === 'shell') setShellOpen(open => !open);
+      else navigate(shortcut.href);
     }
 
     window.addEventListener('keydown', handleKeyDown);
