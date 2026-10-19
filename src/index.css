@@ -976,7 +976,7 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
   height: 100%; color: var(--text-dim); font-size: 14px; gap: 8px;
 }
 .chat-panel__empty-icon { font-size: 2.5em; opacity: 0.4; }
-.chat-panel__empty-sub { font-size: 14px; color: var(--text-dim); opacity: 0.5; }
+.chat-panel__empty-sub { font-size: 14px; color: var(--text-dim); }
 .chat-panel__loading { text-align: center; color: var(--text-dim); font-size: 14px; padding: 20px; }
 .chat-msg__tool { font-size: 14px; color: var(--neon-orange); background: rgba(255,165,0,0.08); padding: 1px 6px; border-radius: 8px; }
 .chat-msg--toolResult .chat-msg__bubble { font-family: monospace; font-size: 14px; opacity: 0.85; max-height: 100px; overflow-y: auto; color: #c8c8d8; }
@@ -7536,7 +7536,7 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
 }
 .agent-chat__time {
   font-size: 13px;
-  color: #555;
+  color: var(--text-dim);
   font-family: var(--font-mono);
 }
 .agent-chat__text {
