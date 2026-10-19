@@ -238,3 +238,7 @@ Inject a fixture browser that raises an assertion failure mid-run and assert rep
 - [ ] **Step 5: Run GREEN:** `node --import tsx --test tests/ui-regression-contract.test.ts`, `npm run build`, `npm run render:smoke`, `npm run test:ui`. Inspect actual `test:ui` report and screenshots, including failed evidence. Return reviewable artifacts/diff to root; root alone performs reviewed rollout and later CUA read-only live product verification without provider/mutation clicks.
 
 The two plans meet only through the fixed selected SF compiled schemas/reader/worker and versioned DTO. Neither source tests nor fixture screenshots qualify a Setfarm release. Root must prove the actual selected preflight/full8 separately after current material and owner gates allow it.
+
+## Paired private custody closure contract
+
+Follow the spec Private SF custody closure section. Publish exact immutable intent under canonical UUID job directory before one fixed spawn; retain current private sibling storage as MC-owned safe data (SF interprets only required intent leaf). Authenticate final SF custody closure acknowledgement through the existing private channel before terminal receipt; receipt state/exit alone never closes SF ownership. A blocked worker with proven never-reserved closure can finish while unrelated owners remain blocking. Crash before registration/closure remains unknown; GET/restart never publishes/adopts/deletes markers or respawns. Public receipt/request schemas and tokens are unchanged. Cover these exact broker cases in the mapped Task1 tests.
