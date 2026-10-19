@@ -423,3 +423,201 @@ test('native close failure retains its fixed phase without changing refusal or m
         } finally { h.dispose(); }
     });
 });
+
+// Original helper handles are simulated; classification and completion code are real Source.
+test('private ps reader requires original exit and close with exact fixed argv and clean empty absence tuple', async () => {
+    const { createUiPsReaderV1 } = await load();
+    assert.equal(typeof createUiPsReaderV1, 'function');
+    const { EventEmitter } = await import('node:events'), { PassThrough } = await import('node:stream');
+    let child: any, settled = false;
+    const args = ['-ww', '-p', '23457', '-o', 'comm='];
+    const reader = createUiPsReaderV1((file: string, argv: string[], options: any) => {
+        assert.equal(file, '/bin/ps'); assert.deepEqual(argv, args);
+        assert.equal(options.shell, false); assert.deepEqual(options.stdio, ['ignore', 'pipe', 'pipe']);
+        assert.deepEqual(options.env, { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', LANG: 'C', LC_ALL: 'C', TZ: 'UTC' });
+        child = new EventEmitter(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
+        child.kill = () => { throw Error('unexpected helper timeout'); }; return child;
+    });
+    const running = reader(args).then((value: any) => { settled = true; return value; }, (error: any) => { settled = true; return error; });
+    child.emit('exit', 1, null); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(settled, false, 'exit without original close cannot establish helper completion');
+    child.emit('close', 1, null);
+    assert.match((await running).message, /^UI_OS_OBSERVATION_INVALID$/);
+});
+
+async function nativeAbsenceHarness(options: { substep?: string; defect?: string } = {}) {
+    const { EventEmitter } = await import('node:events'), { PassThrough } = await import('node:stream');
+    const { createUiNativeLifecycleV1, createUiArtifactStoreV1, createUiPsReaderV1 } = await load();
+    const { UiWorkerLifecycleRecordV1Schema } = await import('../server/services/control-ui-worker-protocol.js');
+    const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'ui-preclose-absence-'))), store = createUiArtifactStoreV1(root);
+    const executable = realpathSync(process.execPath), rootPid = 23456, target = 23457, foreign = 23458;
+    const calls: string[] = [], helperFacts: any[] = [];
+    const defect = options.defect ?? '', substep = options.substep ?? 'args_before';
+    let alive = false, armed = false, now = 1792404000000, argv: string[] = [], child: any, snapshots = 0, reads = 0, gone = false;
+    let sawAbsence = false, nativeKills = 0, helperKills = 0;
+    const children = new Set<number>(defect === 'new-child' ? [] : [target]);
+    if (defect === 'reappearance-rescan') children.add(foreign);
+    if (defect === 'churn-deadline') for (let pid = foreign; pid < foreign + 4; pid++) children.add(pid);
+    const perPidReads = new Map<number, number>();
+    const alias = path.join(root, 'node-alias');
+    if (defect === 'noncanonical-prefix') symlinkSync(executable, alias);
+    if (defect === 'cohort-cap') for (let pid = target + 2; pid < target + 256; pid++) children.add(pid);
+    const command = (pid: number) => pid === rootPid ? [executable, ...argv].join(' ') : executable + ' --type=renderer --fixture-child=' + pid;
+    const start = (pid: number) => armed && pid === target && defect === 'reused-start' ? 'Mon Oct 19 10:00:01 2026' : 'Mon Oct 19 10:00:00 2026';
+    const group = (pid: number) => armed && pid === target && defect === 'escaped-group' ? 987 : rootPid;
+    const user = (pid: number) => armed && pid === target && defect === 'foreign-uid' ? process.getuid!() + 1 : process.getuid!();
+    const row = (pid: number) => ` ${pid} ${pid === rootPid ? process.pid : rootPid} ${group(pid)} ${user(pid)} ${start(pid)}\n`;
+    const metadata = (pid: number) => ` ${pid} ${pid === rootPid ? process.pid : rootPid} ${user(pid)} ${start(pid)} ${group(pid)} ${command(pid)}\n`;
+    const ownerRow = ` ${process.pid} 1 100 ${process.getuid!()} Mon Oct 19 10:00:00 2026\n`;
+    const fakeSpawn = (_file: string, args: string[], opt: any) => {
+        assert.equal(_file, '/bin/ps'); assert.equal(opt.env.LANG, 'C');
+        const helper: any = new EventEmitter(); helper.stdout = new PassThrough(); helper.stderr = new PassThrough();
+        helper.kill = (signal: string) => { assert.equal(signal, 'SIGKILL'); helperKills++; helper.emit('exit', null, 'SIGKILL'); helper.emit('close', null, 'SIGKILL'); };
+        queueMicrotask(() => {
+            let out = '', err = '', code = 0, signal: string | null = null, missingExit = false, missingClose = false, closeCode: number | undefined;
+            if (args.includes('-A')) {
+                calls.push('snapshot');
+                if (armed) snapshots++;
+                out = ownerRow + (alive ? row(rootPid) + [...children].map(row).join('') : '');
+                if (armed && snapshots >= 2 && defect === 'witness-partial') out = 'partial\n';
+                if (armed && snapshots >= 2 && defect === 'witness-duplicate') out += row(rootPid);
+                if (armed && snapshots >= 2 && defect === 'witness-error') { out = ''; code = 2; }
+                if (armed && snapshots >= 2 && ['witness-present', 'witness-escaped'].includes(defect)) out += row(target).replace(defect === 'witness-escaped' ? ` ${rootPid} ${process.getuid!()} ` : 'not-found', ` 987 ${process.getuid!()} `);
+                if (armed && snapshots >= 2 && ['witness-new', 'witness-foreign', 'witness-new-absent', 'cohort-cap'].includes(defect) && alive) { children.add(foreign); out = ownerRow + row(rootPid) + [...children].map(row).join(''); }
+                if (armed && snapshots >= 3 && ['reappearance', 'reappearance-rescan'].includes(defect)) out += row(target);
+                if (armed && snapshots >= 2 && defect === 'churn-deadline') now += 10000;
+                if (armed && snapshots >= 2 && defect === 'deadline-witness') now += 30001;
+            } else {
+                const pid = Number(args[2]), form = args.at(-1) === 'comm=' ? 'comm' : 'args';
+                const selected = armed && (pid === (defect === 'root' ? rootPid : target) || defect === 'churn-deadline' && pid >= target || defect === 'reappearance-rescan' && pid === foreign);
+                let step = form === 'comm' ? 'comm' : 'args_before';
+                if (selected) { reads++; const count = (perPidReads.get(pid) ?? 0) + 1; perPidReads.set(pid, count); step = count === 1 ? 'args_before' : count === 2 ? 'comm' : 'args_after'; }
+                calls.push(`observe:${pid}:${step}`);
+                out = form === 'comm' ? executable + '\n' : metadata(pid);
+                if (armed && pid === foreign && defect === 'witness-foreign') out = form === 'comm' ? realpathSync('/bin/sh') + '\n' : metadata(pid);
+                if (selected && step === 'args_before' && defect === 'malformed-prefix') out = 'partial\n';
+                if (selected && step === 'args_before' && defect === 'changed-prefix-command') out = metadata(pid).replace('--type=renderer', '--type=foreign');
+                if (selected && step === 'args_before' && defect === 'changed-prefix-parent') out = metadata(pid).replace(` ${rootPid} `, ' 777 ');
+                if (selected && step === 'comm' && defect === 'foreign-prefix-executable') out = realpathSync('/bin/sh') + '\n';
+                if (selected && step === 'comm' && defect === 'malformed-comm') out = 'not absolute\n';
+                if (selected && step === 'comm' && defect === 'noncanonical-prefix') out = alias + '\n';
+                if ((selected && step === substep) || armed && pid === foreign && defect === 'witness-new-absent') {
+                    sawAbsence = true; gone = true; children.delete(pid); out = ''; code = 1;
+                    if (defect === 'helper-zero') code = 0;
+                    if (defect === 'helper-two') code = 2;
+                    if (defect === 'helper-signal') { code = null as any; signal = 'SIGTERM'; }
+                    if (defect === 'helper-no-exit') missingExit = true;
+                    if (defect === 'helper-close-mismatch') closeCode = 2;
+                    if (defect === 'helper-no-close') missingClose = true;
+                    if (defect === 'helper-stderr') err = 'private stderr\n';
+                    if (defect === 'helper-whitespace') out = ' \n';
+                    if (defect === 'helper-overflow') out = 'x'.repeat(4194305);
+                    if (defect === 'helper-spawn') helper.emit('error', Error('private spawn error'));
+                    if (defect === 'helper-stream') helper.stdout.emit('error', Error('private stream error'));
+                    if (defect === 'helper-timeout') { missingExit = true; missingClose = true; }
+                    if (defect === 'deadline-observe') now += 30001;
+                    if (defect === 'unknown-flag') child.emit('error', Error('native custody unknown'));
+                    if (defect === 'endpoint-flag') child.stderr.write('DevTools listening on ws://127.0.0.1:49153/devtools/browser/other\n');
+                }
+            }
+            helperFacts.push({ args: [...args], out, err, code, signal });
+            if (out) helper.stdout.write(out); if (err) helper.stderr.write(err);
+            if (!missingExit) helper.emit('exit', code, signal);
+            if (!missingClose) helper.emit('close', closeCode ?? code, signal);
+        });
+        return helper;
+    };
+    const reader = createUiPsReaderV1(fakeSpawn);
+    const readPs = async (args: string[]) => {
+        if (armed && Number(args[2]) === target && ['wrong-helper-pid', 'nonfixed-helper', 'global-helper'].includes(defect)) {
+            const altered = [...args];
+            if (defect === 'wrong-helper-pid') altered[2] = String(target + 99); else if (defect === 'global-helper') altered.splice(0, altered.length, '-ww', '-A', '-o', 'pid='); else altered.push('-bad');
+            // Actual factory still captures original helper events; the requested PID/form will not bind.
+            const alternate = createUiPsReaderV1(() => { const p: any = new EventEmitter(); p.stdout = new PassThrough(); p.stderr = new PassThrough(); p.kill = () => {}; queueMicrotask(() => { p.emit('exit', 1, null); p.emit('close', 1, null); }); return p; });
+            return alternate(altered);
+        }
+        return reader(args);
+    };
+    const browser: any = new EventEmitter(); browser.contexts = () => []; browser.isConnected = () => alive;
+    browser.newBrowserCDPSession = async () => ({ send: async (method: string) => { assert.equal(method, 'Browser.close'); calls.push('Browser.close'); alive = false; child.emit('exit', 0, null); child.emit('close', 0, null); browser.emit('disconnected'); } });
+    browser.close = async () => { calls.push('client-close'); };
+    const lifecycle = createUiNativeLifecycleV1({ store: { ...store, json(value: any) { if (defect === 'witness-publication' && value.schema === 'mission-control.ui-native-absence-witness.v1') throw Error('witness fsync failure'); return store.json(value); } }, jobId: '018d819f-0a78-7d38-bb1f-0195b029ddaf', intentHash: 'a'.repeat(64), ownerHash: 'b'.repeat(64), owner: { pid: process.pid, processGroupId: 100 }, cancellationRequested: () => false, recordSchema: UiWorkerLifecycleRecordV1Schema,
+        descriptor: { executable, executableHash: 'c'.repeat(64), playwrightVersion: '1.60.0', browsersJsonHash: 'd'.repeat(64), check() {} } }, { ps: ['wrong-helper-pid', 'nonfixed-helper', 'global-helper'].includes(defect) ? readPs : reader, clock: () => now, sleep: async (ms: number) => { now += ms; }, connectOverCDP: async () => browser,
+        spawn: (_file: string, args: string[]) => { argv = args; alive = true; child = new EventEmitter(); child.pid = rootPid; child.stdout = new PassThrough(); child.stderr = new PassThrough(); child.kill = () => { nativeKills++; }; queueMicrotask(() => child.stderr.write('DevTools listening on ws://127.0.0.1:49152/devtools/browser/abc-123\n')); return child; } });
+    return { lifecycle, root, calls, helperFacts, target, command, arm() { armed = true; if (defect === 'new-child') children.add(target); }, facts: () => ({ snapshots, reads, gone, sawAbsence, nativeKills, helperKills }), dispose() { rmSync(root, { recursive: true, force: true }); } };
+}
+
+test('pre-close retained child clean disappearance requires immutable witness and full original close', async (t) => {
+    const { readdirSync } = await import('node:fs');
+    for (const substep of ['args_before', 'comm', 'args_after']) await t.test(substep, async () => {
+        const h = await nativeAbsenceHarness({ substep });
+        try {
+            await h.lifecycle.launch(); h.arm();
+            const result = await h.lifecycle.close(); assert.equal(result.browser, 'closed');
+            const artifacts = readdirSync(path.join(h.root, 'artifacts')).map(name => JSON.parse(readFileSync(path.join(h.root, 'artifacts', name), 'utf8')));
+            const witnesses = artifacts.filter(value => value.schema === 'mission-control.ui-native-absence-witness.v1'); assert.equal(witnesses.length, 1);
+            const witness = witnesses[0]; assert.equal(witness.owner.pid, h.target); assert.equal(witness.substep, substep);
+            assert.equal(witness.helper.classification, 'clean_absence'); assert.equal(witness.helper.exitCode, 1); assert.equal(witness.helper.closeCode, 1);
+            assert.equal(witness.helper.stdoutBytes, 0); assert.equal(witness.helper.stderrBytes, 0);
+            assert.equal(witness.helper.stdoutHash, createHash('sha256').update('').digest('hex'));
+            assert.equal(witness.censusRow.pid, h.target); assert.match(witness.absenceCensus.metadataHash, /^[a-f0-9]{64}$/);
+            assert.ok(!JSON.stringify(witness).includes('--type=renderer'));
+            const leaves = readdirSync(path.join(h.root, 'children'));
+            const settled = JSON.parse(readFileSync(path.join(h.root, 'children', leaves.find(n => n.endsWith('.settled.json'))!), 'utf8'));
+            assert.equal(settled.cohort.length, 2); assert.equal(settled.cohort[1].owner.pid, h.target);
+            assert.equal(settled.cohort[1].owner.commandHash, createHash('sha256').update(h.command(h.target)).digest('hex'));
+            assert.equal(settled.emptyCensuses.length, 2); assert.equal(h.facts().nativeKills, 0);
+            assert.equal(h.calls.filter(c => c === 'Browser.close').length, 1);
+            assert.equal(h.facts().snapshots, 4, 'one initial preclose, one fresh witness and two final empty censuses');
+        } finally { h.dispose(); }
+    });
+});
+
+test('pre-close reconciliation refuses unproved absence and preserves every ownership guard', async (t) => {
+    const { readdirSync } = await import('node:fs');
+    const cases = ['new-child', 'root', 'foreign-uid', 'reused-start', 'escaped-group', 'malformed-prefix', 'changed-prefix-command', 'changed-prefix-parent', 'foreign-prefix-executable', 'malformed-comm', 'noncanonical-prefix', 'helper-zero', 'helper-two', 'helper-signal', 'helper-no-exit', 'helper-close-mismatch', 'helper-no-close', 'helper-stderr', 'helper-whitespace', 'helper-overflow', 'helper-spawn', 'helper-stream', 'helper-timeout', 'wrong-helper-pid', 'nonfixed-helper', 'global-helper', 'witness-partial', 'witness-duplicate', 'witness-error', 'witness-present', 'witness-escaped', 'witness-foreign', 'witness-new-absent', 'reappearance', 'reappearance-rescan', 'churn-deadline', 'deadline-observe', 'deadline-witness', 'unknown-flag', 'endpoint-flag', 'witness-publication', 'cohort-cap'];
+    for (const defect of cases) await t.test(defect, async () => {
+        const substep = ['foreign-prefix-executable', 'malformed-comm', 'noncanonical-prefix'].includes(defect) ? 'args_after' : ['malformed-prefix', 'changed-prefix-command', 'changed-prefix-parent'].includes(defect) ? 'comm' : 'args_before';
+        const h = await nativeAbsenceHarness({ substep, defect });
+        try {
+            await h.lifecycle.launch(); h.arm();
+            const callsBefore = h.calls.length;
+            await assert.rejects(h.lifecycle.close());
+            assert.equal(h.facts().nativeKills, 0);
+            assert.equal(h.calls.filter(c => c === 'Browser.close').length, defect === 'reappearance' ? 1 : 0);
+            assert.ok(!readdirSync(path.join(h.root, 'children')).some(name => /\.(settled|closed)\.json$/.test(name)));
+            const artifacts = readdirSync(path.join(h.root, 'artifacts')).map(name => JSON.parse(readFileSync(path.join(h.root, 'artifacts', name), 'utf8')));
+            const diagnostic = artifacts.find(value => value.schema === 'mission-control.ui-native-close-diagnostic.v1'); assert.ok(diagnostic); assert.equal(diagnostic.unknown, true);
+            if (defect.startsWith('deadline-') || defect === 'churn-deadline') {
+                assert.equal(diagnostic.errorCode, 'UI_CLEANUP_UNKNOWN');
+                const after = h.calls.length; await new Promise(resolve => setImmediate(resolve)); assert.equal(h.calls.length, after, 'no rescan continuation after expired shared deadline');
+                assert.ok(after > callsBefore);
+            }
+            if (!['witness-foreign', 'witness-new-absent', 'reappearance', 'reappearance-rescan', 'churn-deadline', 'cohort-cap'].includes(defect)) assert.equal(artifacts.filter(value => value.schema === 'mission-control.ui-native-absence-witness.v1').length, 0);
+            if (defect === 'witness-publication') assert.equal(diagnostic.publicationUncertain, true);
+            assert.ok(!JSON.stringify(diagnostic).includes('private stderr'));
+            assert.ok(!JSON.stringify(diagnostic).includes('--type=renderer'));
+            if (defect === 'new-child') assert.equal(diagnostic.candidateObservation.retainedOwner, null);
+            if (defect === 'malformed-prefix') { assert.equal(diagnostic.processObservation.substep, 'args_before'); assert.equal(diagnostic.processObservation.stage, 'metadata_shape'); assert.equal(diagnostic.processObservation.helper.exitCode, 0); assert.ok(diagnostic.processObservation.helper.stdoutBytes > 0); }
+            if (defect === 'helper-stderr') { assert.equal(diagnostic.processObservation.helper.fault, 'stderr'); assert.equal(diagnostic.processObservation.helper.stderrHash, createHash('sha256').update('private stderr\n').digest('hex')); assert.ok(diagnostic.candidateObservation.retainedOwner); }
+            if (defect === 'helper-close-mismatch') { assert.equal(diagnostic.helperObservation.exitCode, 1); assert.equal(diagnostic.helperObservation.closeCode, 2); assert.equal(diagnostic.helperObservation.classification, 'unknown'); }
+            if (defect === 'global-helper') assert.equal(diagnostic.helperObservation.target, null);
+            if (defect === 'churn-deadline') assert.equal(h.facts().snapshots, 4, 'continuous disappearance stops at the unchanged shared deadline');
+        } finally { h.dispose(); }
+    });
+    await t.test('ordinary running census never reconciles clean absence', async () => {
+        const h = await nativeAbsenceHarness();
+        try { await h.lifecycle.launch(); h.arm(); await assert.rejects(h.lifecycle.census(), /UI_OS_OBSERVATION_INVALID/); assert.ok(!h.calls.includes('Browser.close')); assert.equal(readdirSync(path.join(h.root, 'artifacts')).length, 0); }
+        finally { h.dispose(); }
+    });
+    await t.test('fresh witness rescans and fully validates newly discovered group member', async () => {
+        const h = await nativeAbsenceHarness({ defect: 'witness-new' });
+        try {
+            await h.lifecycle.launch(); h.arm(); await h.lifecycle.close();
+            assert.ok(h.calls.includes('observe:23458:comm'));
+            const names = readdirSync(path.join(h.root, 'children'));
+            const settled = JSON.parse(readFileSync(path.join(h.root, 'children', names.find(n => n.endsWith('.settled.json'))!), 'utf8'));
+            assert.deepEqual(settled.cohort.map((entry: any) => entry.owner.pid), [23456, 23457, 23458]);
+        } finally { h.dispose(); }
+    });
+});

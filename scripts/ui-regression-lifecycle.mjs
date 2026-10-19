@@ -166,42 +166,99 @@ export function parseUiCdpEndpointV1(stderr) {
         fail('UI_CDP_INVALID');
     return m[1];
 }
-/** Every observation helper captures its original handle and awaits close; no shell or inherited fd. */
-async function ps(args) {
-    const child = spawn('/bin/ps', args, { shell: false, env: PS_ENV, stdio: ['ignore', 'pipe', 'pipe'] });
-    return await new Promise((resolve, reject) => {
-        let stdout = '', stderr = '', fault, exit = false, timer;
-        child.on('error', error => { fault = error; });
-        child.stdout.on('data', chunk => {
-            if (Buffer.byteLength(stdout) + chunk.length > 4194304)
-                fault = new Error('UI_OS_OBSERVATION_INVALID');
-            else
-                stdout += chunk;
-        });
-        child.stderr.on('data', chunk => {
-            if (stderr.length < 4096)
-                stderr += chunk;
-            fault = new Error('UI_OS_OBSERVATION_INVALID');
-        });
-        child.once('exit', (code, signal) => { exit = code === 0 && signal === null; });
-        child.once('close', () => {
-            clearTimeout(timer);
-            if (fault || !exit || stderr)
-                reject(new Error('UI_OS_OBSERVATION_INVALID'));
-            else
-                resolve(stdout);
-        });
-        timer = setTimeout(() => { fault = new Error('UI_OS_OBSERVATION_INVALID'); child.kill('SIGKILL'); }, 2000);
-    });
+// These maps bind private evidence to original helper completion, never an error string.
+const psFailures = new WeakMap(), psCompletions = new WeakMap(), processFailures = new WeakMap();
+const processPsArgs = pid => ['-ww', '-p', String(pid), '-o', 'pid=', '-o', 'ppid=', '-o', 'uid=', '-o', 'lstart=', '-o', 'pgid=', '-o', 'args='];
+const commPsArgs = pid => ['-ww', '-p', String(pid), '-o', 'comm='];
+function fixedPsTarget(args) {
+    if (!Array.isArray(args) || !/^[1-9][0-9]*$/.test(args[2] ?? '')) return null;
+    const pid = Number(args[2]);
+    if (!Number.isSafeInteger(pid)) return null;
+    for (const [form, expected] of [['args', processPsArgs(pid)], ['comm', commPsArgs(pid)]])
+        if (args.length === expected.length && args.every((arg, i) => arg === expected[i])) return { pid, form };
+    return null;
 }
+/** Private component seam. Production constructs this with the default original spawn only. */
+export function createUiPsReaderV1(launchProcess = spawn) {
+    const reader = async args => {
+        let child;
+        try { child = launchProcess('/bin/ps', args, { shell: false, env: PS_ENV, stdio: ['ignore', 'pipe', 'pipe'] }); }
+        catch {
+            const error = new Error('UI_OS_OBSERVATION_INVALID');
+            psFailures.set(error, { target: fixedPsTarget(args), classification: 'unknown', fault: 'spawn', exitObserved: false, closeObserved: false, exitCode: null, exitSignal: null, closeCode: null, closeSignal: null, stdoutBytes: 0, stderrBytes: 0, stdoutHash: uiHashV1(''), stderrHash: uiHashV1('') });
+            throw error;
+        }
+        return await new Promise((resolve, reject) => {
+            let stdout = '', fault = null, exitObserved = false, exitCode = null, exitSignal = null, stdoutBytes = 0, stderrBytes = 0, timer;
+            const stdoutHash = createHash('sha256'), stderrHash = createHash('sha256');
+            child.on('error', () => { fault ??= 'spawn'; });
+            child.stdout.on('error', () => { fault ??= 'stream'; });
+            child.stderr.on('error', () => { fault ??= 'stream'; });
+            child.stdout.on('data', chunk => {
+                stdoutBytes += chunk.length; stdoutHash.update(chunk);
+                if (Buffer.byteLength(stdout) + chunk.length > 4194304) fault ??= 'stdout_cap';
+                else stdout += chunk;
+            });
+            child.stderr.on('data', chunk => { stderrBytes += chunk.length; stderrHash.update(chunk); fault ??= 'stderr'; });
+            child.once('exit', (code, signal) => { exitObserved = true; exitCode = code; exitSignal = signal; });
+            child.once('close', (code, signal) => {
+                clearTimeout(timer);
+                const target = fixedPsTarget(args);
+                const cleanAbsence = target && !fault && exitObserved && exitCode === 1 && exitSignal === null && code === 1 && signal === null && stdoutBytes === 0 && stderrBytes === 0;
+                const completion = { target, classification: cleanAbsence ? 'clean_absence' : 'unknown',
+                    fault: cleanAbsence ? null : fault ?? (!exitObserved ? 'missing_exit' : exitSignal !== null || signal !== null ? 'signal_exit' : exitCode !== 0 || code !== 0 ? 'nonzero_exit' : null),
+                    exitObserved, closeObserved: true, exitCode, exitSignal, closeCode: code, closeSignal: signal, stdoutBytes, stderrBytes, stdoutHash: stdoutHash.digest('hex'), stderrHash: stderrHash.digest('hex') };
+                psCompletions.set(reader, completion);
+                if (fault || !exitObserved || exitCode !== 0 || exitSignal !== null || code !== 0 || signal !== null || stderrBytes) {
+                    const error = new Error('UI_OS_OBSERVATION_INVALID'); psFailures.set(error, completion); reject(error);
+                } else resolve(stdout);
+            });
+            timer = setTimeout(() => { fault ??= 'timeout'; child.kill('SIGKILL'); }, 2000);
+        });
+    };
+    return reader;
+}
+// Import/factory construction has no process effects. The fixed entry never supplies a factory.
+const ps = createUiPsReaderV1();
 export async function observeUiProcessV1(pid, readPs = ps) {
-    const args = ['-ww', '-p', String(pid), '-o', 'pid=', '-o', 'ppid=', '-o', 'uid=', '-o', 'lstart=', '-o', 'pgid=', '-o', 'args='];
-    const before = await readPs(args), comm = await readPs(['-ww', '-p', String(pid), '-o', 'comm=']), after = await readPs(args);
-    const rx = new RegExp('^\\s*(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+' + DATE + '\\s+(\\d+)\\s+([^\\r\\n]+)\\n$');
-    const match = rx.exec(before), exe = /^([^\r\n]+)\n$/.exec(comm);
-    if (before !== after || !match || !exe || Number(match[1]) !== pid || !path.isAbsolute(exe[1]) || realpathSync(exe[1]) !== exe[1])
-        fail('UI_OS_OBSERVATION_INVALID');
-    return { pid, ppid: Number(match[2]), uid: Number(match[3]), startedAt: parseTime(match[4]), pgid: Number(match[5]), executable: exe[1], rawArgs: match[6] };
+    let substep = 'args_before', stage = 'args_before', before = null, executable = null, helper = null;
+    const parse = raw => {
+        stage = 'metadata_shape';
+        const rx = new RegExp('^\\s*(\\d+)\\s+(\\d+)\\s+(\\d+)\\s+' + DATE + '\\s+(\\d+)\\s+([^\\r\\n]+)\\n$');
+        const match = typeof raw === 'string' && rx.exec(raw);
+        if (!match) fail('UI_OS_OBSERVATION_INVALID');
+        stage = 'pid_binding';
+        if (Number(match[1]) !== pid) fail('UI_OS_OBSERVATION_INVALID');
+        return { pid, ppid: Number(match[2]), uid: Number(match[3]), startedAt: parseTime(match[4]), pgid: Number(match[5]), rawArgs: match[6] };
+    };
+    try {
+        const rawBefore = await readPs(processPsArgs(pid)); helper = psCompletions.get(readPs) ?? null;
+        before = parse(rawBefore);
+        substep = stage = 'comm';
+        const comm = await readPs(commPsArgs(pid)); helper = psCompletions.get(readPs) ?? null;
+        stage = 'executable_shape';
+        const exe = typeof comm === 'string' && /^([^\r\n]+)\n$/.exec(comm);
+        if (!exe || !path.isAbsolute(exe[1])) fail('UI_OS_OBSERVATION_INVALID');
+        stage = 'executable_canonical';
+        if (realpathSync(exe[1]) !== exe[1]) fail('UI_OS_OBSERVATION_INVALID');
+        executable = exe[1];
+        substep = stage = 'args_after';
+        const rawAfter = await readPs(processPsArgs(pid)); helper = psCompletions.get(readPs) ?? null;
+        parse(rawAfter);
+        stage = 'stable_bytes';
+        if (rawBefore !== rawAfter) fail('UI_OS_OBSERVATION_INVALID');
+        return { ...before, executable };
+    } catch (error) {
+        if (error && (typeof error === 'object' || typeof error === 'function'))
+            processFailures.set(error, { pid, substep, stage, helper: psFailures.get(error) ?? helper, before, executable });
+        throw error;
+    }
+}
+function processObservationProjection(detail) {
+    if (!detail) return null;
+    return { pid: detail.pid, substep: detail.substep, stage: detail.stage, helper: detail.helper,
+        prefix: { metadata: detail.before ? { pid: detail.before.pid, ppid: detail.before.ppid, uid: detail.before.uid, startedAt: detail.before.startedAt, pgid: detail.before.pgid, commandHash: uiHashV1(detail.before.rawArgs) } : null,
+            executableHash: detail.executable ? uiHashV1(detail.executable) : null } };
 }
 export async function observeUiNodeOwnerV1(script, argv) {
     const observed = await observeUiProcessV1(process.pid);
@@ -260,8 +317,8 @@ export function createUiNativeLifecycleV1(input, effects = {}) {
     let rootExit, exitObserved = false, closeObserved = false, streamFault = false, stdout = '', stderr = '', unknown = false, transportClosed = false;
     let resolveExit, resolveClose;
     const exitPromise = new Promise(resolve => { resolveExit = resolve; }), closePromise = new Promise(resolve => { resolveClose = resolve; });
-    const cohort = new Map();
-    let initialContexts = new Set(), lastSuccessfulCensus = null, observation = null;
+    const cohort = new Map(), reconciled = new Set(), absenceWitnessHashes = [];
+    let initialContexts = new Set(), lastSuccessfulCensus = null, observation = null, candidateObservation = null;
     const base = { jobId, intentHash };
     const record = (name, value) => {
         try {
@@ -299,15 +356,15 @@ export function createUiNativeLifecycleV1(input, effects = {}) {
             }
         }
     };
-    const snapshot = async () => {
+    const snapshot = async (reader = readPs) => {
         observation = { operation: 'snapshot', pid: null };
-        const raw = await readPs(['-ww', '-A', '-o', 'pid=', '-o', 'ppid=', '-o', 'pgid=', '-o', 'uid=', '-o', 'lstart=']);
+        const raw = await reader(['-ww', '-A', '-o', 'pid=', '-o', 'ppid=', '-o', 'pgid=', '-o', 'uid=', '-o', 'lstart=']);
         const result = { rows: parseUiMetadataSnapshotV1(raw), capturedAt: new Date(clock()).toISOString(), metadataHash: uiHashV1(raw) };
         lastSuccessfulCensus = { capturedAt: result.capturedAt, metadataHash: result.metadataHash, rowCount: result.rows.length };
         return result;
     };
     const native = p => ({ kind: 'native_browser', pid: p.pid, processStartedAt: p.startedAt, processGroupId: p.pgid, source: 'observed_os', executable: p.executable, commandHash: uiHashV1(p.rawArgs) });
-    const observe = async (pid) => { observation = { operation: 'observe', pid }; return observeUiProcessV1(pid, readPs); };
+    const observe = async (pid, reader = readPs) => { observation = { operation: 'observe', pid }; return observeUiProcessV1(pid, reader); };
     const retain = p => {
         if (p.uid !== uid() || p.executable !== descriptor.executable || p.pgid !== rootOwner.processGroupId)
             fail('UI_COHORT_UNKNOWN');
@@ -319,29 +376,70 @@ export function createUiNativeLifecycleV1(input, effects = {}) {
         if (cohort.size > 256)
             fail('UI_COHORT_OVERFLOW');
     };
-    const inspect = async () => {
-        const census = await snapshot();
-        if (!rootOwner)
-            return census;
-        const candidates = new Set([...cohort.keys(), rootOwner.pid]);
-        for (let changed = true; changed;) {
-            changed = false;
-            for (const row of census.rows)
-                if (row.pgid === rootOwner.processGroupId || candidates.has(row.ppid)) {
-                    if (!candidates.has(row.pid)) {
-                        candidates.add(row.pid);
-                        changed = true;
+    const inspect = async (preCloseDeadline = null) => {
+        const guard = () => {
+            if (preCloseDeadline !== null && (clock() >= preCloseDeadline || unknown || streamFault || endpointFault || publicationUncertain)) fail('UI_CLEANUP_UNKNOWN');
+        };
+        const reader = preCloseDeadline === null ? readPs : async args => {
+            guard();
+            try { const raw = await readPs(args); guard(); return raw; }
+            catch (error) { guard(); throw error; }
+            finally { if (psCompletions.has(readPs)) psCompletions.set(reader, psCompletions.get(readPs)); }
+        };
+        guard();
+        let census = await snapshot(reader);
+        guard();
+        if (!rootOwner) return census;
+        for (;;) {
+            guard();
+            if (census.rows.some(row => reconciled.has(row.pid))) fail('UI_COHORT_IDENTITY_CHANGED');
+            const candidates = new Set([...cohort.keys(), rootOwner.pid]);
+            for (let changed = true; changed;) {
+                guard(); changed = false;
+                for (const row of census.rows)
+                    if (row.pgid === rootOwner.processGroupId || candidates.has(row.ppid)) {
+                        if (!candidates.has(row.pid)) { candidates.add(row.pid); changed = true; }
                     }
+            }
+            let restart = false;
+            for (const row of census.rows) {
+                guard();
+                if (!candidates.has(row.pid)) continue;
+                const existing = cohort.get(row.pid)?.owner;
+                candidateObservation = { censusRow: { ...row }, retainedOwner: existing ?? null };
+                let p;
+                try { p = await observe(row.pid, reader); guard(); }
+                catch (error) {
+                    guard();
+                    const detail = processFailures.get(error), helper = psFailures.get(error);
+                    const eligible = preCloseDeadline !== null && existing && row.pid !== rootOwner.pid && !reconciled.has(row.pid) && reconciled.size < 256
+                        && row.uid === uid() && row.startedAt === existing.processStartedAt && row.pgid === existing.processGroupId && row.pgid === rootOwner.processGroupId
+                        && helper?.classification === 'clean_absence' && helper.target?.pid === row.pid && detail?.pid === row.pid
+                        && helper.target.form === (detail.substep === 'comm' ? 'comm' : 'args') && ['args_before', 'comm', 'args_after'].includes(detail.substep);
+                    if (!eligible) throw error;
+                    const prefix = detail.before;
+                    if (detail.substep !== 'args_before' && (!prefix || prefix.pid !== row.pid || prefix.ppid !== row.ppid || prefix.uid !== row.uid || prefix.startedAt !== row.startedAt || prefix.pgid !== row.pgid || uiHashV1(prefix.rawArgs) !== existing.commandHash)) throw error;
+                    if (detail.substep === 'args_after' && (detail.executable !== existing.executable || detail.executable !== descriptor.executable)) throw error;
+                    guard();
+                    const fresh = await snapshot(reader);
+                    guard();
+                    if (fresh.rows.some(candidate => candidate.pid === row.pid || reconciled.has(candidate.pid))) fail('UI_COHORT_IDENTITY_CHANGED');
+                    const witness = { schema: 'mission-control.ui-native-absence-witness.v1', ...base, ownerHash, spawnId, launchIntentHash, observedHash,
+                        owner: existing, censusRow: { ...row }, previousCensus: { capturedAt: census.capturedAt, metadataHash: census.metadataHash },
+                        absenceCensus: { capturedAt: fresh.capturedAt, metadataHash: fresh.metadataHash, rowCount: fresh.rows.length }, substep: detail.substep, helper,
+                        prefix: processObservationProjection(detail).prefix };
+                    guard();
+                    try { absenceWitnessHashes.push(store.json(witness)); }
+                    catch (publicationError) { publicationUncertain = true; unknown = true; throw publicationError; }
+                    guard();
+                    reconciled.add(row.pid);
+                    census = fresh; restart = true; break;
                 }
-        }
-        for (const row of census.rows)
-            if (candidates.has(row.pid)) {
-                const p = await observe(row.pid);
-                if (p.startedAt !== row.startedAt || p.pgid !== row.pgid || p.uid !== row.uid)
-                    fail('UI_COHORT_UNKNOWN');
+                if (p.startedAt !== row.startedAt || p.pgid !== row.pgid || p.uid !== row.uid) fail('UI_COHORT_UNKNOWN');
                 retain(p);
             }
-        return census;
+            if (!restart) return census;
+        }
     };
     const bounded = async (operation, deadline) => {
         const ms = deadline - clock();
@@ -458,7 +556,7 @@ export function createUiNativeLifecycleV1(input, effects = {}) {
                 if (!child || !rootOwner || !observedHash || !browser)
                     fail('UI_CLEANUP_UNKNOWN');
                 phase = 'pre_close_census';
-                await bounded(inspect(), deadline);
+                await bounded(inspect(deadline), deadline);
                 phase = 'context_close';
                 for (const context of browser.contexts())
                     if (!initialContexts.has(context))
@@ -516,7 +614,7 @@ export function createUiNativeLifecycleV1(input, effects = {}) {
                     const at = clock();
                     const diagnosticHash = store.json({ schema: 'mission-control.ui-native-close-diagnostic.v1', ...base, ownerHash, spawnId: spawnId ?? null, launchIntentHash: launchIntentHash ?? null, observedHash: observedHash ?? null,
                         phase, errorCode: knownCodes.includes(error?.message) ? error.message : 'UI_NATIVE_OPERATION_FAILED', capturedAt: new Date(at).toISOString(), deadline, elapsedMs: at - (deadline - 30000),
-                        rootOwner: rootOwner ?? null, cohortCount: cohort.size, rootExitObserved: exitObserved, rootCloseObserved: closeObserved, transportClosed, streamFault, endpointFault, publicationUncertain, unknown, observation, lastSuccessfulCensus });
+                        rootOwner: rootOwner ?? null, cohortCount: cohort.size, rootExitObserved: exitObserved, rootCloseObserved: closeObserved, transportClosed, streamFault, endpointFault, publicationUncertain, unknown, observation, lastSuccessfulCensus, candidateObservation, processObservation: processObservationProjection(processFailures.get(error)), helperObservation: psFailures.get(error) ?? null, absenceWitnessHashes: [...absenceWitnessHashes] });
                     line = { code: 'UI_NATIVE_CLOSE_FAILED', diagnosticHash };
                 }
                 catch {
