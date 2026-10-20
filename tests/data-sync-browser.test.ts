@@ -783,7 +783,7 @@ test('responsive tools readability', { timeout: 240000 }, async () => {
                     for (const field of ['title', 'notice', 'socket-status', 'connection-note', 'agents-tab', 'history-tab', 'main-selector', 'panel-name', 'progress-and-composer'])
                         plannedChecks.push(`chat-${prefix}-${field}`);
                     for (const target of targets) for (const field of ['identity', 'role']) plannedChecks.push(`chat-${prefix}-${target.id}-${field}`);
-                    for (const field of ['agent-scroll-independent', 'select-last-and-main', 'long-panel-name', 'long-panel-scroll', 'root-width'])
+                    for (const field of ['agent-scroll-independent', 'select-last-and-main', 'long-panel-name', 'long-message-sender', 'long-messages-width', 'long-panel-scroll', 'root-width'])
                         plannedChecks.push(`chat-${prefix}-${field}`);
                     for (const field of ['available', 'note', 'independent-scroll', 'enter-activation-focus', 'space-activation-focus', 'main-row-selection', 'loading', 'loading-tabs', 'unavailable', 'unavailable-tabs'])
                         plannedChecks.push(`history-${prefix}-${field}`);
@@ -910,6 +910,24 @@ test('responsive tools readability', { timeout: 240000 }, async () => {
                         await p.getByRole('button', { name: new RegExp(last.identityName) }).click();
                         await panelReady(last.id, last.identityName);
                         await text(`chat-${prefix}-long-panel-name`, p.locator('.chat-panel__agent-name'), last.identityName);
+                        await check(`chat-${prefix}-long-message-sender`, async () => {
+                            const sender = p.locator('.chat-msg--assistant .chat-msg__from').last();
+                            if (await sender.isVisible()) await sender.scrollIntoViewIfNeeded();
+                            const geometry = await responsiveGeometry(sender);
+                            const evidenceHash = h.receipt({ prefix, sender: geometry });
+                            assert.equal(geometry.visible, true, `saved assistant sender visible; geometry ${evidenceHash}`);
+                            assert.equal(geometry.text, `${last.identityEmoji} ${last.identityName}`, 'full saved assistant sender identity');
+                            assert.equal(geometry.font.size, 14, `preserved sender font; geometry ${evidenceHash}`);
+                            assert.ok(geometry.scroll.width <= geometry.scroll.clientWidth + 1, `no horizontal sender text escape; geometry ${evidenceHash}`);
+                            assert.ok(geometry.unclipped && geometry.fragments.length > 0, `all sender Range fragments inside ancestor clips; geometry ${evidenceHash}`);
+                            return { evidenceHash };
+                        });
+                        await check(`chat-${prefix}-long-messages-width`, async () => {
+                            const geometry = await responsiveGeometry(p.locator('.chat-panel__messages'));
+                            const evidenceHash = h.receipt({ prefix, longTargetMessages: geometry });
+                            assert.ok(geometry.scroll.width <= geometry.scroll.clientWidth + 1, `no internal horizontal messages escape; geometry ${evidenceHash}`);
+                            return { evidenceHash };
+                        });
                         await shot(`chat-${prefix}-selected-long`);
                         await p.getByRole('button', { name: 'Select main target', exact: true }).click();
                         await panelReady('main', targets[0].identityName);
