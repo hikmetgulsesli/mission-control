@@ -25,6 +25,64 @@ const PENDING_JOB = 'mission-control.controls.pending-job.v1';
 const SELECTED = 'mission-control.controls.selected-job.v1';
 const EVIDENCE = '/api/controls/evidence', JOBS = '/api/controls/jobs';
 const OBSERVATION_HEADER = 'x-mc-controls-fixture-request-id';
+// Self-contained browser JavaScript text: tsx/esbuild must never serialize a
+// callback containing keepNames helpers into the page. No helper polyfill.
+const CONTROLS_READ_OBSERVER_INIT_SCRIPT = String.raw`(() => {
+  const header = 'x-mc-controls-fixture-request-id', cap = 512;
+  // Passive observation only. Return each ORIGINAL fetch/json promise and
+  // leave its Response, fulfillment value, and rejection reason untouched.
+  const records = [], faults = [], responses = new WeakMap();
+  const note = (code) => { if (faults.length < 32) faults.push(code); };
+  const originalFetch = window.fetch, originalJson = Response.prototype.json;
+  let nextFetchId = 0;
+  window.fetch = function(...args) {
+    const promise = Reflect.apply(originalFetch, this, args);
+    /** @type {any} */
+    let record;
+    try {
+      const input = args[0], init = args[1];
+      const url = new URL(input instanceof Request ? input.url : String(input), location.href);
+      if (!url.pathname.startsWith('/api/controls/')) return promise;
+      if (records.length >= cap) { note('READ_OBSERVER_BOUND'); return promise; }
+      record = { fetchId: ++nextFetchId, requestLedgerId: null, url: url.href,
+        method: init?.method ?? (input instanceof Request ? input.method : 'GET'),
+        fetchState: 'pending', jsonCalls: 0, jsonState: 'not_called' };
+      records.push(record);
+    } catch { note('READ_OBSERVER_REQUEST_UNKNOWN'); return promise; }
+    void promise.then(response => {
+      try {
+        record.fetchState = 'fulfilled'; record.status = response.status; record.responseUrl = response.url;
+        record.requestLedgerId = response.headers.get(header);
+        if (!/^[1-9][0-9]{0,2}$/.test(record.requestLedgerId ?? '')) note('READ_OBSERVER_HEADER_UNKNOWN');
+        responses.set(response, record);
+      } catch { note('READ_OBSERVER_RESPONSE_UNKNOWN'); }
+    }, () => { record.fetchState = 'rejected'; note('READ_OBSERVER_FETCH_REJECTED'); });
+    return promise;
+  };
+  Response.prototype.json = function(...args) {
+    const promise = Reflect.apply(originalJson, this, args), record = responses.get(this);
+    if (record) {
+      record.jsonCalls++;
+      if (record.jsonCalls !== 1) note('READ_OBSERVER_JSON_AMBIGUOUS');
+      record.jsonState = 'pending';
+      void promise.then(value => {
+        try {
+          record.jsonState = 'fulfilled';
+          const serialized = JSON.stringify(value), bytes = new TextEncoder().encode(serialized);
+          record.jsonBytes = bytes.byteLength;
+          if (bytes.byteLength > 262144) { note('READ_OBSERVER_BODY_BOUND'); return; }
+          void crypto.subtle.digest('SHA-256', bytes).then(digest => {
+            record.jsonBodyHash = Array.from(new Uint8Array(digest), n => n.toString(16).padStart(2,'0')).join('');
+          }, () => note('READ_OBSERVER_BODY_HASH_UNKNOWN'));
+        } catch { note('READ_OBSERVER_JSON_VALUE_UNKNOWN'); }
+      }, () => { record.jsonState = 'rejected'; note('READ_OBSERVER_JSON_REJECTED'); });
+    }
+    return promise;
+  };
+  Object.defineProperty(window, 'controlsReadObserver', { value: Object.freeze({
+    snapshot: () => ({ records: records.map(record => ({ ...record })), errors: [...faults] }),
+  }) });
+})();`;
 const receiptPath = (id: string) => `${JOBS}/${id}`;
 const evidencePath = (id: string) => `${receiptPath(id)}/evidence`;
 const hash = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
@@ -119,7 +177,7 @@ async function harness(name: 'causal' | 'races', body: (p: Page, h: Harness) => 
   if (existsSync(join(SOURCE_ROOT, 'src/lib/control-selected-evidence.ts'))) paths.push('src/lib/control-selected-evidence.ts');
   const owned: OwnedProfile = await createControlsSelectedEvidenceOwnedProfileV1({ sourceRoot: SOURCE_ROOT, sourcePaths: paths.sort(),
     profileData: { name, jobA: JOB_A, jobB: JOB_B, globalSelection: S, historicalSelection: T, data: { global: data.global,
-      receipts: [...data.receipts], evidence: [...data.evidence] }, scenarios: ['row-selection','refresh','reload','late-global','a-b-a-success-error','remount-success-error','terminal-refs-success-error','terminal-missing','historical','pending-byte-stability'] } });
+      receipts: [...data.receipts], evidence: [...data.evidence] }, readObserverScriptHash: hash(CONTROLS_READ_OBSERVER_INIT_SCRIPT), scenarios: ['row-selection','refresh','reload','late-global','a-b-a-success-error','remount-success-error','terminal-refs-success-error','terminal-missing','historical','pending-byte-stability'] } });
   let cache: string | null = null, cacheIdentity: ReturnType<typeof lstatSync> | null = null;
   let server: ViteDevServer | null = null, http: ViteDevServer['httpServer'] = null;
   let page: Page | undefined, origin = '', listener: unknown = null;
@@ -245,72 +303,34 @@ async function harness(name: 'causal' | 'races', body: (p: Page, h: Harness) => 
       if (req.url?.startsWith('/api/') || req.url?.startsWith('/ws')) { res.statusCode = 403; res.end('TEST_NETWORK_DENIED'); }
       else next();
     });
-    await server.listen();
+    // Installed Vite startServer treats zero as falsy and falls back to 5173,
+    // even for server.listen(0). Its original HTTP object's public listen is
+    // wrapped separately to run initServer(true), then forwards zero unchanged.
+    const originalHttp = http;
+    await bounded(new Promise<void>((resolve, reject) => {
+      const onListening = () => { originalHttp.off('error', onError); resolve(); };
+      const onError = (error: Error) => { originalHttp.off('listening', onListening); reject(error); };
+      originalHttp.once('listening', onListening);
+      originalHttp.once('error', onError);
+      // Observe the installed async wrapper's rejection as well as the actual
+      // original HTTP events. No extra listener or port-availability probe.
+      void Promise.resolve(originalHttp.listen(0, '127.0.0.1')).catch(onError);
+    }), 'SELECTED_EPHEMERAL_LISTEN_UNKNOWN');
+    assert.equal(server.httpServer, originalHttp, 'original HTTP identity required');
     const address = http.address();
     assert.ok(address && typeof address !== 'string');
     assert.equal(address.address, '127.0.0.1');
+    assert.ok(Number.isInteger(address.port) && address.port > 0 && address.port <= 65535, 'actual assigned ephemeral port required');
     assert.ok(![3080,3333,18789,13081,13082].includes(address.port));
     origin = `http://127.0.0.1:${address.port}`;
     listener = { host: address.address, port: address.port, family: address.family };
-    owned.store.json({ schema: 'mission-control.controls-selected-evidence-listener.v1', origin, listener, cacheRoot: cache });
+    owned.store.json({ schema: 'mission-control.controls-selected-evidence-listener.v1', origin, listener, requestedPort: 0,
+      listenApi: 'original_vite_http_server', readObserverScriptHash: hash(CONTROLS_READ_OBSERVER_INIT_SCRIPT), cacheRoot: cache });
     stage = 'native-acquisition';
     const browser = await owned.launch();
     assert.ok(browser, 'native refusal is setup UNKNOWN, never causal RED');
     const context = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1440, height: 1000 } });
-    await context.addInitScript(({ header, cap }) => {
-      // Passive observation only. Return each ORIGINAL fetch/json promise and
-      // leave its Response, fulfillment value, and rejection reason untouched.
-      const records: any[] = [], faults: string[] = [], responses = new WeakMap<Response, any>();
-      const note = (code: string) => { if (faults.length < 32) faults.push(code); };
-      const originalFetch = window.fetch, originalJson = Response.prototype.json;
-      let nextFetchId = 0;
-      window.fetch = function(...args) {
-        const promise = Reflect.apply(originalFetch, this, args);
-        let record: any;
-        try {
-          const input = args[0], init = args[1];
-          const url = new URL(input instanceof Request ? input.url : String(input), location.href);
-          if (!url.pathname.startsWith('/api/controls/')) return promise;
-          if (records.length >= cap) { note('READ_OBSERVER_BOUND'); return promise; }
-          record = { fetchId: ++nextFetchId, requestLedgerId: null, url: url.href,
-            method: init?.method ?? (input instanceof Request ? input.method : 'GET'),
-            fetchState: 'pending', jsonCalls: 0, jsonState: 'not_called' };
-          records.push(record);
-        } catch { note('READ_OBSERVER_REQUEST_UNKNOWN'); return promise; }
-        void promise.then(response => {
-          try {
-            record.fetchState = 'fulfilled'; record.status = response.status; record.responseUrl = response.url;
-            record.requestLedgerId = response.headers.get(header);
-            if (!/^[1-9][0-9]{0,2}$/.test(record.requestLedgerId ?? '')) note('READ_OBSERVER_HEADER_UNKNOWN');
-            responses.set(response, record);
-          } catch { note('READ_OBSERVER_RESPONSE_UNKNOWN'); }
-        }, () => { record.fetchState = 'rejected'; note('READ_OBSERVER_FETCH_REJECTED'); });
-        return promise;
-      };
-      Response.prototype.json = function(...args) {
-        const promise = Reflect.apply(originalJson, this, args), record = responses.get(this);
-        if (record) {
-          record.jsonCalls++;
-          if (record.jsonCalls !== 1) note('READ_OBSERVER_JSON_AMBIGUOUS');
-          record.jsonState = 'pending';
-          void promise.then(value => {
-            try {
-              record.jsonState = 'fulfilled';
-              const serialized = JSON.stringify(value), bytes = new TextEncoder().encode(serialized);
-              record.jsonBytes = bytes.byteLength;
-              if (bytes.byteLength > 262144) { note('READ_OBSERVER_BODY_BOUND'); return; }
-              void crypto.subtle.digest('SHA-256', bytes).then(digest => {
-                record.jsonBodyHash = Array.from(new Uint8Array(digest), n => n.toString(16).padStart(2,'0')).join('');
-              }, () => note('READ_OBSERVER_BODY_HASH_UNKNOWN'));
-            } catch { note('READ_OBSERVER_JSON_VALUE_UNKNOWN'); }
-          }, () => { record.jsonState = 'rejected'; note('READ_OBSERVER_JSON_REJECTED'); });
-        }
-        return promise;
-      };
-      Object.defineProperty(window, 'controlsReadObserver', { value: Object.freeze({
-        snapshot: () => ({ records: records.map(record => ({ ...record })), errors: [...faults] }),
-      }) });
-    }, { header: OBSERVATION_HEADER, cap: 512 });
+    await context.addInitScript({ content: CONTROLS_READ_OBSERVER_INIT_SCRIPT });
     await context.route('**/*', async (route: Route) => {
       const request = route.request(), url = new URL(request.url()), path = url.pathname + url.search;
       if (url.origin !== origin || request.method() !== 'GET') { denied.push(`${request.method()}:${url.href}`); return route.abort(); }
