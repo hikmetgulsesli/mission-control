@@ -11,16 +11,19 @@ test('overview projects and observed roster through the actual HTTP producer', a
   const temporaryRoot = mkdtempSync(join(tmpdir(), 'mc-overview-'));
   t.after(() => rmSync(temporaryRoot, { recursive: true, force: true }));
   const dataPath = join(temporaryRoot, 'data.json');
+  const jobsPath = join(temporaryRoot, 'jobs.json');
   writeFileSync(dataPath, '{}\n');
+  writeFileSync(jobsPath, '{"jobs":[]}\n');
 
   const fixture = String.raw`
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { writeFileSync } from 'node:fs';
+import { renameSync, writeFileSync } from 'node:fs';
 import test from 'node:test';
 import express from 'express';
 
 test('actual overview boundary', async (context) => {
+  const cronCache = await import(process.env.MC_CACHE_MODULE);
   let roster = [{ id: 'main', name: 'Fallback', identityName: 'Rune', identityEmoji: '🛠' }];
   let rosterUnavailable = false;
   let runsUnavailable = false;
@@ -36,10 +39,17 @@ test('actual overview boundary', async (context) => {
     runs = [];
     projected = [];
     runReads = 0;
+    cronCache.invalidateCache('cron');
     writeFileSync(process.env.MC_DATA_PATH, '{}');
+    writeFileSync(process.env.MC_JOBS_PATH, '{"jobs":[]}');
   });
-  context.mock.module(process.env.MC_CONFIG_MODULE, { namedExports: { config: { dataJson: process.env.MC_DATA_PATH } } });
-  context.mock.module(process.env.MC_CACHE_MODULE, { namedExports: { cached: async (_key, _ttl, read) => read() } });
+  context.mock.module(process.env.MC_CONFIG_MODULE, { namedExports: { config: {
+    dataJson: process.env.MC_DATA_PATH, jobsJson: process.env.MC_JOBS_PATH,
+  } } });
+  context.mock.module(process.env.MC_CACHE_MODULE, { namedExports: {
+    cached: async (key, ttl, read) => key === 'cron' ? cronCache.cached(key, ttl, read) : read(),
+    invalidateCache: cronCache.invalidateCache,
+  } });
   context.mock.module(process.env.MC_PROJECTS_MODULE, { namedExports: { readProjectApiProjections: async () => {
     if (projectsUnavailable) throw new Error('fixture projections unavailable');
     return projected;
@@ -56,6 +66,7 @@ test('actual overview boundary', async (context) => {
   context.mock.module(process.env.MC_METRICS_MODULE, { namedExports: { getSystemMetrics: async () => null } });
 
   const { default: router, selectOperationalActiveProjects, selectRecentRuntimeProjects } = await import(process.env.MC_OVERVIEW_MODULE);
+  const { default: cronRouter } = await import(process.env.MC_CRON_MODULE);
   const execution = (state, runId, runStatus = state) => ({
     schema: 'mission-control.project-execution.v1', state,
     active: ['running', 'resuming', 'cancelling', 'failing'].includes(state),
@@ -69,6 +80,7 @@ test('actual overview boundary', async (context) => {
   });
   const app = express();
   app.use('/api', router);
+  app.use('/api', cronRouter);
   const server = createServer(app);
   const runtimeServer = createServer((_request, response) => response.end('ok'));
   const close = (ownedServer, name) => new Promise((resolve, reject) => ownedServer.close((error) => {
@@ -86,6 +98,74 @@ test('actual overview boundary', async (context) => {
       assert.equal(response.status, 200);
       return response.json();
     };
+    const readCrons = async () => {
+      const response = await fetch('http://127.0.0.1:' + address.port + '/api/cron');
+      assert.equal(response.status, 200);
+      return response.json();
+    };
+    const configuredJobs = [
+      { id: 'configured-1', name: 'one', enabled: true },
+      { id: 'configured-2', name: 'two', enabled: false },
+      { id: 'configured-3', name: 'three', enabled: true },
+      { id: 'configured-4', name: 'four', enabled: true },
+      { id: 'configured-5', name: 'five', enabled: false },
+      { id: 'configured-6', name: 'six', enabled: true },
+      { id: 'configured-7', name: 'seven', enabled: false },
+      { id: 'configured-8', name: 'eight', enabled: true },
+    ];
+
+    for (const dashboard of [{ crons: [{ enabled: true }] }, {}]) {
+      await context.test('five enabled configured schedules win over ' + (dashboard.crons ? 'conflicting' : 'absent') + ' dashboard crons', async () => {
+        writeFileSync(process.env.MC_DATA_PATH, JSON.stringify(dashboard));
+        writeFileSync(process.env.MC_JOBS_PATH, JSON.stringify({ jobs: configuredJobs }));
+        assert.deepEqual(await readCrons(), configuredJobs);
+        assert.equal((await read()).cronCount, 5);
+      });
+    }
+    await context.test('Overview and Operations share the configured display cache in either read order', async () => {
+      writeFileSync(process.env.MC_JOBS_PATH, JSON.stringify({ jobs: configuredJobs }));
+      assert.equal((await read()).cronCount, 5);
+      writeFileSync(process.env.MC_JOBS_PATH, '{"jobs":[]}');
+      assert.deepEqual(await readCrons(), configuredJobs);
+      cronCache.invalidateCache('cron');
+      assert.deepEqual(await readCrons(), []);
+      writeFileSync(process.env.MC_JOBS_PATH, JSON.stringify({ jobs: configuredJobs }));
+      assert.equal((await read()).cronCount, 0);
+    });
+    await context.test('valid empty configured jobs are zero despite enabled dashboard crons', async () => {
+      writeFileSync(process.env.MC_DATA_PATH, '{"crons":[{"enabled":true}]}');
+      assert.equal((await read()).cronCount, 0);
+    });
+    await context.test('configured jobs remain available when the independent dashboard snapshot is malformed', async () => {
+      writeFileSync(process.env.MC_DATA_PATH, '{malformed');
+      writeFileSync(process.env.MC_JOBS_PATH, JSON.stringify({ jobs: configuredJobs }));
+      assert.equal((await read()).cronCount, 5);
+    });
+    for (const [name, raw] of [
+      ['missing collection', '{}'], ['null collection', '{"jobs":null}'],
+      ['object collection', '{"jobs":{}}'], ['invalid JSON', '{malformed'],
+      ['null job', '{"jobs":[null]}'], ['missing enabled state', '{"jobs":[{}]}'],
+      ['nonboolean enabled state', '{"jobs":[{"enabled":"false"}]}'],
+    ]) {
+      await context.test(name + ' configured jobs stay unknown despite dashboard crons', async () => {
+        writeFileSync(process.env.MC_DATA_PATH, '{"crons":[{"enabled":true}]}');
+        writeFileSync(process.env.MC_JOBS_PATH, raw);
+        const body = await read();
+        assert.equal(body.cronCount, null);
+        assert.equal(body.agentCount, 1, 'cron availability does not suppress other observations');
+      });
+    }
+    await context.test('missing configured file stays unknown without suppressing other observations', async () => {
+      const retainedPath = process.env.MC_JOBS_PATH + '.retained';
+      renameSync(process.env.MC_JOBS_PATH, retainedPath);
+      try {
+        const body = await read();
+        assert.equal(body.cronCount, null);
+        assert.equal(body.agentCount, 1);
+      } finally {
+        renameSync(retainedPath, process.env.MC_JOBS_PATH);
+      }
+    });
 
     await context.test('one observed Rune and zero runs cannot invent CEO work or catalog rows', async () => {
       const body = await read();
@@ -190,7 +270,9 @@ test('actual overview boundary', async (context) => {
       env: {
         PATH: process.env.PATH,
         MC_DATA_PATH: dataPath,
+        MC_JOBS_PATH: jobsPath,
         MC_OVERVIEW_MODULE: new URL('./overview.ts', import.meta.url).href,
+        MC_CRON_MODULE: new URL('./cron.ts', import.meta.url).href,
         MC_CONFIG_MODULE: new URL('../config.ts', import.meta.url).href,
         MC_CACHE_MODULE: new URL('../utils/cache.ts', import.meta.url).href,
         MC_PROJECTS_MODULE: new URL('./projects.ts', import.meta.url).href,

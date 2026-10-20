@@ -127,7 +127,7 @@ export interface OverviewData {
   agentCount: number | null;
   activeRuns: Run[];
   activeRunCount: number;
-  cronCount: number;
+  cronCount: number | null;
   costToday: number;
   costAllTime: number;
   system: SystemMetrics | null;

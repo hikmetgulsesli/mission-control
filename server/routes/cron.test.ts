@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { test, type TestContext } from 'node:test';
 import express from 'express';
@@ -19,7 +19,12 @@ async function fixture(t: TestContext, jobs: unknown, refusal?: string) {
   const calls: [string, string[]][] = [];
   let invalidations = 0;
   let reads = 0;
-  const source = readFileSync(new URL('./cron.ts', import.meta.url), 'utf8');
+  let readError: string | undefined;
+  // Execute the shared reader too when the route delegates to it. Its imports
+  // use these same inert filesystem/config ports and the real display cache.
+  const readerPath = new URL('../services/cron-jobs.ts', import.meta.url);
+  const source = (existsSync(readerPath) ? readFileSync(readerPath, 'utf8') : '')
+    + '\n' + readFileSync(new URL('./cron.ts', import.meta.url), 'utf8');
   const tree = ts.createSourceFile('cron.ts', source, ts.ScriptTarget.Latest, true);
   const body = tree.statements.filter(node => !ts.isImportDeclaration(node) && !ts.isExportAssignment(node))
     .map(node => node.getText(tree)).join('\n');
@@ -29,7 +34,7 @@ async function fixture(t: TestContext, jobs: unknown, refusal?: string) {
   const router = new Function('Router', 'readFileSync', 'config', 'cached', 'invalidateCache', 'runCli', js
     + ';return createCronRouter({readJobs: () => JSON.parse(readFileSync()).jobs, runCli});')(
     express.Router,
-    () => { reads++; return JSON.stringify({ jobs }); },
+    () => { reads++; if (readError) throw new Error(readError); return JSON.stringify({ jobs }); },
     { jobsJson: 'fixture-only' },
     cached,
     (key: string) => { invalidations++; invalidateCache(key); },
@@ -53,8 +58,68 @@ async function fixture(t: TestContext, jobs: unknown, refusal?: string) {
   return {
     base: `http://127.0.0.1:${address.port}/api/cron`, calls,
     invalidations: () => invalidations, reads: () => reads,
+    setJobs: (next: unknown) => { jobs = next; },
+    refuseReads: () => { readError = 'fixture jobs unavailable'; },
   };
 }
+
+test('GET preserves a valid empty configured collection', async t => {
+  const f = await fixture(t, []);
+  const response = await fetch(f.base);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), []);
+});
+
+for (const jobs of [undefined, null, {}, [null], [{}], [{ enabled: 'false' }]]) {
+  test(`GET rejects malformed configured jobs instead of reporting an empty collection (${JSON.stringify(jobs)})`, async t => {
+    const f = await fixture(t, jobs);
+    const response = await fetch(f.base);
+    assert.equal(response.status, 500);
+    assert.equal(typeof (await response.json()).error, 'string');
+    assert.deepEqual(f.calls, []);
+  });
+}
+
+test('GET reports unavailable source without a cache value', async t => {
+  const f = await fixture(t, []);
+  f.refuseReads();
+  const response = await fetch(f.base);
+  assert.equal(response.status, 500);
+  assert.deepEqual(await response.json(), { error: 'fixture jobs unavailable' });
+});
+
+test('GET retains last-good data during failed refresh and refuses it after the existing hard TTL', async t => {
+  let now = 1_000_000;
+  t.mock.method(Date, 'now', () => now);
+  const jobs = [{ id: selectedId, name: 'test/agent', enabled: true }];
+  const f = await fixture(t, jobs);
+  assert.deepEqual(await (await fetch(f.base)).json(), jobs);
+  f.setJobs([{ enabled: 'invalid' }]);
+  now += 30_001;
+  const stale = await fetch(f.base);
+  assert.equal(stale.status, 200);
+  assert.deepEqual(await stale.json(), jobs);
+  // Allow the already-started background refresh rejection to settle.
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.reads(), 2);
+  assert.deepEqual(await (await fetch(f.base)).json(), jobs);
+  now = 1_150_001;
+  const expired = await fetch(f.base);
+  assert.equal(expired.status, 500);
+  assert.equal(typeof (await expired.json()).error, 'string');
+});
+
+test('toggle selects its action from uncached authority after a display read', async t => {
+  const f = await fixture(t, [{ id: selectedId, name: 'test/agent', enabled: true }]);
+  await fetch(f.base);
+  f.setJobs([{ id: selectedId, name: 'test/agent', enabled: false }]);
+  const response = await fetch(`${f.base}/${selectedId}/toggle`, { method: 'POST' });
+  assert.equal(response.status, 200);
+  assert.deepEqual(f.calls, [['openclaw', ['cron', 'enable', selectedId]]]);
+  assert.deepEqual(await response.json(), { success: true, name: 'test/agent', enabled: true });
+  assert.equal(f.reads(), 2);
+  assert.equal(f.invalidations(), 1);
+});
 
 for (const enabled of [true, false]) {
   test(`duplicate names toggle only the selected ${enabled ? 'enabled' : 'disabled'} UUID and refresh cached GET`, async t => {
