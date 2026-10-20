@@ -117,10 +117,10 @@ export class ControlSelectedEvidenceV1 {
       if (changed && startEvidence) void this.readEvidence(true);
       return this.evidenceContext(scope);
     } catch (error) {
-      if (this.ownsScope(scope) && (!gate || this.ownsEvidence(gate))
-        && sequence === this.receiptSequence && sequence >= this.settledReceiptSequence) {
-        this.settledReceiptSequence = sequence;
-        this.fail(errorCode(error));
+      if (this.ownsScope(scope) && (!gate || this.ownsEvidence(gate))) {
+        // An ignored visible error still fences successes from requests older than this outcome.
+        this.settledReceiptSequence = Math.max(this.settledReceiptSequence, sequence);
+        if (sequence === this.receiptSequence && sequence >= this.settledReceiptSequence) this.fail(errorCode(error));
       }
       return null;
     }

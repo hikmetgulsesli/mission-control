@@ -183,6 +183,25 @@ for (const reject of [false, true]) {
   });
 }
 
+test('an ignored intermediate rejection fences older higher receipts while the newest request remains pending', async () => {
+  const h = await harness(); h.owner.activate(); h.owner.select(A, receipt());
+  h.reports[0]!.wait.resolve(evidence()); await drain();
+  const ready = h.state(), publications = h.states.length;
+  const first = h.owner.refreshReceipt(), intermediate = h.owner.refreshReceipt(), newest = h.owner.refreshReceipt();
+  h.receipts[1]!.wait.reject(new Error('CONTROL_HTTP_503')); await intermediate;
+  assert.strictEqual(h.state(), ready); assert.equal(h.states.length, publications);
+  assert.equal(h.accepted.length, 1); assert.equal(h.reports.length, 1);
+  h.receipts[0]!.wait.resolve(receipt(A, 99)); await first;
+  assert.equal(h.state().receipt?.revision, 5);
+  assert.strictEqual(h.state(), ready); assert.equal(h.states.length, publications);
+  assert.deepEqual(h.accepted.map(value => value.revision), [5]); assert.equal(h.reports.length, 1);
+  h.receipts[2]!.wait.resolve(receipt(A, 6, { state: 'completed', finishedAt: T, reportRefs: { activationHash: H } })); await newest;
+  assert.deepEqual(h.accepted.map(value => value.revision), [5, 6]); assert.equal(h.reports.length, 2);
+  h.reports[1]!.wait.resolve(evidence({ activation: activation() })); await drain();
+  assert.equal(h.state().status, 'ready'); assert.equal(h.state().receipt?.revision, 6);
+  assert.equal(h.state().envelope?.evidence.activation.report?.hash, H);
+});
+
 test('newest manual refresh evidence wins and stale failures cannot detach it', async () => {
   const h = await harness(); h.owner.activate(); h.owner.select(A, receipt());
   const one = h.owner.refresh();
