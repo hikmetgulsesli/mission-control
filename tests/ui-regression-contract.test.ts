@@ -775,9 +775,11 @@ function withChatWorkflowsLoadedDom(geometry: any) {
     geometry.window.innerHeight = 900;
     const content: Record<string, [string, number, number]> = {
         '.chat-page h2': ['COMMS', 208, 235], '.chat-page > button': ['Show Progress', 250, 290],
-        '.chat-panel__agent-info': ['Arya', 304, 330], '.chat-panel__status': ['ONLINE', 304, 330],
+        '.chat-panel__agent-info': ['Arya', 304, 330], '.chat-panel__status': ['MC SOCKET CONNECTED', 304, 330],
+        '.chat-panel__connection-note': ['Browser-to-Mission-Control connection only; gateway and target availability are unverified.', 334, 380],
+        '.chat-page__notice': ['Targets include catalog defaults and recorded agents. Catalog roles describe defaults; availability is unverified.', 292, 302],
         '.chat-panel__input input': ['', 850, 882], '.chat-panel__input button': ['SEND', 850, 882],
-        '.chat-panel__empty': ['No messages with Arya yet Send a message to start a conversation', 400, 500],
+        '.chat-panel__empty': ['No saved messages returned for Arya. Local submissions and received events appear here.', 400, 500],
         '.workflows-page [role="status"]': ['No workflows in the last observed collection.', 300, 330],
     };
     geometry.document.querySelectorAll = (selector: string) => {
@@ -1707,6 +1709,7 @@ test('populated Projects actual behavior checks card-local geometry at all width
 // only Root's native run can establish computed flex layout.
 test('Chat pane effect keeps newest-first scrolling local on mount history and message updates', async () => {
     const ts = await import('typescript'), { runInNewContext } = await import('node:vm'), React = await import('react');
+    const { chatTargetDisplay, chatTimestamp, newestKnownChatTime } = await import('../src/lib/chat-presentation.ts');
     const text = readFileSync(new URL('../src/components/ChatPanel.tsx', import.meta.url), 'utf8');
     const tree = ts.createSourceFile('ChatPanel.tsx', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     const declarations = tree.statements.filter(n => ts.isFunctionDeclaration(n) && n.name?.text === 'ChatPanel');
@@ -1714,15 +1717,15 @@ test('Chat pane effect keeps newest-first scrolling local on mount history and m
     const source = ts.transpileModule(declarations[0].getText(tree).replace(/^export /, ''), { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText;
     for (const phase of ['mount', 'history', 'message']) {
         let stateIndex = 0, ancestorScrolls = 0; const local: any[] = [], effects: { callback: Function; deps: unknown[] }[] = [], memos: any[] = [];
-        const history = phase === 'mount' ? [] : [{ id: 'old', role: 'assistant', agent: 'main', text: 'Old history', ts: 10, done: true }, { id: 'new', role: 'user', agent: 'main', text: 'New history', ts: 20, done: true }];
+        const history = phase === 'mount' ? [] : [{ id: 'old', role: 'assistant', agent: 'main', text: 'Old history', ts: 10, done: true, origin: 'saved' }, { id: 'new', role: 'user', agent: 'main', text: 'New history', ts: 20, done: true, origin: 'saved' }];
         const component = runInNewContext(source + '\nChatPanel', {
-            React, AGENT_MAP: { main: { name: 'Arya', emoji: 'A' } }, renderMarkdown: (s: string) => s,
-            useState: () => [[ '', [], history, false ][stateIndex++], () => {}],
+            React, chatTargetDisplay, chatTimestamp, newestKnownChatTime, renderMarkdown: (s: string) => s,
+            useState: () => [[ '', [], { agentId: 'main', status: phase === 'mount' ? 'loading' : 'ready', messages: history } ][stateIndex++], () => {}],
             useRef: (value: any) => ({ current: value }), useEffect: (callback: Function, deps: unknown[]) => effects.push({ callback, deps }),
             useMemo: (fn: Function) => { const value = fn(); memos.push(value); return value; },
         });
         const events = phase === 'message' ? [{ event: 'chat', payload: { sessionKey: 'agent:main', runId: 'stream', state: 'final', message: { role: 'assistant', timestamp: 30, content: [{ text: 'Newest event' }] } } }] : [];
-        const output = component({ events, onSend() {}, connected: true, selectedAgent: 'main' });
+        const output = component({ events, onSend() {}, connected: true, selectedAgent: 'main', selectedAgentData: { id: 'main', identityName: 'Arya' } });
         const visit = (node: any) => {
             if (!node || typeof node !== 'object') return;
             if (Array.isArray(node)) return node.forEach(visit);
@@ -1786,7 +1789,7 @@ async function chatWorkflowsLoadedCallback(page: any) {
 
 test('Chat and Workflows loaded callback refuses hidden controls offscreen composer and absent empty guidance', async (t) => {
     const { runInNewContext } = await import('node:vm');
-    for (const scenario of ['fit', 'fit-768', 'fit-1440', 'online', 'hidden-heading', 'duplicate-heading', 'hidden-status', 'invalid-status', 'bottom-composer', 'outer-scroll', 'loading', 'delayed-fit', 'delayed-overflow', 'missing-empty', 'wrong-empty', 'workflows-fit']) await t.test(scenario, async () => {
+    for (const scenario of ['fit', 'fit-768', 'fit-1440', 'online', 'old-online', 'old-offline', 'missing-connection-note', 'hidden-connection-note', 'missing-catalog-note', 'hidden-catalog-note', 'hidden-heading', 'duplicate-heading', 'hidden-status', 'invalid-status', 'bottom-composer', 'outer-scroll', 'loading', 'delayed-fit', 'delayed-overflow', 'missing-empty', 'wrong-empty', 'workflows-fit']) await t.test(scenario, async () => {
         const route = ['missing-empty', 'wrong-empty', 'workflows-fit'].includes(scenario) ? '/workflows' : '/chat';
         const width = scenario === 'fit-768' ? 768 : scenario === 'fit-1440' ? 1440 : 390;
         const nodes: any[] = [];
@@ -1797,11 +1800,13 @@ test('Chat and Workflows loaded callback refuses hidden controls offscreen compo
         if (scenario === 'duplicate-heading') add('.chat-page h2', 'COMMS', 240, 260);
         add('.chat-page > button', 'Show Progress', 250, 290);
         add('.chat-panel__agent-info', 'Arya', 304, 330);
-        const status = add('.chat-panel__status', scenario === 'invalid-status' ? 'READY' : scenario === 'online' ? 'ONLINE' : 'OFFLINE', 304, 330); status.hidden = scenario === 'hidden-status';
+        const status = add('.chat-panel__status', scenario === 'invalid-status' ? 'READY' : scenario === 'old-online' ? 'ONLINE' : scenario === 'old-offline' ? 'OFFLINE' : scenario === 'online' ? 'MC SOCKET CONNECTED' : 'MC SOCKET NOT CONNECTED', 304, 330); status.hidden = scenario === 'hidden-status';
+        if (scenario !== 'missing-connection-note') { const note = add('.chat-panel__connection-note', 'Browser-to-Mission-Control connection only; gateway and target availability are unverified.', 334, 380); note.hidden = scenario === 'hidden-connection-note'; }
+        if (scenario !== 'missing-catalog-note') { const note = add('.chat-page__notice', 'Targets include catalog defaults and recorded agents. Catalog roles describe defaults; availability is unverified.', 292, 302); note.hidden = scenario === 'hidden-catalog-note'; }
         add('.chat-panel__input input', '', 850, ['bottom-composer', 'delayed-overflow'].includes(scenario) ? 916 : 882);
         add('.chat-panel__input button', 'SEND', 850, ['bottom-composer', 'delayed-overflow'].includes(scenario) ? 916 : 882);
-        add('.chat-panel__empty', 'No messages with Arya yet Send a message to start a conversation', 400, 500);
-        if (['loading', 'delayed-fit', 'delayed-overflow'].includes(scenario)) add('.chat-panel__loading', 'Loading history...', 350, 380);
+        add('.chat-panel__empty', 'No saved messages returned for Arya. Local submissions and received events appear here.', 400, 500);
+        if (['loading', 'delayed-fit', 'delayed-overflow'].includes(scenario)) add('.chat-panel__loading', 'Loading saved history...', 350, 380);
         if (scenario !== 'missing-empty') add('.workflows-page [role="status"]', scenario === 'wrong-empty' ? 'Workflow board unavailable until both collections are observed.' : 'No workflows in the last observed collection.', 300, 330);
         const globals = { window: { innerHeight: 900 }, document: { querySelector: (s: string) => nodes.find(n => n.selector === s) ?? null, querySelectorAll: (s: string) => nodes.filter(n => n.selector === s) }, getComputedStyle: (node: any) => ({ display: node.hidden ? 'none' : 'block', visibility: 'visible' }) };
         let currentUrl = '', readiness = 0, geometry = 0;

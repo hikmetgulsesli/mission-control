@@ -660,8 +660,8 @@ async function runCatalog({ browser, state, store, measured, control, schemas })
                 const empty = Array.from(document.querySelectorAll('.chat-panel__empty'));
                 return !Array.from(document.querySelectorAll('.chat-panel__loading')).some(visible)
                     && empty.length === 1 && visible(empty[0])
-                    && empty[0].textContent.includes('No messages with Arya yet')
-                    && empty[0].textContent.includes('Send a message to start a conversation');
+                    && empty[0].textContent.includes('No saved messages returned for Arya.')
+                    && empty[0].textContent.includes('Local submissions and received events appear here.');
             });
             assert(await page.evaluate(() => {
                 const main = document.querySelector('.layout__content');
@@ -671,6 +671,8 @@ async function runCatalog({ browser, state, store, measured, control, schemas })
                     ['.chat-page h2', 'COMMS'], ['.chat-page > button', 'Show Progress'],
                     ['.chat-panel__agent-info', 'Arya'], ['.chat-panel__status', null],
                     ['.chat-panel__input input', null], ['.chat-panel__input button', 'SEND'],
+                    ['.chat-panel__connection-note', 'Browser-to-Mission-Control connection only; gateway and target availability are unverified.'],
+                    ['.chat-page__notice', 'Targets include catalog defaults and recorded agents. Catalog roles describe defaults; availability is unverified.'],
                 ];
                 return expected.every(([selector, text]) => {
                     const elements = Array.from(document.querySelectorAll(selector));
@@ -679,7 +681,7 @@ async function runCatalog({ browser, state, store, measured, control, schemas })
                     return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden'
                         && rect.top >= Math.max(0, bounds.top) - 1 && rect.bottom <= Math.min(window.innerHeight, bounds.bottom) + 1
                         && rect.left >= bounds.left - 1 && rect.right <= bounds.right + 1
-                        && (selector !== '.chat-panel__status' || /^(ONLINE|OFFLINE)$/.test(element.textContent.trim()))
+                        && (selector !== '.chat-panel__status' || /^(MC SOCKET CONNECTED|MC SOCKET NOT CONNECTED)$/.test(element.textContent.trim()))
                         && (text === null || element.textContent.trim().includes(text));
                 });
             }), 'UI_CHAT_VIEWPORT');

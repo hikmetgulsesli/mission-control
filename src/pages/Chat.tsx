@@ -3,14 +3,14 @@ import { useSearchParams } from 'react-router-dom';
 import { usePolling } from '../hooks/usePolling';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { api } from '../lib/api';
-import { AGENT_MAP } from '../lib/constants';
+import { chatTargetDisplay } from '../lib/chat-presentation';
 import { ChatPanel } from '../components/ChatPanel';
 import { ChatSidebar } from '../components/ChatSidebar';
 import { LiveProgressPanel } from '../components/LiveProgressPanel';
 import { GlitchText } from '../components/GlitchText';
 
 export function Chat() {
-  const { data: agents, loading: agentsLoading } = usePolling(api.agents, 60000);
+  const { data: agents, loading: agentsLoading, error: agentsError } = usePolling(api.agents, 60000);
   const { messages: events, connected, send } = useWebSocket();
   const [searchParams] = useSearchParams();
   const [selectedAgent, setSelectedAgent] = useState('main');
@@ -23,7 +23,7 @@ export function Chat() {
   }, [searchParams]);
 
   const selectedAgentData = (agents || []).find((a) => a.id === selectedAgent);
-  const agentName = selectedAgentData?.identityName || selectedAgentData?.name || AGENT_MAP[selectedAgent]?.name || selectedAgent;
+  const { name: agentName } = chatTargetDisplay(selectedAgent, selectedAgentData);
 
   return (
     <div className="chat-page">
@@ -40,18 +40,22 @@ export function Chat() {
         </button>
       )}
 
+      <p className="chat-page__notice">Targets include catalog defaults and recorded agents. Catalog roles describe defaults; availability is unverified.</p>
+
       <div className="chat-page__layout">
         <ChatSidebar
           agents={agents || []}
           selected={selectedAgent}
           onSelect={setSelectedAgent}
           loading={agentsLoading}
+          error={agentsError}
         />
         <ChatPanel
           events={events}
           onSend={send}
           connected={connected}
           selectedAgent={selectedAgent}
+          selectedAgentData={selectedAgentData}
         />
       </div>
 
