@@ -1,0 +1,487 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { createHash } from 'node:crypto';
+import { existsSync, lstatSync, realpathSync } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { isAbsolute, join, normalize, relative, sep } from 'node:path';
+import type { Socket } from 'node:net';
+import type { Page, Route } from 'playwright';
+import type { ViteDevServer } from 'vite';
+import type { ControlEvidenceEnvelopeV1, ControlJobReceiptV1 } from '../src/lib/control-evidence';
+import type { OwnedProfile } from './fixtures/controls-selected-evidence-owned';
+
+// No runtime fixture/native/Vite import or acquisition before the test gate.
+const enabled = process.env.MC_CONTROLS_SELECTED_EVIDENCE_QUALIFICATION === '1';
+const options = { timeout: 180_000, skip: enabled ? false : 'Root qualification requires MC_CONTROLS_SELECTED_EVIDENCE_QUALIFICATION=1; SKIP is never native PASS' };
+const SOURCE_ROOT = realpathSync(fileURLToPath(new URL('..', import.meta.url)));
+const JOB_A = 'a1111111-1111-4111-8111-111111111111';
+const JOB_B = 'b2222222-2222-4222-8222-222222222222';
+const S = 'c'.repeat(64), H = 'a'.repeat(64), T = 'd'.repeat(64);
+const AT = '2026-10-20T00:00:00.000Z';
+const PENDING = 'mission-control.controls.pending-launch.v1';
+const PENDING_JOB = 'mission-control.controls.pending-job.v1';
+const SELECTED = 'mission-control.controls.selected-job.v1';
+const EVIDENCE = '/api/controls/evidence', JOBS = '/api/controls/jobs';
+const receiptPath = (id: string) => `${JOBS}/${id}`;
+const evidencePath = (id: string) => `${receiptPath(id)}/evidence`;
+const hash = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
+const unavailable = (code: string, state: 'unconfigured' | 'missing' = 'unconfigured') => ({ availability: { state, code }, report: null });
+function envelope(code: string, selectionHash = S): ControlEvidenceEnvelopeV1 {
+  return { schema: 'mission-control.controls-evidence-envelope.v1', selectionHash,
+    evidence: { activation: unavailable(code), evaluation: unavailable(`${code}_EVAL`), ui: unavailable(`${code}_UI`) }, history: [] };
+}
+function receipt(id: string, terminal: boolean): ControlJobReceiptV1 {
+  return { schema: 'mission-control.control-job.v1', jobId: id,
+    kind: id === JOB_B ? 'convergence_full8' : 'activation_preflight', revision: terminal ? 6 : 5,
+    selectionHash: S, sourceSha: 'e'.repeat(40), mcSourceSha: 'f'.repeat(40), mcBuildHash: 'b'.repeat(64),
+    suiteHash: id === JOB_B ? '8'.repeat(64) : null, state: terminal ? 'completed' : 'running',
+    requestedAt: AT, startedAt: AT, updatedAt: terminal ? '2026-10-20T00:00:06.000Z' : '2026-10-20T00:00:05.000Z',
+    finishedAt: terminal ? '2026-10-20T00:00:06.000Z' : null, phase: terminal ? 'closed' : 'running', code: null,
+    currentCaseId: null, ownedRunId: null, completedCases: 0, plannedCases: id === JOB_B ? 8 : 0,
+    reportRefs: terminal && id === JOB_A ? { activationHash: H } : {}, cancelRequested: false };
+}
+function selected(code = 'SELECTED_A_PASS', historical = false): ControlEvidenceEnvelopeV1 {
+  // Exact-job envelopes retain the backend's currently captured selection S;
+  // historical ownership is the receipt's T plus report compatibility.
+  const e = envelope('SELECTED_A_UNCONFIGURED', S);
+  e.evidence.activation = { availability: { state: 'available', code: null }, report: {
+    hash: H, status: 'pass', protocol: 'v3', compatibility: historical ? 'historical' : 'current', observedAt: AT,
+    checks: ['migration_shape','migration_attestation','database','artifact_capacity','activity','protocol_activation']
+      .map(id => ({ id, status: 'pass' as const, blocking: true, code })),
+  } };
+  // A selected envelope's history must never replace the global History view.
+  e.history = [{ id: '7'.repeat(64), sourceSha: '7'.repeat(40), evidence: {
+    activation: unavailable('SELECTED_HISTORY_ONLY'), evaluation: unavailable('SELECTED_HISTORY_ONLY_EVAL'),
+  } }];
+  return e;
+}
+function model() {
+  const global = envelope('GLOBAL_ACTIVATION_UNCONFIGURED');
+  global.history = [{ id: '9'.repeat(64), sourceSha: '9'.repeat(40), evidence: {
+    activation: unavailable('GLOBAL_HISTORY_ONLY'), evaluation: unavailable('GLOBAL_HISTORY_ONLY_EVAL'),
+  } }];
+  return { global, receipts: new Map([[JOB_A, receipt(JOB_A, true)], [JOB_B, receipt(JOB_B, false)]]),
+    evidence: new Map([[JOB_A, selected()], [JOB_B, envelope('SELECTED_B_UNCONFIGURED')]]) };
+}
+type Model = ReturnType<typeof model>;
+type NetworkRow = { number: number; path: string; origin: string; method: string; held: boolean; status?: number; responseHash?: string; completed?: boolean };
+type Reply = { body: unknown; status?: number };
+function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(r => { resolve = r; }); return { promise, resolve }; }
+async function bounded<T>(promise: Promise<T>, label: string, ms = 10_000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try { return await Promise.race([promise, new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(label)), ms); })]); }
+  finally { clearTimeout(timer); }
+}
+const activation = (p: Page) => p.locator('main.controls > .controls__top').getByRole('region', { name: 'Activation health', exact: true });
+const progress = (p: Page) => p.getByRole('region', { name: 'Owned progress', exact: true });
+async function clickJob(p: Page, id: string) {
+  await p.getByRole('region', { name: 'Recent jobs', exact: true }).getByRole('button').filter({ hasText: id }).click();
+  await progress(p).getByText(id, { exact: true }).waitFor();
+}
+async function expectSix(p: Page, code = 'SELECTED_A_PASS') {
+  await p.waitForFunction(() => document.querySelectorAll('main.controls > .controls__top [aria-label="Activation health"] [data-testid="activation-check-row"]').length === 6, undefined, { timeout: 2500 });
+  assert.deepEqual(await activation(p).locator('[data-testid="activation-check-row"] code').allTextContents(), Array(6).fill(code));
+}
+async function frameFence(p: Page) {
+  // Browser rendering/microtask barrier after the numbered response completed;
+  // no arbitrary sleep or test-only component state is used to settle races.
+  await p.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+}
+async function pendingBytes(p: Page) {
+  return p.evaluate(([a,b]) => [localStorage.getItem(a), localStorage.getItem(b)], [PENDING, PENDING_JOB]);
+}
+
+type Harness = {
+  data: Model; ledger: NetworkRow[]; capture(label: string, extra?: unknown): Promise<void>;
+  hold(path: string, reply?: Reply): { arrived(): Promise<NetworkRow>; release(reply?: Reply): Promise<void> };
+  checkpoint(label: string): Promise<void>; causalAssertion(): void;
+};
+async function harness(name: 'causal' | 'races', body: (p: Page, h: Harness) => Promise<void>) {
+  assert.equal(enabled, true, 'Root qualification gate required before imports or acquisition');
+  const { createControlsSelectedEvidenceOwnedProfileV1, CONTROLS_SELECTED_SOURCE_PATHS } = await import('./fixtures/controls-selected-evidence-owned.js');
+  const { createServer } = await import('vite');
+  const { default: react } = await import('@vitejs/plugin-react');
+  const { parseControlEvidenceEnvelopeV1, parseControlJobReceiptV1 } = await import('../src/lib/control-evidence.js');
+  const data = model();
+  parseControlEvidenceEnvelopeV1(data.global);
+  for (const r of data.receipts.values()) parseControlJobReceiptV1(r);
+  for (const e of data.evidence.values()) parseControlEvidenceEnvelopeV1(e);
+  const paths = [...CONTROLS_SELECTED_SOURCE_PATHS];
+  if (existsSync(join(SOURCE_ROOT, 'src/lib/control-selected-evidence.ts'))) paths.push('src/lib/control-selected-evidence.ts');
+  const owned: OwnedProfile = await createControlsSelectedEvidenceOwnedProfileV1({ sourceRoot: SOURCE_ROOT, sourcePaths: paths.sort(),
+    profileData: { name, jobA: JOB_A, jobB: JOB_B, globalSelection: S, historicalSelection: T, data: { global: data.global,
+      receipts: [...data.receipts], evidence: [...data.evidence] }, scenarios: ['row-selection','refresh','reload','late-global','a-b-a-success-error','remount-success-error','terminal-refs-success-error','terminal-missing','historical','pending-byte-stability'] } });
+  let cache: string | null = null, cacheIdentity: ReturnType<typeof lstatSync> | null = null;
+  let server: ViteDevServer | null = null, http: ViteDevServer['httpServer'] = null;
+  let page: Page | undefined, origin = '', listener: unknown = null;
+  let listeningObserved = false, httpClosed = false, serverClosed = false;
+  const sockets = new Set<Socket>(), websockets = new Set<any>();
+  const ledger: NetworkRow[] = [], denied: string[] = [], errors: string[] = [], expectedHttpConsole: string[] = [];
+  const plans = new Map<string, any[]>(), allPlans: any[] = [];
+  let stage = 'acquisition', setupReady = false, causal = false, original: unknown = null, bodyPassed = false;
+  let wsHeartbeats = 0, wsClosed = 0;
+  const defaultReply = (path: string): Reply | null => {
+    if (path === EVIDENCE) return { body: structuredClone(data.global) };
+    if (path === JOBS) return { body: { jobs: [...data.receipts.values()].map(r => structuredClone(r)) } };
+    for (const id of [JOB_A, JOB_B]) {
+      if (path === receiptPath(id)) return { body: { receipt: structuredClone(data.receipts.get(id)) } };
+      if (path === evidencePath(id)) return { body: structuredClone(data.evidence.get(id)) };
+    }
+    return null;
+  };
+  const hold: Harness['hold'] = (path, reply) => {
+    assert.ok(defaultReply(path), 'only exact reviewed fixture routes can be held');
+    const arrived = deferred<NetworkRow>(), released = deferred<Reply | undefined>(), done = deferred<void>();
+    const plan = { arrived, released, done, reply, used: false };
+    plans.set(path, [...(plans.get(path) ?? []), plan]); allPlans.push(plan);
+    return { arrived: () => bounded(arrived.promise, `HELD_REQUEST_NOT_OBSERVED:${path}`),
+      async release(value) { released.resolve(value); if (plan.used) await bounded(done.promise, `HELD_RESPONSE_NOT_SETTLED:${path}`); } };
+  };
+  const capture: Harness['capture'] = async (label, extra) => {
+    assert.match(label, /^[a-z0-9-]+$/);
+    assert.ok(page);
+    const dom = await page.locator('body').innerHTML();
+    assert.ok(Buffer.byteLength(dom) <= 262144, 'bounded fixture DOM');
+    const domHash = owned.store.json({ schema: 'mission-control.controls-selected-evidence-dom.v1', name, label, dom });
+    const shotHash = await owned.shot(page, label);
+    owned.store.json({ schema: 'mission-control.controls-selected-evidence-observation.v1', name, label, domHash, shotHash,
+      pending: await pendingBytes(page), ledger: structuredClone(ledger), extra: extra ?? null });
+  };
+  const checkpoint: Harness['checkpoint'] = async label => {
+    assert.deepEqual(denied, [], 'all network traffic belongs to the private fixture origin and reviewed graph');
+    assert.deepEqual(errors, [], 'no page/console error may qualify selected behavior');
+    assert.ok(ledger.every(r => r.origin === origin && r.method === 'GET'), 'API traffic is exact-origin GET-only');
+    assert.equal(await page!.getByRole('region', { name: 'Selected readiness', exact: true }).getByText(S, { exact: true }).count(), 1);
+    assert.equal(await page!.getByRole('region', { name: 'Historical evidence', exact: true }).getByText('9'.repeat(40), { exact: true }).count(), 1);
+    assert.equal(await page!.getByText('7'.repeat(40), { exact: true }).count(), 0, 'selected history cannot replace global history');
+    await owned.boundary();
+    await capture(label);
+  };
+  try {
+    cache = realpathSync(await mkdtemp(join(tmpdir(), 'mc-controls-selected-vite-')));
+    cacheIdentity = lstatSync(cache);
+    assert.equal(cacheIdentity.mode & 0o777, 0o700);
+    server = await createServer({ configFile: false, envFile: false, root: SOURCE_ROOT, cacheDir: cache,
+      plugins: [react()], publicDir: false, css: { postcss: { plugins: [] } }, clearScreen: false, logLevel: 'error',
+      server: { host: '127.0.0.1', port: 0, strictPort: true, hmr: false, proxy: {}, fs: { strict: true, allow: [SOURCE_ROOT, cache] } } });
+    http = server.httpServer;
+    assert.ok(http, 'retain the actual private HTTP object');
+    http.on('connection', socket => { sockets.add(socket); socket.once('close', () => sockets.delete(socket)); });
+    http.once('listening', () => { listeningObserved = true; });
+    http.once('close', () => { httpClosed = true; });
+    server.middlewares.use((req, res, next) => {
+      if (req.url?.startsWith('/api/') || req.url?.startsWith('/ws')) { res.statusCode = 403; res.end('TEST_NETWORK_DENIED'); }
+      else next();
+    });
+    await server.listen();
+    const address = http.address();
+    assert.ok(address && typeof address !== 'string');
+    assert.equal(address.address, '127.0.0.1');
+    assert.ok(![3080,3333,18789,13081,13082].includes(address.port));
+    origin = `http://127.0.0.1:${address.port}`;
+    listener = { host: address.address, port: address.port, family: address.family };
+    owned.store.json({ schema: 'mission-control.controls-selected-evidence-listener.v1', origin, listener, cacheRoot: cache });
+    stage = 'native-acquisition';
+    const browser = await owned.launch();
+    assert.ok(browser, 'native refusal is setup UNKNOWN, never causal RED');
+    const context = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1440, height: 1000 } });
+    await context.route('**/*', async (route: Route) => {
+      const request = route.request(), url = new URL(request.url()), path = url.pathname + url.search;
+      if (url.origin !== origin || request.method() !== 'GET') { denied.push(`${request.method()}:${url.href}`); return route.abort(); }
+      if (url.pathname.startsWith('/api/')) {
+        if (ledger.length >= 512) { denied.push('LEDGER_BOUND'); return route.abort(); }
+        const reply = defaultReply(path), plan = plans.get(path)?.shift();
+        const row: NetworkRow = { number: ledger.length + 1, path, origin: url.origin, method: request.method(), held: !!plan };
+        ledger.push(row);
+        if (!reply) { denied.push(path); return route.abort(); }
+        if (plan) { plan.used = true; plan.arrived.resolve(row); }
+        try {
+          const response: Reply = plan ? (await plan.released.promise) ?? plan.reply ?? reply : reply;
+          row.status = response.status ?? 200;
+          row.responseHash = hash(JSON.stringify(response.body));
+          await route.fulfill({ status: row.status, json: response.body });
+          row.completed = true;
+        } catch (error) { errors.push(`ROUTE:${String(error).slice(0,1000)}`); }
+        finally { plan?.done.resolve(); }
+        return;
+      }
+      if (/^\/(?:src|server|tests)\//.test(url.pathname) && !paths.includes(decodeURIComponent(url.pathname.slice(1)))) {
+        denied.push(path); return route.abort();
+      }
+      if (url.pathname.startsWith('/@fs/')) {
+        const physical = decodeURIComponent(url.pathname.slice('/@fs'.length));
+        const within = (root: string) => {
+          try {
+            if (!isAbsolute(physical) || normalize(physical) !== physical || physical.includes('\0')) return false;
+            const child = relative(root, physical);
+            if (!child || child === '..' || child.startsWith('..' + sep) || isAbsolute(child)) return false;
+            if (realpathSync(root) !== root || realpathSync(physical) !== physical) return false;
+            if (root === join(cache!, 'deps')) {
+              const now = lstatSync(cache!);
+              if (now.dev !== cacheIdentity!.dev || now.ino !== cacheIdentity!.ino || now.uid !== process.getuid!() || (now.mode & 0o777) !== 0o700) return false;
+            }
+            const file = lstatSync(physical);
+            return file.isFile() && !file.isSymbolicLink() && file.uid === process.getuid!();
+          } catch { return false; }
+        };
+        if (!within(join(SOURCE_ROOT, 'node_modules'))) {
+          const depsRoot = join(cache!, 'deps'), child = relative(depsRoot, physical);
+          if (!isAbsolute(physical) || normalize(physical) !== physical || physical.includes('\0') || !child || child === '..' || child.startsWith('..' + sep) || isAbsolute(child)) {
+            denied.push(path); return route.abort();
+          }
+          const info = server!.environments.client.depsOptimizer?.metadata.depInfoList.find(dep => dep.file === physical);
+          if (!info) { denied.push(path); return route.abort(); }
+          try { await bounded(info.processing ?? Promise.resolve(), 'SELECTED_OPTIMIZER_PUBLICATION_UNKNOWN'); }
+          catch { denied.push('OPTIMIZER_PUBLICATION_UNKNOWN:' + path); return route.abort(); }
+          if (!within(depsRoot)) { denied.push(path); return route.abort(); }
+        }
+      }
+      if (paths.includes(url.pathname.slice(1)) || /^\/(?:node_modules\/|@vite\/|@react-refresh(?:$|\?)|@fs\/)/.test(url.pathname)) return route.continue();
+      denied.push(path); return route.abort();
+    });
+    await context.routeWebSocket('**/*', socket => {
+      const url = new URL(socket.url()), query = [...url.searchParams];
+      // Vite's exact private heartbeat is consumed locally; never connectToServer.
+      if (url.origin !== origin.replace('http','ws') || url.pathname !== '/' || url.username || url.password
+          || query.length !== 1 || query[0][0] !== 'token' || query[0][1] !== server!.config.webSocketToken) {
+        denied.push('WS:' + socket.url()); socket.close(); return;
+      }
+      websockets.add(socket);
+      socket.onClose(() => { if (websockets.delete(socket)) wsClosed++; });
+      socket.onMessage(message => {
+        if (message === '{"type":"ping"}') wsHeartbeats++;
+        else { denied.push('WS_OUTBOUND:VITE'); socket.close(); }
+      });
+      socket.send(JSON.stringify({ type: 'connected' }));
+    });
+    page = await context.newPage();
+    page.setDefaultTimeout(3500);
+    page.on('pageerror', error => errors.push(error.message.slice(0,1500)));
+    page.on('console', message => {
+      if (message.type() !== 'error') return;
+      const location = message.location().url;
+      const expected = ledger.some(r => r.held && r.status === 503 && origin + r.path === location)
+        && /^Failed to load resource: the server responded with a status of 503 \(Service Unavailable\)$/.test(message.text());
+      if (expected) expectedHttpConsole.push(location);
+      else errors.push(message.text().slice(0,1500));
+    });
+    stage = 'positive-setup';
+    await page.goto(`${origin}/tests/fixtures/controls-selected-evidence.html`);
+    await activation(page).getByText('GLOBAL_ACTIVATION_UNCONFIGURED', { exact: true }).waitFor();
+    const recent = page.getByRole('region', { name: 'Recent jobs', exact: true });
+    await recent.getByRole('button').filter({ hasText: JOB_A }).waitFor();
+    await recent.getByRole('button').filter({ hasText: JOB_B }).waitFor();
+    assert.deepEqual(await pendingBytes(page), [null,null]);
+    assert.equal(await page.evaluate(key => localStorage.getItem(key), SELECTED), null, 'primary setup has no restored selection');
+    await checkpoint('global-ready');
+    setupReady = true;
+    stage = 'body';
+    await body(page, { data, ledger, capture, hold, checkpoint, causalAssertion: () => { stage = 'causal-assertion'; } });
+    await checkpoint('body-complete');
+    bodyPassed = true;
+  } catch (error) {
+    original = { name: error instanceof Error ? error.name : typeof error, message: String(error).slice(0,2000), stage };
+    // Only this exact observed page mismatch can qualify preimplementation RED.
+    // Setup, import, navigation, interaction and unknown cleanup failures cannot.
+    if (name === 'causal' && stage === 'causal-assertion' && setupReady && page && !denied.length && !errors.length) {
+      causal = await activation(page).locator('[data-testid="activation-check-row"]').count() === 0
+        && await activation(page).getByText('GLOBAL_ACTIVATION_UNCONFIGURED', { exact: true }).count() === 1
+        && await progress(page).getByText(JOB_A, { exact: true }).count() === 1
+        && !ledger.some(r => r.path === evidencePath(JOB_A));
+    }
+    owned.store.json({ schema: 'mission-control.controls-selected-evidence-original-failure.v1', original, setupReady, causalCandidate: causal });
+    throw error;
+  } finally {
+    // Release every used/unconsumed numbered hold before independent cleanup.
+    const cleanupErrors: string[] = [];
+    for (const plan of allPlans) plan.released.resolve(undefined);
+    try { await bounded(Promise.all(allPlans.filter(plan => plan.used).map(plan => plan.done.promise)), 'SELECTED_HELD_CLEANUP_UNKNOWN'); }
+    catch (error) { cleanupErrors.push('held:' + String(error)); }
+    if (page) {
+      try { await capture('final', { original, causalCandidate: causal }); } catch (error) { cleanupErrors.push('capture:' + String(error)); }
+      try { await page.evaluate(() => (window as any).controlsFixture.unmount()); } catch (error) { cleanupErrors.push('unmount:' + String(error)); }
+    }
+    let native: unknown = null;
+    try { native = await owned.close(); } catch (error) { cleanupErrors.push('native:' + String(error)); }
+    // Do not kill processes, destroy sockets or substitute a new listener probe.
+    if (server) {
+      try {
+        const closed = !http || !listeningObserved || httpClosed ? Promise.resolve() : new Promise<void>(resolve => http!.once('close', resolve));
+        await bounded(Promise.all([server.close(), closed]), 'SELECTED_SERVER_CLOSURE_UNKNOWN');
+        assert.ok(http);
+        assert.equal(http.listening, false);
+        assert.equal(http.address(), null);
+        if (listeningObserved) assert.equal(httpClosed, true);
+        assert.equal(sockets.size, 0);
+        assert.equal(websockets.size, 0);
+        serverClosed = true;
+      } catch (error) { cleanupErrors.push('server:' + String(error)); }
+    }
+    const settled = setupReady && cleanupErrors.length === 0 && denied.length === 0 && errors.length === 0 && serverClosed;
+    let cacheRemoved = false;
+    if (settled && cache && cacheIdentity) {
+      try {
+        const now = lstatSync(cache);
+        assert.equal(realpathSync(cache), cache);
+        assert.equal(now.dev, cacheIdentity.dev); assert.equal(now.ino, cacheIdentity.ino);
+        assert.equal(now.uid, process.getuid!()); assert.equal(now.mode & 0o777, 0o700);
+        await rm(cache, { recursive: true }); cacheRemoved = true;
+      } catch (error) { cleanupErrors.push('cache:' + String(error)); }
+    }
+    const ledgerHash = owned.store.json({ schema: 'mission-control.controls-selected-evidence-network-ledger.v1', origin, ledger, denied, errors, expectedHttpConsole, wsHeartbeats, wsClosed });
+    const outcome = settled && !cleanupErrors.length
+      ? bodyPassed ? 'GREEN' : causal ? 'CAUSAL_RED' : name === 'races' && stage === 'body' ? 'BEHAVIOR_FAIL' : 'UNKNOWN'
+      : 'UNKNOWN';
+    owned.store.json({ schema: 'mission-control.controls-selected-evidence-final-outcome.v1', name, outcome, original, setupReady,
+      native, listener, listeningObserved, httpClosed, serverClosed, originalListenerAbsent: http?.address() === null,
+      sockets: sockets.size, websockets: websockets.size, ledgerHash, cache, cacheRemoved, cleanupErrors });
+    owned.store.verify();
+    console.log(JSON.stringify({ code: 'CONTROLS_SELECTED_EVIDENCE_OUTCOME', name, outcome, artifactRoot: owned.store.root }));
+    if (outcome === 'UNKNOWN') throw new Error('CONTROLS_SELECTED_EVIDENCE_QUALIFICATION_UNKNOWN; original failure retained in artifact store');
+  }
+}
+
+test('Controls selected job reports use exact evidence', options, async () => {
+  await harness('causal', async (page, h) => {
+    const before = await pendingBytes(page);
+    const recent = page.getByRole('region', { name: 'Recent jobs', exact: true });
+    await recent.getByRole('button').filter({ hasText: JOB_A }).click();
+    await progress(page).getByText(JOB_A, { exact: true }).waitFor();
+    h.causalAssertion();
+    const panel = activation(page);
+    // Required central actual-page assertion. The current page never requests
+    // A evidence and keeps global Unconfigured despite A's completed receipt.
+    await page.waitForFunction(() => document.querySelectorAll(
+      'main.controls > .controls__top [aria-label="Activation health"] [data-testid="activation-check-row"]'
+    ).length === 6, undefined, { timeout: 2500 });
+    assert.deepEqual(await panel.locator('[data-testid="activation-check-row"] code').allTextContents(), Array(6).fill('SELECTED_A_PASS'));
+    assert.ok(h.ledger.some(r => r.path === evidencePath(JOB_A) && r.completed), 'actual page requested and received exact A evidence');
+    await page.getByText(`Reports for selected job ${JOB_A}`, { exact: true }).waitFor();
+    assert.deepEqual(await pendingBytes(page), before);
+    await h.checkpoint('selected-a-six-checks');
+  });
+});
+
+test('Controls selected evidence survives races and terminal refs', options, async () => {
+  await harness('races', async (page, h) => {
+    await page.getByRole('checkbox').check();
+    await clickJob(page, JOB_A); await expectSix(page);
+    assert.equal(await page.getByRole('checkbox').isChecked(), true, 'selected GET cannot invalidate current global confirmation');
+    const manual = h.hold(evidencePath(JOB_A));
+    await page.getByRole('button', { name: 'Refresh evidence', exact: true }).click();
+    await manual.arrived(); await manual.release(); await frameFence(page); await expectSix(page);
+    await page.reload();
+    await progress(page).getByText(JOB_A, { exact: true }).waitFor(); await expectSix(page);
+    await h.checkpoint('reload-restores-exact-a');
+
+    const lateGlobal = h.hold(EVIDENCE);
+    await page.getByRole('button', { name: 'Refresh evidence', exact: true }).click();
+    await lateGlobal.arrived();
+    await clickJob(page, JOB_B);
+    await activation(page).getByText('SELECTED_B_UNCONFIGURED', { exact: true }).waitFor();
+    await clickJob(page, JOB_A); await expectSix(page);
+    await lateGlobal.release(); await frameFence(page); await expectSix(page);
+    await h.checkpoint('late-global-keeps-selected-a');
+
+    for (const reject of [false,true]) {
+      await clickJob(page, JOB_B);
+      await activation(page).getByText('SELECTED_B_UNCONFIGURED', { exact: true }).waitFor();
+      const old = h.hold(evidencePath(JOB_A), reject ? { status: 503, body: { error: 'OLD_A_READ_FAILED' } } : { body: selected('OLD_A_PASS') });
+      await clickJob(page, JOB_A); await old.arrived();
+      assert.equal(await activation(page).locator('[data-testid="activation-check-row"]').count(), 0, 'held selected read has no old/global report fallback');
+      await clickJob(page, JOB_B);
+      await activation(page).getByText('SELECTED_B_UNCONFIGURED', { exact: true }).waitFor();
+      await clickJob(page, JOB_A); await expectSix(page);
+      await old.release(); await frameFence(page); await expectSix(page);
+      assert.equal(await page.getByRole('alert').filter({ hasText: 'OLD_A_READ_FAILED' }).count(), 0);
+      await h.checkpoint(reject ? 'a-b-a-late-error' : 'a-b-a-late-success');
+    }
+    for (const reject of [false,true]) {
+      await clickJob(page, JOB_B);
+      const old = h.hold(receiptPath(JOB_A), reject ? { status:503,body:{ error:'OLD_A_RECEIPT_FAILED' } } : { body:{ receipt:{ ...receipt(JOB_A,true),revision:5,state:'running',finishedAt:null,reportRefs:{} } } });
+      await page.getByRole('region',{name:'Recent jobs',exact:true}).getByRole('button').filter({hasText:JOB_A}).click();
+      await old.arrived();
+      await clickJob(page, JOB_B); await clickJob(page, JOB_A); await expectSix(page);
+      await old.release(); await frameFence(page); await expectSix(page);
+      await progress(page).getByText('Completed · Closed',{exact:true}).waitFor();
+      assert.equal(await page.getByRole('alert').filter({hasText:'OLD_A_RECEIPT_FAILED'}).count(),0);
+      await h.checkpoint(reject ? 'a-b-a-late-receipt-error' : 'a-b-a-late-receipt-success');
+    }
+    const olderManual = h.hold(evidencePath(JOB_A),{body:selected('OLDER_MANUAL_PASS')});
+    await page.getByRole('button',{name:'Refresh evidence',exact:true}).click(); await olderManual.arrived();
+    const newerManual = h.hold(evidencePath(JOB_A));
+    await page.getByRole('button',{name:'Refresh evidence',exact:true}).click(); await newerManual.arrived();
+    await newerManual.release(); await frameFence(page); await expectSix(page);
+    await olderManual.release(); await frameFence(page); await expectSix(page);
+    await h.checkpoint('newest-manual-evidence-wins');
+    for (const reject of [false,true]) {
+      const old = h.hold(evidencePath(JOB_A), reject ? { status:503,body:{ error:'OLD_LIFETIME_FAILED' } } : { body:selected('OLD_LIFETIME_PASS') });
+      await page.getByRole('button', { name: 'Refresh evidence', exact: true }).click(); await old.arrived();
+      await page.evaluate(() => (window as any).controlsFixture.remount());
+      await progress(page).getByText(JOB_A, { exact:true }).waitFor(); await expectSix(page);
+      await old.release(); await frameFence(page); await expectSix(page);
+      assert.equal(await page.getByRole('alert').filter({ hasText:'OLD_LIFETIME_FAILED' }).count(),0);
+      await h.checkpoint(reject ? 'remount-late-error' : 'remount-late-success');
+    }
+    for (const reject of [false,true]) {
+      await clickJob(page, JOB_B);
+      h.data.receipts.set(JOB_A, receipt(JOB_A,false));
+      h.data.evidence.set(JOB_A, envelope('A_REV5_UNCONFIGURED'));
+      const old = h.hold(evidencePath(JOB_A), reject ? { status:503,body:{ error:'OLD_REV5_FAILED' } } : { body:envelope('A_REV5_UNCONFIGURED') });
+      await clickJob(page, JOB_A); await old.arrived();
+      const terminalPoll = h.hold(receiptPath(JOB_A), { body:{ receipt:receipt(JOB_A,true) } });
+      h.data.receipts.set(JOB_A,receipt(JOB_A,true)); h.data.evidence.set(JOB_A,selected());
+      await terminalPoll.arrived(); await terminalPoll.release();
+      // E2 must start without waiting for the held E1 and without Refresh.
+      await expectSix(page);
+      await old.release(); await frameFence(page); await expectSix(page);
+      assert.equal(await page.getByRole('alert').filter({ hasText:'OLD_REV5_FAILED' }).count(),0);
+      await h.checkpoint(reject ? 'terminal-ref-late-error' : 'terminal-ref-late-empty');
+    }
+    const failed = h.hold(evidencePath(JOB_A),{status:503,body:{error:'CONTROL_SELECTED_REPORT_FAILED'}});
+    await clickJob(page,JOB_A); await failed.arrived(); await failed.release();
+    await page.getByRole('alert').filter({hasText:'CONTROL_SELECTED_REPORT_FAILED'}).waitFor();
+    assert.equal(await activation(page).locator('[data-testid="activation-check-row"]').count(),0);
+    await h.checkpoint('terminal-get-failure-detaches-pass');
+
+    h.data.evidence.set(JOB_A, { ...selected(), evidence: { ...selected().evidence, activation:unavailable('SELECTED_A_REPORT_MISSING','missing') } });
+    await clickJob(page,JOB_A);
+    await activation(page).getByText('SELECTED_A_REPORT_MISSING',{exact:true}).waitFor();
+    assert.equal(await activation(page).locator('[data-testid="activation-check-row"]').count(),0);
+    await h.checkpoint('terminal-missing-stays-unavailable');
+
+    h.data.receipts.set(JOB_A,{ ...receipt(JOB_A,true),selectionHash:T }); h.data.evidence.set(JOB_A,selected('SELECTED_A_PASS',true));
+    await page.getByRole('checkbox').check();
+    await clickJob(page,JOB_A); await expectSix(page);
+    await activation(page).getByText(/Historical report/).waitFor();
+    await page.getByText('This job belongs to a different selection. Its progress remains historical.',{exact:true}).waitFor();
+    assert.equal(await page.getByRole('checkbox').isChecked(),true);
+    assert.equal(await page.getByText('Qualified release',{exact:true}).count(),0);
+    await h.checkpoint('historical-selected-does-not-change-launch-authority');
+
+    // Seed an unrelated persisted pending A request before a fresh real mount.
+    // Select completed B while A's receipt GET is held; its late terminal receipt
+    // must not clear A's raw pending mapping or leak a report into B's view.
+    h.data.receipts.set(JOB_A,receipt(JOB_A,true)); h.data.evidence.set(JOB_A,selected());
+    h.data.receipts.set(JOB_B,receipt(JOB_B,true));
+    const pending = '{ "kind": "activation_preflight", "expectedSelectionHash": "'+S+'", "idempotencyKey": "c3333333-3333-4333-8333-333333333333" }';
+    const mapping = '{ "jobId": "'+JOB_A+'", "kind": "activation_preflight", "expectedSelectionHash": "'+S+'", "idempotencyKey": "c3333333-3333-4333-8333-333333333333" }';
+    const lateA = h.hold(receiptPath(JOB_A));
+    await page.evaluate(({ pending,mapping,keys,job }) => {
+      localStorage.setItem(keys[0],pending); localStorage.setItem(keys[1],mapping); localStorage.setItem(keys[2],job);
+      (window as any).controlsFixture.remount();
+    },{pending,mapping,keys:[PENDING,PENDING_JOB,SELECTED],job:JOB_A});
+    await lateA.arrived();
+    await clickJob(page,JOB_B);
+    await activation(page).getByText('SELECTED_B_UNCONFIGURED',{exact:true}).waitFor();
+    const before = await pendingBytes(page); assert.deepEqual(before,[pending,mapping]);
+    await page.getByRole('button',{name:'Refresh evidence',exact:true}).click();
+    await lateA.release(); await frameFence(page);
+    await activation(page).getByText('SELECTED_B_UNCONFIGURED',{exact:true}).waitFor();
+    assert.deepEqual(await pendingBytes(page),before,'selected/global GETs and late unrelated A GET preserve exact pending bytes');
+    await progress(page).getByText(JOB_B,{exact:true}).waitFor();
+    await h.checkpoint('unrelated-pending-byte-identical');
+  });
+});
