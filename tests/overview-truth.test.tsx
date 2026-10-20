@@ -30,6 +30,17 @@ test('Overview truth at the render boundary', async (context) => {
     });
     const render = () => renderToStaticMarkup(React.createElement(Overview));
     const hub = (html) => html.slice(html.indexOf('class="command-center"'), html.indexOf('class="agent-grid"'));
+    const cronCard = (html) => html.slice(html.indexOf('class="stat-card stat-card--orange"'), html.indexOf('class="stat-card stat-card--green"'));
+
+    for (const [count, displayed] of [[5, '5'], [0, '0'], [null, 'Unknown']]) {
+      await context.test('configured cron count ' + count + ' renders as ' + displayed + ' enabled schedules', () => {
+        overview = { ...empty(), cronCount: count };
+        const html = cronCard(render());
+        assert.ok(html.includes('class="stat-card__value">' + displayed + '</div>'));
+        assert.match(html, /enabled schedules/);
+        assert.doesNotMatch(html, />active</);
+      });
+    }
 
     await context.test('observed Rune replaces static main identity and uses the observed denominator', () => {
       overview = { ...empty(), agentCount: 1, agents: [{ id: 'main', name: 'Fallback', identityName: 'Rune' }],

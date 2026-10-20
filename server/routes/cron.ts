@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import { readFileSync } from 'fs';
 import { config } from '../config.js';
-import { cached, invalidateCache } from '../utils/cache.js';
+import { invalidateCache } from '../utils/cache.js';
 import { runCli } from '../utils/cli.js';
+import { readConfiguredCronJobs } from '../services/cron-jobs.js';
 
 interface CronDependencies {
   readJobs: () => unknown;
@@ -16,7 +17,7 @@ export function createCronRouter(deps: Partial<CronDependencies> = {}) {
 
   router.get('/cron', async (_req, res) => {
     try {
-      const data = await cached('cron', 30000, async () => readJobs() || []);
+      const data = await readConfiguredCronJobs(readJobs);
       res.json(data);
     } catch (err: any) {
       res.status(500).json({ error: err.message });

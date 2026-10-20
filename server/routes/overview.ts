@@ -11,6 +11,7 @@ import {
   type ProjectApiProjection,
 } from './projects.js';
 import { isSetfarmOperationalActiveRunStatusV1 } from '../shared/setfarm-operational-active-run-status-v1.js';
+import { readConfiguredCronJobs } from '../services/cron-jobs.js';
 
 const router = Router();
 
@@ -146,7 +147,7 @@ function buildAgentSummary(agents: any[] | null, activeRuns: any[] | null, dataF
 
 router.get('/overview', async (_req, res) => {
   try {
-    const [agents, system, runs, dataFile, openPRs, projectProjections] = await Promise.allSettled([
+    const [agents, system, runs, dataFile, openPRs, projectProjections, configuredJobs] = await Promise.allSettled([
       cached('agents', 30000, () => runCliJson<any[]>('openclaw', ['agents', 'list', '--json'])),
       cached('system', 15000, getSystemMetrics),
       cached('runs', 15000, getRuns),
@@ -156,6 +157,7 @@ router.get('/overview', async (_req, res) => {
       }),
       cached('open-prs', 300000, fetchOpenPRs),
       readProjectApiProjections(),
+      readConfiguredCronJobs(),
     ]);
 
     const agentList = agents.status === 'fulfilled'
@@ -189,8 +191,9 @@ router.get('/overview', async (_req, res) => {
 
     const data = dataFile.status === 'fulfilled' ? dataFile.value : {} as any;
 
-    const cronJobs = data.crons || [];
-    const activeCrons = Array.isArray(cronJobs) ? cronJobs.filter((c: any) => c.enabled !== false).length : 0;
+    const cronCount = configuredJobs.status === 'fulfilled'
+      ? configuredJobs.value.filter(job => job.enabled).length
+      : null;
 
     const now = Date.now();
     const ONE_HOUR = 60 * 60 * 1000;
@@ -223,7 +226,7 @@ router.get('/overview', async (_req, res) => {
       agentCount: agents.status === 'fulfilled' ? agentList.length : null,
       activeRuns,
       activeRunCount: activeRuns.length,
-      cronCount: activeCrons,
+      cronCount,
       costToday: data.totalCostToday || 0,
       costAllTime: data.totalCostAllTime || 0,
       system: system.status === 'fulfilled' ? system.value : null,

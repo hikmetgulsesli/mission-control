@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { controlsApi } from '../lib/api';
 import type { ControlEvidenceEnvelopeV1, ControlJobKindV1, ControlJobReceiptV1 } from '../lib/control-evidence';
 import { ControlJobSessionV1, isControlReceiptTerminalV1 } from '../lib/control-job-session';
+import { ControlSelectedEvidenceV1 } from '../lib/control-selected-evidence';
+import type { SelectedControlEvidenceStateV1 } from '../lib/control-selected-evidence';
 import { HealthChecks } from '../components/controls/HealthChecks';
 import { TestEvidence } from '../components/controls/TestEvidence';
 import { ManualTestRequirements } from '../components/controls/ManualTestRequirements';
@@ -17,10 +19,11 @@ export function Controls() {
   const sessionRef = useRef<ControlJobSessionV1 | null>(null);
   if (!sessionRef.current) sessionRef.current = new ControlJobSessionV1(storage(), controlsApi.launch, selectedFromStorage());
   const session = sessionRef.current;
-  const [evidence,setEvidence] = useState<ControlEvidenceEnvelopeV1|null>(null);
+  const [globalEnvelope,setGlobalEnvelope] = useState<ControlEvidenceEnvelopeV1|null>(null);
   const [jobs,setJobs] = useState<ControlJobReceiptV1[]>([]);
-  const [selectedId,setSelectedId] = useState<string|null>(session.selectedJobId);
-  const [receipt,setReceipt] = useState<ControlJobReceiptV1|null>(null);
+  const [selectedEvidence,setSelectedEvidence] = useState<SelectedControlEvidenceStateV1>({
+    boundJobId: session.selectedJobId, status: session.selectedJobId ? 'loading' : 'idle', receipt: null, envelope: null, error: null,
+  });
   const [pending,setPending] = useState(session.pending);
   const [kind,setKind] = useState<ControlJobKindV1>(session.kind);
   const [confirmed,setConfirmed] = useState(false);
@@ -29,47 +32,61 @@ export function Controls() {
   const [error,setError] = useState<string|null>(null);
   const [notice,setNotice] = useState<string|null>(null);
   const alive=useRef(false);
+  const selectedId=selectedEvidence.boundJobId;
+  const receipt=selectedEvidence.receipt;
   const selectedRef=useRef(selectedId);
-  const receiptRef=useRef(receipt);
-  const refreshGeneration=useRef(0);
-  selectedRef.current=selectedId; receiptRef.current=receipt;
+  const selectionEpoch=useRef(0);
+  const lifetimeEpoch=useRef(0);
+  const globalGeneration=useRef(0);
+  const selectedOwnerRef=useRef<ControlSelectedEvidenceV1|null>(null);
+  if (!selectedOwnerRef.current) selectedOwnerRef.current = new ControlSelectedEvidenceV1({
+    readReceipt: controlsApi.job,
+    readEvidence: controlsApi.jobEvidence,
+    publish: setSelectedEvidence,
+    acceptedReceipt: next => { session.acceptReceipt(next); setPending(session.pending); },
+  });
+  const selectedOwner=selectedOwnerRef.current;
 
-  const acceptReceipt=useCallback((next:ControlJobReceiptV1) => {
-    const previous=receiptRef.current;
-    if(selectedRef.current!==next.jobId || previous?.jobId===next.jobId && next.revision<previous.revision)return;
-    session.acceptReceipt(next);
-    setPending(session.pending);
-    receiptRef.current=next;setReceipt(next);
-  },[session]);
-
-  const refresh=useCallback(async (signal?:AbortSignal) => {
-    const generation=++refreshGeneration.current;
-    const wanted=selectedRef.current;
-    const [e,j,r]=await Promise.allSettled([controlsApi.evidence(),controlsApi.jobs(),wanted?controlsApi.job(wanted):Promise.resolve(null)]);
-    if(signal?.aborted||!alive.current||generation!==refreshGeneration.current)return;
+  const refreshGlobal=useCallback(async (signal?:AbortSignal) => {
+    const generation=++globalGeneration.current;
+    const [e,j]=await Promise.allSettled([controlsApi.evidence(),controlsApi.jobs()]);
+    if(signal?.aborted||!alive.current||generation!==globalGeneration.current)return;
     const problems:string[]=[];
     if(e.status==='fulfilled') {
       session.setSelection(e.value.selectionHash);
       setConfirmed(session.isConfirmed());
-      setEvidence(e.value);
+      setGlobalEnvelope(e.value);
     } else problems.push(`Evidence: ${String(e.reason instanceof Error?e.reason.message:e.reason)}`);
     if (j.status === 'fulfilled') setJobs(j.value);
     else problems.push(`Jobs: ${String(j.reason instanceof Error ? j.reason.message : j.reason)}`);
-    if (selectedRef.current === wanted) {
-      if (r.status === 'fulfilled' && r.value) acceptReceipt(r.value);
-      else if (r.status === 'rejected') problems.push(`Selected job: ${String(r.reason instanceof Error ? r.reason.message : r.reason)}`);
-    }
     setError(problems.length ? problems.join(' · ') : null);
     setLoading(false);
-  },[acceptReceipt,session]);
+  },[session]);
+
+  function refresh(){
+    void refreshGlobal();
+    void selectedOwner.refresh();
+  }
 
   useEffect(() => {
     alive.current = true;
+    lifetimeEpoch.current++;
+    selectionEpoch.current++;
     session.activate();
+    selectedOwner.activate();
+    selectedOwner.select(selectedRef.current);
     const controller = new AbortController();
-    void refresh(controller.signal);
-    return () => { alive.current = false; session.dispose(); controller.abort(); };
-  }, [refresh,session]);
+    void refreshGlobal(controller.signal);
+    return () => {
+      alive.current = false;
+      lifetimeEpoch.current++;
+      selectionEpoch.current++;
+      globalGeneration.current++;
+      selectedOwner.dispose();
+      session.dispose();
+      controller.abort();
+    };
+  }, [refreshGlobal,selectedOwner,session]);
   useEffect(() => {
     if (!selectedId || receipt?.jobId === selectedId && isControlReceiptTerminalV1(receipt)) return;
     let active = true;
@@ -78,31 +95,24 @@ export function Controls() {
       if (inFlight || !active) return;
       inFlight = true;
       try {
-        const next = await controlsApi.job(selectedId);
-        if (active && alive.current && selectedRef.current === selectedId) acceptReceipt(next);
-      } catch (e) {
-        if (active && alive.current && selectedRef.current === selectedId)
-          setError(`Selected job: ${e instanceof Error ? e.message : 'CONTROL_UNAVAILABLE'}`);
+        await selectedOwner.refreshReceipt();
       } finally { inFlight = false; }
     }, 3000);
     return () => { active = false; window.clearInterval(timer); };
-  },[selectedId,receipt?.jobId,receipt?.state,receipt?.finishedAt,acceptReceipt]);
+  },[selectedId,receipt?.jobId,receipt?.state,receipt?.finishedAt,selectedOwner]);
 
   function chooseJob(id:string){
     session.chooseJob(id);
+    selectionEpoch.current++;
     selectedRef.current=id;
-    setSelectedId(id);
-    setReceipt(null);
+    selectedOwner.select(id);
     rememberJob(id);
     setError(null);
-    void controlsApi.job(id).then(next=>{
-      if(alive.current&&selectedRef.current===id)acceptReceipt(next);
-    }).catch(e=>{
-      if(alive.current&&selectedRef.current===id)setError(`Selected job: ${e instanceof Error?e.message:'CONTROL_UNAVAILABLE'}`);
-    });
   }
   async function launch(){
     if(busy)return;
+    const scope=selectionEpoch.current;
+    const lifetime=lifetimeEpoch.current;
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -110,24 +120,29 @@ export function Controls() {
       const awaiting = session.launch();
       setPending(session.pending);
       const result = await awaiting;
-      if (!alive.current) return;
+      if (!alive.current || lifetime!==lifetimeEpoch.current) return;
+      if (result.reveal && scope!==selectionEpoch.current) {
+        // Same-ID reselect advances the page scope even when the session version is unchanged.
+        if (selectedRef.current!==null) session.chooseJob(selectedRef.current);
+        else session.selectedJobId=null;
+      }
       session.acceptReceipt(result.receipt);
       setPending(session.pending);
       setConfirmed(false);
-      if (result.reveal) {
+      if (result.reveal && scope===selectionEpoch.current) {
+        selectionEpoch.current++;
         selectedRef.current = result.receipt.jobId;
-        setSelectedId(result.receipt.jobId);
         rememberJob(result.receipt.jobId);
-        acceptReceipt(result.receipt);
+        selectedOwner.select(result.receipt.jobId,result.receipt);
         setNotice(result.replay ? 'Existing request reconnected.' : 'Check accepted.');
-      } else {
+      } else if (scope===selectionEpoch.current) {
         setNotice(`Check accepted as job ${result.receipt.jobId}. Your selected job remains in view.`);
       }
-      void refresh();
+      void refreshGlobal();
     } catch (e) {
-      if (alive.current) setError(`Launch status unknown: ${e instanceof Error ? e.message : 'CONTROL_UNAVAILABLE'}. A pending retry keeps the same request key.`);
+      if (alive.current && lifetime===lifetimeEpoch.current && scope===selectionEpoch.current) setError(`Launch status unknown: ${e instanceof Error ? e.message : 'CONTROL_UNAVAILABLE'}. A pending retry keeps the same request key.`);
     } finally {
-      if (alive.current) { setPending(session.pending); setBusy(false); }
+      if (alive.current && lifetime===lifetimeEpoch.current) { setPending(session.pending); setBusy(false); }
     }
   }
   function prepareNew(){
@@ -141,26 +156,31 @@ export function Controls() {
   async function cancel(){
     if(!receipt||busy||isControlReceiptTerminalV1(receipt))return;
     const jobId=receipt.jobId;
+    const scope=selectionEpoch.current;
+    const lifetime=lifetimeEpoch.current;
     setBusy(true);
     try {
       const result=await controlsApi.cancel(jobId,{idempotencyKey:crypto.randomUUID(),expectedRevision:receipt.revision});
-      if(alive.current && selectedRef.current===jobId){
-        acceptReceipt(result.receipt);
+      if(alive.current && lifetime===lifetimeEpoch.current && scope===selectionEpoch.current){
+        selectedOwner.acceptReceipt(result.receipt);
         setNotice('Cancellation requested; awaiting terminal evidence.');
       }
     } catch(e) {
-      if(alive.current && selectedRef.current===jobId)setError(`Cancel: ${e instanceof Error?e.message:'CONTROL_UNAVAILABLE'}`);
-    } finally { if(alive.current)setBusy(false); }
+      if(alive.current && lifetime===lifetimeEpoch.current && scope===selectionEpoch.current)setError(`Cancel: ${e instanceof Error?e.message:'CONTROL_UNAVAILABLE'}`);
+    } finally { if(alive.current && lifetime===lifetimeEpoch.current)setBusy(false); }
   }
-  const selected=evidence?.selectionHash;
+  const selected=globalEnvelope?.selectionHash;
   const stale=receipt&&selected&&receipt.selectionHash!==selected;
-  const current=evidence?.evidence;
+  const current=selectedId===null ? globalEnvelope?.evidence : selectedEvidence.status==='ready' ? selectedEvidence.envelope?.evidence : undefined;
   return <main className="controls">
     <header className="controls__header"><div><p className="controls__eyebrow">Operator workspace</p><h1>Controls</h1><p>Selected evidence, manual checks, and owned job progress.</p></div><button type="button" onClick={()=>void refresh()} disabled={loading}>Refresh evidence</button></header>
-    {loading&&<p role="status">Loading selected evidence and recent jobs…</p>}
+    {loading&&<p role="status">Loading latest evidence and recent jobs…</p>}
+    <p className="controls__scope">{selectedId===null?'Reports for latest job':<>Reports for selected job <code>{selectedId}</code></>}</p>
+    {selectedId!==null&&selectedEvidence.status==='loading'&&<p role="status">Loading reports for selected job <code>{selectedId}</code>…</p>}
+    {selectedId!==null&&selectedEvidence.status==='error'&&<p className="controls__alert" role="alert">Selected job <code>{selectedId}</code>: {selectedEvidence.error}</p>}
     {error&&<p className="controls__alert" role="alert">{error}</p>}{notice&&<p className="controls__notice" role="status">{notice}</p>}
     <div className="controls__top">
-      <section className="controls__panel controls__readiness" aria-label="Selected readiness"><h2>Selected readiness</h2><p>{selected?'An installation is selected.':'No installation is selected.'}</p><dl className="controls__facts"><div><dt>Current selection</dt><dd><code>{selected??'Unknown'}</code></dd></div><div><dt>Current source</dt><dd>Unknown in the selected evidence envelope</dd></div><div><dt>Current MC build</dt><dd>Unknown in the selected evidence envelope</dd></div><div><dt>Why is it waiting?</dt><dd>{selected?'Review the checks and confirm a manual check.':<code>{current?.activation.availability.code??'CONTROL_SELECTION_UNAVAILABLE'}</code>}</dd></div></dl>{stale&&<p className="controls__alert">This job belongs to a different selection. Its progress remains historical.</p>}</section>
+      <section className="controls__panel controls__readiness" aria-label="Selected readiness"><h2>Selected readiness</h2><p>{selected?'An installation is selected.':'No installation is selected.'}</p><dl className="controls__facts"><div><dt>Current selection</dt><dd><code>{selected??'Unknown'}</code></dd></div><div><dt>Current source</dt><dd>Unknown in the selected evidence envelope</dd></div><div><dt>Current MC build</dt><dd>Unknown in the selected evidence envelope</dd></div><div><dt>Why is it waiting?</dt><dd>{selected?'Review the checks and confirm a manual check.':<code>{globalEnvelope?.evidence.activation.availability.code??'CONTROL_SELECTION_UNAVAILABLE'}</code>}</dd></div></dl>{stale&&<p className="controls__alert">This job belongs to a different selection. Its progress remains historical.</p>}</section>
       <HealthChecks activation={current?.activation??noReport}/>
     </div>
     <section className="controls__panel controls__manual" aria-label="Manual check"><h2>Manual check</h2><label htmlFor="control-kind">Check</label><select id="control-kind" value={kind} onChange={e=>{const next=e.target.value as ControlJobKindV1;session.setKind(next);setKind(next);setConfirmed(false);}}>{Object.entries(label).map(([value,text])=><option key={value} value={value}>{text}</option>)}</select><ManualTestRequirements kind={kind}/>
@@ -170,7 +190,7 @@ export function Controls() {
     </section>
     <TestEvidence evaluation={current?.evaluation??noReport} ui={current?.ui??noReport} receipt={receipt}/>
     <section className="controls__panel" aria-label="Recent jobs"><h2>Recent jobs</h2>{jobs.length?<ul className="controls__jobs">{jobs.map(job=><li key={job.jobId}><button type="button" aria-current={selectedId===job.jobId?'true':undefined} onClick={()=>chooseJob(job.jobId)}><strong>{label[job.kind]}</strong><span>{job.state.replaceAll('_',' ')} · {job.completedCases} of {job.plannedCases}</span><code>{job.jobId}</code></button></li>)}</ul>:<p>No recent receipts available.</p>}</section>
-    {evidence?.history.length ? <EvidenceHistory history={evidence.history}/> : null}
+    {globalEnvelope?.history.length ? <EvidenceHistory history={globalEnvelope.history}/> : null}
   </main>;
 }
 

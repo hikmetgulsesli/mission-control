@@ -259,9 +259,9 @@ export function Overview() {
           <div className="stat-card__sub">workflows</div>
         </div>
         <div className="stat-card stat-card--orange">
-          <div className="stat-card__value">{data.cronCount}</div>
+          <div className="stat-card__value">{data.cronCount ?? 'Unknown'}</div>
           <div className="stat-card__label">CRONS</div>
-          <div className="stat-card__sub">active</div>
+          <div className="stat-card__sub">enabled schedules</div>
         </div>
         <div className="stat-card stat-card--green">
           <div className="stat-card__value">${(data.costToday ?? 0).toFixed(2)}</div>

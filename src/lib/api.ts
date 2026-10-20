@@ -8,7 +8,7 @@ import {
   type ProductBuildAuthorityState,
 } from './product-build-authority';
 import { parseControlEvidenceEnvelopeV1, parseControlJobReceiptV1, parsePendingControlLaunchV1 } from './control-evidence';
-import type { ControlJobReceiptV1, PendingControlLaunchV1 } from './control-evidence';
+import type { ControlEvidenceEnvelopeV1, ControlJobReceiptV1, PendingControlLaunchV1 } from './control-evidence';
 
 const BASE = '';
 const AUTH_TOKEN = (typeof document === 'undefined' ? '' : (document.querySelector('meta[name="mc-token"]') as HTMLMetaElement)?.content) || '';
@@ -31,6 +31,7 @@ export const controlsApi = {
   evidence: async () => parseControlEvidenceEnvelopeV1(await controlRequest('/evidence')),
   jobs: async () => { const value = await controlRequest('/jobs'); if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).join('|') !== 'jobs' || !Array.isArray((value as { jobs: unknown }).jobs) || (value as { jobs: unknown[] }).jobs.length > 50) throw new Error('CONTROL_RESPONSE_INVALID'); return (value as { jobs: unknown[] }).jobs.map(parseControlJobReceiptV1); },
   job: async (jobId: string) => { const value = await controlRequest(`/jobs/${controlJobId(jobId)}`); if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).join('|') !== 'receipt') throw new Error('CONTROL_RESPONSE_INVALID'); return parseControlJobReceiptV1((value as { receipt: unknown }).receipt); },
+  jobEvidence: async (jobId: string): Promise<ControlEvidenceEnvelopeV1> => parseControlEvidenceEnvelopeV1(await controlRequest(`/jobs/${controlJobId(jobId)}/evidence`, { method: 'GET' })),
   launch: async (pending: PendingControlLaunchV1) => { const body = parsePendingControlLaunchV1(pending); return controlReceiptWrapper(await controlRequest('/jobs', { method: 'POST', headers: CT_JSON, body: JSON.stringify(body) })); },
   cancel: async (jobId: string, request: { idempotencyKey: string; expectedRevision: number }) => {
     if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(request.idempotencyKey) || !Number.isSafeInteger(request.expectedRevision) || request.expectedRevision < 0) throw new Error('CONTROL_REQUEST_INVALID');

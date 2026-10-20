@@ -167,7 +167,7 @@ function evidence(variant = 'planned') {
     return { schema: 'mission-control.controls-evidence-envelope.v1', selectionHash: SELECTION, evidence: current, history: [{ id: '1'.repeat(64), sourceSha: '2'.repeat(40), evidence: { activation: { ...activation, report: { ...activation.report, compatibility: 'historical' } }, evaluation: { availability: { state: 'available', code: null }, report: { ...report, compatibility: 'historical', qualification: 'historical' } } } }] };
 }
 function receipt(id, body) { return { schema: 'mission-control.control-job.v1', jobId: id, kind: body.kind, revision: 1, selectionHash: body.expectedSelectionHash, sourceSha: SOURCE, mcSourceSha: SOURCE, mcBuildHash: BUILD, suiteHash: body.kind === 'convergence_full8' ? 'f'.repeat(64) : null, state: 'running', requestedAt: AT, startedAt: AT, updatedAt: AT, finishedAt: null, phase: 'running', code: null, currentCaseId: null, ownedRunId: null, completedCases: 1, plannedCases: body.kind === 'convergence_full8' ? 8 : body.kind === 'ui_regression' ? ASSERTIONS.length : 6, reportRefs: {}, cancelRequested: false }; }
-function createFixtureState() { return { populatedProjects: false, unexpected: [], activeAssertion: null, browserRequests: [], browserResponses: [], requestFailures: [], intentionalFaults: [], jobs: new Map(), launches: new Map(), launchBodies: [], evidence: evidence(), history: HISTORY, holdHistory: null, holdLaunch: null, loseNextLaunch: false, cancelSettled: false, requests: [], pendingResponses: new Set() }; }
+function createFixtureState() { return { populatedProjects: false, unexpected: [], activeAssertion: null, browserRequests: [], browserResponses: [], requestFailures: [], intentionalFaults: [], jobs: new Map(), jobEvidence: new Map(), launches: new Map(), launchBodies: [], evidence: evidence(), history: HISTORY, holdHistory: null, holdLaunch: null, loseNextLaunch: false, cancelSettled: false, requests: [], pendingResponses: new Set() }; }
 async function fixtureResponse(state, method, url, body, rawTarget) {
     const p = url.pathname;
     state.requests.push({ method, path: p });
@@ -179,6 +179,19 @@ async function fixtureResponse(state, method, url, body, rawTarget) {
             return state.evidence;
         if (p === '/api/controls/jobs')
             return { jobs: [...state.jobs.values()] };
+        const jobEvidence = /^\/api\/controls\/jobs\/([a-f0-9-]{36})\/evidence$/.exec(p);
+        if (jobEvidence) {
+            const id = jobEvidence[1], job = state.jobs.get(id);
+            if (!job)
+                return { __fixtureStatus: 404, error: 'CONTROL_JOB_NOT_FOUND' };
+            if (state.jobEvidence.has(id))
+                return state.jobEvidence.get(id);
+            if (Object.values(job.reportRefs).some(ref => ref != null))
+                return { __fixtureStatus: 500, error: 'UI_FIXTURE_JOB_EVIDENCE_UNCONFIGURED' };
+            const absent = { availability: { state: 'unconfigured', code: 'FIXTURE_UNCONFIGURED' }, report: null };
+            return { schema: 'mission-control.controls-evidence-envelope.v1', selectionHash: job.selectionHash,
+                evidence: { activation: absent, evaluation: absent, ui: absent }, history: [] };
+        }
         if (p.startsWith('/api/controls/jobs/'))
             return { receipt: state.jobs.get(p.split('/').at(-1)) };
         if (p === '/api/prd/history') {
