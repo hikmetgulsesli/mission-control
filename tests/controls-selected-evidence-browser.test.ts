@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { isAbsolute, join, normalize, relative, sep } from 'node:path';
 import type { Socket } from 'node:net';
+import type { Server as HttpServer } from 'node:http';
 import type { Page, Request, Route } from 'playwright';
 import type { ViteDevServer } from 'vite';
 import type { ControlEvidenceEnvelopeV1, ControlJobReceiptV1 } from '../src/lib/control-evidence';
@@ -131,7 +132,8 @@ type FetchObservation = { fetchId: number; requestLedgerId: string | null; url: 
 type NetworkRow = { number: number; path: string; origin: string; method: string; held: boolean;
   status?: number; responseHash?: string; completed?: boolean; browserConsumed?: FetchObservation };
 type SocketProof = { number: number; peerEnded: boolean; closed: boolean; hadError: boolean;
-  endOrder: number | null; closeOrder: number | null; closePromise: Promise<void> };
+  connectionOrder: number; endOrder: number | null; closeOrder: number | null; closeHadError: boolean | null;
+  errorEvents: { order: number; code: string | null }[]; closePromise: Promise<void> };
 type Reply = { body: unknown; status?: number };
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(r => { resolve = r; }); return { promise, resolve }; }
 async function bounded<T>(promise: Promise<T>, label: string, ms = 10_000): Promise<T> {
@@ -179,11 +181,12 @@ async function harness(name: 'causal' | 'races', body: (p: Page, h: Harness) => 
     profileData: { name, jobA: JOB_A, jobB: JOB_B, globalSelection: S, historicalSelection: T, data: { global: data.global,
       receipts: [...data.receipts], evidence: [...data.evidence] }, readObserverScriptHash: hash(CONTROLS_READ_OBSERVER_INIT_SCRIPT), scenarios: ['row-selection','refresh','reload','late-global','a-b-a-success-error','remount-success-error','terminal-refs-success-error','terminal-missing','historical','pending-byte-stability'] } });
   let cache: string | null = null, cacheIdentity: ReturnType<typeof lstatSync> | null = null;
-  let server: ViteDevServer | null = null, http: ViteDevServer['httpServer'] = null;
+  let server: ViteDevServer | null = null, http: HttpServer | null = null;
   let page: Page | undefined, origin = '', listener: unknown = null;
   let listeningObserved = false, httpClosed = false, serverClosed = false;
   const sockets = new Set<Socket>(), websockets = new Set<any>();
   const socketProofs: SocketProof[] = [], originalSockets = new Map<Socket, SocketProof>(), originalHttpClose = deferred<void>();
+  const socketObservationHashes: string[] = [];
   let socketEventOrder = 0, viteCloseInvoked = false, preWrapperPeerProof: unknown = null;
   const ledger: NetworkRow[] = [], denied: string[] = [], errors: string[] = [], expectedHttpConsole: string[] = [];
   type HoldPlan = { arrived: ReturnType<typeof deferred<NetworkRow>>; released: ReturnType<typeof deferred<Reply | undefined>>;
@@ -281,19 +284,29 @@ async function harness(name: 'causal' | 'races', body: (p: Page, h: Harness) => 
     server = await createServer({ configFile: false, envFile: false, root: SOURCE_ROOT, cacheDir: cache,
       plugins: [react()], publicDir: false, css: { postcss: { plugins: [] } }, clearScreen: false, logLevel: 'error',
       server: { host: '127.0.0.1', port: 0, strictPort: true, hmr: false, proxy: {}, fs: { strict: true, allow: [SOURCE_ROOT, cache] } } });
-    http = server.httpServer;
-    assert.ok(http, 'retain the actual private HTTP object');
+    const privateHttp = server.httpServer;
+    assert.ok(privateHttp, 'retain the actual private HTTP object');
+    assert.ok('keepAliveTimeout' in privateHttp, 'the private fixture requires its original HTTP/1 server');
+    http = privateHttp;
+    // Keep the private fixture's idle timer from locally destroying historical
+    // sockets. Every original peer-end/close/zero gate below still applies.
+    http.keepAliveTimeout = 0;
     http.on('connection', socket => {
       sockets.add(socket);
       const close = deferred<void>();
       const proof: SocketProof = { number: socketProofs.length + 1, peerEnded: false, closed: false,
-        hadError: false, endOrder: null, closeOrder: null, closePromise: close.promise };
+        hadError: false, connectionOrder: ++socketEventOrder, endOrder: null, closeOrder: null, closeHadError: null,
+        errorEvents: [], closePromise: close.promise };
       socketProofs.push(proof); originalSockets.set(socket, proof);
       if (socketProofs.length > 1024) errors.push('ORIGINAL_SOCKET_PROOF_BOUND');
       socket.once('end', () => { proof.peerEnded = true; proof.endOrder = ++socketEventOrder; });
-      socket.on('error', () => { proof.hadError = true; });
+      socket.on('error', error => {
+        proof.hadError = true;
+        const code = (error as NodeJS.ErrnoException).code;
+        proof.errorEvents.push({ order: ++socketEventOrder, code: typeof code === 'string' ? code : null });
+      });
       socket.once('close', (hadError: boolean) => {
-        proof.closed = true; proof.hadError ||= hadError; proof.closeOrder = ++socketEventOrder;
+        proof.closed = true; proof.closeHadError = hadError; proof.hadError ||= hadError; proof.closeOrder = ++socketEventOrder;
         sockets.delete(socket); close.resolve();
       });
     });
@@ -325,7 +338,9 @@ async function harness(name: 'causal' | 'races', body: (p: Page, h: Harness) => 
     origin = `http://127.0.0.1:${address.port}`;
     listener = { host: address.address, port: address.port, family: address.family };
     owned.store.json({ schema: 'mission-control.controls-selected-evidence-listener.v1', origin, listener, requestedPort: 0,
-      listenApi: 'original_vite_http_server', readObserverScriptHash: hash(CONTROLS_READ_OBSERVER_INIT_SCRIPT), cacheRoot: cache });
+      listenApi: 'original_vite_http_server', keepAliveTimeout: http.keepAliveTimeout, timeout: http.timeout,
+      readObserverScriptHash: hash(CONTROLS_READ_OBSERVER_INIT_SCRIPT), cacheRoot: cache });
+    assert.equal(http.keepAliveTimeout, 0, 'private fixture idle timeout policy required before native acquisition');
     stage = 'native-acquisition';
     const browser = await owned.launch();
     assert.ok(browser, 'native refusal is setup UNKNOWN, never causal RED');
@@ -453,25 +468,41 @@ async function harness(name: 'causal' | 'races', body: (p: Page, h: Harness) => 
     }
     let native: unknown = null;
     try { native = await owned.close(); } catch (error) { cleanupErrors.push('native:' + String(error)); }
+    let admittedSocketCount: number | null = null, connectionCount: number | null = null, connectionCountError: string | null = null;
+    const recordSocketObservation = (phase: 'before_assertions' | 'before_peer_assertions' | 'server_error' | 'unknown') => {
+      socketObservationHashes.push(owned.store.json({ schema: 'mission-control.controls-selected-evidence-socket-observation.v1',
+        phase, listener, observationOrder: ++socketEventOrder, admittedSocketCount, connectionCount, connectionCountError,
+        originalHttpPresent: http !== null, listening: http?.listening ?? false, address: http?.address() ?? null,
+        keepAliveTimeout: http?.keepAliveTimeout ?? null, timeout: http?.timeout ?? null, httpClosed, serverClosed,
+        viteCloseInvoked, retainedOriginalSockets: originalSockets.size, socketCount: socketProofs.length,
+        activeOriginalSockets: sockets.size, activeWebsockets: websockets.size,
+        sockets: socketProofs.map(({ closePromise: _promise, ...proof }) => proof) }));
+    };
     // Vite's installed wrapper destroys remaining sockets. Admit that wrapper
     // ONLY after every retained original socket has independently peer-ended and
     // closed and the original HTTP object reports zero connections. If unknown,
     // leave the original server/resources retained; never force a cleanup proof.
     if (server) {
       try {
+        admittedSocketCount = socketProofs.length;
+        recordSocketObservation('before_assertions');
         assert.ok(http);
-        const admittedSocketCount = socketProofs.length;
         assert.equal(originalSockets.size, admittedSocketCount, 'ORIGINAL_SOCKET_IDENTITY_UNKNOWN');
         await bounded(Promise.all(socketProofs.map(proof => proof.closePromise)), 'SELECTED_NATURAL_PEER_CLOSURE_UNKNOWN');
+        try {
+          connectionCount = await bounded(new Promise<number>((resolve, reject) => {
+            http!.getConnections((error, count) => error ? reject(error) : resolve(count));
+          }), 'SELECTED_ORIGINAL_CONNECTION_COUNT_UNKNOWN');
+        } catch (error) { connectionCountError = String(error).slice(0,1000); throw error; }
+        // Preserve all historical rows and the original count before a failed
+        // peer/error/order assertion can withhold the qualified wrapper proof.
+        recordSocketObservation('before_peer_assertions');
         assert.equal(sockets.size, 0);
         assert.equal(websockets.size, 0);
         for (const proof of socketProofs) {
           assert.ok(proof.peerEnded && proof.closed && !proof.hadError, 'SELECTED_PEER_END_CLOSE_UNKNOWN');
           assert.ok(proof.endOrder !== null && proof.closeOrder !== null && proof.endOrder < proof.closeOrder);
         }
-        const connectionCount = await bounded(new Promise<number>((resolve, reject) => {
-          http!.getConnections((error, count) => error ? reject(error) : resolve(count));
-        }), 'SELECTED_ORIGINAL_CONNECTION_COUNT_UNKNOWN');
         assert.equal(connectionCount, 0);
         assert.equal(socketProofs.length, admittedSocketCount, 'NEW_CONNECTION_DURING_PEER_PROOF_UNKNOWN');
         assert.equal(sockets.size, 0);
@@ -492,7 +523,11 @@ async function harness(name: 'causal' | 'races', body: (p: Page, h: Harness) => 
         assert.equal(sockets.size, 0);
         assert.equal(websockets.size, 0);
         serverClosed = true;
-      } catch (error) { cleanupErrors.push('server:' + String(error)); }
+      } catch (error) {
+        cleanupErrors.push('server:' + String(error));
+        try { recordSocketObservation('server_error'); }
+        catch (auditError) { cleanupErrors.push('socket-observation:' + String(auditError)); }
+      }
     }
     // Root ruling I2: retain this exact private cache for EVERY outcome. No
     // deletion is attempted, even after successful publication/verification.
@@ -512,9 +547,13 @@ async function harness(name: 'causal' | 'races', body: (p: Page, h: Harness) => 
     const outcome = settled && !cleanupErrors.length
       ? bodyPassed ? 'GREEN' : causal ? 'CAUSAL_RED' : name === 'races' && stage === 'body' ? 'BEHAVIOR_FAIL' : 'UNKNOWN'
       : 'UNKNOWN';
+    if (outcome === 'UNKNOWN') {
+      try { recordSocketObservation('unknown'); }
+      catch (error) { cleanupErrors.push('socket-observation:' + String(error)); }
+    }
     owned.store.json({ schema: 'mission-control.controls-selected-evidence-final-outcome.v1', name, outcome, original, setupReady,
       native, listener, listeningObserved, httpClosed, serverClosed, originalListenerAbsent: http?.address() === null,
-      sockets: sockets.size, websockets: websockets.size, preWrapperPeerProof, viteCloseInvoked, ledgerHash, cache,
+      sockets: sockets.size, websockets: websockets.size, socketObservationHashes, preWrapperPeerProof, viteCloseInvoked, ledgerHash, cache,
       cacheRetained, cacheRemovalAttempted: false, cachePolicy: 'retain_all_outcomes', cleanupErrors });
     owned.store.verify();
     console.log(JSON.stringify({ code: 'CONTROLS_SELECTED_EVIDENCE_OUTCOME', name, outcome, artifactRoot: owned.store.root }));
