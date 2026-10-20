@@ -697,11 +697,20 @@ test('responsive tools readability', { timeout: 240000 }, async () => {
             const checks: { name: string; status: 'pass' | 'fail' | 'unrun'; error?: string; evidenceHash?: string }[] = [];
             const captures: { label: string; pngHash: string }[] = [];
             const setupFailures: { viewport: number[]; error: string }[] = [];
+            const inProgressChecks = new Set<string>();
+            const coverage: { prefix: string; evidenceHash: string }[] = [];
+            const historyCycles: { prefix: string; cycle: number; label: string; stage: string; evidenceHash: string }[] = [];
             const check = async (name: string, body: () => Promise<unknown>) => {
-                try { const value = await body(); checks.push({ name, status: 'pass', evidenceHash: h.receipt({ name, value: value ?? null }) }); return true; }
+                inProgressChecks.add(name);
+                try {
+                    const value = await body();
+                    checks.push({ name, status: 'pass', evidenceHash: h.receipt({ name, value: value ?? null }) });
+                    inProgressChecks.delete(name); return true;
+                }
                 catch (error) {
                     if (!(error instanceof assert.AssertionError)) throw error;
-                    checks.push({ name, status: 'fail', error: String(error), evidenceHash: h.receipt({ name, error: String(error) }) }); return false;
+                    checks.push({ name, status: 'fail', error: String(error), evidenceHash: h.receipt({ name, error: String(error) }) });
+                    inProgressChecks.delete(name); return false;
                 }
             };
             const unrun = (name: string, reason: string) => checks.push({ name, status: 'unrun', error: reason });
@@ -734,6 +743,9 @@ test('responsive tools readability', { timeout: 240000 }, async () => {
                 return values;
             });
             const panelReady = async (id: string, name: string) => {
+                const checkName = `panel-identity-${id}-${p.viewportSize()!.width}-${p.viewportSize()!.height}`;
+                // Readiness can throw before check() starts, including after an earlier identity pass.
+                inProgressChecks.add(checkName);
                 await p.waitForFunction(({ id, name }) => {
                     // Marked appends CR/LF at paragraph boundaries; preserve all interior text/spacing.
                     const bubbles = Array.from(document.querySelectorAll('.chat-msg__bubble')).map(e => (e.textContent || '').replace(/^[\r\n]+|[\r\n]+$/g, ''));
@@ -742,7 +754,7 @@ test('responsive tools readability', { timeout: 240000 }, async () => {
                         && bubbles.includes(`Saved ${id} message 30: fixed readable history content.`)
                         && bubbles.includes(`Saved ${id} message 29: fixed readable history content.`);
                 }, { id, name });
-                await check(`panel-identity-${id}-${p.viewportSize()!.width}-${p.viewportSize()!.height}`, async () => {
+                await check(checkName, async () => {
                     assert.equal(await p.locator('.chat-panel__agent-name').innerText(), name);
                     const bubbles = (await p.locator('.chat-msg__bubble').allTextContents()).map(text => text.replace(/^[\r\n]+|[\r\n]+$/g, ''));
                     assert.ok(bubbles.includes(`Saved ${id} message 30: fixed readable history content.`));
@@ -754,6 +766,51 @@ test('responsive tools readability', { timeout: 240000 }, async () => {
             const last = targets[13];
             for (const [width, height] of profileData.viewports) {
                 const prefix = `${width}-${height}`;
+                const checkStart = checks.length;
+                const captureStart = captures.length;
+                const plannedChecks: string[] = [];
+                const plannedCaptures: string[] = [];
+                let normalBoundaryObserved = false;
+                if (height === 900) {
+                    plannedChecks.push(`scrape-${prefix}-25-names-developers-actions`, `scrape-${prefix}-grid-300`);
+                    for (let i = 0; i < 25; i++) for (const field of ['name', 'developer', 'category', 'action', 'action-focus', 'icon'])
+                        plannedChecks.push(`scrape-${prefix}-${i}-${field}`);
+                    plannedChecks.push(`scrape-${prefix}-scroll-last-first`, `scrape-${prefix}-root-width`, `scrape-${prefix}-control-availability`);
+                    plannedCaptures.push(`scrape-${prefix}-top`, `scrape-${prefix}-bottom`);
+                }
+                if (width !== 1900) {
+                    plannedChecks.push(`panel-identity-main-${prefix}`, `panel-identity-${last.id}-${prefix}`);
+                    for (const field of ['title', 'notice', 'socket-status', 'connection-note', 'agents-tab', 'history-tab', 'main-selector', 'panel-name', 'progress-and-composer'])
+                        plannedChecks.push(`chat-${prefix}-${field}`);
+                    for (const target of targets) for (const field of ['identity', 'role']) plannedChecks.push(`chat-${prefix}-${target.id}-${field}`);
+                    for (const field of ['agent-scroll-independent', 'select-last-and-main', 'long-panel-name', 'long-panel-scroll', 'root-width'])
+                        plannedChecks.push(`chat-${prefix}-${field}`);
+                    for (const field of ['available', 'note', 'independent-scroll', 'enter-activation-focus', 'space-activation-focus', 'main-row-selection', 'loading', 'loading-tabs', 'unavailable', 'unavailable-tabs'])
+                        plannedChecks.push(`history-${prefix}-${field}`);
+                    for (const target of targets) for (const field of ['title', 'time', 'preview']) plannedChecks.push(`history-${prefix}-${target.id}-${field}`);
+                    for (const field of ['agents-top', 'agents-bottom', 'selected-long', 'messages-bottom']) plannedCaptures.push(`chat-${prefix}-${field}`);
+                    for (const field of ['top', 'bottom', 'enter-focus', 'enter-selected', 'space-focus', 'space-selected', 'loading', 'unavailable'])
+                        plannedCaptures.push(`history-${prefix}-${field}`);
+                    if (height === 844) {
+                        plannedChecks.push(`warning-${prefix}-actual-banner-and-budget`);
+                        plannedCaptures.push(`warning-${prefix}-budget`);
+                    }
+                }
+                const recordCoverage = (reason: string) => {
+                    const observed = new Set(checks.slice(checkStart).map(item => item.name));
+                    // A repeated check can be interrupted even when its earlier invocation passed.
+                    for (const name of inProgressChecks) unrun(name, `Interrupted before a result was recorded: ${reason}`);
+                    for (const name of plannedChecks) if (!observed.has(name) && !inProgressChecks.has(name))
+                        unrun(name, `Planned observation not executed to a result: ${reason}`);
+                    const observedCaptures = new Set(captures.slice(captureStart).map(item => item.label));
+                    for (const label of plannedCaptures) if (!observedCaptures.has(label))
+                        unrun(`capture-${label}`, `Planned capture not observed: ${reason}`);
+                    if (!normalBoundaryObserved) unrun(`boundary-${prefix}-end`, `Normal end-of-viewport boundary not observed: ${reason}`);
+                    coverage.push({ prefix, evidenceHash: h.receipt({ prefix, reason, plannedChecks, plannedCaptures,
+                        results: checks.slice(checkStart), captures: captures.slice(captureStart),
+                        interrupted: [...inProgressChecks], normalBoundaryObserved }) });
+                    inProgressChecks.clear();
+                };
                 try {
                     await p.setViewportSize({ width, height });
                     await h.boundary();
@@ -809,7 +866,10 @@ test('responsive tools readability', { timeout: 240000 }, async () => {
                             await input.fill('');
                         });
                     }
-                    if (width === 1900) { await h.boundary(); continue; }
+                    if (width === 1900) {
+                        await h.boundary(); normalBoundaryObserved = true;
+                        recordCoverage('Viewport body reached its normal boundary'); continue;
+                    }
                     await h.nav('/chat');
                     await p.waitForFunction(() => document.querySelectorAll('.chat-sidebar__agent').length === 14);
                     await panelReady('main', targets[0].identityName);
@@ -878,8 +938,45 @@ test('responsive tools readability', { timeout: 240000 }, async () => {
                     });
                     if (canUseHistory) {
                         // Visibility is an intended presentation assertion; click/readiness faults are UNKNOWN.
-                        await historyTab.click();
-                        await p.waitForFunction(() => document.querySelectorAll('.chat-sidebar__session').length === 14 && !document.querySelector('.chat-sidebar__loading'));
+                        const path = `/api/agents/${last.id}/history?limit=1`;
+                        let cycle = 0;
+                        const openHistory = async (label: string, inspectLoading?: () => Promise<void>, expectedRows = 14) => {
+                            const currentCycle = ++cycle;
+                            const before = h.count(path);
+                            const record = (stage: string, value: unknown = null) => historyCycles.push({ prefix, cycle: currentCycle, label, stage,
+                                evidenceHash: h.receipt({ prefix, cycle: currentCycle, label, stage, path, before,
+                                    count: h.count(path), outstanding: h.outstanding(path), value }) });
+                            h.hold(path);
+                            try {
+                                record('held-before-entry');
+                                await Promise.all([
+                                    p.waitForRequest(request => {
+                                        const url = new URL(request.url());
+                                        return request.method() === 'GET' && url.pathname + url.search === path;
+                                    }),
+                                    historyTab.click(),
+                                ]);
+                                record('new-request-observed');
+                                await p.waitForFunction(() => document.querySelector('.chat-sidebar__loading')?.textContent === 'Loading history...'
+                                    && document.querySelectorAll('.chat-sidebar__session').length === 0);
+                                assert.equal(h.count(path), before + 1, 'new exact preview request cycle');
+                                assert.equal(h.outstanding(path), 1, 'new preview request remains held during loading');
+                                record('loading-observed', await p.locator('.chat-sidebar__loading').textContent());
+                                await inspectLoading?.();
+                                h.release(path);
+                                record('released-for-readiness');
+                                await p.waitForFunction(rows => document.querySelectorAll('.chat-sidebar__session').length === rows
+                                    && !document.querySelector('.chat-sidebar__loading'), expectedRows);
+                                record('fresh-ready-observed', { rows: await p.locator('.chat-sidebar__session').count(), expectedRows });
+                            } catch (error) {
+                                record('interrupted', { error: String(error) });
+                                throw error;
+                            } finally {
+                                h.release(path);
+                                record('released-finally');
+                            }
+                        };
+                        await openHistory('initial');
                         await shot(`history-${prefix}-top`);
                         await text(`history-${prefix}-note`, p.locator('.chat-sidebar__sessions > .chat-sidebar__notice'), 'Saved local history for listed targets.');
                         const ancestor = await ancestorScroll();
@@ -917,27 +1014,21 @@ test('responsive tools readability', { timeout: 240000 }, async () => {
                             }
                             await p.getByRole('button', { name: 'Select main target', exact: true }).click();
                             await panelReady('main', targets[0].identityName);
-                            await historyTab.click();
-                            await p.waitForFunction(() => document.querySelectorAll('.chat-sidebar__session').length === 14 && !document.querySelector('.chat-sidebar__loading'));
+                            await openHistory(`after-${key.toLowerCase()}`);
                         }
                         await check(`history-${prefix}-main-row-selection`, async () => {
                             await p.locator('.chat-sidebar__session').first().click();
                             await panelReady('main', targets[0].identityName);
                             assert.equal(await p.locator('.chat-sidebar__agent').count(), 14);
                         });
-                        const path = `/api/agents/${last.id}/history?limit=1`;
-                        h.hold(path);
-                        await historyTab.click();
-                        await p.waitForFunction(() => document.querySelector('.chat-sidebar__loading')?.textContent === 'Loading history...');
-                        await text(`history-${prefix}-loading`, p.locator('.chat-sidebar__loading'), 'Loading history...');
-                        await text(`history-${prefix}-loading-tabs`, historyTab, 'HISTORY');
-                        await shot(`history-${prefix}-loading`);
-                        h.release(path);
-                        await p.waitForFunction(() => document.querySelectorAll('.chat-sidebar__session').length === 14 && !document.querySelector('.chat-sidebar__loading'));
+                        await openHistory('loading-control', async () => {
+                            await text(`history-${prefix}-loading`, p.locator('.chat-sidebar__loading'), 'Loading history...');
+                            await text(`history-${prefix}-loading-tabs`, historyTab, 'HISTORY');
+                            await shot(`history-${prefix}-loading`);
+                        });
                         await p.getByRole('button', { name: 'AGENTS', exact: true }).click();
                         h.fail.add(path);
-                        await historyTab.click();
-                        await p.waitForFunction(() => document.querySelectorAll('.chat-sidebar__session').length === 13 && !document.querySelector('.chat-sidebar__loading'));
+                        await openHistory('unavailable-control', undefined, 13);
                         await text(`history-${prefix}-unavailable`, p.locator('.chat-sidebar__notice').filter({ hasText: /^Saved history unavailable/ }), 'Saved history unavailable for 1 of 14 targets.');
                         await text(`history-${prefix}-unavailable-tabs`, historyTab, 'HISTORY');
                         await shot(`history-${prefix}-unavailable`);
@@ -963,19 +1054,22 @@ test('responsive tools readability', { timeout: 240000 }, async () => {
                     }
                     await rootGuard(`chat-${prefix}`);
                     await h.boundary();
+                    normalBoundaryObserved = true;
+                    recordCoverage('Viewport body reached its normal boundary');
                 } catch (error) {
                     setupFailures.push({ viewport: [width, height], error: String(error) });
                     h.receipt({ phase: 'setup-or-interaction-UNKNOWN', viewport: [width, height], error: String(error) });
                     // Keep independent widths observable, while refusing a causal RED classification.
                     for (const path of targets.map(t => `/api/agents/${t.id}/history?limit=1`)) h.release(path);
                     h.fail.clear();
+                    recordCoverage(String(error));
                     await shot(`unknown-${prefix}`);
                     await h.boundary();
                 }
             }
             const candidateOutcome = setupFailures.length || h.denied.length || h.errors.length ? 'UNKNOWN'
                 : checks.every(check => check.status === 'pass') ? 'pass' : 'fail';
-            const candidateHash = h.receipt({ profile: 'responsive-tools-v1', checks, captures, setupFailures,
+            const candidateHash = h.receipt({ profile: 'responsive-tools-v1', checks, captures, setupFailures, coverage, historyCycles,
                 networkDenied: h.denied, applicationErrors: h.errors, outcome: candidateOutcome });
             console.log(JSON.stringify({ code: 'RESPONSIVE_TOOLS_VISUAL_CANDIDATE', candidateHash,
                 outcome: candidateOutcome, setupFailures, networkDenied: h.denied, applicationErrors: h.errors, failed: checks.filter(check => check.status === 'fail').map(check => check.name), unrun: checks.filter(check => check.status === 'unrun').map(check => check.name), captures }));
