@@ -625,11 +625,11 @@ function responsiveReviewedPaths(): string[] {
 // Range fragments expose ellipsis/overflow that matching CSS declarations cannot prove.
 async function responsiveGeometry(locator: Locator) {
     return locator.evaluate(element => {
-        const box = (r: DOMRect) => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height });
         const style = getComputedStyle(element);
         const range = document.createRange(); range.selectNodeContents(element);
-        const fragments = Array.from(range.getClientRects()).filter(r => r.width > 0 && r.height > 0).map(box);
-        const clips: { tag: string; x: boolean; y: boolean; rect: ReturnType<typeof box>; scrollTop: number; scrollLeft: number }[] = [];
+        const fragments = Array.from(range.getClientRects()).filter(r => r.width > 0 && r.height > 0)
+            .map(r => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height }));
+        const clips: { tag: string; x: boolean; y: boolean; rect: { left: number; top: number; right: number; bottom: number; width: number; height: number }; scrollTop: number; scrollLeft: number }[] = [];
         for (let node: Element | null = element; node; node = node.parentElement) {
             const s = getComputedStyle(node), rect = node.getBoundingClientRect();
             const x = /hidden|clip|auto|scroll/.test(s.overflowX), y = /hidden|clip|auto|scroll/.test(s.overflowY);
@@ -638,15 +638,16 @@ async function responsiveGeometry(locator: Locator) {
                     right: rect.left + node.clientLeft + node.clientWidth, bottom: rect.top + node.clientTop + node.clientHeight,
                     width: node.clientWidth, height: node.clientHeight }, scrollTop: node.scrollTop, scrollLeft: node.scrollLeft });
         }
-        const rect = box(element.getBoundingClientRect());
+        const bounds = element.getBoundingClientRect();
+        const rect = { left: bounds.left, top: bounds.top, right: bounds.right, bottom: bounds.bottom, width: bounds.width, height: bounds.height };
         const card = element.closest('.scrape-inspiration__card');
-        const cardRect = card ? box(card.getBoundingClientRect()) : null;
-        const inBox = (r: typeof rect, b: typeof rect) => r.left >= b.left - 1 && r.right <= b.right + 1 && r.top >= b.top - 1 && r.bottom <= b.bottom + 1;
+        const cardBounds = card ? card.getBoundingClientRect() : null;
+        const cardRect = cardBounds ? { left: cardBounds.left, top: cardBounds.top, right: cardBounds.right, bottom: cardBounds.bottom, width: cardBounds.width, height: cardBounds.height } : null;
         return { text: element.textContent || '', rect, fragments, cardRect, clips,
             font: { size: parseFloat(style.fontSize), family: style.fontFamily, lineHeight: style.lineHeight, weight: style.fontWeight },
             scroll: { width: element.scrollWidth, clientWidth: element.clientWidth, height: element.scrollHeight, clientHeight: element.clientHeight, top: element.scrollTop, left: element.scrollLeft },
             visible: rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none',
-            insideCard: !cardRect || fragments.every(r => inBox(r, cardRect)),
+            insideCard: !cardRect || fragments.every(r => r.left >= cardRect.left - 1 && r.right <= cardRect.right + 1 && r.top >= cardRect.top - 1 && r.bottom <= cardRect.bottom + 1),
             unclipped: fragments.every(r => clips.every(c => (!c.x || r.left >= c.rect.left - 1 && r.right <= c.rect.right + 1) && (!c.y || r.top >= c.rect.top - 1 && r.bottom <= c.rect.bottom + 1))),
             viewport: { width: innerWidth, height: innerHeight, documentWidth: document.documentElement.scrollWidth },
         };
