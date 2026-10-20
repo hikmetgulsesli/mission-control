@@ -142,7 +142,8 @@ export function ChatSidebar({ agents, selected, onSelect, loading, error }: Prop
             const isActive = preview.agentId === selected;
 
             return (
-              <div
+              <button
+                type="button"
                 key={preview.agentId}
                 className={`chat-sidebar__session ${isActive ? 'chat-sidebar__session--active' : ''}`}
                 onClick={() => { onSelect(preview.agentId); setView('agents'); }}
@@ -159,7 +160,7 @@ export function ChatSidebar({ agents, selected, onSelect, loading, error }: Prop
                     {preview.lastMessage}{preview.lastMessage.length >= 80 ? '...' : ''}
                   </div>
                 )}
-              </div>
+              </button>
             );
           })}
         </div>

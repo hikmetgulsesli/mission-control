@@ -952,13 +952,16 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
   padding: 0 12px 8px; border-bottom: 1px solid var(--border);
 }
 .chat-sidebar__agent {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
   width: 100%; padding: 8px 12px;
   background: none; border: none; border-left: 3px solid transparent;
   color: #ffffff; font-family: var(--font);
   font-size: 14px; cursor: pointer; font-weight: 500;
   transition: all 0.15s;
 }
+.chat-sidebar__agent > span { min-width: 0; overflow-wrap: anywhere; }
+.chat-sidebar__agent > span:first-child { flex-shrink: 0; }
+.chat-sidebar__agent > span:nth-child(2) { flex: 1; }
 .chat-sidebar__agent:hover { background: rgba(255,255,255,0.03); }
 .chat-sidebar__agent--active { background: rgba(0,255,255,0.05); border-left-color: var(--neon-cyan); }
 
@@ -1443,7 +1446,6 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
   .ops-page__grid { grid-template-columns: 1fr; }
 
   /* Chat */
-  .chat-sidebar { width: 140px; min-width: 140px; }
   .chat-panel__messages { padding: 12px; }
 
   /* Cost */
@@ -1572,37 +1574,7 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
   }
   .agent-card__label { font-size: 14px; }
 
-  /* Chat: sidebar collapse + full width */
-  .chat-page__layout {
-    flex-direction: column;
-  }
-  .chat-sidebar {
-    width: 100%;
-    min-width: unset;
-    flex-direction: row;
-    display: flex;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-    padding: 0;
-    max-height: 44px;
-    -webkit-overflow-scrolling: touch;
-  }
-  .chat-sidebar::-webkit-scrollbar { display: none; }
-  .chat-sidebar__title { display: none; }
-  .chat-sidebar__agent {
-    flex-shrink: 0;
-    padding: 8px 10px;
-    border-left: none;
-    border-bottom: 3px solid transparent;
-    font-size: 14px;
-    white-space: nowrap;
-  }
-  .chat-sidebar__agent--active {
-    border-bottom-color: var(--neon-cyan);
-    border-left-color: transparent;
-  }
+  /* Chat panel */
   .chat-panel__messages { padding: 8px; }
   .chat-msg__bubble {
     max-width: 95%;
@@ -6869,6 +6841,9 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
 .chat-sidebar__new-chat {
   display: block;
   width: 100%;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
   padding: 10px 12px;
   background: rgba(0,255,255,0.06);
   border: 1px dashed var(--neon-cyan);
@@ -6889,6 +6864,7 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
 
 .chat-sidebar__role {
   display: block;
+  flex-basis: 100%;
   font-size: 14px;
   color: #b0b0c8;
   margin-top: 1px;
@@ -6988,6 +6964,10 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
 /* ===== Chat Sidebar Tabs ===== */
 .chat-sidebar__tabs {
   display: flex;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-card);
   gap: 0;
   margin-bottom: 0.5rem;
   border-bottom: 1px solid rgba(0, 255, 255, 0.15);
@@ -6998,7 +6978,7 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
   padding: 0.5rem;
   background: none;
   border: none;
-  color: #666;
+  color: var(--text-dim);
   cursor: pointer;
   font-size: 14px;
   font-weight: 600;
@@ -7020,16 +7000,28 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
-  overflow-y: auto;
+  min-width: 0;
+  overflow: visible;
   flex-shrink: 0;
 }
 
 .chat-sidebar__session {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
   padding: 0.6rem 0.75rem;
   cursor: pointer;
   border-radius: 6px;
   border-left: 3px solid transparent;
   transition: all 0.15s;
+}
+
+.chat-sidebar__session:focus-visible {
+  outline: 2px solid var(--neon-cyan);
+  outline-offset: -2px;
 }
 
 .chat-sidebar__session:hover {
@@ -7043,6 +7035,7 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
 
 .chat-sidebar__session-header {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: 0.4rem;
 }
@@ -7053,38 +7046,41 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
 }
 
 .chat-sidebar__session-title {
-  flex-shrink: 0;
-  font-size: 0.8rem;
-  color: #ddd;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  flex-shrink: 1;
+  font-size: 14px;
+  color: var(--text-primary);
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .chat-sidebar__session-meta {
   display: flex;
   justify-content: space-between;
-  font-size: 0.65rem;
-  color: #666;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--text-dim);
   margin-top: 0.2rem;
   padding-left: 1.25rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .chat-sidebar__session-preview {
-  font-size: 0.7rem;
-  color: #555;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--text-dim);
   margin-top: 0.15rem;
   padding-left: 1.25rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .chat-sidebar__empty {
   text-align: center;
-  color: #555;
+  color: var(--text-dim);
   padding: 2rem 1rem;
-  font-size: 0.8rem;
+  font-size: 14px;
 }
 
 /* ===================================================
@@ -7242,15 +7238,22 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
   /* Pixel Office */
   .pixel-office__canvas-wrap { min-height: 300px; }
 
-  /* Chat sidebar: horizontal scrollable agents */
-  .chat-sidebar__tabs { display: none; }
-  .chat-sidebar__sessions { display: none; }
-  .chat-sidebar__new-chat {
-    padding: 6px 12px;
-    font-size: 14px;
-    white-space: nowrap;
-    flex-shrink: 0;
+  /* Chat: bounded vertical sidebar with its own scroll area */
+  .chat-page__layout { flex-direction: column; }
+  .chat-sidebar {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    flex: 0 1 180px;
+    max-height: min(34vh, 180px);
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 0;
   }
+  .chat-sidebar__agent { white-space: normal; }
 
   /* Live progress panel */
   .live-progress-panel {
@@ -7291,16 +7294,7 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
   .hub-agent__name { font-size: 14px; }
   .hub-pr { padding: 6px; }
 
-  /* Chat: full width, no sidebar */
-  .chat-page__layout {
-    flex-direction: column;
-  }
-  .chat-sidebar {
-    max-height: 36px;
-    padding: 0 4px;
-  }
-  .chat-sidebar__agent { padding: 4px 8px; font-size: 14px; }
-  .chat-sidebar__role { display: none; }
+  /* Chat */
   .chat-panel__input input { font-size: 14px; }
 
   /* Modal: nearly full screen */
@@ -9671,15 +9665,15 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
 /* ── Scrape Inspiration Cards ── */
 .scrape-inspiration { margin-bottom: 20px; }
 .scrape-inspiration__title { font-size: 14px; font-weight: 700; color: var(--neon-orange); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 10px; border-bottom: 1px dashed rgba(255, 102, 0, 0.2); padding-bottom: 4px; }
-.scrape-inspiration__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; max-height: 300px; overflow-y: auto; scrollbar-width: thin; }
+.scrape-inspiration__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 10px; max-height: 300px; overflow-y: auto; scrollbar-width: thin; }
 .scrape-inspiration__card { display: flex; align-items: center; gap: 10px; padding: 10px; background: var(--glass-bg, rgba(18,18,31,0.7)); border: 1px solid var(--glass-border, rgba(255,255,255,0.08)); border-radius: 6px; cursor: pointer; transition: border-color 0.2s, box-shadow 0.2s; }
 .scrape-inspiration__card:hover { border-color: var(--neon-cyan); box-shadow: 0 0 10px rgba(0,255,255,0.15); }
 .scrape-inspiration__icon { width: 48px; height: 48px; border-radius: 12px; object-fit: cover; flex-shrink: 0; }
-.scrape-inspiration__info { flex: 1; min-width: 0; overflow: hidden; }
-.scrape-inspiration__name { font-size: 14px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.scrape-inspiration__developer { font-size: 14px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.scrape-inspiration__category { font-size: 14px; color: var(--neon-cyan); background: rgba(0,255,255,0.08); padding: 1px 6px; border-radius: 3px; margin-top: 2px; display: inline-block; }
-.scrape-inspiration__clone-btn { font-size: 14px; font-weight: 700; color: var(--neon-green); background: rgba(0,255,65,0.08); border: 1px solid rgba(0,255,65,0.2); border-radius: 3px; padding: 2px 8px; cursor: pointer; margin-top: 4px; transition: background 0.2s; }
+.scrape-inspiration__info { flex: 1; min-width: 0; overflow: visible; }
+.scrape-inspiration__name { font-size: 14px; font-weight: 700; color: var(--text-primary); white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+.scrape-inspiration__developer { font-size: 14px; color: var(--text-dim); white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+.scrape-inspiration__category { font-size: 14px; color: var(--neon-cyan); background: rgba(0,255,255,0.08); padding: 1px 6px; border-radius: 3px; margin-top: 2px; display: inline-block; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.scrape-inspiration__clone-btn { font-size: 14px; font-weight: 700; color: var(--neon-green); background: rgba(0,255,65,0.08); border: 1px solid rgba(0,255,65,0.2); border-radius: 3px; padding: 2px 8px; cursor: pointer; margin-top: 4px; transition: background 0.2s; flex-shrink: 0; }
 .scrape-inspiration__clone-btn:hover { background: rgba(0,255,65,0.2); }
 .scrape-inspiration__loading, .scrape-inspiration__empty { font-size: 14px; color: var(--text-dim); padding: 20px 0; }
 
