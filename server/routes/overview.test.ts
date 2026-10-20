@@ -38,22 +38,22 @@ test('actual overview boundary', async (context) => {
     runReads = 0;
     writeFileSync(process.env.MC_DATA_PATH, '{}');
   });
-  context.mock.module(process.env.MC_CONFIG_MODULE, { exports: { config: { dataJson: process.env.MC_DATA_PATH } } });
-  context.mock.module(process.env.MC_CACHE_MODULE, { exports: { cached: async (_key, _ttl, read) => read() } });
-  context.mock.module(process.env.MC_PROJECTS_MODULE, { exports: { readProjectApiProjections: async () => {
+  context.mock.module(process.env.MC_CONFIG_MODULE, { namedExports: { config: { dataJson: process.env.MC_DATA_PATH } } });
+  context.mock.module(process.env.MC_CACHE_MODULE, { namedExports: { cached: async (_key, _ttl, read) => read() } });
+  context.mock.module(process.env.MC_PROJECTS_MODULE, { namedExports: { readProjectApiProjections: async () => {
     if (projectsUnavailable) throw new Error('fixture projections unavailable');
     return projected;
   } } });
-  context.mock.module(process.env.MC_SETFARM_MODULE, { exports: { getRuns: async () => {
+  context.mock.module(process.env.MC_SETFARM_MODULE, { namedExports: { getRuns: async () => {
     runReads++;
     if (runsUnavailable) throw new Error('fixture runs unavailable');
     return runs;
   } } });
-  context.mock.module(process.env.MC_CLI_MODULE, { exports: {
+  context.mock.module(process.env.MC_CLI_MODULE, { namedExports: {
     runCliJson: async () => { if (rosterUnavailable) throw new Error('fixture roster unavailable'); return roster; },
     runCli: async () => '[]',
   } });
-  context.mock.module(process.env.MC_METRICS_MODULE, { exports: { getSystemMetrics: async () => null } });
+  context.mock.module(process.env.MC_METRICS_MODULE, { namedExports: { getSystemMetrics: async () => null } });
 
   const { default: router, selectOperationalActiveProjects, selectRecentRuntimeProjects } = await import(process.env.MC_OVERVIEW_MODULE);
   const execution = (state, runId, runStatus = state) => ({

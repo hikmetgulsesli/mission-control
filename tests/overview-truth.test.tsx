@@ -19,9 +19,9 @@ test('Overview truth at the render boundary', async (context) => {
     color: '#123456', agents: ['main', 'visitor'], limits: { promptsPer5h: 25 },
     usage: { today: { cost: 3 } }, models: [{ id: 'fixture-model', name: 'Configured model', status: 'active' }],
   }];
-  context.mock.module(process.env.MC_STORE_MODULE, { exports: { useAppStore: (selector) => selector({ overview, sync: {} }) } });
-  context.mock.module(process.env.MC_POLLING_MODULE, { exports: { usePolling: (read) => ({ data: read(), loading: false, error: null }) } });
-  context.mock.module(process.env.MC_API_MODULE, { exports: { api: { modelLimits: () => models, quota: () => quota } } });
+  context.mock.module(process.env.MC_STORE_MODULE, { namedExports: { useAppStore: (selector) => selector({ overview, sync: {} }) } });
+  context.mock.module(process.env.MC_POLLING_MODULE, { namedExports: { usePolling: (read) => ({ data: read(), loading: false, error: null }) } });
+  context.mock.module(process.env.MC_API_MODULE, { namedExports: { api: { modelLimits: () => models, quota: () => quota } } });
   try {
     const { Overview } = await import(process.env.MC_OVERVIEW_MODULE);
     const empty = () => ({ agents: [], agentCount: 0, activeRuns: [], activeRunCount: 0, cronCount: 0,

@@ -39,7 +39,7 @@ const AGENT_ROLES: Record<string, string> = {
 
 const ROW0_AGENTS = ['koda', 'flux', 'atlas', 'iris'];
 const ROW1_AGENTS = ['sentinel', 'cipher', 'lux', 'nexus', 'prism'];
-const ALL_AGENTS = ['main', ...ROW0_AGENTS, ...ROW1_AGENTS];
+export const OFFICE_ROLE_IDS = ['main', ...ROW0_AGENTS, ...ROW1_AGENTS];
 
 // ===== TYPES =====
 
@@ -604,6 +604,11 @@ export interface OfficeAgentState {
   activity: string;
 }
 
+export interface OfficeMappingObservation {
+  state: 'unknown' | 'unavailable' | 'fresh' | 'stale';
+  mappedCount: number | null;
+}
+
 export class PixelOfficeEngine {
   private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
@@ -614,6 +619,7 @@ export class PixelOfficeEngine {
   private animId = 0;
   private sceneDrawn = false;
   private activityManager = new ActivityManager();
+  private mappingObservation: OfficeMappingObservation = { state: 'unknown', mappedCount: null };
 
   // Ping pong ball
   private pongBall = { x: 970, y: 325, vx: 3 };
@@ -650,7 +656,7 @@ export class PixelOfficeEngine {
     this.offCtx = this.offscreen.getContext('2d')!;
     this.offCtx.imageSmoothingEnabled = false;
 
-    for (const id of ALL_AGENTS) {
+    for (const id of OFFICE_ROLE_IDS) {
       const c = CUBICLES[id];
       const startX = id === 'main' ? 410 : c.chairX;
       const startY = id === 'main' ? 105 : c.chairY - 30;
@@ -682,8 +688,12 @@ export class PixelOfficeEngine {
     drawBossOffice(ctx);
     drawKitchen(ctx);
     drawLounge(ctx);
-    for (const id of ALL_AGENTS) drawCubicle(ctx, id);
+    for (const id of OFFICE_ROLE_IDS) drawCubicle(ctx, id);
     this.sceneDrawn = true;
+  }
+
+  setMappingObservation(value: OfficeMappingObservation): void {
+    this.mappingObservation = value;
   }
 
   updateAgentStates(agents: OfficeAgentState[]) {
@@ -1327,12 +1337,14 @@ export class PixelOfficeEngine {
     // Title
     drawPixelText(this.ctx, 'PIXEL OFFICE', 80, H - 13, '#334455', 10);
 
-    // Agent count badge
-    let workingCount = 0;
-    this.sprites.forEach(s => { if (s.status === 'working') workingCount++; });
-    const badgeText = `${workingCount}/10 ACTIVE`;
-    drawRect(this.ctx, 140, H - 26, 80, 16, '#112211');
-    drawPixelText(this.ctx, badgeText, 180, H - 13, '#00ff41', 9);
+    // Receipt-qualified workflow mapping, separate from illustrative sprite activity.
+    const { state, mappedCount } = this.mappingObservation;
+    const badgeText = state === 'unknown' ? 'ROLES 10 · MAPPING UNKNOWN'
+      : state === 'unavailable' ? 'ROLES 10 · MAPPING UNAVAILABLE'
+      : `ROLES 10 · MAPPED ${mappedCount}${state === 'stale' ? ' · STALE' : ''}`;
+    drawRect(this.ctx, 140, H - 26, 360, 16, '#112211');
+    drawPixelText(this.ctx, badgeText, 320, H - 13, state === 'fresh' ? '#00ff41' : '#ffaa00', 9);
+    drawPixelText(this.ctx, 'STATIC ROLE CATALOG · ILLUSTRATIVE', 750, H - 13, '#8899aa', 9);
 
     this.frame++;
     this.animId = requestAnimationFrame(this.renderFrame);
