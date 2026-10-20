@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, realpathSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { isAbsolute, join, normalize, relative, sep } from 'node:path';
 import type { Socket } from 'node:net';
-import type { Page, Route } from 'playwright';
+import type { Page, Request, Route } from 'playwright';
 import type { ViteDevServer } from 'vite';
 import type { ControlEvidenceEnvelopeV1, ControlJobReceiptV1 } from '../src/lib/control-evidence';
 import type { OwnedProfile } from './fixtures/controls-selected-evidence-owned';
@@ -24,6 +24,7 @@ const PENDING = 'mission-control.controls.pending-launch.v1';
 const PENDING_JOB = 'mission-control.controls.pending-job.v1';
 const SELECTED = 'mission-control.controls.selected-job.v1';
 const EVIDENCE = '/api/controls/evidence', JOBS = '/api/controls/jobs';
+const OBSERVATION_HEADER = 'x-mc-controls-fixture-request-id';
 const receiptPath = (id: string) => `${JOBS}/${id}`;
 const evidencePath = (id: string) => `${receiptPath(id)}/evidence`;
 const hash = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
@@ -66,7 +67,13 @@ function model() {
     evidence: new Map([[JOB_A, selected()], [JOB_B, envelope('SELECTED_B_UNCONFIGURED')]]) };
 }
 type Model = ReturnType<typeof model>;
-type NetworkRow = { number: number; path: string; origin: string; method: string; held: boolean; status?: number; responseHash?: string; completed?: boolean };
+type FetchObservation = { fetchId: number; requestLedgerId: string | null; url: string; method: string;
+  fetchState: string; responseUrl?: string; status?: number; jsonCalls: number; jsonState: string;
+  jsonBodyHash?: string; jsonBytes?: number; error?: string };
+type NetworkRow = { number: number; path: string; origin: string; method: string; held: boolean;
+  status?: number; responseHash?: string; completed?: boolean; browserConsumed?: FetchObservation };
+type SocketProof = { number: number; peerEnded: boolean; closed: boolean; hadError: boolean;
+  endOrder: number | null; closeOrder: number | null; closePromise: Promise<void> };
 type Reply = { body: unknown; status?: number };
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(r => { resolve = r; }); return { promise, resolve }; }
 async function bounded<T>(promise: Promise<T>, label: string, ms = 10_000): Promise<T> {
@@ -85,8 +92,8 @@ async function expectSix(p: Page, code = 'SELECTED_A_PASS') {
   assert.deepEqual(await activation(p).locator('[data-testid="activation-check-row"] code').allTextContents(), Array(6).fill(code));
 }
 async function frameFence(p: Page) {
-  // Browser rendering/microtask barrier after the numbered response completed;
-  // no arbitrary sleep or test-only component state is used to settle races.
+  // Rendering only: each held response must first pass the separate exact
+  // Playwright response + actual browser fetch/Response.json consumption barrier.
   await p.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
 }
 async function pendingBytes(p: Page) {
@@ -118,8 +125,13 @@ async function harness(name: 'causal' | 'races', body: (p: Page, h: Harness) => 
   let page: Page | undefined, origin = '', listener: unknown = null;
   let listeningObserved = false, httpClosed = false, serverClosed = false;
   const sockets = new Set<Socket>(), websockets = new Set<any>();
+  const socketProofs: SocketProof[] = [], originalSockets = new Map<Socket, SocketProof>(), originalHttpClose = deferred<void>();
+  let socketEventOrder = 0, viteCloseInvoked = false, preWrapperPeerProof: unknown = null;
   const ledger: NetworkRow[] = [], denied: string[] = [], errors: string[] = [], expectedHttpConsole: string[] = [];
-  const plans = new Map<string, any[]>(), allPlans: any[] = [];
+  type HoldPlan = { arrived: ReturnType<typeof deferred<NetworkRow>>; released: ReturnType<typeof deferred<Reply | undefined>>;
+    done: ReturnType<typeof deferred<void>>; reply?: Reply; used: boolean; request: Request | null; row: NetworkRow | null };
+  const plans = new Map<string, HoldPlan[]>(), allPlans: HoldPlan[] = [];
+  const observationFaults: string[] = [];
   let stage = 'acquisition', setupReady = false, causal = false, original: unknown = null, bodyPassed = false;
   let wsHeartbeats = 0, wsClosed = 0;
   const defaultReply = (path: string): Reply | null => {
@@ -131,13 +143,55 @@ async function harness(name: 'causal' | 'races', body: (p: Page, h: Harness) => 
     }
     return null;
   };
+  const observeConsumption = async (plan: HoldPlan) => {
+    assert.ok(page && plan.request && plan.row, 'HELD_BROWSER_OBSERVATION_UNKNOWN: missing exact request');
+    const request = plan.request, row = plan.row;
+    // Request object identity is retained at interception. Correlation is carried
+    // only by this synthetic RESPONSE header; the outgoing request is unchanged.
+    const response = await bounded(request.response(), 'HELD_RESPONSE_OBJECT_UNKNOWN');
+    assert.ok(response && response.request() === request, 'HELD_RESPONSE_IDENTITY_UNKNOWN');
+    assert.equal(await response.headerValue(OBSERVATION_HEADER), String(row.number), 'HELD_RESPONSE_HEADER_UNKNOWN');
+    assert.equal(await bounded(response.finished(), 'HELD_RESPONSE_BODY_END_UNKNOWN'), null);
+    const observation = await bounded(page.waitForFunction(id => {
+      const snapshot = (window as any).controlsReadObserver?.snapshot();
+      if (!snapshot || snapshot.errors.length) throw new Error('BROWSER_READ_OBSERVER_UNKNOWN');
+      const rows = snapshot.records.filter((r: any) => r.requestLedgerId === String(id));
+      if (rows.length > 1) throw new Error('BROWSER_READ_OBSERVER_AMBIGUOUS');
+      const row = rows[0];
+      return row && row.fetchState === 'fulfilled' && row.jsonState === 'fulfilled' && row.jsonBodyHash ? row : false;
+    }, row.number, { timeout: 8000 }), 'HELD_BROWSER_CONSUMPTION_UNKNOWN');
+    const consumed = await observation.jsonValue() as FetchObservation;
+    await observation.dispose();
+    assert.equal(consumed.requestLedgerId, String(row.number));
+    assert.equal(consumed.url, origin + row.path);
+    assert.equal(consumed.responseUrl, origin + row.path);
+    assert.equal(consumed.method, row.method);
+    assert.equal(consumed.status, row.status);
+    assert.equal(consumed.jsonCalls, 1, 'BROWSER_READ_OBSERVER_AMBIGUOUS_JSON');
+    assert.equal(consumed.jsonBodyHash, row.responseHash, 'BROWSER_READ_BODY_BINDING_UNKNOWN');
+    assert.ok(consumed.jsonBytes! <= 262144);
+    row.browserConsumed = consumed;
+  };
   const hold: Harness['hold'] = (path, reply) => {
     assert.ok(defaultReply(path), 'only exact reviewed fixture routes can be held');
     const arrived = deferred<NetworkRow>(), released = deferred<Reply | undefined>(), done = deferred<void>();
-    const plan = { arrived, released, done, reply, used: false };
+    const plan: HoldPlan = { arrived, released, done, reply, used: false, request: null, row: null };
     plans.set(path, [...(plans.get(path) ?? []), plan]); allPlans.push(plan);
     return { arrived: () => bounded(arrived.promise, `HELD_REQUEST_NOT_OBSERVED:${path}`),
-      async release(value) { released.resolve(value); if (plan.used) await bounded(done.promise, `HELD_RESPONSE_NOT_SETTLED:${path}`); } };
+      async release(value) {
+        released.resolve(value);
+        try {
+          if (!plan.used) throw new Error('HELD_BROWSER_OBSERVATION_UNKNOWN: release before exact request');
+          await bounded(done.promise, `HELD_RESPONSE_NOT_SETTLED:${path}`);
+          await observeConsumption(plan);
+        } catch (error) { observationFaults.push(String(error).slice(0,1500)); throw error; }
+      } };
+  };
+  const browserReadSnapshot = async () => {
+    const reads = await page!.evaluate(() => (window as any).controlsReadObserver?.snapshot() ?? null);
+    if ((!reads || reads.errors.length) && observationFaults.length < 32)
+      observationFaults.push('BROWSER_READ_OBSERVER_UNKNOWN:' + JSON.stringify(reads?.errors ?? null));
+    return reads;
   };
   const capture: Harness['capture'] = async (label, extra) => {
     assert.match(label, /^[a-z0-9-]+$/);
@@ -147,11 +201,14 @@ async function harness(name: 'causal' | 'races', body: (p: Page, h: Harness) => 
     const domHash = owned.store.json({ schema: 'mission-control.controls-selected-evidence-dom.v1', name, label, dom });
     const shotHash = await owned.shot(page, label);
     owned.store.json({ schema: 'mission-control.controls-selected-evidence-observation.v1', name, label, domHash, shotHash,
-      pending: await pendingBytes(page), ledger: structuredClone(ledger), extra: extra ?? null });
+      pending: await pendingBytes(page), ledger: structuredClone(ledger),
+      browserReads: await browserReadSnapshot(), extra: extra ?? null });
   };
   const checkpoint: Harness['checkpoint'] = async label => {
     assert.deepEqual(denied, [], 'all network traffic belongs to the private fixture origin and reviewed graph');
     assert.deepEqual(errors, [], 'no page/console error may qualify selected behavior');
+    await browserReadSnapshot();
+    assert.deepEqual(observationFaults, [], 'missing or ambiguous client consumption is UNKNOWN');
     assert.ok(ledger.every(r => r.origin === origin && r.method === 'GET'), 'API traffic is exact-origin GET-only');
     assert.equal(await page!.getByRole('region', { name: 'Selected readiness', exact: true }).getByText(S, { exact: true }).count(), 1);
     assert.equal(await page!.getByRole('region', { name: 'Historical evidence', exact: true }).getByText('9'.repeat(40), { exact: true }).count(), 1);
@@ -168,9 +225,22 @@ async function harness(name: 'causal' | 'races', body: (p: Page, h: Harness) => 
       server: { host: '127.0.0.1', port: 0, strictPort: true, hmr: false, proxy: {}, fs: { strict: true, allow: [SOURCE_ROOT, cache] } } });
     http = server.httpServer;
     assert.ok(http, 'retain the actual private HTTP object');
-    http.on('connection', socket => { sockets.add(socket); socket.once('close', () => sockets.delete(socket)); });
+    http.on('connection', socket => {
+      sockets.add(socket);
+      const close = deferred<void>();
+      const proof: SocketProof = { number: socketProofs.length + 1, peerEnded: false, closed: false,
+        hadError: false, endOrder: null, closeOrder: null, closePromise: close.promise };
+      socketProofs.push(proof); originalSockets.set(socket, proof);
+      if (socketProofs.length > 1024) errors.push('ORIGINAL_SOCKET_PROOF_BOUND');
+      socket.once('end', () => { proof.peerEnded = true; proof.endOrder = ++socketEventOrder; });
+      socket.on('error', () => { proof.hadError = true; });
+      socket.once('close', (hadError: boolean) => {
+        proof.closed = true; proof.hadError ||= hadError; proof.closeOrder = ++socketEventOrder;
+        sockets.delete(socket); close.resolve();
+      });
+    });
     http.once('listening', () => { listeningObserved = true; });
-    http.once('close', () => { httpClosed = true; });
+    http.once('close', () => { httpClosed = true; originalHttpClose.resolve(); });
     server.middlewares.use((req, res, next) => {
       if (req.url?.startsWith('/api/') || req.url?.startsWith('/ws')) { res.statusCode = 403; res.end('TEST_NETWORK_DENIED'); }
       else next();
@@ -187,6 +257,60 @@ async function harness(name: 'causal' | 'races', body: (p: Page, h: Harness) => 
     const browser = await owned.launch();
     assert.ok(browser, 'native refusal is setup UNKNOWN, never causal RED');
     const context = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1440, height: 1000 } });
+    await context.addInitScript(({ header, cap }) => {
+      // Passive observation only. Return each ORIGINAL fetch/json promise and
+      // leave its Response, fulfillment value, and rejection reason untouched.
+      const records: any[] = [], faults: string[] = [], responses = new WeakMap<Response, any>();
+      const note = (code: string) => { if (faults.length < 32) faults.push(code); };
+      const originalFetch = window.fetch, originalJson = Response.prototype.json;
+      let nextFetchId = 0;
+      window.fetch = function(...args) {
+        const promise = Reflect.apply(originalFetch, this, args);
+        let record: any;
+        try {
+          const input = args[0], init = args[1];
+          const url = new URL(input instanceof Request ? input.url : String(input), location.href);
+          if (!url.pathname.startsWith('/api/controls/')) return promise;
+          if (records.length >= cap) { note('READ_OBSERVER_BOUND'); return promise; }
+          record = { fetchId: ++nextFetchId, requestLedgerId: null, url: url.href,
+            method: init?.method ?? (input instanceof Request ? input.method : 'GET'),
+            fetchState: 'pending', jsonCalls: 0, jsonState: 'not_called' };
+          records.push(record);
+        } catch { note('READ_OBSERVER_REQUEST_UNKNOWN'); return promise; }
+        void promise.then(response => {
+          try {
+            record.fetchState = 'fulfilled'; record.status = response.status; record.responseUrl = response.url;
+            record.requestLedgerId = response.headers.get(header);
+            if (!/^[1-9][0-9]{0,2}$/.test(record.requestLedgerId ?? '')) note('READ_OBSERVER_HEADER_UNKNOWN');
+            responses.set(response, record);
+          } catch { note('READ_OBSERVER_RESPONSE_UNKNOWN'); }
+        }, () => { record.fetchState = 'rejected'; note('READ_OBSERVER_FETCH_REJECTED'); });
+        return promise;
+      };
+      Response.prototype.json = function(...args) {
+        const promise = Reflect.apply(originalJson, this, args), record = responses.get(this);
+        if (record) {
+          record.jsonCalls++;
+          if (record.jsonCalls !== 1) note('READ_OBSERVER_JSON_AMBIGUOUS');
+          record.jsonState = 'pending';
+          void promise.then(value => {
+            try {
+              record.jsonState = 'fulfilled';
+              const serialized = JSON.stringify(value), bytes = new TextEncoder().encode(serialized);
+              record.jsonBytes = bytes.byteLength;
+              if (bytes.byteLength > 262144) { note('READ_OBSERVER_BODY_BOUND'); return; }
+              void crypto.subtle.digest('SHA-256', bytes).then(digest => {
+                record.jsonBodyHash = Array.from(new Uint8Array(digest), n => n.toString(16).padStart(2,'0')).join('');
+              }, () => note('READ_OBSERVER_BODY_HASH_UNKNOWN'));
+            } catch { note('READ_OBSERVER_JSON_VALUE_UNKNOWN'); }
+          }, () => { record.jsonState = 'rejected'; note('READ_OBSERVER_JSON_REJECTED'); });
+        }
+        return promise;
+      };
+      Object.defineProperty(window, 'controlsReadObserver', { value: Object.freeze({
+        snapshot: () => ({ records: records.map(record => ({ ...record })), errors: [...faults] }),
+      }) });
+    }, { header: OBSERVATION_HEADER, cap: 512 });
     await context.route('**/*', async (route: Route) => {
       const request = route.request(), url = new URL(request.url()), path = url.pathname + url.search;
       if (url.origin !== origin || request.method() !== 'GET') { denied.push(`${request.method()}:${url.href}`); return route.abort(); }
@@ -196,12 +320,12 @@ async function harness(name: 'causal' | 'races', body: (p: Page, h: Harness) => 
         const row: NetworkRow = { number: ledger.length + 1, path, origin: url.origin, method: request.method(), held: !!plan };
         ledger.push(row);
         if (!reply) { denied.push(path); return route.abort(); }
-        if (plan) { plan.used = true; plan.arrived.resolve(row); }
+        if (plan) { plan.used = true; plan.request = request; plan.row = row; plan.arrived.resolve(row); }
         try {
           const response: Reply = plan ? (await plan.released.promise) ?? plan.reply ?? reply : reply;
           row.status = response.status ?? 200;
           row.responseHash = hash(JSON.stringify(response.body));
-          await route.fulfill({ status: row.status, json: response.body });
+          await route.fulfill({ status: row.status, headers: { [OBSERVATION_HEADER]: String(row.number) }, json: response.body });
           row.completed = true;
         } catch (error) { errors.push(`ROUTE:${String(error).slice(0,1000)}`); }
         finally { plan?.done.resolve(); }
@@ -299,18 +423,49 @@ async function harness(name: 'causal' | 'races', body: (p: Page, h: Harness) => 
     for (const plan of allPlans) plan.released.resolve(undefined);
     try { await bounded(Promise.all(allPlans.filter(plan => plan.used).map(plan => plan.done.promise)), 'SELECTED_HELD_CLEANUP_UNKNOWN'); }
     catch (error) { cleanupErrors.push('held:' + String(error)); }
+    if (page) for (const plan of allPlans.filter(plan => plan.used && !plan.row?.browserConsumed)) {
+      try { await observeConsumption(plan); }
+      catch (error) { observationFaults.push(String(error).slice(0,1500)); }
+    }
     if (page) {
       try { await capture('final', { original, causalCandidate: causal }); } catch (error) { cleanupErrors.push('capture:' + String(error)); }
       try { await page.evaluate(() => (window as any).controlsFixture.unmount()); } catch (error) { cleanupErrors.push('unmount:' + String(error)); }
     }
     let native: unknown = null;
     try { native = await owned.close(); } catch (error) { cleanupErrors.push('native:' + String(error)); }
-    // Do not kill processes, destroy sockets or substitute a new listener probe.
+    // Vite's installed wrapper destroys remaining sockets. Admit that wrapper
+    // ONLY after every retained original socket has independently peer-ended and
+    // closed and the original HTTP object reports zero connections. If unknown,
+    // leave the original server/resources retained; never force a cleanup proof.
     if (server) {
       try {
-        const closed = !http || !listeningObserved || httpClosed ? Promise.resolve() : new Promise<void>(resolve => http!.once('close', resolve));
-        await bounded(Promise.all([server.close(), closed]), 'SELECTED_SERVER_CLOSURE_UNKNOWN');
         assert.ok(http);
+        const admittedSocketCount = socketProofs.length;
+        assert.equal(originalSockets.size, admittedSocketCount, 'ORIGINAL_SOCKET_IDENTITY_UNKNOWN');
+        await bounded(Promise.all(socketProofs.map(proof => proof.closePromise)), 'SELECTED_NATURAL_PEER_CLOSURE_UNKNOWN');
+        assert.equal(sockets.size, 0);
+        assert.equal(websockets.size, 0);
+        for (const proof of socketProofs) {
+          assert.ok(proof.peerEnded && proof.closed && !proof.hadError, 'SELECTED_PEER_END_CLOSE_UNKNOWN');
+          assert.ok(proof.endOrder !== null && proof.closeOrder !== null && proof.endOrder < proof.closeOrder);
+        }
+        const connectionCount = await bounded(new Promise<number>((resolve, reject) => {
+          http!.getConnections((error, count) => error ? reject(error) : resolve(count));
+        }), 'SELECTED_ORIGINAL_CONNECTION_COUNT_UNKNOWN');
+        assert.equal(connectionCount, 0);
+        assert.equal(socketProofs.length, admittedSocketCount, 'NEW_CONNECTION_DURING_PEER_PROOF_UNKNOWN');
+        assert.equal(sockets.size, 0);
+        const countBeforeWrapper = socketProofs.length;
+        preWrapperPeerProof = { connectionCount, socketCount: countBeforeWrapper, activeOriginalSockets: sockets.size,
+          eventOrder: ++socketEventOrder, observedBeforeViteClose: !viteCloseInvoked,
+          sockets: socketProofs.map(({ closePromise: _promise, ...proof }) => proof) };
+        owned.store.json({ schema: 'mission-control.controls-selected-evidence-pre-vite-peer-closure.v1', listener,
+          proof: preWrapperPeerProof });
+        // No await or new listener probe between the zero proof and invocation.
+        viteCloseInvoked = true;
+        const closing = server.close();
+        await bounded(Promise.all([closing, listeningObserved ? originalHttpClose.promise : Promise.resolve()]), 'SELECTED_SERVER_CLOSURE_UNKNOWN');
+        assert.equal(socketProofs.length, countBeforeWrapper, 'NEW_CONNECTION_AFTER_PEER_PROOF_UNKNOWN');
         assert.equal(http.listening, false);
         assert.equal(http.address(), null);
         if (listeningObserved) assert.equal(httpClosed, true);
@@ -319,24 +474,28 @@ async function harness(name: 'causal' | 'races', body: (p: Page, h: Harness) => 
         serverClosed = true;
       } catch (error) { cleanupErrors.push('server:' + String(error)); }
     }
-    const settled = setupReady && cleanupErrors.length === 0 && denied.length === 0 && errors.length === 0 && serverClosed;
-    let cacheRemoved = false;
-    if (settled && cache && cacheIdentity) {
+    // Root ruling I2: retain this exact private cache for EVERY outcome. No
+    // deletion is attempted, even after successful publication/verification.
+    let cacheRetained: boolean | null = cache ? null : false;
+    if (cache && cacheIdentity) {
       try {
         const now = lstatSync(cache);
         assert.equal(realpathSync(cache), cache);
         assert.equal(now.dev, cacheIdentity.dev); assert.equal(now.ino, cacheIdentity.ino);
         assert.equal(now.uid, process.getuid!()); assert.equal(now.mode & 0o777, 0o700);
-        await rm(cache, { recursive: true }); cacheRemoved = true;
-      } catch (error) { cleanupErrors.push('cache:' + String(error)); }
+        cacheRetained = true;
+      } catch (error) { cleanupErrors.push('cache-custody:' + String(error)); }
     }
-    const ledgerHash = owned.store.json({ schema: 'mission-control.controls-selected-evidence-network-ledger.v1', origin, ledger, denied, errors, expectedHttpConsole, wsHeartbeats, wsClosed });
+    const settled = setupReady && cleanupErrors.length === 0 && denied.length === 0 && errors.length === 0
+      && observationFaults.length === 0 && serverClosed;
+    const ledgerHash = owned.store.json({ schema: 'mission-control.controls-selected-evidence-network-ledger.v1', origin, ledger, denied, errors, expectedHttpConsole, observationFaults, wsHeartbeats, wsClosed });
     const outcome = settled && !cleanupErrors.length
       ? bodyPassed ? 'GREEN' : causal ? 'CAUSAL_RED' : name === 'races' && stage === 'body' ? 'BEHAVIOR_FAIL' : 'UNKNOWN'
       : 'UNKNOWN';
     owned.store.json({ schema: 'mission-control.controls-selected-evidence-final-outcome.v1', name, outcome, original, setupReady,
       native, listener, listeningObserved, httpClosed, serverClosed, originalListenerAbsent: http?.address() === null,
-      sockets: sockets.size, websockets: websockets.size, ledgerHash, cache, cacheRemoved, cleanupErrors });
+      sockets: sockets.size, websockets: websockets.size, preWrapperPeerProof, viteCloseInvoked, ledgerHash, cache,
+      cacheRetained, cacheRemovalAttempted: false, cachePolicy: 'retain_all_outcomes', cleanupErrors });
     owned.store.verify();
     console.log(JSON.stringify({ code: 'CONTROLS_SELECTED_EVIDENCE_OUTCOME', name, outcome, artifactRoot: owned.store.root }));
     if (outcome === 'UNKNOWN') throw new Error('CONTROLS_SELECTED_EVIDENCE_QUALIFICATION_UNKNOWN; original failure retained in artifact store');
@@ -391,6 +550,7 @@ test('Controls selected evidence survives races and terminal refs', options, asy
       const old = h.hold(evidencePath(JOB_A), reject ? { status: 503, body: { error: 'OLD_A_READ_FAILED' } } : { body: selected('OLD_A_PASS') });
       await clickJob(page, JOB_A); await old.arrived();
       assert.equal(await activation(page).locator('[data-testid="activation-check-row"]').count(), 0, 'held selected read has no old/global report fallback');
+      await page.locator('main.controls').getByRole('status').filter({hasText:JOB_A}).filter({hasText:/loading/i}).first().waitFor({state:'visible'});
       await clickJob(page, JOB_B);
       await activation(page).getByText('SELECTED_B_UNCONFIGURED', { exact: true }).waitFor();
       await clickJob(page, JOB_A); await expectSix(page);
@@ -442,7 +602,7 @@ test('Controls selected evidence survives races and terminal refs', options, asy
     }
     const failed = h.hold(evidencePath(JOB_A),{status:503,body:{error:'CONTROL_SELECTED_REPORT_FAILED'}});
     await clickJob(page,JOB_A); await failed.arrived(); await failed.release();
-    await page.getByRole('alert').filter({hasText:'CONTROL_SELECTED_REPORT_FAILED'}).waitFor();
+    await page.locator('main.controls').getByRole('alert').filter({hasText:'CONTROL_SELECTED_REPORT_FAILED'}).filter({hasText:JOB_A}).first().waitFor({state:'visible'});
     assert.equal(await activation(page).locator('[data-testid="activation-check-row"]').count(),0);
     await h.checkpoint('terminal-get-failure-detaches-pass');
 
