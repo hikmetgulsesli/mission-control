@@ -1007,7 +1007,7 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
 .chat-msg--toolResult .chat-msg__bubble { font-family: monospace; font-size: 14px; opacity: 0.85; max-height: 100px; overflow-y: auto; color: #c8c8d8; }
 .chat-msg { padding: 8px 0; }
 .chat-msg__header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 4px; }
-.chat-msg__from { font-size: 14px; font-weight: 600; color: #d0d0e0; }
+.chat-msg__from { min-width: 0; max-width: 100%; overflow-wrap: anywhere; font-size: 14px; font-weight: 600; color: #d0d0e0; }
 .chat-msg--assistant .chat-msg__from { color: var(--neon-orange); }
 .chat-msg--user .chat-msg__from { color: var(--neon-cyan); }
 .chat-msg__typing { font-size: 14px; color: var(--neon-green); animation: blink 1.5s infinite; }
