@@ -656,7 +656,14 @@ async function responsiveGeometry(locator: Locator) {
 
 // Catches hidden History controls, clipped populated app/identity text, missing
 // native keyboard semantics, ancestor scroll coupling and a collapsed message area.
-test('responsive tools readability', { timeout: 240000 }, async () => {
+// Explicit qualification: npm run test:ui:responsive on macOS with physical Node
+// /opt/homebrew/Cellar/node@22/22.23.1/bin/node; all existing ownership/native/8GiB
+// guards still apply. Default SKIP is not native PASS.
+test('responsive tools readability', {
+    timeout: 240000,
+    skip: process.env.MC_RESPONSIVE_TOOLS_QUALIFICATION === '1'
+        ? false : 'native qualification requires MC_RESPONSIVE_TOOLS_QUALIFICATION=1; SKIP is not native PASS',
+}, async () => {
     const at = '2026-10-20T00:00:00.000Z';
     const targets = AGENTS.map((agent, i) => ({
         id: agent.id,
