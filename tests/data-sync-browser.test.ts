@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import { createServer, type ViteDevServer } from 'vite';
 import type { SystemMetrics } from '../src/lib/types.js';
@@ -63,6 +64,11 @@ async function harness(name: string, body: (p: Page, h: any) => Promise<void>, r
     let listenAttempted = false;
     let setupReady = false;
     let profileUnknown = false;
+    let setupStage: 'fixture-server' | 'native-acquisition' | 'navigation' | 'fixture-readiness' | 'body' | 'settled' = 'fixture-server';
+    let originalException: { nameSha256: string; messageSha256: string; observedAt: string } | null = null;
+    let fixtureViteHeartbeatCount = 0;
+    let fixtureViteRejectedFrameCount = 0;
+    const fixtureViteRejectedFrames: { type: 'text' | 'binary'; bytes: number; sha256: string; observedAt: string }[] = [];
     const fixtureSockets = new Set<Socket>();
     let httpClosed = false;
     let listener: unknown = null;
@@ -93,6 +99,7 @@ async function harness(name: string, body: (p: Page, h: any) => Promise<void>, r
         origin = `http://127.0.0.1:${address.port}`;
         listener = { host: address.address, port: address.port, family: address.family };
         if (responsive) responsive.owned.store.json({ schema: 'mission-control.responsive-tools-server-listener.v1', ...binding, origin, listener, cacheRoot: cache, optimizedDepsRoot: join(cache, 'deps') });
+        if (responsive) setupStage = 'native-acquisition';
         browser = responsive ? await responsive.owned.launch() : await chromium.launch({ headless: true });
         assert.ok(browser, 'native lifecycle refused launch; setup UNKNOWN, never causal RED');
         context = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1440, height: 1000 } });
@@ -150,7 +157,7 @@ async function harness(name: string, body: (p: Page, h: any) => Promise<void>, r
                 if (!responsiveSourcePaths.includes(sourcePath)) { denied.push(path); return route.abort(); }
             }
             if (responsive && url.pathname.startsWith('/@fs/')) {
-                const physical = decodeURIComponent(url.pathname.slice('/@fs/'.length));
+                const physical = decodeURIComponent(url.pathname.slice('/@fs'.length));
                 const within = (root: string) => {
                     try {
                         if (!isAbsolute(physical) || normalize(physical) !== physical || physical.includes('\0')) return false;
@@ -196,19 +203,38 @@ async function harness(name: string, body: (p: Page, h: any) => Promise<void>, r
             denied.push(path);
             return route.abort();
         });
-        await context.routeWebSocket('**/*', (socket: any) => { const url = new URL(socket.url()); if (url.origin === origin.replace('http', 'ws') && url.pathname === '/' && url.searchParams.has('token')) {
-            if (responsive) {
-                activeSockets.add(socket);
-                socket.onClose(() => { if (activeSockets.delete(socket)) wsClosed++; });
-                socket.onMessage(() => { denied.push('WS_OUTBOUND:VITE'); socket.close(); });
+        await context.routeWebSocket('**/*', (socket: any) => { const url = new URL(socket.url());
+            const query = [...url.searchParams.entries()];
+            const viteSocket = url.origin === origin.replace('http', 'ws') && url.pathname === '/' && (responsive
+                ? !url.username && !url.password && query.length === 1
+                    && query[0][0] === 'token' && query[0][1] === server.config.webSocketToken
+                : url.searchParams.has('token'));
+            if (viteSocket) {
+                if (responsive) {
+                    activeSockets.add(socket);
+                    socket.onClose(() => { if (activeSockets.delete(socket)) wsClosed++; });
+                    socket.onMessage((message: string | Buffer) => {
+                        // This exact Vite client heartbeat is consumed by the local mock only.
+                        if (typeof message === 'string' && message === '{"type":"ping"}') { fixtureViteHeartbeatCount++; return; }
+                        denied.push('WS_OUTBOUND:VITE');
+                        fixtureViteRejectedFrameCount++;
+                        if (fixtureViteRejectedFrames.length < 16) {
+                            const bytes = typeof message === 'string' ? Buffer.from(message, 'utf8') : message;
+                            fixtureViteRejectedFrames.push({ type: typeof message === 'string' ? 'text' : 'binary',
+                                bytes: bytes.byteLength, sha256: createHash('sha256').update(bytes).digest('hex'), observedAt: new Date().toISOString() });
+                        }
+                        socket.close();
+                    });
+                }
+                socket.send(JSON.stringify({ type: 'connected' }));
+                return;
             }
-            socket.send(JSON.stringify({ type: 'connected' }));
-            return;
-        } if (socket.url() !== origin.replace('http', 'ws') + '/ws') {
-            denied.push(socket.url());
-            socket.close();
-            return;
-        } wsCount++; ws = socket; activeSockets.add(socket);
+            if (socket.url() !== origin.replace('http', 'ws') + '/ws') {
+                denied.push(responsive ? 'WS_ENDPOINT_DENIED' : socket.url());
+                socket.close();
+                return;
+            }
+            wsCount++; ws = socket; activeSockets.add(socket);
             if (responsive) socket.onMessage(() => { denied.push('WS_OUTBOUND:/ws'); socket.close(); });
             socket.onClose(() => { if (activeSockets.delete(socket)) wsClosed++; });
         });
@@ -217,15 +243,29 @@ async function harness(name: string, body: (p: Page, h: any) => Promise<void>, r
         page.on('console', msg => { if (msg.type() === 'error' && !msg.text().includes('status of 503'))
             errors.push(msg.text()); });
         await page.clock.install();
+        if (responsive) setupStage = 'navigation';
         await page.goto(origin + '/tests/fixtures/data-sync-browser.html' + (responsive ? '?profile=responsive-tools-v1' : name.startsWith('office-') ? '?initial=/office' : name === 'initial-hidden' ? '?hidden=1' : ''));
+        if (responsive) setupStage = 'fixture-readiness';
         await page.waitForFunction(() => !!(window as any).fixture);
         const h = { requests, fail, denied, errors, hold, release, outstanding: (path: string) => outstanding.get(path) || 0, setResponse: (path: string, value: unknown) => { assert.ok(path in payloads); payloads[path] = value; }, ws: () => ws, wsCount: () => wsCount, activeWs: () => activeSockets.size, wsClosed: () => wsClosed, count: (path: string) => requests.filter(p => p === path).length, nav: async (path: string) => { await page!.evaluate(p => (window as any).fixture.navigate(p), path); await page!.waitForTimeout(100); }, visibility: async (visible: boolean) => { await page!.evaluate(v => (window as any).fixture.visibility(v), visible); await page!.waitForTimeout(100); }, shot: async (suffix: string) => responsive ? responsive.owned.shot(page!, suffix) : page!.screenshot({ path: join(capture, name + '-' + suffix + '.png'), fullPage: true }), boundary: async () => responsive?.owned.boundary(), receipt: (value: unknown) => { assert.ok(responsive); return responsive.owned.store.json({ schema: 'mission-control.responsive-tools-observation.v1', ...binding, value }); } };
         setupReady = true;
+        if (responsive) setupStage = 'body';
         await body(page, h);
         assert.deepEqual(denied, [], 'no unknown/external requests permitted');
         assert.deepEqual(errors, [], 'no application console errors');
+        if (responsive) setupStage = 'settled';
     } catch (error) {
-        if (responsive && !(error instanceof assert.AssertionError)) profileUnknown = true;
+        if (responsive) {
+            if (!(error instanceof assert.AssertionError)) profileUnknown = true;
+            originalException = {
+                nameSha256: createHash('sha256').update(error instanceof Error ? error.name : typeof error).digest('hex'),
+                messageSha256: createHash('sha256').update(error instanceof Error ? error.message : String(error)).digest('hex'),
+                observedAt: new Date().toISOString(),
+            };
+            // Retain the original diagnostic before final qualification can replace its throw.
+            responsive.owned.store.json({ schema: 'mission-control.responsive-tools-setup-failure.v1', ...binding,
+                setupStage, originalException });
+        }
         throw error;
     } finally {
         for (const path of held.keys()) release(path);
@@ -267,10 +307,10 @@ async function harness(name: string, body: (p: Page, h: any) => Promise<void>, r
                 viteCloseResolved, httpClosed, listening: http?.listening ?? null,
                 originalListenerAbsent: http?.address() === null, trackedSockets: fixtureSockets.size, interceptedWs: activeSockets.size });
             const ledgerHash = responsive.owned.store.json({ schema: 'mission-control.responsive-tools-network-ledger.v1', ...binding,
-                origin, requests, denied, errors, wsCount, wsClosed });
+                origin, requests, denied, errors, wsCount, wsClosed, fixtureViteHeartbeatCount, fixtureViteRejectedFrameCount, fixtureViteRejectedFrames });
             if (cacheRemovable) await rm(cache, { recursive: true, force: true });
             responsive.owned.store.json({ schema: 'mission-control.responsive-tools-final-outcome.v1', ...binding,
-                outcome, native, ledgerHash, setupReady, profileUnknown, cacheRoot: cache, cacheRemoved: cacheRemovable, errors: cleanupErrors.map(error => String(error)) });
+                outcome, native, ledgerHash, setupReady, profileUnknown, setupStage, originalException, cacheRoot: cache, cacheRemoved: cacheRemovable, errors: cleanupErrors.map(error => String(error)) });
             assert.deepEqual(cleanupErrors, [], 'unknown custody/server cleanup cannot qualify RED or GREEN');
             if (outcome === 'UNKNOWN') throw new Error('RESPONSIVE_FINAL_QUALIFICATION_UNKNOWN');
         } else {

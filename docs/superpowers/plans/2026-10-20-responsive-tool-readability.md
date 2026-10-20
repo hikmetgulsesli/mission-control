@@ -358,3 +358,14 @@ Worker stage is fixture preparation and cheap parsing/type/diff checks only. It 
 ## Root fixture isolation ruling
 
 The actual Chat/Scrape fixture routes are enabled only by exact fixed profile=responsive-tools-v1 in the fixture entry URL. Old two-argument harness navigation retains the wildcard placeholder and old WS/request ownership. The supplemental profile mounts the real components under actual Layout; production routes/state remain untouched. The exact mapped Task1 Source paths are three (test, TSX entry, new helper), plus the ignored capture recorder.
+
+
+## Actual Task1 setup refinement after original v2
+
+The retained v2 original is setup UNKNOWN, not causal UI RED: its exact /@fs/ parser removes the POSIX root and denies its own registered React optimizer files. The native browser cohort, original server/listener/sockets and original process/streams are closed; retained cache and original evidence remain. Independent actual diagnosis/custody report: `.superpowers/sdd/2026-10-20-responsive-tool-readability/task-1-actual-vite-setup-cause-v1.md`, SHA256 `08ec6beb86baef8448db7bdcb5ae05feb70324f614e446f4e60e1e7136428a10`. Root visually inspected the final1440x1000 PNG: blank, no UI result.
+
+Before another Root native launch, correct only the supplemental fixture setup in `tests/data-sync-browser.test.ts`: preserve the leading slash with `slice('/@fs'.length)`; retain all exact physical-path/cache-inode/metadata/publication/uid checks. This is no additional filesystem scope.
+
+Refine the supplemental mock Vite transport separately from application outbound messages: only exact fixture ws origin, path `/`, exactly one `token` query equal to this acquired server's `server.config.webSocketToken`, no URL credentials or other keys. Consume only exact text `{"type":"ping"}` locally and record its count as fixture heartbeat; never forward/connect it anywhere. Every other text/binary frame is denied/recorded/closed, with bounded type/length/hash/time diagnostics and no raw payload/token. Application `/ws` outbound, GET/API/source/external-origin403/service-worker denials remain strict and unchanged. Local installed Vite schedules this exact heartbeat every30000ms even with hmr:false; the old unrecorded WS frame remains inferred, not proven ping.
+
+Retain a bounded supplemental setup stage plus original error name and message hash in final outcome; never raw URL/message/token. Preserve UNKNOWN, error propagation and every cleanup gate. Do not label any setup exception as presentation RED. File Map remains the existing fixture test plus this Root plan; no production, canonical317, helper/native lifecycle, thresholds or dataset change. Freeze and independently review the exact setup patch, then Root executes a fresh capture namespace. Task2 stays gated on actual intended UI RED and owned closure.
