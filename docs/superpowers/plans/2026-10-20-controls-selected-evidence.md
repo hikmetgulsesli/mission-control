@@ -109,3 +109,7 @@ Stock build deletes local dist outputs; that is the reason its context must not 
 
 
 Ruling: exact selected report view is part of already approved operator UI completion. Global launch authority remains independent, all old failed/historical evidence remains visible. Task1 causal RED is mandatory, and Task2 cannot infer correctness from owner-only unit tests. No user reconfirmation is needed for this reversible in-scope source work. Cost if wrong: withheld delivery and rework. Generic skill commit/full-suite/delete-workspace instructions are superseded by Root-only delivery and protected-record/protected-PM requirements.
+
+## Root Task3 closure refinement after actual first race
+
+Apply the binding spec's private-fixture keepAliveTimeout0 and failure-first socket observation addition in tests/controls-selected-evidence-browser.test.ts only. Preserve every peer/zero/native admission gate and all old UNKNOWN/cancellation records. Root alone executes the same exact fresh race and qualifies original natural closure; source worker only edits and freezes. No live service/build/package/owner/session/profile/protocol change. Review this bounded test correction independently, then complete pending actual-page and branch gates.
