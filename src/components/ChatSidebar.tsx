@@ -2,56 +2,60 @@ import { useState, useEffect } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { AGENT_MAP } from '../lib/constants';
 import { api } from '../lib/api';
+import { chatTargetDisplay, chatTimestamp, newestKnownChatTime, type ChatTarget } from '../lib/chat-presentation';
 
 interface HistoryPreview {
   agentId: string;
   lastMessage: string;
-  lastTimestamp: number;
-  messageCount: number;
+  lastTimestamp: number | null;
 }
 
 interface Props {
-  agents: { id: string; identityName?: string; identityEmoji?: string }[];
+  agents: ChatTarget[];
   selected: string;
   onSelect: (id: string) => void;
   loading?: boolean;
+  error?: string | null;
 }
 
-export function ChatSidebar({ agents, selected, onSelect, loading }: Props) {
+export function ChatSidebar({ agents, selected, onSelect, loading, error }: Props) {
   const [view, setView] = useState<'agents' | 'history'>('agents');
-  const [historyPreviews, setHistoryPreviews] = useState<HistoryPreview[]>([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyObservation, setHistoryObservation] = useState<{
+    previews: HistoryPreview[]; failed: number; attempted: number; status: 'loading' | 'ready';
+  }>({ previews: [], failed: 0, attempted: 0, status: 'loading' });
 
   // Load history previews for all agents when switching to history tab
   useEffect(() => {
     if (view !== 'history') return;
     let cancelled = false;
-    setLoadingHistory(true);
+    setHistoryObservation({ previews: [], failed: 0, attempted: agents.length, status: 'loading' });
 
     async function loadPreviews() {
       const results = await Promise.allSettled(
-        agents.map(agent => api.agentHistory(agent.id, 1).then(data => ({ agent, data })))
+        agents.map(async agent => {
+          const data = await api.agentHistory(agent.id, 1);
+          if (!Array.isArray(data?.messages)) throw new Error('CHAT_HISTORY_UNAVAILABLE');
+          return { agent, messages: data.messages };
+        })
       );
       if (cancelled) return;
 
       const previews: HistoryPreview[] = [];
+      let failed = 0;
       for (const r of results) {
-        if (r.status !== 'fulfilled') continue;
-        const { agent, data } = r.value;
-        const msgs = data.messages || [];
+        if (r.status === 'rejected') { failed += 1; continue; }
+        const { agent, messages: msgs } = r.value;
         if (msgs.length > 0) {
           const last = msgs[msgs.length - 1];
           previews.push({
             agentId: agent.id,
             lastMessage: last.text?.slice(0, 80) || '',
-            lastTimestamp: last.timestamp ? new Date(last.timestamp).getTime() : Date.now(),
-            messageCount: (data as any).total || msgs.length,
+            lastTimestamp: chatTimestamp(last.timestamp),
           });
         }
       }
-      previews.sort((a, b) => b.lastTimestamp - a.lastTimestamp);
-      setHistoryPreviews(previews);
-      setLoadingHistory(false);
+      previews.sort((a, b) => newestKnownChatTime({ ts: a.lastTimestamp }, { ts: b.lastTimestamp }));
+      setHistoryObservation({ previews, failed, attempted: agents.length, status: 'ready' });
     }
 
     loadPreviews();
@@ -62,8 +66,8 @@ export function ChatSidebar({ agents, selected, onSelect, loading }: Props) {
   const sorted = [...agents].sort((a, b) => {
     if (a.id === selected) return -1;
     if (b.id === selected) return 1;
-    const nameA = a.identityName || AGENT_MAP[a.id]?.name || a.id;
-    const nameB = b.identityName || AGENT_MAP[b.id]?.name || b.id;
+    const { name: nameA } = chatTargetDisplay(a.id, a);
+    const { name: nameB } = chatTargetDisplay(b.id, b);
     return nameA.localeCompare(nameB);
   });
 
@@ -85,10 +89,17 @@ export function ChatSidebar({ agents, selected, onSelect, loading }: Props) {
         </button>
       </div>
 
-      {/* New Chat button */}
+      {/* Select the main target without creating or resetting a session. */}
       <button className="chat-sidebar__new-chat" onClick={() => onSelect('main')}>
-        + New Chat
+        Select main target
       </button>
+
+      {error && (
+        <p className="chat-sidebar__notice">{agents.length ? 'Agent list unavailable; showing last loaded targets.' : 'Agent list unavailable.'}</p>
+      )}
+      {!loading && !error && agents.length === 0 && (
+        <p className="chat-sidebar__notice">No targets in the last roster response.</p>
+      )}
 
       {view === 'agents' ? (
         <>
@@ -97,10 +108,8 @@ export function ChatSidebar({ agents, selected, onSelect, loading }: Props) {
           )}
           {sorted.map(agent => {
             const meta = AGENT_MAP[agent.id];
-            const name = agent.identityName || meta?.name || agent.id;
-            const emoji = agent.identityEmoji || meta?.emoji || '?';
+            const { name, emoji } = chatTargetDisplay(agent.id, agent);
             const isActive = agent.id === selected;
-            const preview = historyPreviews.find(h => h.agentId === agent.id);
 
             return (
               <button
@@ -111,23 +120,25 @@ export function ChatSidebar({ agents, selected, onSelect, loading }: Props) {
               >
                 <span>{emoji}</span>
                 <span>{name}</span>
-                {meta?.role && <span className="chat-sidebar__role">{meta.role}</span>}
+                {meta?.role && <span className="chat-sidebar__role">Catalog role: {meta.role}</span>}
               </button>
             );
           })}
         </>
       ) : (
         <div className="chat-sidebar__sessions">
-          {loadingHistory && (
+          <p className="chat-sidebar__notice">Saved local history for listed targets.</p>
+          {historyObservation.status === 'loading' && (
             <div className="chat-sidebar__loading">Loading history...</div>
           )}
-          {!loadingHistory && historyPreviews.length === 0 && (
-            <div className="chat-sidebar__empty">No chat history yet</div>
+          {historyObservation.status === 'ready' && historyObservation.failed > 0 && (
+            <p className="chat-sidebar__notice">{`Saved history unavailable for ${historyObservation.failed} of ${historyObservation.attempted} targets.`}</p>
           )}
-          {historyPreviews.map(preview => {
-            const meta = AGENT_MAP[preview.agentId];
-            const name = meta?.name || preview.agentId;
-            const emoji = meta?.emoji || '?';
+          {historyObservation.status === 'ready' && historyObservation.failed === 0 && historyObservation.attempted > 0 && historyObservation.previews.length === 0 && (
+            <div className="chat-sidebar__empty">No saved messages returned for listed targets.</div>
+          )}
+          {historyObservation.previews.map(preview => {
+            const { name, emoji } = chatTargetDisplay(preview.agentId, agents.find(agent => agent.id === preview.agentId));
             const isActive = preview.agentId === selected;
 
             return (
@@ -141,7 +152,7 @@ export function ChatSidebar({ agents, selected, onSelect, loading }: Props) {
                   <span className="chat-sidebar__session-title">{name}</span>
                 </div>
                 <div className="chat-sidebar__session-meta">
-                  <span>{formatDistanceToNow(preview.lastTimestamp, { addSuffix: true })}</span>
+                  <span>{preview.lastTimestamp === null ? 'Time unknown' : formatDistanceToNow(preview.lastTimestamp, { addSuffix: true })}</span>
                 </div>
                 {preview.lastMessage && (
                   <div className="chat-sidebar__session-preview">

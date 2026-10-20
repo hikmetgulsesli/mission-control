@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { api } from '../lib/api';
-import { AGENT_MAP } from '../lib/constants';
+import { chatTargetDisplay, chatTimestamp, newestKnownChatTime, type ChatTarget } from '../lib/chat-presentation';
 
 // Configure marked for safe rendering
 marked.setOptions({
@@ -31,7 +31,9 @@ interface ChatMessage {
   agent: string;
   text: string;
   done: boolean;
-  ts: number;
+  ts: number | null;
+  origin: 'saved' | 'local' | 'socket';
+  sessionId?: string;
   toolName?: string;
   responseMs?: number;
 }
@@ -40,8 +42,8 @@ interface HistoryMessage {
   role: string;
   text: string;
   toolName?: string;
-  timestamp?: string;
-  sessionId: string;
+  timestamp?: unknown;
+  sessionId?: string;
 }
 
 interface Props {
@@ -49,35 +51,39 @@ interface Props {
   onSend: (msg: any) => void;
   connected: boolean;
   selectedAgent: string;
+  selectedAgentData?: ChatTarget;
 }
 
-export function ChatPanel({ events, onSend, connected, selectedAgent }: Props) {
+export function ChatPanel({ events, onSend, connected, selectedAgent, selectedAgentData }: Props) {
   const [input, setInput] = useState('');
   const [userMessages, setUserMessages] = useState<ChatMessage[]>([]);
-  const [history, setHistory] = useState<ChatMessage[]>([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyState, setHistoryState] = useState<{
+    agentId: string; status: 'loading' | 'ready' | 'unavailable'; messages: ChatMessage[];
+  }>({ agentId: selectedAgent, status: 'loading', messages: [] });
   const messagesRef = useRef<HTMLDivElement>(null);
   const lastUserSendTs = useRef<number>(0);
 
   useEffect(() => {
     let cancelled = false;
-    setHistory([]);
-    setLoadingHistory(true);
+    setHistoryState({ agentId: selectedAgent, status: 'loading', messages: [] });
 
     api.agentHistory(selectedAgent, 40).then((data: any) => {
       if (cancelled) return;
-      const msgs: ChatMessage[] = (data.messages || []).map((m: HistoryMessage, i: number) => ({
+      if (!Array.isArray(data?.messages)) throw new Error('CHAT_HISTORY_UNAVAILABLE');
+      const msgs: ChatMessage[] = data.messages.map((m: HistoryMessage, i: number) => ({
         id: `hist-${i}`,
         role: m.role === 'user' ? 'user' : m.role === 'toolResult' ? 'toolResult' : 'assistant',
         agent: selectedAgent,
         text: m.text,
         done: true,
-        ts: m.timestamp ? new Date(m.timestamp).getTime() : Date.now() - (data.messages.length - i) * 1000,
+        ts: chatTimestamp(m.timestamp),
+        origin: 'saved',
+        sessionId: m.sessionId,
         toolName: m.toolName,
       }));
-      setHistory(msgs);
-    }).catch(() => {}).finally(() => {
-      if (!cancelled) setLoadingHistory(false);
+      setHistoryState({ agentId: selectedAgent, status: 'ready', messages: msgs });
+    }).catch(() => {
+      if (!cancelled) setHistoryState({ agentId: selectedAgent, status: 'unavailable', messages: [] });
     });
 
     return () => { cancelled = true; };
@@ -113,7 +119,8 @@ export function ChatPanel({ events, onSend, connected, selectedAgent }: Props) {
           agent: agentId,
           text,
           done: ev.payload.state === 'final',
-          ts: existing?.ts || ev.payload.message.timestamp || Date.now(),
+          ts: existing?.ts ?? chatTimestamp(ev.payload.message.timestamp),
+          origin: 'socket',
           responseMs: responseMs || existing?.responseMs,
         });
       }
@@ -124,13 +131,16 @@ export function ChatPanel({ events, onSend, connected, selectedAgent }: Props) {
       }
     }
 
-    return Array.from(byRun.values()).sort((a, b) => b.ts - a.ts);
+    return Array.from(byRun.values()).sort(newestKnownChatTime);
   }, [events, selectedAgent]);
 
   const allMessages = useMemo(() => {
     const filteredUser = userMessages.filter(m => m.agent === selectedAgent);
-    return [...history, ...filteredUser, ...agentMessages].sort((a, b) => b.ts - a.ts);
-  }, [history, userMessages, agentMessages, selectedAgent]);
+    const history = historyState.agentId === selectedAgent ? historyState.messages : [];
+    return [...history, ...filteredUser, ...agentMessages].sort(newestKnownChatTime);
+  }, [historyState, userMessages, agentMessages, selectedAgent]);
+
+  const historyStatus = historyState.agentId === selectedAgent ? historyState.status : 'loading';
 
   const isThinking = useMemo(() => {
     return agentMessages.some(m => m.role === 'assistant' && !m.done);
@@ -145,15 +155,17 @@ export function ChatPanel({ events, onSend, connected, selectedAgent }: Props) {
     if (!input.trim() || !connected) return;
 
     const text = input.trim();
-    lastUserSendTs.current = Date.now();
+    const submittedAt = Date.now();
+    lastUserSendTs.current = submittedAt;
 
     setUserMessages(prev => [...prev, {
-      id: `user-${Date.now()}`,
+      id: `user-${submittedAt}`,
       role: 'user',
       agent: selectedAgent,
       text,
       done: true,
-      ts: Date.now(),
+      ts: submittedAt,
+      origin: 'local',
     }]);
 
     onSend({
@@ -164,9 +176,7 @@ export function ChatPanel({ events, onSend, connected, selectedAgent }: Props) {
     setInput('');
   };
 
-  const meta = AGENT_MAP[selectedAgent];
-  const agentName = meta?.name || selectedAgent;
-  const agentEmoji = meta?.emoji || '?';
+  const { name: agentName, emoji: agentEmoji } = chatTargetDisplay(selectedAgent, selectedAgentData);
 
   function formatResponseTime(ms?: number): string {
     if (!ms) return '';
@@ -182,8 +192,9 @@ export function ChatPanel({ events, onSend, connected, selectedAgent }: Props) {
           <span className="chat-panel__agent-name">{agentName}</span>
         </span>
         <span className={`chat-panel__status ${connected ? 'chat-panel__status--on' : ''}`}>
-          {connected ? 'ONLINE' : 'OFFLINE'}
+          {connected ? 'MC SOCKET CONNECTED' : 'MC SOCKET NOT CONNECTED'}
         </span>
+        <p className="chat-panel__connection-note">Browser-to-Mission-Control connection only; gateway and target availability are unverified.</p>
       </div>
 
       <div className="chat-panel__messages" ref={messagesRef}>
@@ -200,14 +211,17 @@ export function ChatPanel({ events, onSend, connected, selectedAgent }: Props) {
             </div>
           </div>
         )}
-        {loadingHistory && (
-          <div className="chat-panel__loading">Loading history...</div>
+        {historyStatus === 'loading' && (
+          <div className="chat-panel__loading">Loading saved history...</div>
         )}
-        {!loadingHistory && allMessages.length === 0 && (
+        {historyStatus === 'unavailable' && (
+          <div className="chat-panel__notice">Saved history unavailable.</div>
+        )}
+        {historyStatus === 'ready' && allMessages.length === 0 && (
           <div className="chat-panel__empty">
             <div className="chat-panel__empty-icon">{agentEmoji}</div>
-            <div>No messages with {agentName} yet</div>
-            <div className="chat-panel__empty-sub">Send a message to start a conversation</div>
+            <div>{`No saved messages returned for ${agentName}.`}</div>
+            <div className="chat-panel__empty-sub">Local submissions and received events appear here.</div>
           </div>
         )}
         {allMessages.map((msg) => (
@@ -218,10 +232,16 @@ export function ChatPanel({ events, onSend, connected, selectedAgent }: Props) {
                   : msg.role === 'toolResult' ? '🔧 Tool'
                   : agentEmoji + ' ' + agentName}
               </span>
+              <span className="chat-msg__provenance">{msg.origin === 'saved' ? 'Saved local history'
+                : msg.origin === 'local' ? 'Local submission — delivery unconfirmed' : 'Received via MC socket'}</span>
+              {msg.ts === null ? <span className="chat-msg__timestamp">Time unknown</span>
+                : <time className="chat-msg__timestamp" dateTime={new Date(msg.ts).toISOString()}>
+                    {msg.origin === 'local' ? 'Local time: ' : ''}{new Date(msg.ts).toLocaleString()}
+                  </time>}
               {!msg.done && <span className="chat-msg__thinking">thinking...</span>}
               {msg.toolName && <span className="chat-msg__tool">{msg.toolName}</span>}
               {msg.done && msg.responseMs && (
-                <span className="chat-msg__time">{formatResponseTime(msg.responseMs)}</span>
+                <span className="chat-msg__time">Local elapsed estimate: {formatResponseTime(msg.responseMs)}</span>
               )}
             </div>
             {msg.role === 'assistant' || msg.role === 'toolResult' ? (
