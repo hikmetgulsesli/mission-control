@@ -76,7 +76,7 @@ export async function createResponsiveToolsOwnedProfileV1(input: Readonly<{
     // Disk admission supplements Root's current resource admission; it cannot replace it.
     const checkFloor = () => {
         const fs = statfsSync(root, { bigint: true });
-        assert.ok(fs.bavail * fs.bsize >= 8589934592n, 'responsive fixture requires the fixed 8GiB floor');
+        assert.ok(fs.bavail * fs.bsize >= 8589934592n, `responsive fixture requires the fixed 8GiB floor: availableBytes=${fs.bavail * fs.bsize} fixedFloorBytes=8589934592`);
     };
     checkFloor();
     const observed = await observeUiProcessV1(process.pid);
