@@ -84,7 +84,7 @@ export class ControlJobSessionV1 {
       && this.confirmation.selectionHash === this.selectionHash;
   }
 
-  chooseJob(jobId: string): void {
+  chooseJob(jobId: string | null): void {
     if (this.selectedJobId !== jobId) this.selectionVersion++;
     this.selectedJobId = jobId;
   }

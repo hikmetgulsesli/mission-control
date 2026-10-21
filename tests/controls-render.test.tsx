@@ -62,6 +62,35 @@ test('manual requirements and page render the actual panels', () => {
   assert.match(html, /Manual check/);
 });
 
+test('a remembered selected job offers an explicit return to current evidence', () => {
+  const selectedKey = 'mission-control.controls.selected-job.v1';
+  const rememberedJob = '00000000-0000-4000-8000-000000000001';
+  const values = new Map([[selectedKey, rememberedJob]]);
+  const previousWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: {
+    localStorage: {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, value); },
+      removeItem: (key: string) => { values.delete(key); },
+    },
+  } });
+  try {
+    const html = renderToStaticMarkup(<Controls />);
+    assert.match(html, new RegExp(`Reports for selected job.*${rememberedJob}`));
+    assert.match(html, /<button[^>]*>Show current evidence<\/button>/);
+    assert.equal(values.get(selectedKey), rememberedJob, 'rendering does not silently discard the historical choice');
+  } finally {
+    if (previousWindow) Object.defineProperty(globalThis, 'window', previousWindow);
+    else Reflect.deleteProperty(globalThis, 'window');
+  }
+});
+
+test('the default current evidence view needs no return action', () => {
+  const html = renderToStaticMarkup(<Controls />);
+  assert.match(html, /Reports for latest job/);
+  assert.doesNotMatch(html, /Show current evidence/);
+});
+
 test('receipt and UI report expose safe public source and build identities with provenance', () => {
   const receipt = { schema: 'mission-control.control-job.v1' as const, jobId: '00000000-0000-4000-8000-000000000001', kind: 'activation_preflight' as const, revision: 1, selectionHash: 'c'.repeat(64), sourceSha: 'd'.repeat(40), mcSourceSha: 'e'.repeat(40), mcBuildHash: 'f'.repeat(64), suiteHash: null, state: 'completed' as const, requestedAt: '2026-10-19T00:00:00.000Z', startedAt: null, updatedAt: '2026-10-19T00:00:01.000Z', finishedAt: '2026-10-19T00:00:01.000Z', phase: 'closed', code: null, currentCaseId: null, ownedRunId: null, completedCases: 0, plannedCases: 0, reportRefs: {}, cancelRequested: false };
   const uiReport = { availability, report: { hash:'1'.repeat(64),compatibility:'historical' as const,mcSourceSha:'2'.repeat(40),mcBuildHash:'3'.repeat(64),fixtureVersion:'fixture.v1',fixtureHash:'4'.repeat(64),startedAt:'2026-10-19T00:00:00.000Z',finishedAt:'2026-10-19T00:00:01.000Z',outcome:'fail' as const,assertions:[],screenshots:[] } };

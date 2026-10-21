@@ -165,7 +165,7 @@ type Harness = {
   hold(path: string, reply?: Reply): { arrived(): Promise<NetworkRow>; release(reply?: Reply): Promise<void> };
   checkpoint(label: string): Promise<void>; causalAssertion(): void;
 };
-async function harness(name: 'causal' | 'races', body: (p: Page, h: Harness) => Promise<void>) {
+async function harness(name: 'causal' | 'races' | 'current', body: (p: Page, h: Harness) => Promise<void>) {
   assert.equal(enabled, true, 'Root qualification gate required before imports or acquisition');
   const { createControlsSelectedEvidenceOwnedProfileV1, CONTROLS_SELECTED_SOURCE_PATHS } = await import('./fixtures/controls-selected-evidence-owned.js');
   const { createServer } = await import('vite');
@@ -179,7 +179,7 @@ async function harness(name: 'causal' | 'races', body: (p: Page, h: Harness) => 
   if (existsSync(join(SOURCE_ROOT, 'src/lib/control-selected-evidence.ts'))) paths.push('src/lib/control-selected-evidence.ts');
   const owned: OwnedProfile = await createControlsSelectedEvidenceOwnedProfileV1({ sourceRoot: SOURCE_ROOT, sourcePaths: paths.sort(),
     profileData: { name, jobA: JOB_A, jobB: JOB_B, globalSelection: S, historicalSelection: T, data: { global: data.global,
-      receipts: [...data.receipts], evidence: [...data.evidence] }, readObserverScriptHash: hash(CONTROLS_READ_OBSERVER_INIT_SCRIPT), scenarios: ['row-selection','refresh','reload','late-global','a-b-a-success-error','remount-success-error','terminal-refs-success-error','terminal-missing','historical','pending-byte-stability'] } });
+      receipts: [...data.receipts], evidence: [...data.evidence] }, readObserverScriptHash: hash(CONTROLS_READ_OBSERVER_INIT_SCRIPT), scenarios: ['row-selection','refresh','reload','late-global','a-b-a-success-error','remount-success-error','terminal-refs-success-error','terminal-missing','historical','pending-byte-stability','current-global-read-error-preservation'] } });
   let cache: string | null = null, cacheIdentity: ReturnType<typeof lstatSync> | null = null;
   let server: ViteDevServer | null = null, http: HttpServer | null = null;
   let page: Page | undefined, origin = '', listener: unknown = null;
@@ -450,6 +450,16 @@ async function harness(name: 'causal' | 'races', body: (p: Page, h: Harness) => 
         && await progress(page).getByText(JOB_A, { exact: true }).count() === 1
         && !ledger.some(r => r.path === evidencePath(JOB_A));
     }
+    if (name === 'current' && stage === 'causal-assertion' && setupReady && page && !denied.length && !errors.length) {
+      const globalErrorHash = hash(JSON.stringify({ error: 'CURRENT_GLOBAL_EVIDENCE_FAILED' }));
+      causal = await page.getByText('Reports for latest job', { exact: true }).count() === 1
+        && await page.evaluate(key => localStorage.getItem(key), SELECTED) === null
+        && await activation(page).getByText('GLOBAL_ACTIVATION_UNCONFIGURED', { exact: true }).count() === 1
+        && await page.getByRole('alert').filter({ hasText: /^Evidence: CURRENT_GLOBAL_EVIDENCE_FAILED$/ }).count() === 0
+        && ledger.some(r => r.path === EVIDENCE && r.held && r.status === 503 && r.completed === true
+          && r.responseHash === globalErrorHash && r.browserConsumed?.status === 503
+          && r.browserConsumed.jsonBodyHash === globalErrorHash);
+    }
     owned.store.json({ schema: 'mission-control.controls-selected-evidence-original-failure.v1', original, setupReady, causalCandidate: causal });
     throw error;
   } finally {
@@ -579,6 +589,38 @@ test('Controls selected job reports use exact evidence', options, async () => {
     await page.getByText(`Reports for selected job ${JOB_A}`, { exact: true }).waitFor();
     assert.deepEqual(await pendingBytes(page), before);
     await h.checkpoint('selected-a-six-checks');
+  });
+});
+
+test('Controls current evidence preserves global read errors', options, async () => {
+  await harness('current', async (page, h) => {
+    await clickJob(page, JOB_A); await expectSix(page);
+    await h.checkpoint('current-error-selected-a-ready');
+
+    const failedGlobal = h.hold(EVIDENCE, { status: 503, body: { error: 'CURRENT_GLOBAL_EVIDENCE_FAILED' } });
+    await page.getByRole('button', { name: 'Refresh evidence', exact: true }).click();
+    await failedGlobal.arrived(); await failedGlobal.release(); await frameFence(page);
+    const globalAlert = page.getByRole('alert').filter({ hasText: /^Evidence: CURRENT_GLOBAL_EVIDENCE_FAILED$/ });
+    await globalAlert.waitFor({ state: 'visible' });
+    assert.equal(await globalAlert.count(), 1);
+    await expectSix(page);
+    await h.checkpoint('current-global-error-before-return');
+
+    const before = await pendingBytes(page), requestsBefore = h.ledger.length;
+    await page.getByRole('button', { name: 'Show current evidence', exact: true }).click();
+    await page.getByText('Reports for latest job', { exact: true }).waitFor();
+    await frameFence(page);
+    assert.equal(await page.evaluate(key => localStorage.getItem(key), SELECTED), null);
+    assert.deepEqual(await pendingBytes(page), before, 'returning to current evidence preserves exact pending bytes');
+    assert.equal(h.ledger.length, requestsBefore, 'returning to current evidence makes no API request');
+    assert.ok(h.ledger.every(r => r.method === 'GET'), 'view changes remain GET-only');
+    await activation(page).getByText('GLOBAL_ACTIVATION_UNCONFIGURED', { exact: true }).waitFor();
+    assert.equal(await activation(page).locator('[data-testid="activation-check-row"]').count(), 0);
+    await h.capture('current-global-error-after-return');
+
+    h.causalAssertion();
+    assert.equal(await globalAlert.count(), 1, 'returning to current evidence preserves the unrelated global read error');
+    await h.checkpoint('current-global-error-preserved');
   });
 });
 
