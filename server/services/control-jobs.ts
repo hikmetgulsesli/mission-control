@@ -4,6 +4,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { controlHashV1, controlBytesV1, controlCanonicalV1, parseControlEvidenceEnvelopeV1, pinControlDirectoryV1, readControlPrivateFileV1, readUiControlEvidenceV1, readUiControlScreenshotV1 } from './control-evidence.js';
 import { UiRegressionCleanupProofV1Schema, type UiObservedOwnerV1 } from './control-ui-worker-protocol.js';
+import { createControlWorkerSettlementV1 } from './control-worker-settlement.js';
 /** Bundling views only: selected SF parsers remain authoritative. */
 export type ControlJobKindV1 = 'activation_preflight' | 'convergence_full8' | 'ui_regression';
 export type ControlReportRefsV1 = Readonly<{
@@ -848,6 +849,20 @@ export function createFixedManualWorkerPortV1(selected: SelectedControlRuntimeV1
                 if (started)
                     queueMicrotask(() => { void drain(); });
             }
+            const settlementFile = path.join(dir, 'original-worker-settlement.json');
+            const settlement = createControlWorkerSettlementV1({
+                child: childHandle, binding, executable, executableHash,
+                selectionHash: selected.selectionHash, sourceSha: selected.sourceSha,
+                mcSourceSha: selected.mcSourceSha, mcBuildHash: selected.mcBuildHash,
+                hashOwner: selected.channel.hashObservedControlWorkerOwnerV1,
+                publish(record) {
+                    const bytes = controlBytesV1(record);
+                    exclusive(settlementFile, record);
+                    if (!readControlPrivateFileV1(settlementFile, 16384).equals(bytes))
+                        fail('CONTROL_STORE_UNCERTAIN');
+                },
+                onFault() { enqueue({ reason: 'error' }); },
+            });
             childHandle.on('message', frame => enqueue({ frame }));
             childHandle.once('disconnect', () => enqueue({ reason: 'disconnect' }));
             childHandle.once('exit', () => enqueue({ reason: 'exit' }));
@@ -855,7 +870,15 @@ export function createFixedManualWorkerPortV1(selected: SelectedControlRuntimeV1
             // Private output is deliberately content-elided before disk: arbitrary child
             // errors can contain credentials split across chunks. Count bounded bytes only.
             for (const [name, stream] of [['stdout', childHandle.stdout], ['stderr', childHandle.stderr]] as const) {
-                const fd = openSync(path.join(dir, name + '.log'), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+                const logError = name === 'stdout' ? 'STDOUT_LOG_ERROR' : 'STDERR_LOG_ERROR';
+                let fd: number;
+                try {
+                    fd = openSync(path.join(dir, name + '.log'), constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+                } catch (error) {
+                    settlement.noteError(logError);
+                    enqueue({ reason: 'error' });
+                    throw error;
+                }
                 let written = 0, closed = false;
                 stream?.on('data', (chunk: Buffer) => { if (written >= 65536 || closed)
                     return; const line = Buffer.from(`[private output omitted: ${chunk.length} bytes]\n`); try {
@@ -864,10 +887,11 @@ export function createFixedManualWorkerPortV1(selected: SelectedControlRuntimeV1
                     written += retained.length;
                 }
                 catch {
+                    settlement.noteError(logError);
                     enqueue({ reason: 'error' });
                 } });
-                const close = () => { if (closed) return; closed = true; try { try { fsyncSync(fd); } finally { closeSync(fd); } } catch { enqueue({ reason: 'error' }); } };
-                stream?.once('close', close);
+                const close = () => { if (closed) return; closed = true; try { try { fsyncSync(fd); } finally { closeSync(fd); } } catch { settlement.noteError(logError); enqueue({ reason: 'error' }); } };
+                stream?.prependOnceListener('close', close);
                 childHandle.once('error', close);
             }
             await new Promise<void>((resolve, reject) => {
@@ -884,6 +908,7 @@ export function createFixedManualWorkerPortV1(selected: SelectedControlRuntimeV1
             if (Number(parent) !== process.pid || controlCanonicalV1(observe(pid, script, jobId, deadline)) !== controlCanonicalV1(originalChild))
                 fail('CONTROL_CUSTODY_UNCERTAIN');
             await selected.assertUnchanged();
+            settlement.bindOwner(originalChild);
             return Object.freeze({ binding, originalChild, executableHash,
                 beginDelivery(value: ManualWorkerEventsV1) { if (started)
                     fail('CONTROL_CHANNEL_INVALID'); events = value; started = true; queueMicrotask(() => { void drain(); }); },

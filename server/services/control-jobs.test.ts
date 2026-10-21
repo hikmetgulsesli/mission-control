@@ -241,6 +241,7 @@ test('fixed real child buffers early frames until beginDelivery and elides secre
 // intent publication, process observation or IPC with a fake worker port.
 async function probeWorkerEnvironment(options: {
     kind?: 'activation_preflight' | 'convergence_full8' | 'ui_regression';
+    exitCode?: 0 | 7;
     env?: Record<string, string | undefined>;
     token?: string;
     duringFinalSelection?: () => void;
@@ -274,8 +275,8 @@ process.send({ probe: {
 } });
 // Wait for broker custody before natural exit; retain a natural timeout for
 // startup failures so tests never need kill/adoption cleanup.
-const deadline = setTimeout(() => process.exit(0), 1500);
-process.once('message', () => { clearTimeout(deadline); setTimeout(() => process.exit(0), 25); });
+const deadline = setTimeout(() => process.exit(${options.exitCode ?? 0}), 1500);
+process.once('message', () => { clearTimeout(deadline); setTimeout(() => process.exit(${options.exitCode ?? 0}), 25); });
 `, { mode: 0o600 });
     const environment: Record<string, string | undefined> = {
         SETFARM_INSTALLATION_DIR: '/dummy/foreign-installation', SETFARM_REPO_DIR: '/dummy/foreign-release',
@@ -289,12 +290,28 @@ process.once('message', () => { clearTimeout(deadline); setTimeout(() => process
     };
     const previous = new Map(Object.keys(environment).map(key => [key, process.env[key]]));
     const originalSpawn = childProcess.spawn;
-    const children: { child: ReturnType<typeof childProcess.spawn>; exit: Promise<unknown>; close: Promise<unknown> }[] = [];
+    const observeOutput = (stream: ReturnType<typeof childProcess.spawn>['stdout']) => {
+        let endObserved = false;
+        const end = new Promise<boolean>(resolve => {
+            if (!stream) { resolve(false); return; }
+            stream.once('end', () => { endObserved = true; resolve(true); });
+            // A real close without end settles the wait but never supplies EOF.
+            stream.once('close', () => resolve(endObserved));
+        });
+        const close = new Promise<boolean>(resolve => {
+            if (!stream) { resolve(false); return; }
+            stream.once('close', () => resolve(true));
+        });
+        return { end, close };
+    };
+    const children: { child: ReturnType<typeof childProcess.spawn>; exit: Promise<unknown>; close: Promise<unknown>;
+        stdout: ReturnType<typeof observeOutput>; stderr: ReturnType<typeof observeOutput> }[] = [];
     const spawnObserver = mock.method(childProcess, 'spawn', (...args: Parameters<typeof childProcess.spawn>) => {
         const child = originalSpawn(...args);
         children.push({ child,
             exit: new Promise(resolve => child.once('exit', (code, signal) => resolve({ code, signal }))),
             close: new Promise(resolve => child.once('close', (code, signal) => resolve({ code, signal }))),
+            stdout: observeOutput(child.stdout), stderr: observeOutput(child.stderr),
         });
         return child;
     });
@@ -330,7 +347,8 @@ process.once('message', () => { clearTimeout(deadline); setTimeout(() => process
         result = await jobs.create({ ...f.request, kind });
     } finally {
         // Settle the actual originals before restoring environment or mocks.
-        try { await Promise.all(children.flatMap(child => [child.exit, child.close])); }
+        try { await Promise.all(children.flatMap(child => [child.exit, child.close,
+            child.stdout.end, child.stdout.close, child.stderr.end, child.stderr.close])); }
         finally {
             spawnObserver.mock.restore(); syncBuiltinESMExports();
             for (const [key, value] of previous) {
@@ -340,8 +358,14 @@ process.once('message', () => { clearTimeout(deadline); setTimeout(() => process
     }
     const settlement = await Promise.all(children.map(async child => ({
         pid: child.child.pid, exit: await child.exit, close: await child.close,
+        stdout: { endObserved: await child.stdout.end, closeObserved: await child.stdout.close },
+        stderr: { endObserved: await child.stderr.end, closeObserved: await child.stderr.close },
     })));
     const dir = path.join(f.root, 'jobs', result!.receipt.jobId);
+    const settlementFile = path.join(dir, 'original-worker-settlement.json');
+    let originalWorkerSettlement: any = null;
+    try { originalWorkerSettlement = JSON.parse(readFileSync(settlementFile, 'utf8')); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
     const receipt = (await jobs.get(result!.receipt.jobId))!;
     const projection = JSON.stringify(receipt);
     const logs = ['stdout.log', 'stderr.log'].map(name => existsSync(path.join(dir, name)) ? readFileSync(path.join(dir, name), 'utf8') : '').join('');
@@ -349,7 +373,10 @@ process.once('message', () => { clearTimeout(deadline); setTimeout(() => process
     assert.equal(projection.includes('dummy-'), false);
     if (options.token) { assert.equal(logs.includes(options.token), false); assert.equal(projection.includes(options.token), false); }
     assert.equal(JSON.stringify(frames).includes('dummy-'), false);
-    return { probe: frames.find(frame => frame.probe)?.probe, settlement, startErrors, owner: session?.originalChild, receipt, finalSelectionRan };
+    const settlementContext = { ...session?.binding, selectionHash: selected.selectionHash, sourceSha: selected.sourceSha,
+        mcSourceSha: selected.mcSourceSha, mcBuildHash: selected.mcBuildHash, executableHash: session?.executableHash, brokerPid: process.pid };
+    return { probe: frames.find(frame => frame.probe)?.probe, settlement, startErrors, owner: session?.originalChild, receipt, finalSelectionRan,
+        settlementFile, originalWorkerSettlement, settlementContext };
 }
 function assertProbeSettled(result: Awaited<ReturnType<typeof probeWorkerEnvironment>>) {
     assert.equal(result.settlement.length, 1);
@@ -361,6 +388,291 @@ function assertProbeSettled(result: Awaited<ReturnType<typeof probeWorkerEnviron
     assert.deepEqual(result.startErrors, []);
     assert.equal(result.finalSelectionRan, true);
 }
+test('fixed real child records original exit and both output EOF', async t => {
+    const result = await probeWorkerEnvironment();
+    assertProbeSettled(result);
+    const original = result.settlement[0];
+    assert.deepEqual(original.stdout, { endObserved: true, closeObserved: true });
+    assert.deepEqual(original.stderr, { endObserved: true, closeObserved: true });
+    t.diagnostic(JSON.stringify({ settlement: result.settlement, settlementFile: result.settlementFile,
+        recordPresent: result.originalWorkerSettlement !== null }));
+    assert.ok(result.originalWorkerSettlement, 'naturally settled original child must publish original-worker-settlement.json');
+    const record = result.originalWorkerSettlement;
+    assert.equal(record.schema, 'mission-control.control-original-worker-settlement.v1');
+    assert.equal(record.subject, 'original_fixed_node_worker');
+    assert.deepEqual({ jobId: record.jobId, kind: record.kind, channelId: record.channelId, intentHash: record.intentHash,
+        selectionHash: record.selectionHash, sourceSha: record.sourceSha, mcSourceSha: record.mcSourceSha,
+        mcBuildHash: record.mcBuildHash, executableHash: record.executableHash, brokerPid: record.brokerPid }, result.settlementContext);
+    assert.deepEqual(record.originalChild, result.owner);
+    assert.equal(record.ownerHash, channel.hashObservedControlWorkerOwnerV1(result.owner));
+    assert.deepEqual(record.exit, original.exit);
+    assert.deepEqual(record.processClose, original.close);
+    assert.deepEqual(record.stdout, original.stdout);
+    assert.deepEqual(record.stderr, original.stderr);
+    assert.deepEqual(record.errors, []);
+    assert.equal(record.observedFactsComplete, true);
+});
+function assertRecordedOriginalProbe(result: Awaited<ReturnType<typeof probeWorkerEnvironment>>) {
+    assert.equal(result.settlement.length, 1);
+    const original = result.settlement[0], record = result.originalWorkerSettlement;
+    assert.equal(original.pid, result.owner.pid);
+    assert.deepEqual(original.stdout, { endObserved: true, closeObserved: true });
+    assert.deepEqual(original.stderr, { endObserved: true, closeObserved: true });
+    assert.ok(record, 'retained original child has a private settlement record');
+    assert.equal(record.schema, 'mission-control.control-original-worker-settlement.v1');
+    assert.equal(record.subject, 'original_fixed_node_worker');
+    assert.deepEqual({ jobId: record.jobId, kind: record.kind, channelId: record.channelId, intentHash: record.intentHash,
+        selectionHash: record.selectionHash, sourceSha: record.sourceSha, mcSourceSha: record.mcSourceSha,
+        mcBuildHash: record.mcBuildHash, executableHash: record.executableHash, brokerPid: record.brokerPid }, result.settlementContext);
+    assert.deepEqual(record.originalChild, result.owner);
+    assert.equal(record.ownerHash, channel.hashObservedControlWorkerOwnerV1(result.owner));
+    assert.deepEqual(record.exit, original.exit);
+    assert.deepEqual(record.processClose, original.close);
+    assert.deepEqual(record.stdout, original.stdout);
+    assert.deepEqual(record.stderr, original.stderr);
+    assert.deepEqual(record.errors, []);
+    assert.equal(record.observedFactsComplete, true);
+}
+test('fixed real child preserves natural nonzero exit in its original settlement record', async t => {
+    const result = await probeWorkerEnvironment({ exitCode: 7 });
+    assert.equal(result.settlement.length, 1);
+    assert.deepEqual(result.settlement[0].exit, { code: 7, signal: null });
+    assert.deepEqual(result.settlement[0].close, { code: 7, signal: null });
+    assert.deepEqual(result.startErrors, []);
+    assert.equal(result.finalSelectionRan, true);
+    assert.equal(result.receipt.state, 'ownership_unknown');
+    assert.deepEqual(result.receipt.reportRefs, {});
+    assertRecordedOriginalProbe(result);
+    t.diagnostic(JSON.stringify({ settlement: result.settlement, settlementFile: result.settlementFile,
+        observedFactsComplete: result.originalWorkerSettlement.observedFactsComplete }));
+});
+
+// Unit-only EventEmitter simulations: no process, disk publication or runtime
+// qualification. All real-child evidence comes from probeWorkerEnvironment.
+async function settlementUnitSimulation(options: {
+    missingStream?: 'stdout' | 'stderr'; internalCloseOnStderr?: boolean;
+    publisherThrows?: 'before' | 'after'; faultThrows?: boolean;
+} = {}) {
+    const { EventEmitter } = await import('node:events');
+    const { createControlWorkerSettlementV1 } = await import('./control-worker-settlement.js');
+    type RecordV1 = Parameters<Parameters<typeof createControlWorkerSettlementV1>[0]['publish']>[0];
+    const stdout = new EventEmitter(), stderr = new EventEmitter();
+    const child = Object.assign(new EventEmitter(), { pid: 424242,
+        stdout: options.missingStream === 'stdout' ? null : stdout,
+        stderr: options.missingStream === 'stderr' ? null : stderr });
+    const owner = { pid: 424242, processStartedAt: '2026-10-21T00:00:00.000Z', processGroupId: 424242,
+        source: 'observed_os' as const, executable: '/unit-only/node', script: '/unit-only/worker.js', commandHash: '1'.repeat(64) };
+    const records: RecordV1[] = [], simulatedWrites: string[] = [];
+    let faults = 0;
+    // Model Node's already registered stream-close listener, which can emit
+    // process close synchronously before an ordinary later stream listener.
+    if (options.internalCloseOnStderr) stderr.once('close', () => child.emit('close', 0, null));
+    const input = { child: child as unknown as Parameters<typeof createControlWorkerSettlementV1>[0]['child'],
+        binding: { jobId: '018d819f-0a78-7d38-bb1f-0195b029ddaa', kind: 'activation_preflight' as const,
+            channelId: '018d819f-0a78-7d38-bb1f-0195b029ddab', intentHash: '2'.repeat(64) },
+        executable: '/unit-only/node', executableHash: '3'.repeat(64), selectionHash: '4'.repeat(64),
+        sourceSha: '5'.repeat(40), mcSourceSha: '6'.repeat(40), mcBuildHash: '7'.repeat(64),
+        hashOwner: channel.hashObservedControlWorkerOwnerV1,
+        publish(record: RecordV1) {
+            records.push(record);
+            if (options.publisherThrows === 'before') throw new Error('unit-only publisher failure before bytes');
+            simulatedWrites.push(controlCanonicalV1(record));
+            if (options.publisherThrows === 'after') throw new Error('unit-only publisher failure after bytes');
+        },
+        onFault() { faults++; if (options.faultThrows) throw new Error('unit-only fault callback failure'); },
+    };
+    const observer = createControlWorkerSettlementV1(input);
+    function finish() {
+        child.emit('exit', 0, null);
+        stdout.emit('end'); stdout.emit('close'); stderr.emit('end'); stderr.emit('close');
+        child.emit('close', 0, null);
+    }
+    return { child, stdout, stderr, owner, input, observer, records, simulatedWrites, finish, get faults() { return faults; } };
+}
+test('worker settlement unit simulations withhold incomplete event and owner observations', async t => {
+    for (const omitted of ['stdout-end', 'stderr-end', 'stdout-close', 'stderr-close', 'exit', 'owner'] as const) {
+        await t.test(omitted, async () => {
+            const f = await settlementUnitSimulation();
+            if (omitted !== 'owner') f.observer.bindOwner(f.owner);
+            if (omitted !== 'exit') f.child.emit('exit', 0, null);
+            if (omitted !== 'stdout-end') f.stdout.emit('end');
+            if (omitted !== 'stdout-close') f.stdout.emit('close');
+            if (omitted !== 'stderr-end') f.stderr.emit('end');
+            if (omitted !== 'stderr-close') f.stderr.emit('close');
+            assert.equal(f.records.length, 0, 'stream/log closure cannot publish before process close');
+            f.child.emit('close', 0, null);
+            assert.equal(f.records.length, 1);
+            const record = f.records[0];
+            assert.equal(record.observedFactsComplete, false);
+            assert.deepEqual(record.stdout, { endObserved: omitted !== 'stdout-end', closeObserved: omitted !== 'stdout-close' });
+            assert.deepEqual(record.stderr, { endObserved: omitted !== 'stderr-end', closeObserved: omitted !== 'stderr-close' });
+            assert.deepEqual(record.exit, omitted === 'exit' ? null : { code: 0, signal: null });
+            assert.deepEqual(record.processClose, { code: 0, signal: null });
+            assert.deepEqual(record.originalChild, omitted === 'owner' ? null : f.owner);
+            assert.deepEqual(record.errors, omitted === 'owner' ? ['OWNER_BINDING_ERROR'] : []);
+            if (omitted === 'owner') {
+                assert.equal(record.ownerHash, null);
+                assert.throws(() => f.observer.bindOwner(f.owner), /OWNER_BINDING_ERROR/);
+                assert.equal(f.records.length, 1); assert.equal(record.originalChild, null);
+            }
+            assert.equal(f.faults, 1);
+        });
+    }
+    await t.test('missing process close never publishes', async () => {
+        const f = await settlementUnitSimulation(); f.observer.bindOwner(f.owner);
+        f.child.emit('exit', 0, null);
+        f.stdout.emit('end'); f.stdout.emit('close'); f.stderr.emit('end'); f.stderr.emit('close');
+        assert.equal(f.records.length, 0);
+        assert.equal(f.simulatedWrites.length, 0);
+    });
+    for (const stream of ['stdout', 'stderr'] as const) {
+        await t.test(`absent ${stream}`, async () => {
+            const f = await settlementUnitSimulation({ missingStream: stream }); f.observer.bindOwner(f.owner); f.finish();
+            assert.equal(f.records[0].observedFactsComplete, false);
+            assert.deepEqual(f.records[0][stream], { endObserved: false, closeObserved: false });
+            assert.deepEqual(f.records[0].errors, [stream === 'stdout' ? 'STDOUT_ERROR' : 'STDERR_ERROR']);
+            assert.equal(f.faults, 1);
+        });
+    }
+});
+test('worker settlement unit simulations reject wrong and repeated owner bindings', async t => {
+    for (const defect of ['pid', 'executable', 'repeat'] as const) {
+        await t.test(defect, async () => {
+            const f = await settlementUnitSimulation({ faultThrows: true });
+            if (defect === 'repeat') f.observer.bindOwner(f.owner);
+            const wrong = { ...f.owner, ...(defect === 'pid' ? { pid: 424243 } : defect === 'executable' ? { executable: '/unit-only/foreign-node' } : {}) };
+            assert.throws(() => f.observer.bindOwner(wrong), /OWNER_BINDING_ERROR/);
+            f.finish();
+            assert.equal(f.records.length, 1);
+            assert.equal(f.records[0].observedFactsComplete, false);
+            assert.deepEqual(f.records[0].errors, ['OWNER_BINDING_ERROR']);
+            assert.deepEqual(f.records[0].originalChild, defect === 'repeat' ? f.owner : null);
+            assert.equal(f.records[0].ownerHash, defect === 'repeat' ? channel.hashObservedControlWorkerOwnerV1(f.owner) : null);
+            assert.equal(f.faults, 1);
+        });
+    }
+});
+test('worker settlement unit simulations retain mismatched and invalid exit tuples', async t => {
+    for (const [name, exit, close, expectedExit, expectedClose, errors] of [
+        ['different numeric exits', [7, null], [0, null], { code: 7, signal: null }, { code: 0, signal: null }, []],
+        ['exit signal differs from process close', [null, 'SIGTERM'], [0, null], { code: null, signal: 'SIGTERM' }, { code: 0, signal: null }, []],
+        ['missing code and signal', [null, null], [0, null], null, { code: 0, signal: null }, ['CHILD_ERROR']],
+        ['fractional exit code', [0.5, null], [0, null], null, { code: 0, signal: null }, ['CHILD_ERROR']],
+        ['numeric code with signal', [0, 'SIGTERM'], [0, null], null, { code: 0, signal: null }, ['CHILD_ERROR']],
+        ['invalid process close', [0, null], [null, null], { code: 0, signal: null }, null, ['CHILD_ERROR']],
+    ] as const) {
+        await t.test(name, async () => {
+            const f = await settlementUnitSimulation(); f.observer.bindOwner(f.owner);
+            f.child.emit('exit', ...exit);
+            f.stdout.emit('end'); f.stdout.emit('close'); f.stderr.emit('end'); f.stderr.emit('close');
+            f.child.emit('close', ...close);
+            assert.equal(f.records.length, 1);
+            assert.deepEqual(f.records[0].exit, expectedExit);
+            assert.deepEqual(f.records[0].processClose, expectedClose);
+            assert.deepEqual(f.records[0].errors, errors);
+            assert.equal(f.records[0].observedFactsComplete, false);
+            assert.equal(f.faults, 1);
+        });
+    }
+});
+test('worker settlement unit simulations report finite process stream and log error codes', async t => {
+    for (const code of ['CHILD_ERROR', 'STDOUT_ERROR', 'STDERR_ERROR', 'STDOUT_LOG_ERROR', 'STDERR_LOG_ERROR'] as const) {
+        await t.test(code, async () => {
+            const f = await settlementUnitSimulation(); f.observer.bindOwner(f.owner);
+            const error = new Error('UNIT_ONLY_RAW_ERROR_MUST_NOT_BE_RETAINED');
+            if (code === 'CHILD_ERROR') f.child.emit('error', error);
+            else if (code === 'STDOUT_ERROR') f.stdout.emit('error', error);
+            else if (code === 'STDERR_ERROR') f.stderr.emit('error', error);
+            else f.observer.noteError(code);
+            f.finish();
+            assert.deepEqual(f.records[0].errors, [code]);
+            assert.equal(f.records[0].observedFactsComplete, false);
+            assert.equal(JSON.stringify(f.records[0]).includes(error.message), false);
+            assert.equal(f.faults, 1);
+        });
+    }
+    await t.test('repeated errors remain deduplicated and bounded to the fixed codes', async () => {
+        const f = await settlementUnitSimulation(); f.observer.bindOwner(f.owner);
+        const codes = ['CHILD_ERROR', 'STDOUT_ERROR', 'STDERR_ERROR', 'STDOUT_LOG_ERROR', 'STDERR_LOG_ERROR', 'OWNER_BINDING_ERROR'] as const;
+        for (let n = 0; n < 32; n++) for (const code of [...codes].reverse()) f.observer.noteError(code);
+        f.finish();
+        assert.deepEqual(f.records[0].errors, codes);
+        assert.equal(f.records[0].observedFactsComplete, false);
+        assert.equal(f.faults, 1);
+    });
+    await t.test('untrusted note text is reduced to a fixed child error', async () => {
+        const f = await settlementUnitSimulation(); f.observer.bindOwner(f.owner);
+        f.observer.noteError('UNIT_ONLY_UNTRUSTED_ERROR' as Parameters<typeof f.observer.noteError>[0]);
+        f.finish();
+        assert.deepEqual(f.records[0].errors, ['CHILD_ERROR']);
+        assert.equal(JSON.stringify(f.records[0]).includes('UNIT_ONLY_UNTRUSTED_ERROR'), false);
+        assert.equal(f.records[0].observedFactsComplete, false);
+    });
+});
+test('worker settlement unit simulation observes close before pre-existing Node stream-close listener', async () => {
+    const f = await settlementUnitSimulation({ internalCloseOnStderr: true }); f.observer.bindOwner(f.owner);
+    f.child.emit('exit', 0, null);
+    f.stdout.emit('end'); f.stdout.emit('close'); f.stderr.emit('end');
+    assert.equal(f.records.length, 0);
+    f.stderr.emit('close');
+    assert.equal(f.records.length, 1);
+    assert.deepEqual(f.records[0].stderr, { endObserved: true, closeObserved: true });
+    assert.equal(f.records[0].observedFactsComplete, true);
+    assert.equal(f.faults, 0);
+});
+test('worker settlement unit simulation freezes its context and publishes one immutable snapshot', async () => {
+    const f = await settlementUnitSimulation();
+    const owner = { ...f.owner }, ownerHash = channel.hashObservedControlWorkerOwnerV1(owner);
+    f.observer.bindOwner(f.owner);
+    f.owner.pid = 424243; f.owner.executable = '/unit-only/mutated-node'; f.owner.commandHash = '9'.repeat(64);
+    f.input.binding.jobId = '018d819f-0a78-7d38-bb1f-0195b029ddff'; f.input.binding.channelId = 'mutated-channel';
+    f.input.binding.intentHash = '9'.repeat(64); f.input.selectionHash = '9'.repeat(64);
+    f.input.sourceSha = '9'.repeat(40); f.input.mcSourceSha = '9'.repeat(40);
+    f.input.mcBuildHash = '9'.repeat(64); f.input.executableHash = '9'.repeat(64); f.child.pid = 424243;
+    f.finish();
+    const record = f.records[0], snapshot = controlCanonicalV1(record);
+    assert.deepEqual({ jobId: record.jobId, kind: record.kind, channelId: record.channelId, intentHash: record.intentHash,
+        selectionHash: record.selectionHash, sourceSha: record.sourceSha, mcSourceSha: record.mcSourceSha,
+        mcBuildHash: record.mcBuildHash, executableHash: record.executableHash, brokerPid: record.brokerPid }, {
+        jobId: '018d819f-0a78-7d38-bb1f-0195b029ddaa', kind: 'activation_preflight', channelId: '018d819f-0a78-7d38-bb1f-0195b029ddab',
+        intentHash: '2'.repeat(64), selectionHash: '4'.repeat(64), sourceSha: '5'.repeat(40), mcSourceSha: '6'.repeat(40),
+        mcBuildHash: '7'.repeat(64), executableHash: '3'.repeat(64), brokerPid: process.pid,
+    });
+    assert.deepEqual(record.originalChild, owner); assert.equal(record.ownerHash, ownerHash);
+    assert.equal(record.observedFactsComplete, true);
+    for (const value of [record, record.originalChild, record.exit, record.processClose, record.stdout, record.stderr, record.errors])
+        assert.equal(Object.isFrozen(value), true);
+    assert.throws(() => { (record.stdout as any).endObserved = false; }, TypeError);
+    assert.throws(() => { (record.errors as any).push('CHILD_ERROR'); }, TypeError);
+    f.child.emit('exit', 7, null); f.child.emit('error', new Error('unit-only late error'));
+    f.stdout.emit('error', new Error('unit-only late output error')); f.finish(); f.observer.noteError('STDERR_LOG_ERROR');
+    assert.throws(() => f.observer.bindOwner(owner), /OWNER_BINDING_ERROR/);
+    assert.equal(f.records.length, 1); assert.equal(f.simulatedWrites.length, 1);
+    assert.equal(controlCanonicalV1(record), snapshot); assert.equal(f.simulatedWrites[0], snapshot);
+});
+test('worker settlement unit simulations contain publisher and fault callback exceptions', async t => {
+    for (const phase of ['before', 'after'] as const) {
+        await t.test(`publisher throws ${phase} simulated bytes`, async () => {
+            const f = await settlementUnitSimulation({ publisherThrows: phase, faultThrows: true }); f.observer.bindOwner(f.owner);
+            assert.doesNotThrow(() => f.finish());
+            assert.equal(f.records.length, 1); assert.equal(f.faults, 1);
+            assert.equal(f.records[0].observedFactsComplete, true, 'facts stay distinct from unsuccessful publication');
+            assert.equal(f.simulatedWrites.length, phase === 'before' ? 0 : 1);
+            const retained = [...f.simulatedWrites];
+            assert.doesNotThrow(() => f.finish());
+            assert.equal(f.records.length, 1); assert.equal(f.faults, 1);
+            assert.deepEqual(f.simulatedWrites, retained, 'no retry or overwrite after publisher failure');
+        });
+    }
+    await t.test('observation fault callback throws without escaping original events', async () => {
+        const f = await settlementUnitSimulation({ faultThrows: true }); f.observer.bindOwner(f.owner);
+        assert.doesNotThrow(() => f.child.emit('error', new Error('unit-only observation fault')));
+        assert.doesNotThrow(() => f.finish());
+        assert.equal(f.faults, 1); assert.equal(f.records.length, 1);
+        assert.deepEqual(f.records[0].errors, ['CHILD_ERROR']);
+        assert.equal(f.records[0].observedFactsComplete, false);
+    });
+});
 test('fixed real activation child preserves enabled, disabled and absent activation without full8 inputs', async t => {
     // Removing activation, ENV_DIR or selected locator assignments breaks the
     // actual child predicates; forwarding ambient secrets breaks exclusion.
@@ -418,6 +730,7 @@ test('fixed real UI child retains stripped selection profile and auth environmen
         MC_INTERNAL_URL: 'https://foreign.invalid', SETFARM_DASHBOARD_URL: 'https://foreign.invalid',
     } });
     assertProbeSettled(result);
+    assertRecordedOriginalProbe(result);
     t.diagnostic(JSON.stringify({ settlement: result.settlement, probe: result.probe }));
     assert.equal(result.probe.uiStripped, true);
     assert.equal(result.probe.forbiddenAbsent, true);
@@ -440,13 +753,18 @@ test('full8 fixed real child environment boundaries', async t => {
         return;
     }
     const config = { authToken: 'dummy-loaded-mc-token' };
-    const configMock = (mock as any).module(new URL('../config.ts', import.meta.url), { exports: { config } });
+    // Node22 uses namedExports; Node26 uses exports. These options cannot be combined.
+    const configMock = (mock as any).module(new URL('../config.ts', import.meta.url),
+        Number(process.versions.node.split('.')[0]) === 22
+            ? { namedExports: { config } }
+            : { exports: { config } });
     try {
         await t.test('selected profile and fixed local endpoints reach the original full8 child', async t => {
             // Removing runtime/model/ENV_DIR/endpoints/MC_AUTH_TOKEN assignments
             // breaks these actual child predicates. Generic AUTH_TOKEN cannot pass.
             const result = await probeWorkerEnvironment({ kind: 'convergence_full8', token: config.authToken });
             assertProbeSettled(result);
+            assertRecordedOriginalProbe(result);
             t.diagnostic(JSON.stringify({ settlement: result.settlement, probe: result.probe }));
             for (const key of ['runtimeMatches', 'modelMatches', 'runtimeDirectoryMatches', 'activationEnabled', 'installationMatches', 'releaseMatches', 'mcEndpointMatches', 'sfEndpointMatches', 'tokenMatches', 'forbiddenAbsent', 'commonMatches'])
                 assert.equal(result.probe[key], true, key);
@@ -456,6 +774,7 @@ test('full8 fixed real child environment boundaries', async t => {
             try {
                 const result = await probeWorkerEnvironment({ kind: 'convergence_full8' });
                 assertProbeSettled(result);
+                assertRecordedOriginalProbe(result);
                 assert.equal(result.probe.tokenMatches, true);
                 assert.equal(result.probe.forbiddenAbsent, true);
             } finally { config.authToken = 'dummy-loaded-mc-token'; }
@@ -482,6 +801,7 @@ test('full8 fixed real child environment boundaries', async t => {
                     duringFinalSelection() { config.authToken = 'dummy-changed-token'; },
                 });
                 assertProbeSettled(result);
+                assertRecordedOriginalProbe(result);
                 assert.equal(result.probe.tokenMatches, true);
             } finally { config.authToken = 'dummy-loaded-mc-token'; }
         });
