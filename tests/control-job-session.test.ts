@@ -69,6 +69,40 @@ test('late accepted POST retains request mapping but never overrides newer user-
   assert.deepEqual(session.pending,pending);
 });
 
+test('returning to current evidence fences a delayed launch while preserving its reconnectable request', async () => {
+  const store = storage();
+  let finish!: (value: { receipt: ControlJobReceiptV1; replay: boolean }) => void;
+  let requests = 0;
+  const session = new ControlJobSessionV1(store, () => {
+    requests++;
+    return new Promise(resolve => { finish = resolve; });
+  }, jobB, () => '00000000-0000-4000-8000-000000000003');
+  session.setSelection(a);
+  session.confirm();
+  const launched = session.launch();
+  const pending = session.pending;
+  const persistedBeforeReturn = new Map(store.map);
+
+  session.chooseJob(null);
+  assert.equal(session.selectedJobId, null);
+  assert.deepEqual(session.pending, pending);
+  assert.deepEqual(store.map, persistedBeforeReturn);
+  assert.equal(session.selectionHash, a);
+  assert.equal(session.isConfirmed(), true, 'browsing does not change launch selection authority');
+  assert.equal(requests, 1, 'returning to current evidence does not launch a second request');
+
+  finish({ receipt: receipt(jobA, 'accepted'), replay: false });
+  const result = await launched;
+  assert.equal(result.reveal, false);
+  assert.equal(session.selectedJobId, null);
+  assert.deepEqual(session.pending, pending);
+  assert.equal(session.pendingJobId, jobA);
+  const reloaded = new ControlJobSessionV1(store, async () => { throw new Error('no request expected'); }, null);
+  assert.deepEqual(reloaded.pending, pending);
+  assert.equal(reloaded.pendingJobId, jobA);
+  assert.equal(requests, 1);
+});
+
 test('old unmounted launch cannot replace or clear a newer exact pending request across sessions', async () => {
   const store=storage();
   const keyA='00000000-0000-4000-8000-000000000003';

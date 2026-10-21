@@ -101,13 +101,13 @@ export function Controls() {
     return () => { active = false; window.clearInterval(timer); };
   },[selectedId,receipt?.jobId,receipt?.state,receipt?.finishedAt,selectedOwner]);
 
-  function chooseJob(id:string){
+  function chooseJob(id:string|null){
     session.chooseJob(id);
     selectionEpoch.current++;
     selectedRef.current=id;
     selectedOwner.select(id);
     rememberJob(id);
-    setError(null);
+    if(id!==null) setError(null);
   }
   async function launch(){
     if(busy)return;
@@ -173,7 +173,13 @@ export function Controls() {
   const stale=receipt&&selected&&receipt.selectionHash!==selected;
   const current=selectedId===null ? globalEnvelope?.evidence : selectedEvidence.status==='ready' ? selectedEvidence.envelope?.evidence : undefined;
   return <main className="controls">
-    <header className="controls__header"><div><p className="controls__eyebrow">Operator workspace</p><h1>Controls</h1><p>Selected evidence, manual checks, and owned job progress.</p></div><button type="button" onClick={()=>void refresh()} disabled={loading}>Refresh evidence</button></header>
+    <header className="controls__header">
+      <div><p className="controls__eyebrow">Operator workspace</p><h1>Controls</h1><p>Selected evidence, manual checks, and owned job progress.</p></div>
+      <div className="controls__actions">
+        {selectedId!==null&&<button type="button" className="controls__secondary" onClick={()=>chooseJob(null)}>Show current evidence</button>}
+        <button type="button" onClick={()=>void refresh()} disabled={loading}>Refresh evidence</button>
+      </div>
+    </header>
     {loading&&<p role="status">Loading latest evidence and recent jobs…</p>}
     <p className="controls__scope">{selectedId===null?'Reports for latest job':<>Reports for selected job <code>{selectedId}</code></>}</p>
     {selectedId!==null&&selectedEvidence.status==='loading'&&<p role="status">Loading reports for selected job <code>{selectedId}</code>…</p>}
