@@ -102,6 +102,15 @@ function receipt(id: string, terminal: boolean): ControlJobReceiptV1 {
     currentCaseId: null, ownedRunId: null, completedCases: 0, plannedCases: id === JOB_B ? 8 : 0,
     reportRefs: terminal && id === JOB_A ? { activationHash: H } : {}, cancelRequested: false };
 }
+function startingFull8(): ControlJobReceiptV1 {
+  return { ...receipt(JOB_B, false), revision: 2, state: 'starting', phase: 'starting',
+    updatedAt: '2026-10-20T00:00:02.000Z', completedCases: 0 };
+}
+function unknownFull8(): ControlJobReceiptV1 {
+  return { ...startingFull8(), revision: 14, state: 'ownership_unknown', phase: 'ownership_unknown',
+    updatedAt: '2026-10-20T00:00:14.000Z', code: 'CONTROL_CUSTODY_UNCERTAIN',
+    completedCases: 1, cancelRequested: true, finishedAt: null };
+}
 function selected(code = 'SELECTED_A_PASS', historical = false): ControlEvidenceEnvelopeV1 {
   // Exact-job envelopes retain the backend's currently captured selection S;
   // historical ownership is the receipt's T plus report compatibility.
@@ -130,7 +139,8 @@ type FetchObservation = { fetchId: number; requestLedgerId: string | null; url: 
   fetchState: string; responseUrl?: string; status?: number; jsonCalls: number; jsonState: string;
   jsonBodyHash?: string; jsonBytes?: number; error?: string };
 type NetworkRow = { number: number; path: string; origin: string; method: string; held: boolean;
-  status?: number; responseHash?: string; completed?: boolean; browserConsumed?: FetchObservation };
+  status?: number; responseHash?: string; completed?: boolean; browserConsumed?: FetchObservation;
+  requestBodyHash?: string };
 type SocketProof = { number: number; peerEnded: boolean; closed: boolean; hadError: boolean;
   connectionOrder: number; endOrder: number | null; closeOrder: number | null; closeHadError: boolean | null;
   errorEvents: { order: number; code: string | null }[]; closePromise: Promise<void> };
@@ -165,13 +175,19 @@ type Harness = {
   hold(path: string, reply?: Reply): { arrived(): Promise<NetworkRow>; release(reply?: Reply): Promise<void> };
   checkpoint(label: string): Promise<void>; causalAssertion(): void;
 };
-async function harness(name: 'causal' | 'races' | 'current', body: (p: Page, h: Harness) => Promise<void>) {
+async function harness(name: 'causal' | 'races' | 'current' | 'progress', body: (p: Page, h: Harness) => Promise<void>,
+    diagnostic?: (message: string) => void) {
   assert.equal(enabled, true, 'Root qualification gate required before imports or acquisition');
   const { createControlsSelectedEvidenceOwnedProfileV1, CONTROLS_SELECTED_SOURCE_PATHS } = await import('./fixtures/controls-selected-evidence-owned.js');
   const { createServer } = await import('vite');
   const { default: react } = await import('@vitejs/plugin-react');
-  const { parseControlEvidenceEnvelopeV1, parseControlJobReceiptV1 } = await import('../src/lib/control-evidence.js');
+  const { parseControlEvidenceEnvelopeV1, parseControlJobReceiptV1, parsePendingControlLaunchV1 } = await import('../src/lib/control-evidence.js');
   const data = model();
+  if (name === 'progress') {
+    data.receipts.set(JOB_A, receipt(JOB_A, false));
+    data.evidence.set(JOB_A, envelope('LIVE_A_UNCONFIGURED'));
+    data.receipts.set(JOB_B, startingFull8());
+  }
   parseControlEvidenceEnvelopeV1(data.global);
   for (const r of data.receipts.values()) parseControlJobReceiptV1(r);
   for (const e of data.evidence.values()) parseControlEvidenceEnvelopeV1(e);
@@ -179,7 +195,7 @@ async function harness(name: 'causal' | 'races' | 'current', body: (p: Page, h: 
   if (existsSync(join(SOURCE_ROOT, 'src/lib/control-selected-evidence.ts'))) paths.push('src/lib/control-selected-evidence.ts');
   const owned: OwnedProfile = await createControlsSelectedEvidenceOwnedProfileV1({ sourceRoot: SOURCE_ROOT, sourcePaths: paths.sort(),
     profileData: { name, jobA: JOB_A, jobB: JOB_B, globalSelection: S, historicalSelection: T, data: { global: data.global,
-      receipts: [...data.receipts], evidence: [...data.evidence] }, readObserverScriptHash: hash(CONTROLS_READ_OBSERVER_INIT_SCRIPT), scenarios: ['row-selection','refresh','reload','late-global','a-b-a-success-error','remount-success-error','terminal-refs-success-error','terminal-missing','historical','pending-byte-stability','current-global-read-error-preservation'] } });
+      receipts: [...data.receipts], evidence: [...data.evidence] }, readObserverScriptHash: hash(CONTROLS_READ_OBSERVER_INIT_SCRIPT), scenarios: ['row-selection','refresh','reload','late-global','a-b-a-success-error','remount-success-error','terminal-refs-success-error','terminal-missing','historical','pending-byte-stability','current-global-read-error-preservation', ...(name === 'progress' ? ['confirmed-launch','live-cancel-positive','selected-unknown-late-list'] : [])] } });
   let cache: string | null = null, cacheIdentity: ReturnType<typeof lstatSync> | null = null;
   let server: ViteDevServer | null = null, http: HttpServer | null = null;
   let page: Page | undefined, origin = '', listener: unknown = null;
@@ -195,6 +211,37 @@ async function harness(name: 'causal' | 'races' | 'current', body: (p: Page, h: 
   const observationFaults: string[] = [];
   let stage = 'acquisition', setupReady = false, causal = false, original: unknown = null, bodyPassed = false;
   let wsHeartbeats = 0, wsClosed = 0;
+  let fixtureLaunches = 0, fixtureCancels = 0;
+  const cancelAPath = `${receiptPath(JOB_A)}/cancel`;
+  const isFixturePost = (method: string, path: string) => name === 'progress' && method === 'POST'
+    && (path === JOBS || path === cancelAPath);
+  const fixturePostReply = (request: Request, path: string): Reply => {
+    // Opt-in synthetic HTTP actions only; no production broker or native owner
+    // is called. The old scenarios retain their exact GET-only policy.
+    const raw = request.postData();
+    assert.ok(raw !== null && Buffer.byteLength(raw) <= 1024, 'bounded fixture action JSON required');
+    assert.match(request.headers()['content-type'] ?? '', /^application\/json(?:;|$)/);
+    const value: unknown = JSON.parse(raw);
+    if (path === JOBS) {
+      const pending = parsePendingControlLaunchV1(value);
+      assert.equal(pending.kind, 'convergence_full8');
+      assert.equal(pending.expectedSelectionHash, S);
+      assert.equal(++fixtureLaunches, 1, 'exactly one real UI launch is admitted');
+      return { body: { receipt: structuredClone(startingFull8()), replay: false } };
+    }
+    assert.equal(path, cancelAPath);
+    assert.ok(value && typeof value === 'object' && !Array.isArray(value));
+    assert.equal(Object.keys(value).sort().join('|'), 'expectedRevision|idempotencyKey');
+    const cancel = value as { expectedRevision: unknown; idempotencyKey: unknown };
+    assert.equal(cancel.expectedRevision, 5);
+    assert.equal(typeof cancel.idempotencyKey, 'string');
+    assert.match(cancel.idempotencyKey as string, /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
+    assert.equal(++fixtureCancels, 1, 'exactly one known-live cancellation is admitted');
+    const cancelled: ControlJobReceiptV1 = { ...receipt(JOB_A, false), revision: 6,
+      state: 'cancelling', cancelRequested: true, updatedAt: '2026-10-20T00:00:06.000Z' };
+    data.receipts.set(JOB_A, cancelled);
+    return { body: { receipt: structuredClone(cancelled), replay: false } };
+  };
   const defaultReply = (path: string): Reply | null => {
     if (path === EVIDENCE) return { body: structuredClone(data.global) };
     if (path === JOBS) return { body: { jobs: [...data.receipts.values()].map(r => structuredClone(r)) } };
@@ -270,7 +317,11 @@ async function harness(name: 'causal' | 'races' | 'current', body: (p: Page, h: 
     assert.deepEqual(errors, [], 'no page/console error may qualify selected behavior');
     await browserReadSnapshot();
     assert.deepEqual(observationFaults, [], 'missing or ambiguous client consumption is UNKNOWN');
-    assert.ok(ledger.every(r => r.origin === origin && r.method === 'GET'), 'API traffic is exact-origin GET-only');
+    if (name === 'progress') {
+      assert.ok(ledger.every(r => r.origin === origin && (r.method === 'GET' || isFixturePost(r.method, r.path))),
+        'API traffic stays within exact-origin GETs and the two reviewed fixture actions');
+      assert.ok(fixtureLaunches <= 1 && fixtureCancels <= 1, 'fixture action count bounds');
+    } else assert.ok(ledger.every(r => r.origin === origin && r.method === 'GET'), 'API traffic is exact-origin GET-only');
     assert.equal(await page!.getByRole('region', { name: 'Selected readiness', exact: true }).getByText(S, { exact: true }).count(), 1);
     assert.equal(await page!.getByRole('region', { name: 'Historical evidence', exact: true }).getByText('9'.repeat(40), { exact: true }).count(), 1);
     assert.equal(await page!.getByText('7'.repeat(40), { exact: true }).count(), 0, 'selected history cannot replace global history');
@@ -348,21 +399,24 @@ async function harness(name: 'causal' | 'races' | 'current', body: (p: Page, h: 
     await context.addInitScript({ content: CONTROLS_READ_OBSERVER_INIT_SCRIPT });
     await context.route('**/*', async (route: Route) => {
       const request = route.request(), url = new URL(request.url()), path = url.pathname + url.search;
-      if (url.origin !== origin || request.method() !== 'GET') { denied.push(`${request.method()}:${url.href}`); return route.abort(); }
+      if (url.origin !== origin || request.method() !== 'GET' && !isFixturePost(request.method(), path)) { denied.push(`${request.method()}:${url.href}`); return route.abort(); }
       if (url.pathname.startsWith('/api/')) {
         if (ledger.length >= 512) { denied.push('LEDGER_BOUND'); return route.abort(); }
-        const reply = defaultReply(path), plan = plans.get(path)?.shift();
+        const action = isFixturePost(request.method(), path);
+        const plan = action ? undefined : plans.get(path)?.shift();
         const row: NetworkRow = { number: ledger.length + 1, path, origin: url.origin, method: request.method(), held: !!plan };
         ledger.push(row);
-        if (!reply) { denied.push(path); return route.abort(); }
         if (plan) { plan.used = true; plan.request = request; plan.row = row; plan.arrived.resolve(row); }
         try {
+          const reply = action ? fixturePostReply(request, path) : defaultReply(path);
+          if (!reply) { denied.push(path); return route.abort(); }
+          if (action) row.requestBodyHash = hash(request.postData()!);
           const response: Reply = plan ? (await plan.released.promise) ?? plan.reply ?? reply : reply;
           row.status = response.status ?? 200;
           row.responseHash = hash(JSON.stringify(response.body));
           await route.fulfill({ status: row.status, headers: { [OBSERVATION_HEADER]: String(row.number) }, json: response.body });
           row.completed = true;
-        } catch (error) { errors.push(`ROUTE:${String(error).slice(0,1000)}`); }
+        } catch (error) { errors.push(`ROUTE:${String(error).slice(0,1000)}`); if (action) await route.abort(); }
         finally { plan?.done.resolve(); }
         return;
       }
@@ -442,6 +496,7 @@ async function harness(name: 'causal' | 'races' | 'current', body: (p: Page, h: 
     bodyPassed = true;
   } catch (error) {
     original = { name: error instanceof Error ? error.name : typeof error, message: String(error).slice(0,2000), stage };
+    diagnostic?.(JSON.stringify({ code: 'CONTROLS_SELECTED_EVIDENCE_ORIGINAL_FAILURE', name, original }));
     // Only this exact observed page mismatch can qualify preimplementation RED.
     // Setup, import, navigation, interaction and unknown cleanup failures cannot.
     if (name === 'causal' && stage === 'causal-assertion' && setupReady && page && !denied.length && !errors.length) {
@@ -459,6 +514,18 @@ async function harness(name: 'causal' | 'races' | 'current', body: (p: Page, h: 
         && ledger.some(r => r.path === EVIDENCE && r.held && r.status === 503 && r.completed === true
           && r.responseHash === globalErrorHash && r.browserConsumed?.status === 503
           && r.browserConsumed.jsonBodyHash === globalErrorHash);
+    }
+    if (name === 'progress' && stage === 'causal-assertion' && setupReady && page && !denied.length && !errors.length) {
+      const row = page.getByRole('region', { name: 'Recent jobs', exact: true }).getByRole('button').filter({ hasText: JOB_B });
+      const unknownHash = hash(JSON.stringify({ receipt: unknownFull8() }));
+      const newer = ledger.find(r => r.path === receiptPath(JOB_B) && r.held && r.completed
+        && r.responseHash === unknownHash && r.browserConsumed?.jsonBodyHash === unknownHash);
+      const older = ledger.find(r => r.path === JOBS && r.method === 'GET' && r.held && r.completed && r.browserConsumed);
+      causal = fixtureLaunches === 1 && fixtureCancels === 1 && !!newer && !!older && older.number < newer.number
+        && await progress(page).getByText(JOB_B, { exact: true }).count() === 1
+        && await progress(page).getByText('1 of 8', { exact: true }).count() === 1
+        && /Ownership Unknown/.test(await progress(page).locator('.controls__lead').innerText())
+        && /starting · 0 of 8/.test(await row.innerText());
     }
     owned.store.json({ schema: 'mission-control.controls-selected-evidence-original-failure.v1', original, setupReady, causalCandidate: causal });
     throw error;
@@ -565,6 +632,10 @@ async function harness(name: 'causal' | 'races' | 'current', body: (p: Page, h: 
       native, listener, listeningObserved, httpClosed, serverClosed, originalListenerAbsent: http?.address() === null,
       sockets: sockets.size, websockets: websockets.size, socketObservationHashes, preWrapperPeerProof, viteCloseInvoked, ledgerHash, cache,
       cacheRetained, cacheRemovalAttempted: false, cachePolicy: 'retain_all_outcomes', cleanupErrors });
+    // The native/server cleanup may replace the thrown error with UNKNOWN.
+    // Keep the original bounded failure visible in the Node test stream too.
+    diagnostic?.(JSON.stringify({ code: 'CONTROLS_SELECTED_EVIDENCE_DIAGNOSTIC', name, outcome,
+      original, causalCandidate: causal, setupReady, cleanupErrors: cleanupErrors.map(value => value.slice(0,500)).slice(0,16) }));
     owned.store.verify();
     console.log(JSON.stringify({ code: 'CONTROLS_SELECTED_EVIDENCE_OUTCOME', name, outcome, artifactRoot: owned.store.root }));
     if (outcome === 'UNKNOWN') throw new Error('CONTROLS_SELECTED_EVIDENCE_QUALIFICATION_UNKNOWN; original failure retained in artifact store');
@@ -622,6 +693,98 @@ test('Controls current evidence preserves global read errors', options, async ()
     assert.equal(await globalAlert.count(), 1, 'returning to current evidence preserves the unrelated global read error');
     await h.checkpoint('current-global-error-preserved');
   });
+});
+
+test('selected unknown progress updates recent jobs and prevents repeat cancellation', options, async t => {
+  await harness('progress', async (page, h) => {
+    const recent = page.getByRole('region', { name: 'Recent jobs', exact: true });
+    const full8Row = recent.getByRole('button').filter({ hasText: JOB_B });
+    assert.match(await full8Row.innerText(), /starting · 0 of 8/);
+
+    // Positive control: the same real mounted UI must still allow an ordinary
+    // known-live cancellation and send exactly its one reviewed fixture POST.
+    await clickJob(page, JOB_A);
+    await activation(page).getByText('LIVE_A_UNCONFIGURED', { exact: true }).waitFor();
+    const cancel = page.getByRole('button', { name: 'Request cancellation', exact: true });
+    assert.equal(await cancel.isEnabled(), true, 'known-live job retains cancellation');
+    await cancel.click();
+    await progress(page).getByText('Cancellation requested · Cancelling · Running', { exact: true }).waitFor();
+    assert.equal(h.ledger.filter(r => r.method === 'POST' && r.path === `${receiptPath(JOB_A)}/cancel` && r.completed).length, 1);
+    assert.equal(h.ledger.filter(r => r.method === 'POST').length, 1);
+    await h.checkpoint('known-live-cancel-positive');
+
+    // Launch through Controls/session itself: it owns both actual storage
+    // writes. No injected React/session state or storage seeding in this case.
+    const oldJobs = [...h.data.receipts.values()].map(r => structuredClone(r));
+    const lateList = h.hold(JOBS, { body: { jobs: oldJobs } });
+    const unknown = unknownFull8();
+    const selectedPoll = h.hold(receiptPath(JOB_B), { body: { receipt: unknown } });
+    await page.getByLabel('Check', { exact: true }).selectOption('convergence_full8');
+    await page.getByRole('checkbox').check();
+    await page.getByRole('button', { name: 'Start manual check', exact: true }).click();
+    const olderListRequest = await lateList.arrived();
+    await progress(page).getByText(JOB_B, { exact: true }).waitFor();
+    await progress(page).getByText('0 of 8', { exact: true }).waitFor();
+    await page.getByRole('status').filter({ hasText: /^Check accepted\.$/ }).waitFor();
+    assert.equal(h.ledger.filter(r => r.method === 'POST' && r.path === JOBS && r.completed).length, 1);
+    assert.equal(h.ledger.filter(r => r.method === 'POST').length, 2);
+    const before = await pendingBytes(page);
+    assert.ok(before[0] !== null && before[1] !== null, 'real accepted launch persisted both pending values before polling');
+    const pending = JSON.parse(before[0]!), binding = JSON.parse(before[1]!);
+    assert.equal(pending.kind, 'convergence_full8');
+    assert.equal(pending.expectedSelectionHash, S);
+    assert.equal(binding.jobId, JOB_B);
+    assert.deepEqual(Object.keys(binding).sort(), ['expectedSelectionHash', 'idempotencyKey', 'jobId', 'kind']);
+    assert.equal(binding.kind, pending.kind);
+    assert.equal(binding.expectedSelectionHash, pending.expectedSelectionHash);
+    assert.equal(binding.idempotencyKey === pending.idempotencyKey, true, 'accepted mapping keeps the real launch key');
+    await h.capture('accepted-full8-before-poll', { pendingPresent: before.map(value => value !== null), postCount: 2 });
+
+    const selectedRequest = await selectedPoll.arrived();
+    assert.ok(olderListRequest.number < selectedRequest.number, 'older list request precedes the newer selected receipt request');
+    h.data.receipts.set(JOB_B, unknown);
+    await selectedPoll.release();
+    await progress(page).getByText('1 of 8', { exact: true }).waitFor();
+    await progress(page).getByText('Cancellation requested · Ownership Unknown · Ownership Unknown', { exact: true }).waitFor();
+    await lateList.release();
+    await frameFence(page);
+
+    const manual = page.getByRole('region', { name: 'Manual check', exact: true });
+    const pendingCopy = (await manual.locator('p.controls__notice').allTextContents()).join(' ').slice(0,1000);
+    const cancellationUnavailable = await cancel.count() === 0 || await cancel.isDisabled();
+    const observed = { jobId: JOB_B, selectedLead: (await progress(page).locator('.controls__lead').innerText()).slice(0,200),
+      selectedCases: await progress(page).getByText('1 of 8', { exact: true }).count(),
+      recentRow: (await full8Row.innerText()).slice(0,300), cancellationUnavailable, pendingCopy,
+      pendingByteIdentical: (await pendingBytes(page)).map((value, index) => value === before[index]),
+      postCount: h.ledger.filter(r => r.method === 'POST').length,
+      selectedCancelPosts: h.ledger.filter(r => r.method === 'POST' && r.path === `${receiptPath(JOB_B)}/cancel`).length,
+      olderListRequest: olderListRequest.number, selectedRequest: selectedRequest.number };
+    t.diagnostic(JSON.stringify({ code: 'CONTROLS_OWNED_PROGRESS_OBSERVED', ...observed }));
+    await h.capture('selected-unknown-after-late-list', observed);
+    await h.checkpoint('unknown-boundary-before-assertion');
+
+    h.causalAssertion();
+    // First expected pre-fix failure: the selected row remains starting/0of8
+    // even though the actual selected receipt is already UNKNOWN/1of8.
+    assert.match(await full8Row.innerText(), /ownership unknown · 1 of 8/,
+      'selected Recent jobs row must match Owned progress after the delayed older list');
+    assert.equal(await full8Row.getAttribute('aria-current'), 'true');
+    assert.match(await progress(page).locator('.controls__lead').innerText(), /Ownership Unknown/);
+    assert.doesNotMatch(await progress(page).locator('.controls__lead').innerText(), /\b(?:completed|cancelled|closed|passed)\b/i);
+    assert.equal(await progress(page).getByText('1 of 8', { exact: true }).count(), 1);
+    assert.equal(cancellationUnavailable, true, 'UNKNOWN or already requested cancellation is unavailable');
+    assert.equal(observed.selectedCancelPosts, 0, 'UNKNOWN receipt polling and UI updates send no cancel POST');
+    assert.equal(observed.postCount, 2, 'only the known-live cancel and real launch POSTs occurred');
+    assert.match(pendingCopy, /accepted/i, 'pending notice distinguishes an accepted job from an unresolved launch');
+    assert.match(pendingCopy, /(?:outcome|result).*unconfirmed|(?:outcome|result).*not (?:yet )?confirmed/i);
+    assert.match(pendingCopy, /same.*key|exact.*key/i, 'accepted retry notice preserves its request-key meaning');
+    assert.match(pendingCopy, /reconnect/i, 'same-key retry reconnects to the accepted job');
+    assert.doesNotMatch(pendingCopy, /A launch request is pending for/);
+    assert.deepEqual((await pendingBytes(page)).map((value, index) => value === before[index]), [true, true],
+      'selected polling, delayed list, and rendering preserve both exact pending bytes');
+    assert.equal(await page.getByText('Qualified release', { exact: true }).count(), 0);
+    await h.checkpoint('selected-unknown-consistent');
+  }, message => t.diagnostic(message));
 });
 
 test('Controls selected evidence survives races and terminal refs', options, async () => {
