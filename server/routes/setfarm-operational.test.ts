@@ -204,7 +204,7 @@ function rawRequest(port, method, path, headers = {}, body = "") {
 }
 
 test("loaded route", async (context) => {
-  context.mock.module(process.env.PBA_SERVICE_URL, { exports: {
+  context.mock.module(process.env.PBA_SERVICE_URL, { namedExports: {
     ProductBuildAuthorityV2DeliveryEvidenceError: DeliveryEvidenceError,
     currentProductBuildAuthorityV2DeliveryEvidenceResponseV1: async () => { throw new Error("not used"); },
     productBuildAuthorityV2LoadedBuildStartupStateV1: () => { loadedStateReads += 1; return startupState; },
@@ -279,6 +279,12 @@ test("loaded route", async (context) => {
   }
 });
 `;
+  const childEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    PBA_ROUTE_URL: routeModuleUrl,
+    PBA_SERVICE_URL: new URL("../services/product-build-authority-v2-delivery-evidence-v1.ts", import.meta.url).href,
+  };
+  delete childEnv.NODE_TEST_CONTEXT;
   const result = await new Promise<Readonly<{ exitCode: number; stdout: string; stderr: string }>>((resolveResult, reject) => {
     const child = spawn(process.execPath, [
       "--experimental-test-module-mocks",
@@ -288,11 +294,7 @@ test("loaded route", async (context) => {
       "--eval",
       fixture,
     ], {
-      env: {
-        ...process.env,
-        PBA_ROUTE_URL: routeModuleUrl,
-        PBA_SERVICE_URL: new URL("../services/product-build-authority-v2-delivery-evidence-v1.ts", import.meta.url).href,
-      },
+      env: childEnv,
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
@@ -349,7 +351,7 @@ function rawRequest(port, method, path, headers = {}, body = "") {
 }
 
 test("production middleware order", async (context) => {
-  context.mock.module(process.env.MC_AUTH_URL, { exports: {
+  context.mock.module(process.env.MC_AUTH_URL, { namedExports: {
     authMiddleware: (req, res, next) => {
       authCalls += 1;
       if (req.headers["x-mc-token"] !== "private-test-token") {
@@ -359,10 +361,8 @@ test("production middleware order", async (context) => {
       next();
     },
   } });
-  context.mock.module(process.env.MC_LIVE_FEED_URL, { exports: {
-    default: (_req, _res, next) => next(),
-  } });
-  context.mock.module(process.env.MC_SERVICE_URL, { exports: {
+  context.mock.module(process.env.MC_LIVE_FEED_URL, { defaultExport: (_req, _res, next) => next() });
+  context.mock.module(process.env.MC_SERVICE_URL, { namedExports: {
     ProductBuildAuthorityV2DeliveryEvidenceError: class extends Error {},
     currentProductBuildAuthorityV2DeliveryEvidenceResponseV1: async () => { throw new Error("not used"); },
     productBuildAuthorityV2LoadedBuildStartupStateV1: () => {
@@ -373,7 +373,7 @@ test("production middleware order", async (context) => {
       });
     },
   } });
-  context.mock.module("http", { exports: { ...actualHttp,
+  context.mock.module("http", { namedExports: { ...actualHttp,
     createServer: (...args) => {
       const server = actualHttp.createServer(...args);
       capturedServer = server;
@@ -541,12 +541,12 @@ test("production startup uses exact endpoint operational auth before general aut
 });
 
 test("internal-production routes preserve auth, delivery-rate, parser, and router order", async () => {
-  const indexSource = await import("node:fs/promises").then(({ readFile }) => readFile(new URL("../index.ts", import.meta.url), "utf8"));
-  const operationalAuthMount = indexSource.indexOf("app.use(productBuildAuthorityV2OperationalAuth);");
-  const authMount = indexSource.indexOf("app.use('/api', productBuildAuthorityV2GeneralAuth);");
-  const deliveryRateMount = indexSource.indexOf("app.use(productBuildAuthorityV2DeliveryEvidenceRateLimitExact);");
-  const parserMount = indexSource.indexOf("app.use(jsonBodyParser);");
-  const routerMount = indexSource.indexOf('app.use("/api", setfarmOperationalRouter);');
+  const appSource = await import("node:fs/promises").then(({ readFile }) => readFile(new URL("../app.ts", import.meta.url), "utf8"));
+  const operationalAuthMount = appSource.indexOf("app.use(productBuildAuthorityV2OperationalAuth);");
+  const authMount = appSource.indexOf("app.use('/api', productBuildAuthorityV2GeneralAuth);");
+  const deliveryRateMount = appSource.indexOf("app.use(productBuildAuthorityV2DeliveryEvidenceRateLimitExact);");
+  const parserMount = appSource.indexOf("app.use(jsonBodyParser);");
+  const routerMount = appSource.indexOf('app.use("/api", setfarmOperationalRouter);');
   assert.notEqual(operationalAuthMount, -1);
   assert.notEqual(authMount, -1);
   assert.notEqual(deliveryRateMount, -1);
@@ -595,7 +595,7 @@ function rawRequest(port, method, path, headers = {}, body = "") {
 }
 
 test("delivery endpoint production boundary", async (context) => {
-  context.mock.module(process.env.MC_AUTH_URL, { exports: {
+  context.mock.module(process.env.MC_AUTH_URL, { namedExports: {
     authMiddleware: (req, res, next) => {
       authCalls += 1;
       if (req.headers["x-mc-token"] !== "private-test-token") {
@@ -605,10 +605,8 @@ test("delivery endpoint production boundary", async (context) => {
       next();
     },
   } });
-  context.mock.module(process.env.MC_LIVE_FEED_URL, { exports: {
-    default: (_req, _res, next) => next(),
-  } });
-  context.mock.module(process.env.MC_SERVICE_URL, { exports: {
+  context.mock.module(process.env.MC_LIVE_FEED_URL, { defaultExport: (_req, _res, next) => next() });
+  context.mock.module(process.env.MC_SERVICE_URL, { namedExports: {
     ProductBuildAuthorityV2DeliveryEvidenceError: class extends Error {},
     currentProductBuildAuthorityV2DeliveryEvidenceResponseV1: () => {
       evidenceReads += 1;
@@ -622,7 +620,7 @@ test("delivery endpoint production boundary", async (context) => {
       });
     },
   } });
-  context.mock.module("http", { exports: { ...actualHttp,
+  context.mock.module("http", { namedExports: { ...actualHttp,
     createServer: (...args) => {
       const server = actualHttp.createServer(...args);
       capturedServer = server;
