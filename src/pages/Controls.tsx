@@ -34,6 +34,9 @@ export function Controls() {
   const alive=useRef(false);
   const selectedId=selectedEvidence.boundJobId;
   const receipt=selectedEvidence.receipt;
+  const canCancel=receipt!==null&&!busy&&!receipt.cancelRequested
+    &&['accepted','starting','running','cancelling'].includes(receipt.state)
+    &&!isControlReceiptTerminalV1(receipt);
   const selectedRef=useRef(selectedId);
   const selectionEpoch=useRef(0);
   const lifetimeEpoch=useRef(0);
@@ -154,7 +157,7 @@ export function Controls() {
     } catch { setError('Pending request could not be cleared. Its original key remains in use.'); }
   }
   async function cancel(){
-    if(!receipt||busy||isControlReceiptTerminalV1(receipt))return;
+    if(!receipt||!canCancel)return;
     const jobId=receipt.jobId;
     const scope=selectionEpoch.current;
     const lifetime=lifetimeEpoch.current;
@@ -172,6 +175,13 @@ export function Controls() {
   const selected=globalEnvelope?.selectionHash;
   const stale=receipt&&selected&&receipt.selectionHash!==selected;
   const current=selectedId===null ? globalEnvelope?.evidence : selectedEvidence.status==='ready' ? selectedEvidence.envelope?.evidence : undefined;
+  // Only the selected receipt can supersede its matching list projection without regressing revision.
+  const recentJobs=jobs.map(job=>receipt&&receipt.jobId===selectedId&&job.jobId===receipt.jobId
+    &&job.kind===receipt.kind&&job.selectionHash===receipt.selectionHash
+    &&job.sourceSha===receipt.sourceSha&&job.mcSourceSha===receipt.mcSourceSha
+    &&job.mcBuildHash===receipt.mcBuildHash&&job.suiteHash===receipt.suiteHash
+    &&job.requestedAt===receipt.requestedAt&&job.plannedCases===receipt.plannedCases
+    &&receipt.revision>=job.revision?receipt:job);
   return <main className="controls">
     <header className="controls__header">
       <div><p className="controls__eyebrow">Operator workspace</p><h1>Controls</h1><p>Selected evidence, manual checks, and owned job progress.</p></div>
@@ -190,12 +200,12 @@ export function Controls() {
       <HealthChecks activation={current?.activation??noReport}/>
     </div>
     <section className="controls__panel controls__manual" aria-label="Manual check"><h2>Manual check</h2><label htmlFor="control-kind">Check</label><select id="control-kind" value={kind} onChange={e=>{const next=e.target.value as ControlJobKindV1;session.setKind(next);setKind(next);setConfirmed(false);}}>{Object.entries(label).map(([value,text])=><option key={value} value={value}>{text}</option>)}</select><ManualTestRequirements kind={kind}/>
-      {pending&&<p className="controls__notice">A launch request is pending for {label[pending.kind]}. Retry keeps its exact selection and idempotency key.</p>}
+      {pending&&<p className="controls__notice">{session.pendingJobId?<>The {label[pending.kind]} launch was accepted as job <code>{session.pendingJobId}</code>. Its final outcome is unconfirmed. Retry with the same idempotency key reconnects to this job.</>:<>A launch request is pending for {label[pending.kind]}. Retry keeps its exact selection and idempotency key.</>}</p>}
       <label className="controls__confirm"><input type="checkbox" checked={confirmed} onChange={e=>{if(e.target.checked)session.confirm();else session.clearConfirmation();setConfirmed(session.isConfirmed());}}/> I confirm this check, the selected installation, and the visible budget.</label>
-      <div className="controls__actions"><button type="button" disabled={!selected||!confirmed||!session.isConfirmed()||busy||!!pending&&(pending.kind!==kind||pending.expectedSelectionHash!==selected)} onClick={()=>void launch()}>{busy?'Working…':pending?'Retry same request':'Start manual check'}</button>{pending&&<button type="button" className="controls__secondary" disabled={busy} onClick={prepareNew}>Prepare a new check</button>}{receipt&&!isControlReceiptTerminalV1(receipt)&&<button type="button" className="controls__secondary" disabled={busy} onClick={()=>void cancel()}>Request cancellation</button>}</div>
+      <div className="controls__actions"><button type="button" disabled={!selected||!confirmed||!session.isConfirmed()||busy||!!pending&&(pending.kind!==kind||pending.expectedSelectionHash!==selected)} onClick={()=>void launch()}>{busy?'Working…':pending?'Retry same request':'Start manual check'}</button>{pending&&<button type="button" className="controls__secondary" disabled={busy} onClick={prepareNew}>Prepare a new check</button>}{receipt&&!isControlReceiptTerminalV1(receipt)&&<button type="button" className="controls__secondary" disabled={!canCancel} onClick={()=>void cancel()}>Request cancellation</button>}</div>
     </section>
     <TestEvidence evaluation={current?.evaluation??noReport} ui={current?.ui??noReport} receipt={receipt}/>
-    <section className="controls__panel" aria-label="Recent jobs"><h2>Recent jobs</h2>{jobs.length?<ul className="controls__jobs">{jobs.map(job=><li key={job.jobId}><button type="button" aria-current={selectedId===job.jobId?'true':undefined} onClick={()=>chooseJob(job.jobId)}><strong>{label[job.kind]}</strong><span>{job.state.replaceAll('_',' ')} · {job.completedCases} of {job.plannedCases}</span><code>{job.jobId}</code></button></li>)}</ul>:<p>No recent receipts available.</p>}</section>
+    <section className="controls__panel" aria-label="Recent jobs"><h2>Recent jobs</h2>{recentJobs.length?<ul className="controls__jobs">{recentJobs.map(job=><li key={job.jobId}><button type="button" aria-current={selectedId===job.jobId?'true':undefined} onClick={()=>chooseJob(job.jobId)}><strong>{label[job.kind]}</strong><span>{job.state.replaceAll('_',' ')} · {job.completedCases} of {job.plannedCases}</span><code>{job.jobId}</code></button></li>)}</ul>:<p>No recent receipts available.</p>}</section>
     {globalEnvelope?.history.length ? <EvidenceHistory history={globalEnvelope.history}/> : null}
   </main>;
 }
