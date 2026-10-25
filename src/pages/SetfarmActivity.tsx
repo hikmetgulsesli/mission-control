@@ -15,7 +15,7 @@ import { ConfirmDialog } from "../components/ConfirmDialog";
 
 export function SetfarmActivity() {
   const navigate = useNavigate();
-  const [filterStatus, setFilterStatus] = useState("");
+  const [filterStatus, setFilterStatus] = useState("all");
   const [filterSearch, setFilterSearch] = useState("");
   const { toast } = useToast();
   const sync = useAppStore(s => s.sync);
@@ -104,17 +104,19 @@ export function SetfarmActivity() {
 
         <div style={{ display: "flex", gap: "8px", marginBottom: "8px", flexWrap: "wrap" }}>
           <input
+            aria-label="Search workflows"
             placeholder="Search project or task..."
             value={filterSearch}
             onChange={e => setFilterSearch(e.target.value)}
             style={{ flex: 1, minWidth: "150px", background: "var(--bg-card)", border: "1px solid var(--border)", color: "var(--text-primary)", padding: "4px 8px", fontSize: "14px", fontFamily: "var(--font)" }}
           />
           <select
+            aria-label="Filter workflow status"
             value={filterStatus}
             onChange={e => setFilterStatus(e.target.value)}
             style={{ background: "var(--bg-card)", border: "1px solid var(--border)", color: "var(--text-primary)", padding: "4px 8px", fontSize: "14px", fontFamily: "var(--font)" }}
           >
-            <option value="">All statuses</option>
+            <option value="all">All statuses</option>
             <option value="running">Running</option>
             <option value="completed">Completed</option>
             <option value="failed">Failed</option>
@@ -145,7 +147,7 @@ export function SetfarmActivity() {
             <button className="btn btn--small" onClick={() => navigate("/setfarm/active")}>ACTIVE RUN</button>
           </div>
           {receipt('pipeline', 'Pipeline')}{receipt('workflows', 'Workflows')}
-          {pipeline !== null ? <PipelineView runs={pipeline} /> : <p>Pipeline unavailable</p>}
+          {pipeline !== null ? <PipelineView runs={pipeline} searchQuery={filterSearch} statusFilter={filterStatus} onStatusFilterChange={setFilterStatus} /> : <p>Pipeline unavailable</p>}
         </div>
         <div className="af-bottom__col af-bottom__col--feed">
           <div className="af-section__title" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
