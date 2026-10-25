@@ -464,12 +464,19 @@ const RunCardInline = memo(function RunCardInline({
   );
 });
 
-export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefresh?: () => void }) {
+export function PipelineView({ runs, onRefresh, searchQuery = "", statusFilter: controlledStatusFilter, onStatusFilterChange }: {
+  runs: PipelineRun[];
+  onRefresh?: () => void;
+  searchQuery?: string;
+  statusFilter?: string;
+  onStatusFilterChange?: (status: string) => void;
+}) {
   const navigate = useNavigate();
   const [expandedRun, setExpandedRun] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [localStatusFilter, setLocalStatusFilter] = useState<string>("all");
+  const statusFilter = controlledStatusFilter ?? localStatusFilter;
   const [stopConfirm, setStopConfirm] = useState<{ runId: string; snapshotHash: string } | null>(null);
   const operationalSnapshots = useOperationalSnapshots((runs || []).map((run) => run.id), 5_000);
 
@@ -548,6 +555,11 @@ export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefre
     }
   }, [selectedStepKey]);
 
+  const handleOpenDetail = useCallback((runId: string) => {
+    navigate(`/setfarm/runs/${runId}`);
+  }, [navigate]);
+
+  const query = searchQuery.trim().toLowerCase();
   const HIDDEN_WORKFLOWS = ["daily-standup"];
   const canonicalStatus = (run: PipelineRun): string | null => {
     const state = operationalSnapshots[run.id];
@@ -556,6 +568,8 @@ export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefre
   const filteredRuns = (runs || [])
     .filter(r => !HIDDEN_WORKFLOWS.includes(r.workflow))
     .filter(r => statusFilter === "all" || canonicalStatus(r) === statusFilter)
+    .filter(r => !query || [r.task, r.workflow, r.id, r.runNumber == null ? "" : `#${r.runNumber}`]
+      .some(value => value.toLowerCase().includes(query)))
     .sort((a, b) => (b.runNumber || 0) - (a.runNumber || 0));
 
   const filterBar = (
@@ -564,7 +578,7 @@ export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefre
         <button
           key={s}
           className={`af-pipeline__filter-btn ${statusFilter === s ? "af-pipeline__filter-btn--active" : ""}`}
-          onClick={() => setStatusFilter(s)}
+          onClick={() => controlledStatusFilter !== undefined ? onStatusFilterChange?.(s) : setLocalStatusFilter(s)}
         >
           {s.toUpperCase()}
           {s !== "all" && <span className="af-pipeline__filter-count">
@@ -610,9 +624,6 @@ export function PipelineView({ runs, onRefresh }: { runs: PipelineRun[]; onRefre
     finally { setActionLoading(null); }
   };
 
-  const handleOpenDetail = useCallback((runId: string) => {
-    navigate(`/setfarm/runs/${runId}`);
-  }, [navigate]);
 
   return (
     <div className="af-pipeline">
