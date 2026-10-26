@@ -13,7 +13,7 @@ function MetricBar({ label, value, max, unit, color, percent }: { label: string;
     <div className="metric-bar">
       <div className="metric-bar__header">
         <span className="metric-bar__label">{label}</span>
-        <span className="metric-bar__value">{known ? `${value}${unit} / ${max}${unit}` : 'Unknown'}{percent != null ? ` · ${percent}%` : ''}</span>
+        <span className="metric-bar__value">{percent !== undefined ? percent === null ? 'Unknown' : `${percent}%` : known ? `${value}${unit} / ${max}${unit}` : 'Unknown'}</span>
       </div>
       <div className="metric-bar__track">
         {pct !== null && <div className="metric-bar__fill" style={{ width: `${pct}%`, background: barColor }} />}
@@ -28,8 +28,9 @@ export function SystemMetricsPanel({ metrics }: Props) {
       <MetricBar label="RAM used" value={metrics.ram.used} max={metrics.ram.total} unit="GB" color="#00ff41" />
       <div className="metric-bar__label">{metrics.ram.source} · total−os.freemem (used)</div>
       <MetricBar label="CPU" value={metrics.cpu.percent} max={100} unit="%" color="#00ffff" />
-      <MetricBar label="DISK" percent={metrics.disk.percent} value={metrics.disk.used} max={metrics.disk.total} unit="GB" color="#ff6600" />
-      <div className="metric-bar__label">{metrics.disk.source} · {metrics.disk.mount ?? metrics.disk.path} · free: {metrics.disk.freeBytes === null ? 'Unknown' : `${metrics.disk.freeBytes} bytes`}</div>
+      <MetricBar label="DISK CAPACITY" percent={metrics.disk.percent} value={metrics.disk.used} max={metrics.disk.total} unit="GiB" color="#ff6600" />
+      <div className="metric-bar__label">Used: {metrics.disk.used === null ? 'Unknown' : `${metrics.disk.used} GiB`} · Available: {metrics.disk.freeBytes === null ? 'Unknown' : `${Math.round(metrics.disk.freeBytes / 1073741824 * 10) / 10} GiB`} · Volume total: {metrics.disk.total === null ? 'Unknown' : `${metrics.disk.total} GiB`}</div>
+      <div className="metric-bar__label">{metrics.disk.source} · {metrics.disk.mount ?? metrics.disk.path}</div>
       <div className="metric-bar">
         <div className="metric-bar__header">
           <span className="metric-bar__label">LOAD</span>
