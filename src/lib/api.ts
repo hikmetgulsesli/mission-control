@@ -187,7 +187,7 @@ async function fetchTelemetry(runId: string): Promise<TelemetryResult> {
   return result ?? telemetryUnavailable(runId, 'invalid_response');
 }
 
-async function fetchApi<T>(path: string, opts?: RequestInit): Promise<T> {
+async function fetchApi<T>(path: string, opts?: RequestInit, errorFromResponse?: (status: number, text: string) => Error): Promise<T> {
   const headers: Record<string, string> = {
     ...(AUTH_TOKEN ? { 'X-MC-Token': AUTH_TOKEN } : {}),
     ...((opts?.headers as Record<string, string>) || {}),
@@ -197,9 +197,36 @@ async function fetchApi<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { ...opts, headers, cache });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`API ${res.status}: ${text}`);
+    throw errorFromResponse ? errorFromResponse(res.status, text) : new Error(`API ${res.status}: ${text}`);
   }
   return res.json();
+}
+
+class AgentSaveError extends Error {}
+
+function agentSaveFailure(status: number, text: string): Error {
+  let code: unknown;
+  try { code = JSON.parse(text)?.error; } catch {}
+  const message = status === 409 && code === 'AGENT_SETTINGS_UNSUPPORTED'
+    ? 'Agent settings cannot be changed in this installation.'
+    : status === 502 && code === 'AGENT_MODEL_SAVE_FAILED'
+    ? 'Model update could not be confirmed. Profile changes may already be saved. Reload before retrying.'
+    : status === 500 && code === 'AGENT_PROFILE_SAVE_FAILED'
+    ? 'Profile update could not be confirmed. The model update was not attempted. Reload before retrying.'
+    : 'Save could not be confirmed. Profile changes may already be saved. Reload before retrying.';
+  return new AgentSaveError(message);
+}
+
+async function fetchAgentSave(id: string, changes: { name?: string; role?: string; model?: string; description?: string }): Promise<void> {
+  try {
+    const receipt = await fetchApi<{ success?: unknown; id?: unknown }>(`/api/agents/${encodeURIComponent(id)}`, {
+      method: 'PATCH', headers: CT_JSON, body: JSON.stringify(changes),
+    }, agentSaveFailure);
+    if (receipt?.success !== true || receipt.id !== id) throw agentSaveFailure(0, '');
+  } catch (error) {
+    if (error instanceof AgentSaveError) throw error;
+    throw agentSaveFailure(0, '');
+  }
 }
 
 async function fetchOperationalSnapshot(runId: string): Promise<OperationalSnapshotFetchResult> {
@@ -442,7 +469,7 @@ export const api = {
   scrapeHistory: () => fetchApi<any[]>('/api/scrape/history'),
   scrape: (data: { url: string; adaptor?: string; format?: string }) => fetchApi<any>('/api/scrape', { method: 'POST', headers: CT_JSON, body: JSON.stringify(data) }),
   // Agent update
-  updateAgent: (id: string, data: any) => fetchApi<any>(`/api/agents/${id}`, { method: 'PATCH', headers: CT_JSON, body: JSON.stringify(data) }),
+  updateAgent: fetchAgentSave,
 
   // PRD Generator
   prdGithubImport: (url: string) =>

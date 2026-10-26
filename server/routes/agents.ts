@@ -119,10 +119,15 @@ router.get('/agents/:id', async (req, res) => {
 
 // PATCH /api/agents/:id — Update agent settings
 router.patch('/agents/:id', async (req, res) => {
+  let profileWriteAttempted = false;
   try {
     const { id } = req.params;
     if (!REAL_AGENTS.includes(id)) {
       res.status(404).json({ error: 'Agent not found' });
+      return;
+    }
+    if (freshMissionControlSelectedV1()) {
+      res.status(409).json({ success: false, error: 'AGENT_SETTINGS_UNSUPPORTED' });
       return;
     }
 
@@ -134,6 +139,7 @@ router.patch('/agents/:id', async (req, res) => {
     if (name) profiles[id].name = name;
     if (role) profiles[id].role = role;
     if (description !== undefined) profiles[id].description = description;
+    profileWriteAttempted = true;
     saveProfiles(profiles);
 
     // Update model via openclaw CLI if changed
@@ -166,20 +172,20 @@ router.patch('/agents/:id', async (req, res) => {
           fullModel
         ]);
 
-        console.log(`[Agent] Model change: ${id} → ${fullModel} (index ${agentIndex})`);
-      } catch (err) {
-        console.error(`[Agent] Failed to update model for ${id}:`, err);
-        // Don't fail the whole request if model update fails
+      } catch {
+        res.status(502).json({ success: false, error: 'AGENT_MODEL_SAVE_FAILED', profileUpdate: 'may_have_saved', modelUpdate: 'unconfirmed' });
+        return;
       }
     }
 
-    // Invalidate caches
-    setCache('profiles', null as any, 0);
-    setCache('agents', null as any, 0);
-
-    res.json({ success: true, id, changes: { name, role, model, description } });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.json({ success: true, id });
+  } catch {
+    res.status(500).json({ success: false, error: 'AGENT_PROFILE_SAVE_FAILED', profileUpdate: 'unconfirmed', modelUpdate: 'not_attempted' });
+  } finally {
+    if (profileWriteAttempted) {
+      setCache('profiles', null as any, 0);
+      setCache('agents', null as any, 0);
+    }
   }
 });
 

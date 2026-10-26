@@ -55,16 +55,8 @@ export function Agents() {
     setLiveAgent(liveAgent === agent.id ? null : agent.id);
   };
 
-  const handleSave = async (agentId: string, changes: Partial<Agent>) => {
-    const res = await fetch(`/api/agents/${agentId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(changes),
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(text || `HTTP ${res.status}`);
-    }
+  const handleSave = async (agentId: string, changes: { name?: string; role?: string; model?: string; description?: string }) => {
+    await api.updateAgent(agentId, changes);
     refresh();
   };
 
