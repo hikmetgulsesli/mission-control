@@ -1131,7 +1131,7 @@ async function behavior(id, { page, context, state, loaded, capture, open, getPa
             }, { scope, rowSelector, labelSelector, valueSelector, expected }), 'UI_METRIC_VALUES_MISMATCH');
         };
         await loaded('/ops');
-        await checkValues('.ops-page .system-metrics', ':scope > .metric-bar > .metric-bar__header', ':scope > .metric-bar__label', ':scope > .metric-bar__value', [['RAM used', '0GB / 16GB'], ['CPU', 'Unknown'], ['DISK', '0GB / 100GB · 0%'], ['LOAD', '0.00']]);
+        await checkValues('.ops-page .system-metrics', ':scope > .metric-bar > .metric-bar__header', ':scope > .metric-bar__label', ':scope > .metric-bar__value', [['RAM used', '0GB / 16GB'], ['CPU', 'Unknown'], ['DISK CAPACITY', '0%'], ['LOAD', '0.00']]);
         await loaded('/costs');
         await checkValues('.costs-page > .stat-cards', ':scope > .stat-card', ':scope > .stat-card__label', ':scope > .stat-card__value', [['TODAY', '$0.00'], ['ALL TIME', '$0.00'], ['PROJECTED/MO', '$0'], ['SUBAGENT TODAY', '$0.00']]);
         await loaded('/performance');

@@ -21,7 +21,7 @@
 
 ### Task 1: Separate capacity from byte quantities
 
-**Files:** Modify `src/components/SystemMetrics.tsx` and `tests/system-status-render.test.tsx`; adjust only the related expectation in `tests/ui-regression-contract.test.ts` if required. The spec/plan document the causal live finding and file map.
+**Files:** Modify `src/components/SystemMetrics.tsx` and `tests/system-status-render.test.tsx`; adjust only the disk label/value pair in `scripts/ui-regression-fixtures.mjs` and its matching mock pair in `tests/ui-regression-contract.test.ts`. The spec/plan document the causal live finding and file map.
 
 **Interfaces:** Consume the unchanged `SystemMetrics` disk fields `percent`, `used`, `total`, `freeBytes`, `source`, `mount`, `path`, `observedAt`; preserve the exported `SystemMetricsPanel({metrics})` signature. Produce display copy only, no API/type change.
 
@@ -39,5 +39,5 @@ assert.doesNotMatch(html, /40\s*GiB\s*\/\s*100\s*GiB/);
 
 - [ ] Step 2: Run `node --import tsx --test tests/system-status-render.test.tsx` and retain the causal failing output in this plan's ignored workspace. No network, browser or services are needed.
 - [ ] Step 3: Make the smallest component change that separates capacity from the three byte labels. Use existing bar styling and raw `metrics.disk.percent`; format available as `Math.round(freeBytes / 1073741824 * 10) / 10` only when non-null. Keep each unknown value explicit. Do not introduce a ratio-derived fallback for disk capacity or alter RAM/CPU/load semantics.
-- [ ] Step 4: Rerun the focused render tests and `node --import tsx --test --test-name-pattern='zero|metric|unknown|APFS' tests/ui-regression-contract.test.ts`. Inspect whether the existing explicit zero-disk text expectation needs its smallest corresponding update. Run `npx tsc --noEmit` for the browser project if supported by its current tsconfig. Report exact commands/results and do not launch a runtime or full suite.
+- [ ] Step 4: Before changing the production fixture, update the contract test mock pair to `['DISK CAPACITY', '0%']` and retain its causal RED against the old fixture expectation. Change only the production fixture's disk label/value pair to match. Preserve strict selector/matching/failure behavior. Rerun the focused render tests and `node --import tsx --test --test-name-pattern='^metrics behavior distinguishes exact scoped zero and unavailable values$' tests/ui-regression-contract.test.ts`. Run `npx tsc --noEmit` for the browser project if supported by its current tsconfig. Report exact commands/results and do not launch a runtime or full suite.
 - [ ] Step 5: Self-review the full diff, retain RED/GREEN stdout/stderr/exits and write `task-1-report.md` inside this plan's ignored workspace. Root obtains independent task review and whole-branch review, performs the required stock build and owns all commits/PR delivery. Workers do not stage or commit.

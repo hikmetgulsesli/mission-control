@@ -1292,7 +1292,7 @@ test('metrics behavior distinguishes exact scoped zero and unavailable values', 
         const visited: string[] = [];
         const scopes: Record<string, string> = { '/ops': '.ops-page .system-metrics', '/costs': '.costs-page > .stat-cards', '/performance': '.performance-page > .stat-cards' };
         const pairs: Record<string, string[][]> = {
-            '/ops': [['RAM used', '0GB / 16GB'], ['CPU', 'Unknown'], ['DISK', '0GB / 100GB · 0%'], ['LOAD', '0.00']],
+            '/ops': [['RAM used', '0GB / 16GB'], ['CPU', 'Unknown'], ['DISK CAPACITY', '0%'], ['LOAD', '0.00']],
             '/costs': [['TODAY', '$0.00'], ['ALL TIME', '$0.00'], ['PROJECTED/MO', '$0'], ['SUBAGENT TODAY', '$0.00']],
             '/performance': [['COST TODAY', 'Unavailable'], ['COST ALL TIME', '$0.00'], ['AGENTS', '0'], ['TOTAL SESSIONS', '0']],
         };

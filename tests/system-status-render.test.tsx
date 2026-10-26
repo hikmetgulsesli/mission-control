@@ -28,6 +28,10 @@ test('real panel and status bar render unknown values without fake zero or NaN',
   const metrics = fixture(); const StatusBar = statusBar(metrics);
   const html = renderToStaticMarkup(<><SystemMetricsPanel metrics={metrics}/><StatusBar/></>);
   assert.match(html,/unknown/i); assert.doesNotMatch(html,/NaN|null|undefined|0%|0GB/);
+  assert.match(html, /DISK CAPACITY<\/span><span class="metric-bar__value">Unknown/);
+  assert.match(html, /Used: Unknown/);
+  assert.match(html, /Available: Unknown/);
+  assert.match(html, /Volume total: Unknown/);
   assert.match(html,/node:os/); assert.match(html,/total.*freemem/); assert.match(html,/used/i);
   assert.doesNotMatch(html,/pressure/i);
 });
@@ -38,6 +42,45 @@ test('APFS capacity drives the visible disk percent and bar, preserving true CPU
   const StatusBar = statusBar(metrics);
   const html = renderToStaticMarkup(<><SystemMetricsPanel metrics={metrics}/><StatusBar/></>);
   assert.match(html,/95%/); assert.match(html,/width:95%/); assert.match(html,/CPU 0%/); assert.match(html,/\/Data/); assert.match(html,/df/);
+  assert.match(html, /DISK CAPACITY<\/span><span class="metric-bar__value">95%<\/span>/);
+  assert.match(html, /width:95%;background:#ff0040/);
+  assert.match(html, /Used: 40 GiB/);
+  assert.match(html, /Available: 5 GiB/);
+  assert.match(html, /Volume total: 100 GiB/);
+  assert.doesNotMatch(html, /40\s*(?:GB|GiB)\s*\/\s*100\s*(?:GB|GiB)/);
+  assert.match(html, /disk 2026-10-19T00:00:00Z/);
+});
+
+test('unknown disk capacity stays unknown when byte quantities are known', () => {
+  const metrics = fixture();
+  Object.assign(metrics.disk, {total:100,used:40,freeBytes:5*1073741824,status:'available'});
+  const html = renderToStaticMarkup(<SystemMetricsPanel metrics={metrics}/>);
+  assert.match(html, /DISK CAPACITY<\/span><span class="metric-bar__value">Unknown/);
+  assert.doesNotMatch(html, /metric-bar__fill/);
+  assert.match(html, /Used: 40 GiB/);
+  assert.match(html, /Available: 5 GiB/);
+  assert.match(html, /Volume total: 100 GiB/);
+  assert.match(html, /df · \/work/);
+});
+
+test('observed zero disk capacity and byte quantities remain zero', () => {
+  const metrics = fixture();
+  Object.assign(metrics.disk, {total:0,used:0,percent:0,freeBytes:0,status:'available'});
+  const html = renderToStaticMarkup(<SystemMetricsPanel metrics={metrics}/>);
+  assert.match(html, /DISK CAPACITY<\/span><span class="metric-bar__value">0%<\/span>/);
+  assert.match(html, /width:0%/);
+  assert.match(html, /Used: 0 GiB/);
+  assert.match(html, /Available: 0 GiB/);
+  assert.match(html, /Volume total: 0 GiB/);
+});
+
+test('available disk bytes are presented as rounded GiB independently of missing used and total', () => {
+  const metrics = fixture();
+  metrics.disk.freeBytes = 5637144576;
+  const html = renderToStaticMarkup(<SystemMetricsPanel metrics={metrics}/>);
+  assert.match(html, /Used: Unknown/);
+  assert.match(html, /Available: 5\.3 GiB/);
+  assert.match(html, /Volume total: Unknown/);
 });
 
 
