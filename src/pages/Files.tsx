@@ -46,7 +46,35 @@ export function Files() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
 
   // Unsaved changes confirmation
-  const [unsavedConfirm, setUnsavedConfirm] = useState<{ action: () => void } | null>(null);
+  const [unsavedConfirm, setUnsavedConfirm] = useState<{ action: () => void | Promise<void> } | null>(null);
+  const mountedRef = useRef(false);
+  // Identity, rather than path equality, distinguishes A → B → A selections.
+  const selectionRef = useRef(0);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      selectionRef.current++;
+    };
+  }, []);
+
+  const ownsSelection = (owner: number) => mountedRef.current && selectionRef.current === owner;
+
+  const replaceSelection = (path: string | null, keepEdit = false) => {
+    const owner = ++selectionRef.current;
+    setSelectedFile(path);
+    setFileData(null);
+    setFileError(null);
+    setFileLoading(false);
+    setSaving(false);
+    if (!keepEdit) {
+      setEditMode(false);
+      setEditContent("");
+      setOriginalContent("");
+    }
+    return owner;
+  };
 
   const { data: listing, error: listError, loading: listLoading, refresh } = usePolling(() => api.filesList(currentPath), 30000, currentPath);
 
@@ -54,41 +82,44 @@ export function Files() {
     if (!currentPath && listing?.path) setCurrentPath(listing.path);
   }, [currentPath, listing?.path]);
 
-  const confirmIfUnsaved = (action: () => void) => {
+  const confirmIfUnsaved = (action: () => void | Promise<void>) => {
     if (editMode) {
       setUnsavedConfirm({ action });
       return;
     }
-    action();
+    return action();
   };
 
   const handleNavigate = (path: string) => {
     confirmIfUnsaved(() => {
-      setEditMode(false);
+      replaceSelection(null);
       setCurrentPath(path);
-      setSelectedFile(null);
-      setFileData(null);
-      setFileError(null);
     });
   };
 
-  const handleSelectFile = async (path: string) => {
+  const handleSelectFile = async (path: string, editIntent = false) => {
     const doSelect = async () => {
-      setEditMode(false);
-      setSelectedFile(path);
+      if (!mountedRef.current) return;
+      const owner = replaceSelection(path);
       setFileLoading(true);
-      setFileError(null);
       try {
         const data = await api.filesRead(path);
+        if (!ownsSelection(owner)) return;
         setFileData(data);
+        if (editIntent) {
+          setOriginalContent(data.content);
+          setEditContent(data.content);
+          setEditMode(true);
+        }
       } catch (err: any) {
+        if (!ownsSelection(owner)) return;
         setFileError(err.message || "Failed to read file");
         setFileData(null);
       } finally {
-        setFileLoading(false);
+        if (ownsSelection(owner)) setFileLoading(false);
       }
     };
-    confirmIfUnsaved(doSelect);
+    return confirmIfUnsaved(doSelect);
   };
 
   // Edit handlers
@@ -101,18 +132,22 @@ export function Files() {
 
   const handleSave = async () => {
     if (!fileData || !selectedFile) return;
+    const owner = selectionRef.current;
+    const path = selectedFile;
     setSaving(true);
     try {
-      await api.filesWrite(selectedFile, editContent);
-      const updated = await api.filesRead(selectedFile);
+      await api.filesWrite(path, editContent);
+      if (!ownsSelection(owner)) return;
+      const updated = await api.filesRead(path);
+      if (!ownsSelection(owner)) return;
       setFileData(updated);
       setOriginalContent(updated.content);
       setEditMode(false);
       refresh();
     } catch (err: any) {
-      toast("Save failed: " + (err.message || "Unknown error"), "error");
+      if (mountedRef.current) toast("Save failed: " + (err.message || "Unknown error"), "error");
     } finally {
-      setSaving(false);
+      if (ownsSelection(owner)) setSaving(false);
     }
   };
 
@@ -150,7 +185,7 @@ export function Files() {
     if (t.isDir) {
       return [
         { label: "Open", icon: ">", action: () => handleNavigate(t.path + "/") },
-        { label: "New File", icon: "+", action: () => { setCurrentPath(t.path + "/"); openDialog("newFile", t.path + "/"); } },
+        { label: "New File", icon: "+", action: () => confirmIfUnsaved(() => { replaceSelection(null); setCurrentPath(t.path + "/"); openDialog("newFile", t.path + "/"); }) },
         { label: "New Directory", icon: ">", action: () => openDialog("newDir", t.path + "/") },
         { label: "Upload", icon: "^", action: () => openDialog("upload", t.path + "/") },
         { label: "Rename", icon: "R", action: () => { setDialog({ type: "rename", path: t.path, name: t.name }); setDialogInput(t.name); } },
@@ -159,7 +194,7 @@ export function Files() {
     }
 
     return [
-      { label: "Edit", icon: "E", action: () => { handleSelectFile(t.path).then(() => setTimeout(handleStartEdit, 100)); } },
+      { label: "Edit", icon: "E", action: () => handleSelectFile(t.path, true) },
       { label: "Rename", icon: "R", action: () => { setDialog({ type: "rename", path: t.path, name: t.name }); setDialogInput(t.name); } },
       { label: "Download", icon: "D", action: () => window.open("/api/files/download?path=" + encodeURIComponent(t.path), "_blank") },
       { label: "Delete", icon: "X", action: () => setDialog({ type: "delete", path: t.path, name: t.name, isDir: false }), danger: true },
@@ -185,62 +220,71 @@ export function Files() {
   // Action handlers
   const handleDelete = async () => {
     if (!dialog || dialog.type !== "delete") return;
+    const owner = selectionRef.current;
     setDialogLoading(true);
     setDialogError("");
     try {
       await api.filesDelete(dialog.path);
-      if (selectedFile === dialog.path) {
-        setSelectedFile(null);
-        setFileData(null);
-        setEditMode(false);
+      if (!mountedRef.current) return;
+      if (ownsSelection(owner) && selectedFile === dialog.path) {
+        replaceSelection(null);
       }
       refresh();
       closeDialog();
     } catch (err: any) {
-      setDialogError(err.message || "Delete failed");
+      if (mountedRef.current) setDialogError(err.message || "Delete failed");
     } finally {
-      setDialogLoading(false);
+      if (mountedRef.current) setDialogLoading(false);
     }
   };
 
   const handleRename = async () => {
     if (!dialog || dialog.type !== "rename") return;
     if (!dialogInput.trim()) { setDialogError("Name cannot be empty"); return; }
+    const owner = selectionRef.current;
+    let readOwner: number | undefined;
     setDialogLoading(true);
     setDialogError("");
     try {
       const dir = dialog.path.substring(0, dialog.path.lastIndexOf("/"));
       const newPath = dir + "/" + dialogInput.trim();
       await api.filesRename(dialog.path, newPath);
-      if (selectedFile === dialog.path) {
-        setSelectedFile(newPath);
+      if (!mountedRef.current) return;
+      if (ownsSelection(owner) && selectedFile === dialog.path) {
+        readOwner = replaceSelection(newPath, true);
+        setFileLoading(true);
         const data = await api.filesRead(newPath);
-        setFileData(data);
+        if (ownsSelection(readOwner)) setFileData(data);
       }
+      if (!mountedRef.current) return;
       refresh();
       closeDialog();
     } catch (err: any) {
-      setDialogError(err.message || "Rename failed");
+      if (mountedRef.current) setDialogError(err.message || "Rename failed");
     } finally {
-      setDialogLoading(false);
+      if (readOwner !== undefined && ownsSelection(readOwner)) setFileLoading(false);
+      if (mountedRef.current) setDialogLoading(false);
     }
   };
 
   const handleNewFile = async () => {
     if (!dialog || dialog.type !== "newFile") return;
     if (!dialogInput.trim()) { setDialogError("File name cannot be empty"); return; }
+    const owner = selectionRef.current;
     setDialogLoading(true);
     setDialogError("");
     try {
       const filePath = dialog.dir.endsWith("/") ? dialog.dir + dialogInput.trim() : dialog.dir + "/" + dialogInput.trim();
       await api.filesWrite(filePath, "");
+      if (!mountedRef.current) return;
       refresh();
       closeDialog();
-      await handleSelectFile(filePath);
-      setTimeout(handleStartEdit, 200);
+      if (ownsSelection(owner)) await handleSelectFile(filePath, true);
     } catch (err: any) {
-      setDialogError(err.message || "File creation failed");
-      setDialogLoading(false);
+      if (mountedRef.current) {
+        setDialogError(err.message || "File creation failed");
+        setDialogLoading(false);
+      }
     }
   };
 
