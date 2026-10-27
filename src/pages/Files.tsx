@@ -30,6 +30,7 @@ export function Files() {
   const [editMode, setEditMode] = useState(false);
   const [editContent, setEditContent] = useState("");
   const [originalContent, setOriginalContent] = useState("");
+  const [baselineKnown, setBaselineKnown] = useState(true);
   const [saving, setSaving] = useState(false);
 
   // Context menu
@@ -76,6 +77,7 @@ export function Files() {
       setEditMode(false);
       setEditContent("");
       setOriginalContent("");
+      setBaselineKnown(true);
     }
     return owner;
   };
@@ -111,10 +113,11 @@ export function Files() {
         const data = await api.filesRead(path);
         if (!ownsSelection(owner)) return;
         setFileData(data);
+        setOriginalContent(data.content);
+        setBaselineKnown(true);
         if (editIntent) {
           editRef.current.revision++;
           editRef.current.active = true;
-          setOriginalContent(data.content);
           setEditContent(data.content);
           setEditMode(true);
         }
@@ -150,14 +153,19 @@ export function Files() {
     setSaving(true);
     try {
       await api.filesWrite(path, editContent);
-      if (!ownsDraft()) return;
+      if (!ownsSave()) return;
+      // A confirmed write invalidates the old baseline until its readback settles.
+      setBaselineKnown(false);
       const updated = await api.filesRead(path);
-      if (!ownsDraft()) return;
+      if (!ownsSave()) return;
       setFileData(updated);
       setOriginalContent(updated.content);
-      editRef.current.revision++;
-      editRef.current.active = false;
-      setEditMode(false);
+      setBaselineKnown(true);
+      if (ownsDraft()) {
+        editRef.current.revision++;
+        editRef.current.active = false;
+        setEditMode(false);
+      }
       refresh();
     } catch (err: any) {
       if (mountedRef.current) toast("Save failed: " + (err.message || "Unknown error"), "error");
@@ -279,7 +287,11 @@ export function Files() {
         readOwner = replaceSelection(newPath, true);
         setFileLoading(true);
         const data = await api.filesRead(newPath);
-        if (ownsSelection(readOwner)) setFileData(data);
+        if (ownsSelection(readOwner)) {
+          setFileData(data);
+          setOriginalContent(data.content);
+          setBaselineKnown(true);
+        }
       }
       if (!mountedRef.current) return;
       refresh();
@@ -369,7 +381,7 @@ export function Files() {
     path: "/" + pathParts.slice(0, i + 1).join("/") + "/",
   }));
 
-  const hasChanges = editContent !== originalContent;
+  const hasChanges = !baselineKnown || editContent !== originalContent;
 
   return (
     <div className="files-page">

@@ -49,7 +49,8 @@ for (const phase of ['write', 'readback']) test(`save A ${phase} completion cann
   if (phase === 'write') { h.request('filesWrite', '/A').resolve({}); await flush(); }
   const readback = h.calls.filter(c => c.method === 'filesRead' && c.args[0] === '/A')[1]; if (readback) readback.result.resolve(file('/A', 'A saved'));
   await saved; await flush(); assert.equal(h.tree().selectedFile, '/B'); assert.equal(h.viewer().file.content, 'B text'); assert.equal(h.viewer().editMode, true); assert.equal(h.viewer().editContent, 'B draft');
-  assert.equal(h.calls.filter(c => c.method === 'filesWrite').length, 1); assert.equal(h.toasts.length, 0); h.unmount();
+  assert.equal(h.calls.filter(c => c.method === 'filesWrite').length, 1); assert.equal(h.toasts.length, 0);
+  h.viewer().onUndo(); assert.equal(h.viewer().editContent, 'B text'); assert.equal(h.viewer().hasChanges, false); h.unmount();
 });
 test('current save retains captured write, accepts readback, ends editing; undo/cancel/download remain', async () => {
   const h = filesHarness(); await select(h, '/A', 'initial'); h.viewer().onStartEdit(); h.viewer().onEditChange('draft'); h.viewer().onUndo(); assert.equal(h.viewer().editContent, 'initial');
@@ -144,12 +145,24 @@ for (const phase of ['write', 'readback']) {
       assert.equal(h.tree().selectedFile, '/A');
       assert.equal(h.viewer().editMode, true, 'later edit session stays open');
       assert.equal(h.viewer().editContent, expectedDraft);
-      assert.equal(h.viewer().file.content, 'initial', 'obsolete readback is not accepted');
       assert.equal(h.viewer().saving, false, 'completed save settles despite losing edit ownership');
-      assert.equal(h.viewer().hasChanges, change !== 'undo');
-      assert.equal(h.calls.filter(c => c.method === 'filesRead').length, phase === 'readback' ? 2 : 1);
+      assert.equal(h.viewer().hasChanges, true, 'preserved text differs from the confirmed saved baseline');
+      assert.equal(h.viewer().file.content, 'submitted', 'current save reconciles persisted content without replacing the draft');
+      assert.equal(h.calls.filter(c => c.method === 'filesRead').length, 2);
       assert.deepEqual(h.calls.filter(c => c.method === 'filesWrite').map(c => c.args), [['/A', 'submitted']]);
       assert.deepEqual(h.toasts, []);
+      if (change === 'undo') {
+        const explicitSave = h.viewer().onSave();
+        assert.deepEqual(h.calls.filter(c => c.method === 'filesWrite').map(c => c.args), [['/A', 'submitted'], ['/A', 'initial']]);
+        h.request('filesWrite', '/A', 1).resolve({ success: true });
+        await flush();
+        h.request('filesRead', '/A', 2).resolve(file('/A', 'initial'));
+        await explicitSave;
+        assert.equal(h.viewer().file.content, 'initial');
+        assert.equal(h.viewer().editMode, false);
+        assert.equal(h.viewer().saving, false);
+        assert.equal(h.viewer().hasChanges, false);
+      }
       h.unmount();
     });
   }
@@ -262,5 +275,78 @@ test('delete submitted before a new same-file edit session cannot clear its late
   assert.equal(h.viewer().saving, false);
   assert.deepEqual(h.calls.map(c => [c.method, ...c.args]), [['filesRead', '/A'], ['filesDelete', '/A']]);
   assert.equal(h.refreshes(), 1);
+  h.unmount();
+});
+
+for (const phase of ['write', 'readback']) test(`reverted draft remains saveable after ${phase}-pending save readback refusal`, async () => {
+  const h = filesHarness();
+  await select(h, '/A', 'initial');
+  h.viewer().onStartEdit();
+  h.viewer().onEditChange('submitted');
+  const saved = h.viewer().onSave();
+  if (phase === 'readback') {
+    h.request('filesWrite', '/A').resolve({ success: true });
+    await flush();
+  }
+  h.viewer().onUndo();
+  if (phase === 'write') {
+    h.request('filesWrite', '/A').resolve({ success: true });
+    await flush();
+  }
+  const refusedRead = h.calls.filter(c => c.method === 'filesRead')[1];
+  if (refusedRead) refusedRead.result.reject(new Error('Readback refused'));
+  await saved;
+  assert.equal(h.tree().selectedFile, '/A');
+  assert.equal(h.viewer().editMode, true);
+  assert.equal(h.viewer().editContent, 'initial');
+  assert.equal(h.viewer().saving, false);
+  assert.equal(h.viewer().hasChanges, true, 'unknown persisted baseline cannot falsely disable explicit Save');
+  assert.deepEqual(h.calls.filter(c => c.method === 'filesWrite').map(c => c.args), [['/A', 'submitted']]);
+  assert.equal(h.calls.filter(c => c.method === 'filesRead').length, 2);
+  assert.deepEqual(h.toasts, [['Save failed: Readback refused', 'error']]);
+  const explicitSave = h.viewer().onSave();
+  assert.deepEqual(h.calls.filter(c => c.method === 'filesWrite').map(c => c.args), [['/A', 'submitted'], ['/A', 'initial']]);
+  h.request('filesWrite', '/A', 1).resolve({ success: true });
+  await flush();
+  h.request('filesRead', '/A', 2).resolve(file('/A', 'initial'));
+  await explicitSave;
+  assert.equal(h.viewer().file.content, 'initial');
+  assert.equal(h.viewer().editMode, false);
+  assert.equal(h.viewer().hasChanges, false);
+  assert.equal(h.viewer().saving, false);
+  h.unmount();
+});
+
+for (const phase of ['write', 'readback']) test(`older save ${phase} cannot change the latest saved baseline`, async () => {
+  const h = filesHarness();
+  await select(h, '/A', 'initial');
+  h.viewer().onStartEdit();
+  h.viewer().onEditChange('first');
+  const first = h.viewer().onSave();
+  if (phase === 'readback') {
+    h.request('filesWrite', '/A').resolve({ success: true });
+    await flush();
+  }
+  h.viewer().onEditChange('second');
+  const second = h.viewer().onSave();
+  h.request('filesWrite', '/A', 1).resolve({ success: true });
+  await flush();
+  const latestRead = h.calls.filter(c => c.method === 'filesRead').at(-1)!;
+  latestRead.result.resolve(file('/A', 'second'));
+  await second;
+  h.viewer().onStartEdit();
+  h.viewer().onEditChange('newer draft');
+  if (phase === 'write') h.request('filesWrite', '/A').resolve({ success: true });
+  else h.request('filesRead', '/A', 1).resolve(file('/A', 'first'));
+  await first;
+  assert.equal(h.viewer().file.content, 'second');
+  assert.equal(h.viewer().editMode, true);
+  assert.equal(h.viewer().editContent, 'newer draft');
+  assert.equal(h.viewer().saving, false);
+  h.viewer().onUndo();
+  assert.equal(h.viewer().editContent, 'second', 'Revert uses the latest persisted baseline');
+  assert.equal(h.viewer().hasChanges, false, 'older completion cannot mark the latest known baseline unknown');
+  assert.deepEqual(h.calls.filter(c => c.method === 'filesWrite').map(c => c.args), [['/A', 'first'], ['/A', 'second']]);
+  assert.equal(h.calls.filter(c => c.method === 'filesRead').length, phase === 'write' ? 2 : 3);
   h.unmount();
 });
