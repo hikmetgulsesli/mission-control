@@ -30,6 +30,7 @@ export function Files() {
   const [editMode, setEditMode] = useState(false);
   const [editContent, setEditContent] = useState("");
   const [originalContent, setOriginalContent] = useState("");
+  const [baselineKnown, setBaselineKnown] = useState(true);
   const [saving, setSaving] = useState(false);
 
   // Context menu
@@ -46,7 +47,45 @@ export function Files() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
 
   // Unsaved changes confirmation
-  const [unsavedConfirm, setUnsavedConfirm] = useState<{ action: () => void } | null>(null);
+  const [unsavedConfirm, setUnsavedConfirm] = useState<{ action: () => void | Promise<void> } | null>(null);
+  const mountedRef = useRef(false);
+  // Identity, rather than path equality, distinguishes A → B → A selections.
+  const selectionRef = useRef(0);
+  const editRef = useRef({ active: false, revision: 0 });
+  const saveRef = useRef(0);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      selectionRef.current++;
+    };
+  }, []);
+
+  const ownsSelection = (owner: number) => mountedRef.current && selectionRef.current === owner;
+
+  const replaceSelection = (path: string | null, keepEdit = false) => {
+    const owner = ++selectionRef.current;
+    editRef.current.revision++;
+    setSelectedFile(path);
+    // A confirmed rename moves the latest accepted metadata with its retained draft.
+    setFileData((current: any) => keepEdit && current && path ? {
+      ...current,
+      path,
+      name: path.substring(path.lastIndexOf("/") + 1),
+    } : null);
+    setFileError(null);
+    setFileLoading(false);
+    setSaving(false);
+    if (!keepEdit) {
+      editRef.current.active = false;
+      setEditMode(false);
+      setEditContent("");
+      setOriginalContent("");
+      setBaselineKnown(true);
+    }
+    return owner;
+  };
 
   const { data: listing, error: listError, loading: listLoading, refresh } = usePolling(() => api.filesList(currentPath), 30000, currentPath);
 
@@ -54,46 +93,55 @@ export function Files() {
     if (!currentPath && listing?.path) setCurrentPath(listing.path);
   }, [currentPath, listing?.path]);
 
-  const confirmIfUnsaved = (action: () => void) => {
-    if (editMode) {
+  const confirmIfUnsaved = (action: () => void | Promise<void>) => {
+    // Async follow-ups must consult the current edit session, not their render closure.
+    if (editRef.current.active) {
       setUnsavedConfirm({ action });
       return;
     }
-    action();
+    return action();
   };
 
   const handleNavigate = (path: string) => {
     confirmIfUnsaved(() => {
-      setEditMode(false);
+      replaceSelection(null);
       setCurrentPath(path);
-      setSelectedFile(null);
-      setFileData(null);
-      setFileError(null);
     });
   };
 
-  const handleSelectFile = async (path: string) => {
+  const handleSelectFile = async (path: string, editIntent = false) => {
     const doSelect = async () => {
-      setEditMode(false);
-      setSelectedFile(path);
+      if (!mountedRef.current) return;
+      const owner = replaceSelection(path);
       setFileLoading(true);
-      setFileError(null);
       try {
         const data = await api.filesRead(path);
+        if (!ownsSelection(owner)) return;
         setFileData(data);
+        setOriginalContent(data.content);
+        setBaselineKnown(true);
+        if (editIntent) {
+          editRef.current.revision++;
+          editRef.current.active = true;
+          setEditContent(data.content);
+          setEditMode(true);
+        }
       } catch (err: any) {
+        if (!ownsSelection(owner)) return;
         setFileError(err.message || "Failed to read file");
         setFileData(null);
       } finally {
-        setFileLoading(false);
+        if (ownsSelection(owner)) setFileLoading(false);
       }
     };
-    confirmIfUnsaved(doSelect);
+    return confirmIfUnsaved(doSelect);
   };
 
   // Edit handlers
   const handleStartEdit = () => {
     if (!fileData) return;
+    editRef.current.revision++;
+    editRef.current.active = true;
     setOriginalContent(fileData.content);
     setEditContent(fileData.content);
     setEditMode(true);
@@ -101,28 +149,52 @@ export function Files() {
 
   const handleSave = async () => {
     if (!fileData || !selectedFile) return;
+    const owner = selectionRef.current;
+    const revision = editRef.current.revision;
+    const save = ++saveRef.current;
+    const ownsSave = () => ownsSelection(owner) && saveRef.current === save;
+    const ownsDraft = () => ownsSave() && editRef.current.revision === revision;
+    const path = selectedFile;
     setSaving(true);
     try {
-      await api.filesWrite(selectedFile, editContent);
-      const updated = await api.filesRead(selectedFile);
+      await api.filesWrite(path, editContent);
+      if (!ownsSave()) return;
+      // A confirmed write invalidates the old baseline until its readback settles.
+      setBaselineKnown(false);
+      const updated = await api.filesRead(path);
+      if (!ownsSave()) return;
       setFileData(updated);
       setOriginalContent(updated.content);
-      setEditMode(false);
+      setBaselineKnown(true);
+      if (ownsDraft()) {
+        editRef.current.revision++;
+        editRef.current.active = false;
+        setEditMode(false);
+      }
       refresh();
     } catch (err: any) {
-      toast("Save failed: " + (err.message || "Unknown error"), "error");
+      if (mountedRef.current) toast("Save failed: " + (err.message || "Unknown error"), "error");
     } finally {
-      setSaving(false);
+      // Losing the draft still settles this save; a newer save owns its own indicator.
+      if (ownsSave()) setSaving(false);
     }
   };
 
   const handleCancel = () => {
+    editRef.current.revision++;
+    editRef.current.active = false;
     setEditMode(false);
     setEditContent("");
   };
 
   const handleUndo = () => {
+    editRef.current.revision++;
     setEditContent(originalContent);
+  };
+
+  const handleEditChange = (content: string) => {
+    editRef.current.revision++;
+    setEditContent(content);
   };
 
   const handleDownload = () => {
@@ -150,7 +222,7 @@ export function Files() {
     if (t.isDir) {
       return [
         { label: "Open", icon: ">", action: () => handleNavigate(t.path + "/") },
-        { label: "New File", icon: "+", action: () => { setCurrentPath(t.path + "/"); openDialog("newFile", t.path + "/"); } },
+        { label: "New File", icon: "+", action: () => confirmIfUnsaved(() => { replaceSelection(null); setCurrentPath(t.path + "/"); openDialog("newFile", t.path + "/"); }) },
         { label: "New Directory", icon: ">", action: () => openDialog("newDir", t.path + "/") },
         { label: "Upload", icon: "^", action: () => openDialog("upload", t.path + "/") },
         { label: "Rename", icon: "R", action: () => { setDialog({ type: "rename", path: t.path, name: t.name }); setDialogInput(t.name); } },
@@ -159,7 +231,7 @@ export function Files() {
     }
 
     return [
-      { label: "Edit", icon: "E", action: () => { handleSelectFile(t.path).then(() => setTimeout(handleStartEdit, 100)); } },
+      { label: "Edit", icon: "E", action: () => handleSelectFile(t.path, true) },
       { label: "Rename", icon: "R", action: () => { setDialog({ type: "rename", path: t.path, name: t.name }); setDialogInput(t.name); } },
       { label: "Download", icon: "D", action: () => window.open("/api/files/download?path=" + encodeURIComponent(t.path), "_blank") },
       { label: "Delete", icon: "X", action: () => setDialog({ type: "delete", path: t.path, name: t.name, isDir: false }), danger: true },
@@ -185,62 +257,81 @@ export function Files() {
   // Action handlers
   const handleDelete = async () => {
     if (!dialog || dialog.type !== "delete") return;
+    const owner = selectionRef.current;
+    const revision = editRef.current.revision;
     setDialogLoading(true);
     setDialogError("");
     try {
       await api.filesDelete(dialog.path);
-      if (selectedFile === dialog.path) {
-        setSelectedFile(null);
-        setFileData(null);
-        setEditMode(false);
+      if (!mountedRef.current) return;
+      if (ownsSelection(owner) && editRef.current.revision === revision && selectedFile === dialog.path) {
+        replaceSelection(null);
       }
       refresh();
       closeDialog();
     } catch (err: any) {
-      setDialogError(err.message || "Delete failed");
+      if (mountedRef.current) setDialogError(err.message || "Delete failed");
     } finally {
-      setDialogLoading(false);
+      if (mountedRef.current) setDialogLoading(false);
     }
   };
 
   const handleRename = async () => {
     if (!dialog || dialog.type !== "rename") return;
     if (!dialogInput.trim()) { setDialogError("Name cannot be empty"); return; }
+    const owner = selectionRef.current;
+    let readOwner: number | undefined;
+    let renamed = false;
     setDialogLoading(true);
     setDialogError("");
     try {
       const dir = dialog.path.substring(0, dialog.path.lastIndexOf("/"));
       const newPath = dir + "/" + dialogInput.trim();
       await api.filesRename(dialog.path, newPath);
-      if (selectedFile === dialog.path) {
-        setSelectedFile(newPath);
-        const data = await api.filesRead(newPath);
-        setFileData(data);
-      }
+      renamed = true;
+      if (!mountedRef.current) return;
       refresh();
+      if (ownsSelection(owner) && selectedFile === dialog.path) {
+        readOwner = replaceSelection(newPath, true);
+        setFileLoading(true);
+        const data = await api.filesRead(newPath);
+        if (ownsSelection(readOwner)) {
+          setFileData(data);
+          setOriginalContent(data.content);
+          setBaselineKnown(true);
+        }
+      }
+      if (!mountedRef.current) return;
       closeDialog();
     } catch (err: any) {
-      setDialogError(err.message || "Rename failed");
+      if (mountedRef.current) setDialogError(renamed
+        ? "File renamed, but its contents could not be refreshed: " + (err.message || "Unknown error")
+        : err.message || "Rename failed");
     } finally {
-      setDialogLoading(false);
+      if (readOwner !== undefined && ownsSelection(readOwner)) setFileLoading(false);
+      if (mountedRef.current) setDialogLoading(false);
     }
   };
 
   const handleNewFile = async () => {
     if (!dialog || dialog.type !== "newFile") return;
     if (!dialogInput.trim()) { setDialogError("File name cannot be empty"); return; }
+    const owner = selectionRef.current;
+    const revision = editRef.current.revision;
     setDialogLoading(true);
     setDialogError("");
     try {
       const filePath = dialog.dir.endsWith("/") ? dialog.dir + dialogInput.trim() : dialog.dir + "/" + dialogInput.trim();
       await api.filesWrite(filePath, "");
+      if (!mountedRef.current) return;
       refresh();
       closeDialog();
-      await handleSelectFile(filePath);
-      setTimeout(handleStartEdit, 200);
+      if (ownsSelection(owner) && editRef.current.revision === revision) await handleSelectFile(filePath, true);
     } catch (err: any) {
-      setDialogError(err.message || "File creation failed");
-      setDialogLoading(false);
+      if (mountedRef.current) {
+        setDialogError(err.message || "File creation failed");
+        setDialogLoading(false);
+      }
     }
   };
 
@@ -299,7 +390,7 @@ export function Files() {
     path: "/" + pathParts.slice(0, i + 1).join("/") + "/",
   }));
 
-  const hasChanges = editContent !== originalContent;
+  const hasChanges = !baselineKnown || editContent !== originalContent;
 
   return (
     <div className="files-page">
@@ -350,7 +441,7 @@ export function Files() {
             error={fileError}
             editMode={editMode}
             editContent={editContent}
-            onEditChange={setEditContent}
+            onEditChange={handleEditChange}
             onSave={handleSave}
             onCancel={handleCancel}
             onUndo={handleUndo}
