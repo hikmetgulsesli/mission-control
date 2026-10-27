@@ -68,7 +68,12 @@ export function Files() {
     const owner = ++selectionRef.current;
     editRef.current.revision++;
     setSelectedFile(path);
-    setFileData(null);
+    // A confirmed rename moves the latest accepted metadata with its retained draft.
+    setFileData((current: any) => keepEdit && current && path ? {
+      ...current,
+      path,
+      name: path.substring(path.lastIndexOf("/") + 1),
+    } : null);
     setFileError(null);
     setFileLoading(false);
     setSaving(false);
@@ -276,13 +281,16 @@ export function Files() {
     if (!dialogInput.trim()) { setDialogError("Name cannot be empty"); return; }
     const owner = selectionRef.current;
     let readOwner: number | undefined;
+    let renamed = false;
     setDialogLoading(true);
     setDialogError("");
     try {
       const dir = dialog.path.substring(0, dialog.path.lastIndexOf("/"));
       const newPath = dir + "/" + dialogInput.trim();
       await api.filesRename(dialog.path, newPath);
+      renamed = true;
       if (!mountedRef.current) return;
+      refresh();
       if (ownsSelection(owner) && selectedFile === dialog.path) {
         readOwner = replaceSelection(newPath, true);
         setFileLoading(true);
@@ -294,10 +302,11 @@ export function Files() {
         }
       }
       if (!mountedRef.current) return;
-      refresh();
       closeDialog();
     } catch (err: any) {
-      if (mountedRef.current) setDialogError(err.message || "Rename failed");
+      if (mountedRef.current) setDialogError(renamed
+        ? "File renamed, but its contents could not be refreshed: " + (err.message || "Unknown error")
+        : err.message || "Rename failed");
     } finally {
       if (readOwner !== undefined && ownsSelection(readOwner)) setFileLoading(false);
       if (mountedRef.current) setDialogLoading(false);
