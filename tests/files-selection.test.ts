@@ -108,3 +108,159 @@ test('new-file read/edit intent is discarded after a later selection and after u
     assert.equal(h.timers.size, 0);
   }
 });
+
+for (const phase of ['write', 'readback']) {
+  for (const change of ['type', 'cancel-reedit', 'undo']) {
+    test(`save ${phase} completion preserves same-selection ${change} revision and settles saving`, async () => {
+      const h = filesHarness();
+      await select(h, '/A', 'initial');
+      h.viewer().onStartEdit();
+      h.viewer().onEditChange('submitted');
+      const saved = h.viewer().onSave();
+      assert.equal(h.viewer().saving, true);
+      assert.deepEqual(h.calls.find(c => c.method === 'filesWrite')?.args, ['/A', 'submitted']);
+      if (phase === 'readback') {
+        h.request('filesWrite', '/A').resolve({ success: true });
+        await flush();
+        assert.equal(h.calls.filter(c => c.method === 'filesRead').length, 2);
+      }
+      if (change === 'cancel-reedit') {
+        h.viewer().onCancel();
+        h.viewer().onStartEdit();
+      }
+      if (change === 'undo') h.viewer().onUndo();
+      else h.viewer().onEditChange('newer unsaved draft');
+      assert.equal(h.viewer().saving, true);
+      const expectedDraft = change === 'undo' ? 'initial' : 'newer unsaved draft';
+      if (phase === 'write') {
+        h.request('filesWrite', '/A').resolve({ success: true });
+        await flush();
+      }
+      // Settle any read emitted by the old implementation to expose its actual completion.
+      const readback = h.calls.filter(c => c.method === 'filesRead')[1];
+      if (readback) readback.result.resolve(file('/A', 'submitted'));
+      await saved;
+      await flush();
+      assert.equal(h.tree().selectedFile, '/A');
+      assert.equal(h.viewer().editMode, true, 'later edit session stays open');
+      assert.equal(h.viewer().editContent, expectedDraft);
+      assert.equal(h.viewer().file.content, 'initial', 'obsolete readback is not accepted');
+      assert.equal(h.viewer().saving, false, 'completed save settles despite losing edit ownership');
+      assert.equal(h.viewer().hasChanges, change !== 'undo');
+      assert.equal(h.calls.filter(c => c.method === 'filesRead').length, phase === 'readback' ? 2 : 1);
+      assert.deepEqual(h.calls.filter(c => c.method === 'filesWrite').map(c => c.args), [['/A', 'submitted']]);
+      assert.deepEqual(h.toasts, []);
+      h.unmount();
+    });
+  }
+}
+
+test('older save finally cannot settle a newer save on the same selection', async () => {
+  const h = filesHarness();
+  await select(h, '/A', 'initial');
+  h.viewer().onStartEdit();
+  h.viewer().onEditChange('first submitted');
+  const first = h.viewer().onSave();
+  h.viewer().onEditChange('second submitted');
+  const second = h.viewer().onSave();
+  h.request('filesWrite', '/A').resolve({ success: true });
+  await flush();
+  const oldReadback = h.calls.filter(c => c.method === 'filesRead')[1];
+  if (oldReadback) oldReadback.result.resolve(file('/A', 'first submitted'));
+  await first;
+  assert.equal(h.viewer().saving, true, 'newer save still pending');
+  assert.equal(h.viewer().editMode, true);
+  assert.equal(h.viewer().editContent, 'second submitted');
+  h.request('filesWrite', '/A', 1).resolve({ success: true });
+  await flush();
+  const currentReadback = h.calls.filter(c => c.method === 'filesRead').at(-1)!;
+  currentReadback.result.resolve(file('/A', 'second submitted'));
+  await second;
+  assert.equal(h.viewer().file.content, 'second submitted');
+  assert.equal(h.viewer().editMode, false);
+  assert.equal(h.viewer().saving, false);
+  assert.equal(h.calls.filter(c => c.method === 'filesRead').length, 2);
+  assert.deepEqual(h.calls.filter(c => c.method === 'filesWrite').map(c => c.args), [['/A', 'first submitted'], ['/A', 'second submitted']]);
+  h.unmount();
+});
+
+test('create completion after dialog dismissal cannot replace a newer draft on the same file', async () => {
+  const h = filesHarness();
+  await select(h, '/A', 'initial');
+  h.tree().onNewFile();
+  h.input('new.txt');
+  const created = h.button('Create');
+  h.button('Cancel');
+  h.viewer().onStartEdit();
+  h.viewer().onEditChange('newer A draft');
+  h.request('filesWrite', '/root/new.txt').resolve({ success: true });
+  await flush();
+  const oldFollowup = h.calls.find(c => c.method === 'filesRead' && c.args[0] === '/root/new.txt');
+  if (oldFollowup) oldFollowup.result.resolve(file('/root/new.txt', ''));
+  await created;
+  await flush();
+  assert.equal(h.tree().selectedFile, '/A');
+  assert.equal(h.viewer().file.content, 'initial');
+  assert.equal(h.viewer().editMode, true);
+  assert.equal(h.viewer().editContent, 'newer A draft');
+  assert.equal(h.viewer().saving, false);
+  assert.equal(h.confirm().open, false, 'obsolete auto-selection is discarded');
+  assert.deepEqual(h.calls.map(c => [c.method, ...c.args]), [['filesRead', '/A'], ['filesWrite', '/root/new.txt', '']]);
+  assert.equal(h.refreshes(), 1, 'submitted creation still refreshes the listing');
+  h.tree().onSelectFile('/B');
+  assert.equal(h.confirm().open, true);
+  h.confirm().onCancel();
+  assert.equal(h.viewer().editContent, 'newer A draft');
+  h.unmount();
+});
+
+test('current create while editing retains explicit confirmation cancel and accepted destination', async () => {
+  const h = filesHarness();
+  await select(h, '/A', 'initial');
+  h.viewer().onStartEdit();
+  h.viewer().onEditChange('existing draft');
+  h.tree().onNewFile();
+  h.input('cancelled.txt');
+  const cancelled = h.button('Create');
+  h.request('filesWrite', '/root/cancelled.txt').resolve({ success: true });
+  await cancelled;
+  assert.equal(h.confirm().open, true);
+  assert.equal(h.calls.filter(c => c.method === 'filesRead').length, 1);
+  h.confirm().onCancel();
+  assert.equal(h.tree().selectedFile, '/A');
+  assert.equal(h.viewer().editContent, 'existing draft');
+  h.tree().onNewFile();
+  h.input('accepted.txt');
+  const accepted = h.button('Create');
+  h.request('filesWrite', '/root/accepted.txt').resolve({ success: true });
+  await accepted;
+  assert.equal(h.confirm().open, true);
+  h.confirm().onConfirm();
+  h.request('filesRead', '/root/accepted.txt').resolve(file('/root/accepted.txt', 'accepted content'));
+  await flush();
+  assert.equal(h.tree().selectedFile, '/root/accepted.txt');
+  assert.equal(h.viewer().editMode, true);
+  assert.equal(h.viewer().editContent, 'accepted content');
+  assert.deepEqual(h.calls.filter(c => c.method === 'filesWrite').map(c => c.args), [['/root/cancelled.txt', ''], ['/root/accepted.txt', '']]);
+  h.unmount();
+});
+
+test('delete submitted before a new same-file edit session cannot clear its later draft', async () => {
+  const h = filesHarness();
+  await select(h, '/A', 'initial');
+  h.context('/A', 'Delete');
+  const deleted = h.button('Delete');
+  h.button('Cancel');
+  h.viewer().onStartEdit();
+  h.viewer().onEditChange('later A draft');
+  h.request('filesDelete', '/A').resolve({ success: true });
+  await deleted;
+  assert.equal(h.tree().selectedFile, '/A');
+  assert.equal(h.viewer().file.content, 'initial');
+  assert.equal(h.viewer().editMode, true);
+  assert.equal(h.viewer().editContent, 'later A draft');
+  assert.equal(h.viewer().saving, false);
+  assert.deepEqual(h.calls.map(c => [c.method, ...c.args]), [['filesRead', '/A'], ['filesDelete', '/A']]);
+  assert.equal(h.refreshes(), 1);
+  h.unmount();
+});

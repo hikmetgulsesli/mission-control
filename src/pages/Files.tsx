@@ -50,6 +50,8 @@ export function Files() {
   const mountedRef = useRef(false);
   // Identity, rather than path equality, distinguishes A → B → A selections.
   const selectionRef = useRef(0);
+  const editRef = useRef({ active: false, revision: 0 });
+  const saveRef = useRef(0);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -63,12 +65,14 @@ export function Files() {
 
   const replaceSelection = (path: string | null, keepEdit = false) => {
     const owner = ++selectionRef.current;
+    editRef.current.revision++;
     setSelectedFile(path);
     setFileData(null);
     setFileError(null);
     setFileLoading(false);
     setSaving(false);
     if (!keepEdit) {
+      editRef.current.active = false;
       setEditMode(false);
       setEditContent("");
       setOriginalContent("");
@@ -83,7 +87,8 @@ export function Files() {
   }, [currentPath, listing?.path]);
 
   const confirmIfUnsaved = (action: () => void | Promise<void>) => {
-    if (editMode) {
+    // Async follow-ups must consult the current edit session, not their render closure.
+    if (editRef.current.active) {
       setUnsavedConfirm({ action });
       return;
     }
@@ -107,6 +112,8 @@ export function Files() {
         if (!ownsSelection(owner)) return;
         setFileData(data);
         if (editIntent) {
+          editRef.current.revision++;
+          editRef.current.active = true;
           setOriginalContent(data.content);
           setEditContent(data.content);
           setEditMode(true);
@@ -125,6 +132,8 @@ export function Files() {
   // Edit handlers
   const handleStartEdit = () => {
     if (!fileData) return;
+    editRef.current.revision++;
+    editRef.current.active = true;
     setOriginalContent(fileData.content);
     setEditContent(fileData.content);
     setEditMode(true);
@@ -133,31 +142,46 @@ export function Files() {
   const handleSave = async () => {
     if (!fileData || !selectedFile) return;
     const owner = selectionRef.current;
+    const revision = editRef.current.revision;
+    const save = ++saveRef.current;
+    const ownsSave = () => ownsSelection(owner) && saveRef.current === save;
+    const ownsDraft = () => ownsSave() && editRef.current.revision === revision;
     const path = selectedFile;
     setSaving(true);
     try {
       await api.filesWrite(path, editContent);
-      if (!ownsSelection(owner)) return;
+      if (!ownsDraft()) return;
       const updated = await api.filesRead(path);
-      if (!ownsSelection(owner)) return;
+      if (!ownsDraft()) return;
       setFileData(updated);
       setOriginalContent(updated.content);
+      editRef.current.revision++;
+      editRef.current.active = false;
       setEditMode(false);
       refresh();
     } catch (err: any) {
       if (mountedRef.current) toast("Save failed: " + (err.message || "Unknown error"), "error");
     } finally {
-      if (ownsSelection(owner)) setSaving(false);
+      // Losing the draft still settles this save; a newer save owns its own indicator.
+      if (ownsSave()) setSaving(false);
     }
   };
 
   const handleCancel = () => {
+    editRef.current.revision++;
+    editRef.current.active = false;
     setEditMode(false);
     setEditContent("");
   };
 
   const handleUndo = () => {
+    editRef.current.revision++;
     setEditContent(originalContent);
+  };
+
+  const handleEditChange = (content: string) => {
+    editRef.current.revision++;
+    setEditContent(content);
   };
 
   const handleDownload = () => {
@@ -221,12 +245,13 @@ export function Files() {
   const handleDelete = async () => {
     if (!dialog || dialog.type !== "delete") return;
     const owner = selectionRef.current;
+    const revision = editRef.current.revision;
     setDialogLoading(true);
     setDialogError("");
     try {
       await api.filesDelete(dialog.path);
       if (!mountedRef.current) return;
-      if (ownsSelection(owner) && selectedFile === dialog.path) {
+      if (ownsSelection(owner) && editRef.current.revision === revision && selectedFile === dialog.path) {
         replaceSelection(null);
       }
       refresh();
@@ -271,6 +296,7 @@ export function Files() {
     if (!dialog || dialog.type !== "newFile") return;
     if (!dialogInput.trim()) { setDialogError("File name cannot be empty"); return; }
     const owner = selectionRef.current;
+    const revision = editRef.current.revision;
     setDialogLoading(true);
     setDialogError("");
     try {
@@ -279,7 +305,7 @@ export function Files() {
       if (!mountedRef.current) return;
       refresh();
       closeDialog();
-      if (ownsSelection(owner)) await handleSelectFile(filePath, true);
+      if (ownsSelection(owner) && editRef.current.revision === revision) await handleSelectFile(filePath, true);
     } catch (err: any) {
       if (mountedRef.current) {
         setDialogError(err.message || "File creation failed");
@@ -394,7 +420,7 @@ export function Files() {
             error={fileError}
             editMode={editMode}
             editContent={editContent}
-            onEditChange={setEditContent}
+            onEditChange={handleEditChange}
             onSave={handleSave}
             onCancel={handleCancel}
             onUndo={handleUndo}
