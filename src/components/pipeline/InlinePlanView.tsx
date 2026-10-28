@@ -360,10 +360,23 @@ export interface InlinePlanViewProps {
   initialTab?: "overview" | "contract" | "prd" | "design" | "stories" | "raw" | "memory";
 }
 
+interface DesignViewState {
+  runId: string;
+  data: any;
+  readStatus: "idle" | "loading" | "ready" | "error";
+  retrievalStatus: "idle" | "pending" | "error";
+}
+
 export const InlinePlanView = React.memo(function InlinePlanView({ runId, initialTab = "overview" }: InlinePlanViewProps) {
-  const [tab, setTab] = useState<"overview" | "contract" | "prd" | "design" | "stories" | "raw" | "memory">(initialTab);
+  const [selection, setSelection] = useState({ runId, initialTab, tab: initialTab });
+  const tab = selection.runId === runId && selection.initialTab === initialTab ? selection.tab : initialTab;
+  const setTab = (next: NonNullable<InlinePlanViewProps["initialTab"]>) => setSelection({ runId, initialTab, tab: next });
   const [planData, setPlanData] = useState<PlanData | null>(null);
-  const [designData, setDesignData] = useState<any>(null);
+  const [designView, setDesignView] = useState<DesignViewState>({ runId, data: null, readStatus: "idle", retrievalStatus: "idle" });
+  const designOwner = useRef({ runId, active: false, readSeq: 0, retrieving: false });
+  // Hide accepted data from the preceding run even before effect cleanup executes.
+  const currentDesign = designView.runId === runId ? designView : null;
+  const designData = currentDesign?.data;
   const [contractData, setContractData] = useState<RunContractData | null>(null);
   const [operationsData, setOperationsData] = useState<OperationsData | null>(null);
   const [activityStep, setActivityStep] = useState<{ stepId: string; label: string } | null>(null);
@@ -375,14 +388,12 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, initia
     const seq = ++requestSeq.current;
     Promise.all([
       api.runPlan(runId),
-      api.runDesign(runId).catch(() => null),
       api.runStories(runId).catch(() => []),
       api.runContract(runId).catch(() => null),
       api.runOperations(runId).catch(() => null),
-    ]).then(([plan, design, stories, contract, operations]) => {
+    ]).then(([plan, stories, contract, operations]) => {
       if (seq !== requestSeq.current) return;
       setPlanData(plan);
-      setDesignData(design || null);
       setContractData(contract || null);
       setOperationsData(operations || null);
       if (Array.isArray(stories)) setStoryList(stories);
@@ -398,13 +409,14 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, initia
   useEffect(() => {
     fetchData();
     const id = setInterval(fetchData, 3_000);
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(id);
+      ++requestSeq.current;
+    };
   }, [fetchData]);
 
   useEffect(() => {
-    setTab(initialTab);
     setPlanData(null);
-    setDesignData(null);
     setContractData(null);
     setOperationsData(null);
     setActivityStep(null);
@@ -412,12 +424,56 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, initia
     setLoading(true);
   }, [runId, initialTab]);
 
-  const planStories = Array.isArray(planData?.stories) ? planData.stories : [];
+  useEffect(() => {
+    const owner = { runId, active: true, readSeq: 0, retrieving: false };
+    designOwner.current = owner;
+    setDesignView({ runId, data: null, readStatus: "idle", retrievalStatus: "idle" });
+    return () => { owner.active = false; };
+  }, [runId]);
 
-  if (loading) return <div className="af-inline-plan__loading">Loading plan data...</div>;
-  if (!planData || (!planData.prd && planStories.length === 0 && !contractData)) {
-    return <StoryChecklist runId={runId} />;
-  }
+  const readDesign = useCallback(() => {
+    const owner = designOwner.current;
+    if (!owner.active || owner.runId !== runId || owner.retrieving) return;
+    const seq = ++owner.readSeq;
+    const isCurrent = () => owner.active && designOwner.current === owner && seq === owner.readSeq;
+    setDesignView((previous) => ({ ...previous, readStatus: "loading" }));
+    api.runDesign(runId).then((data) => {
+      if (!isCurrent()) return;
+      setDesignView({ runId, data, readStatus: "ready", retrievalStatus: "idle" });
+    }).catch(() => {
+      if (!isCurrent()) return;
+      setDesignView((previous) => ({ ...previous, readStatus: "error" }));
+    });
+  }, [runId]);
+
+  useEffect(() => {
+    if (tab !== "design") return;
+    readDesign();
+    const owner = designOwner.current;
+    return () => { ++owner.readSeq; };
+  }, [tab, readDesign]);
+
+  const retrieveDesign = () => {
+    const owner = designOwner.current;
+    if (!owner.active || owner.runId !== runId || owner.retrieving) return;
+    // The ref closes the double-click window before React commits the busy state.
+    owner.retrieving = true;
+    ++owner.readSeq;
+    setDesignView((previous) => ({ ...previous, readStatus: previous.data ? "ready" : "idle", retrievalStatus: "pending" }));
+    api.retrieveRunDesign(runId).then((data) => {
+      if (!owner.active || designOwner.current !== owner) return;
+      owner.retrieving = false;
+      setDesignView({ runId, data, readStatus: "ready", retrievalStatus: "idle" });
+    }).catch(() => {
+      if (!owner.active || designOwner.current !== owner) return;
+      owner.retrieving = false;
+      // Preserve accepted local artifacts when retrieval only partially succeeds.
+      setDesignView((previous) => ({ ...previous, retrievalStatus: "error" }));
+    });
+  };
+
+  const planStories = Array.isArray(planData?.stories) ? planData.stories : [];
+  const showStoryFallback = !loading && (!planData || (!planData.prd && planStories.length === 0 && !contractData));
 
   const safePlan: PlanData = { prd: planData?.prd || "", stories: planStories, rawOutput: planData?.rawOutput || "", projectMemory: planData?.projectMemory, stepDurations: planData?.stepDurations, storyStats: planData?.storyStats };
   const storyCount = safePlan.stories.length || contractData?.stories?.length || 0;
@@ -432,21 +488,19 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, initia
     <div className="af-inline-plan">
       <div className="af-inline-plan__tabs">
         <button className={`af-inline-plan__tab ${tab === "overview" ? "af-inline-plan__tab--active" : ""}`} onClick={() => setTab("overview")}>OVERVIEW</button>
-        {contractData && (
-          <button className={`af-inline-plan__tab ${tab === "contract" ? "af-inline-plan__tab--active" : ""}`} onClick={() => setTab("contract")}>
-            CONTRACT {contractFail > 0 ? `(${contractFail})` : contractTotal > 0 ? `(${contractPass}/${contractTotal})` : ""}
-          </button>
-        )}
+        <button className={`af-inline-plan__tab ${tab === "contract" ? "af-inline-plan__tab--active" : ""}`} onClick={() => setTab("contract")}>
+          CONTRACT {contractFail > 0 ? `(${contractFail})` : contractTotal > 0 ? `(${contractPass}/${contractTotal})` : ""}
+        </button>
         <button className={`af-inline-plan__tab ${tab === "prd" ? "af-inline-plan__tab--active" : ""}`} onClick={() => setTab("prd")}>PRD</button>
-        {designData && designData.screens && designData.screens.length > 0 && (
-          <button className={`af-inline-plan__tab ${tab === "design" ? "af-inline-plan__tab--active" : ""}`} onClick={() => setTab("design")}>DESIGN ({designData.screens.length})</button>
-        )}
+        <button className={`af-inline-plan__tab ${tab === "design" ? "af-inline-plan__tab--active" : ""}`} onClick={() => setTab("design")}>DESIGN{designData ? ` (${designData.screens.length})` : ""}</button>
         <button className={`af-inline-plan__tab ${tab === "stories" ? "af-inline-plan__tab--active" : ""}`} onClick={() => setTab("stories")}>STORIES ({storyCount})</button>
         <button className={`af-inline-plan__tab ${tab === "raw" ? "af-inline-plan__tab--active" : ""}`} onClick={() => setTab("raw")}>RAW</button>
         <button className={`af-inline-plan__tab ${tab === "memory" ? "af-inline-plan__tab--active" : ""}`} onClick={() => setTab("memory")}>MEMORY</button>
       </div>
 
       <div className="af-inline-plan__content">
+        {tab !== "design" && loading && <div className="af-inline-plan__loading">Loading plan data...</div>}
+        {tab !== "design" && tab !== "stories" && showStoryFallback && <StoryChecklist runId={runId} />}
         {/* OVERVIEW — Plan Drill-Down */}
         {tab === "overview" && (
           <div className="af-plan-overview">
@@ -506,36 +560,32 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, initia
             </div>
 
             {/* Design System Info */}
-            {designData && (
-              <div className="af-plan-overview__section">
-                <div className="af-plan-overview__section-header">
-                  <h4 className="af-plan-overview__title">Design System</h4>
-                  {designData.screens && designData.screens.length > 0 && (
-                    <button className="af-plan-overview__more" onClick={() => setTab("design")}>View Screens &rarr;</button>
-                  )}
-                </div>
-                {designData.designSystem ? (
-                  <div className="af-plan-overview__design-tokens">
-                    {Object.entries(designData.designSystem).map(([key, value]: [string, any]) => (
-                      <div key={key} className="af-plan-overview__token">
-                        <span className="af-plan-overview__token-key">{key}</span>
-                        <span className="af-plan-overview__token-val">{formatContractValue(value)}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="af-plan-overview__empty">No design system data available.</p>
-                )}
-                {designData.designNotes && (
-                  <p className="af-plan-overview__design-notes">{designData.designNotes}</p>
-                )}
-                {designData.screens && (
-                  <div className="af-plan-overview__screen-summary">
-                    {designData.screens.length} screen{designData.screens.length !== 1 ? "s" : ""} generated
-                  </div>
-                )}
+            <div className="af-plan-overview__section">
+              <div className="af-plan-overview__section-header">
+                <h4 className="af-plan-overview__title">Design System</h4>
+                <button className="af-plan-overview__more" onClick={() => setTab("design")}>View Screens &rarr;</button>
               </div>
-            )}
+              {designData?.designSystem ? (
+                <div className="af-plan-overview__design-tokens">
+                  {Object.entries(designData.designSystem).map(([key, value]: [string, any]) => (
+                    <div key={key} className="af-plan-overview__token">
+                      <span className="af-plan-overview__token-key">{key}</span>
+                      <span className="af-plan-overview__token-val">{formatContractValue(value)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="af-plan-overview__empty">No design system data available.</p>
+              )}
+              {designData?.designNotes && (
+                <p className="af-plan-overview__design-notes">{designData.designNotes}</p>
+              )}
+              {designData?.screens && (
+                <div className="af-plan-overview__screen-summary">
+                  {designData.screens.length} local screen{designData.screens.length !== 1 ? "s" : ""}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -663,9 +713,20 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, initia
           )
         )}
 
-        {tab === "design" && designData && (
+        {tab === "design" && (
           <div className="af-inline-plan__design">
-            {designData.designSystem && (
+            <button className="af-design-card__btn" disabled={currentDesign?.retrievalStatus === "pending"} onClick={retrieveDesign}>
+              {currentDesign?.retrievalStatus === "pending" ? "Retrieving design..." : "Retrieve design"}
+            </button>
+            {currentDesign?.readStatus === "loading" && <p className="af-plan-overview__empty">Loading local design...</p>}
+            {currentDesign?.readStatus === "error" && (
+              <div className="af-plan-overview__empty" role="alert">
+                Local design unavailable. <button className="af-design-card__btn" disabled={currentDesign.retrievalStatus === "pending"} onClick={readDesign}>Retry</button>
+              </div>
+            )}
+            {currentDesign?.retrievalStatus === "error" && <p className="af-plan-overview__empty" role="alert">Design retrieval failed. You can try again.</p>}
+            {currentDesign?.readStatus === "ready" && designData?.screens.length === 0 && <p className="af-plan-overview__empty">No local design screens available.</p>}
+            {designData?.designSystem && (
               <div className="af-design-system">
                 <h4 className="af-design-system__title">Design System</h4>
                 <div className="af-design-system__tokens">
@@ -678,11 +739,11 @@ export const InlinePlanView = React.memo(function InlinePlanView({ runId, initia
                 </div>
               </div>
             )}
-            {designData.designNotes && (
+            {designData?.designNotes && (
               <p className="af-design-notes">{designData.designNotes}</p>
             )}
             <div className="af-design-grid">
-              {designData.screens.map((screen: any, idx: number) => {
+              {designData?.screens.map((screen: any, idx: number) => {
                 const screenId = formatContractValue(screen.screenId || screen.id || idx);
                 const screenName = formatContractValue(screen.name || screen.title || `Screen ${idx + 1}`);
                 const screenType = formatContractValue(screen.type || screen.deviceType || "desktop");

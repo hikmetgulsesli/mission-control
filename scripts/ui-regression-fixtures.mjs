@@ -258,7 +258,7 @@ async function fixtureResponse(state, method, url, body, rawTarget) {
             if (tail === 'plan')
                 return PLANNING.find(plan => plan.runId === id).plan;
             if (tail === 'design')
-                return { design: null };
+                return { screens: [], projectId: null, designSystem: null };
             if (tail === 'contract')
                 return PLANNING.find(plan => plan.runId === id).contract;
             if (tail === 'operations')
