@@ -34,20 +34,30 @@ interface FeedEntry {
 }
 
 export function AgentChatFeed() {
-  const { data: feed, loading } = usePolling<FeedEntry[]>(
-    () => api.setfarmAgentFeed(100),
+  const { data: feed, error, loading, refresh } = usePolling<FeedEntry[]>(
+    async () => {
+      const data = await api.setfarmAgentFeed(100);
+      if (!Array.isArray(data)) throw new Error('Invalid agent feed response');
+      return data;
+    },
     10_000,
   );
 
-  if (loading && !feed) {
+  if (loading && feed === null) {
     return <div className="agent-chat__loading">Loading feed...</div>;
   }
 
-  const entries = feed || [];
+  const entries = feed ?? [];
 
   return (
     <div className="agent-chat">
-      {entries.length === 0 && (
+      {error !== null && (
+        <div role="status">
+          <p>{feed === null ? 'Agent output unavailable.' : 'Agent output refresh failed. The last loaded data may be outdated.'}</p>
+          <button className="btn btn--tiny" onClick={refresh}>Retry</button>
+        </div>
+      )}
+      {feed !== null && entries.length === 0 && (
         <div className="agent-chat__empty">No agent output yet</div>
       )}
       {entries.map((e) => {
