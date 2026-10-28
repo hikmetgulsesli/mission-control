@@ -407,6 +407,7 @@ export const api = {
   runStories: (id: string) => fetchApi<any[]>(`/api/setfarm/runs/${id}/stories`),
   runPlan: (id: string) => fetchApi<any>(`/api/setfarm/runs/${id}/plan`),
   runDesign: (id: string) => fetchApi<any>(`/api/setfarm/runs/${id}/design`),
+  retrieveRunDesign: (id: string) => fetchApi<any>(`/api/setfarm/runs/${id}/design/retrieve`, { method: 'POST' }),
   runContract: (id: string) => fetchApi<any>(`/api/setfarm/runs/${id}/contract`),
   runOperations: (id: string) => fetchApi<any>(`/api/setfarm/runs/${id}/operations`),
   runOperationalSnapshot: (id: string) => fetchOperationalSnapshot(id),

@@ -259,7 +259,6 @@ async function syncTasksWithStories() {
         }
       }
 
-      await sql`UPDATE public.tasks SET updated_at = now() WHERE status = 'in_progress'`;
       return;
     }
 

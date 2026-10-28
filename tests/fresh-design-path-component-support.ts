@@ -29,13 +29,14 @@ function compile(body: string, bindings: Record<string, unknown>, result: string
   const js = ts.transpileModule(body, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
   return new Function(...Object.keys(bindings), js + '\nreturn ' + result + ';')(...Object.values(bindings));
 }
-function callback(relative: string, method: string, route: string): string {
+function callback(relative: string, method: string, route: string, optional = false): string {
   const parsed = tree(relative);
   const matches = parsed.statements.filter(ts.isExpressionStatement).map(node => node.expression)
     .filter(ts.isCallExpression).filter(node => ts.isPropertyAccessExpression(node.expression)
       && ts.isIdentifier(node.expression.expression) && node.expression.expression.text === 'router'
       && node.expression.name.text === method && node.arguments[0] && ts.isStringLiteral(node.arguments[0])
       && node.arguments[0].text === route);
+  if (optional && matches.length === 0) return 'undefined';
   assert.equal(matches.length, 1, 'one exact top-level router callback');
   const value = matches[0]!.arguments[1]!;
   assert.ok(ts.isArrowFunction(value) || ts.isFunctionExpression(value));
@@ -51,7 +52,7 @@ export function fixture() {
   return { base, paths, repo: path.join(paths.projectsDir, 'app'),
     dispose: () => fs.rmSync(base, { recursive: true, force: true }) };
 }
-type Options = { selected?: boolean; refuse?: boolean; exists?: typeof fs.existsSync; runs?: any[]; projectId?: string; screenId?: string; refuseAfterNextPort?: 'fetch' | 'json' };
+type Options = { selected?: boolean; refuse?: boolean; exists?: typeof fs.existsSync; runs?: any[]; projectId?: string; screenId?: string; refuseAfterNextPort?: 'fetch' | 'json'; command?: (args: string[]) => Buffer | string };
 const helperNames = ['assertSelectedDesignIdsV1', 'selectedDesignCacheRootV1', 'selectedDesignCacheDirectoryV1',
   'selectedDesignRepositoryV1', 'selectedDesignRepositoryPathV1', 'selectedDesignArtifactFileV1'];
 export function ports(base: string, options: Options = {}) {
@@ -73,13 +74,13 @@ const activityRequired = ['noStore', 'parseRunContext', 'safeJson', 'compactDisp
   'projectRootCandidates', 'stitchCacheDir', 'resolveRunStitchDirs', 'findRunStitchFile', 'designArtifactUrl',
   'resolveRunProjectId', 'createBuildingProject', 'syncProjectsFromRuns'];
 export function activity(base: string, options: Options = {}) {
-  const p = ports(base, options), calls: string[] = [], commands: string[][] = [];
+  const p = ports(base, options), calls: string[] = [], commands: string[][] = [], cacheWrites: string[] = [];
   const record = (name: string) => { calls.push(name); };
   const unexpected = () => { throw Error('unexpected V3 component path'); };
   const bindings: Record<string, unknown> = { ...p.bindings, PATHS: p.paths, process: p.processPort,
     freshMissionControlPathsV1: p.freshMissionControlPathsV1, join: path.join, basename: path.basename,
     existsSync: options.exists ?? fs.existsSync, readFileSync: fs.readFileSync, readdirSync: fs.readdirSync,
-    mkdirSync: fs.mkdirSync, console: { log() {}, warn() {}, error() {} },
+    mkdirSync: ((directory: fs.PathLike, settings: any) => { cacheWrites.push(String(directory)); return fs.mkdirSync(directory, settings); }), console: { log() {}, warn() {}, error() {} },
     config: { internalUrl: 'http://component.invalid' }, getRuns: async () => options.runs ?? [],
     // Unrelated business/transport DATA ports force the actual repo boundaries.
     extractProjectName: () => 'MeaningfulApp', isV3RunProtocol: () => false, isMobileProject: () => false,
@@ -90,16 +91,21 @@ export function activity(base: string, options: Options = {}) {
     createProjectProgrammatic: () => { record('registry'); return { created: false, reason: 'deleted' }; },
     updateProjectById: () => record('registry-update'), autoDeployProject: () => { record('deploy'); return { deployed: false }; },
     syncIncrementalV3ProjectTransfers: unexpected, transferSelectedV3Run: unexpected,
-    execFileSync: (_command: string, args: string[]) => { commands.push([...args]); record(args[1]!); return Buffer.from(JSON.stringify([
+    execFileSync: (_command: string, args: string[]) => { commands.push([...args]); record(args[1]!); if (options.command) return options.command(args);
+      if (args[1] === 'populate-cache') return Buffer.from(JSON.stringify({ success: true, copied: 0 }));
+      if (args[1] === 'download') { fs.writeFileSync(args[3]!, 'saved', { mode: 0o600 }); return Buffer.from(JSON.stringify({ path: args[3], size: 5 })); }
+      return Buffer.from(JSON.stringify([
       { id: options.screenId ?? 'def456', screenshotUrl: 'https://component.invalid/image', htmlUrl: 'https://component.invalid/html' },
     ])); },
   };
-  const body = declarations('server/routes/setfarm-activity.ts', activityRequired, ['designArtifactFilePathV1']);
+  const body = declarations('server/routes/setfarm-activity.ts', activityRequired, ['designArtifactFilePathV1', 'respondRunDesign', 'retrieveRunDesignArtifacts']);
   const result = compile(body, bindings, '{roots:projectRootCandidates,cache:stitchCacheDir,find:findRunStitchFile,'
     + 'dirs:resolveRunStitchDirs,projectId:resolveRunProjectId,contract:readRepoContract,fallback:buildFallbackContract,'
     + 'create:createBuildingProject,sync:syncProjectsFromRuns}');
   const routeBody = body + '\nconst route = ' + callback('server/routes/setfarm-activity.ts', 'get', '/setfarm/runs/:id/design') + ';';
-  return { ...result, calls, commands, design: compile(routeBody, bindings, 'route') };
+  const retrieveBody = body + '\nconst route = ' + callback('server/routes/setfarm-activity.ts', 'post', '/setfarm/runs/:id/design/retrieve', true) + ';';
+  return { ...result, calls, commands, cacheWrites, design: compile(routeBody, bindings, 'route'),
+    designRetrieve: compile(retrieveBody, bindings, 'route') };
 }
 
 export function service(base: string, options: Options = {}) {
