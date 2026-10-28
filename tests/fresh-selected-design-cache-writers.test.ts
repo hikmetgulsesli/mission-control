@@ -185,13 +185,13 @@ test('absent private repo is omitted without basename fallback or relative CWD c
   } finally { f.dispose(); }
 });
 
-test('actual design route gives populate-cache only the validated private 0755 repo and private cache', async () => {
+test('actual design retrieval gives populate-cache only the validated private 0755 repo and private cache', async () => {
   const f = fixture();
   try {
     const repo = privateRepo(f), run = { id: 'run', context: { repo }, steps: [{ step_id: 'design', status: 'done',
       output: 'STITCH_PROJECT_ID: abc123\nSCREEN_MAP:\n[\n {"screenId":"def456","name":"Home"}\n]\n' }] };
     const c = activity(f.base, { runs: [run] }), res = response();
-    await c.design(request('abc123'), res);
+    await c.designRetrieve(request('abc123'), res);
     const populated = c.commands.filter((args: string[]) => args[1] === 'populate-cache');
     assert.equal(populated.length, 1);
     assert.equal(populated[0]![2], path.join(repo, 'stitch'));
@@ -200,13 +200,13 @@ test('actual design route gives populate-cache only the validated private 0755 r
   } finally { f.dispose(); }
 });
 
-test('actual design route rejects remote screen traversal before manual download filename writes', async () => {
+test('actual design retrieval rejects remote screen traversal before manual download filename writes', async () => {
   const f = fixture();
   try {
     const run = { id: 'run', context: {}, steps: [{ step_id: 'design', status: 'done',
       output: 'STITCH_PROJECT_ID: abc123\nSCREEN_MAP:\n[\n {"screenId":"def456","name":"Home"}\n]\n' }] };
     const c = activity(f.base, { runs: [run], screenId: '../../escaped' }), res = response();
-    await c.design(request('abc123'), res);
+    await c.designRetrieve(request('abc123'), res);
     assert.equal(c.calls.includes('download'), false);
     assert.equal(fs.existsSync(path.join(f.paths.setfarmDir, 'escaped.png')), false);
     assert.equal(fs.existsSync(path.join(f.paths.setfarmDir, 'escaped.html')), false);

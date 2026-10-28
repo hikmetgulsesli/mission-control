@@ -1149,8 +1149,88 @@ router.get('/setfarm/runs/:id/design-artifact/:file', async (req, res) => {
   }
 });
 
-// GET /setfarm/runs/:id/design — Stitch design screens with local screenshots
-router.get('/setfarm/runs/:id/design', async (req, res) => {
+async function retrieveRunDesignArtifacts(run: any, projectId: string, screenMap: any[]): Promise<any[]> {
+  const script = join(PATHS.setfarmRepoDir, 'scripts/stitch-api.mjs');
+  // Recheck selected context, repository, metadata and destination at each effect
+  // boundary, including after a provider command returns.
+  const recheck = () => {
+    const ctx = parseRunContext(run);
+    if (freshMissionControlPathsV1()) {
+      const repo = selectedDesignRepositoryV1(ctx.repo);
+      if (repo) selectedDesignRepositoryPathV1(repo, '.stitch');
+    }
+    for (const dir of resolveRunStitchDirs(run, projectId)) designArtifactFilePathV1(dir, 'DESIGN_MANIFEST.json');
+    return stitchCacheDir(projectId);
+  };
+  const cacheDir = recheck();
+  if (freshMissionControlPathsV1()) mkdirSync(cacheDir, { recursive: true, mode: 0o700 });
+  else mkdirSync(cacheDir, { recursive: true });
+  const pngs = () => (readdirSync(recheck()) as string[]).filter(f => f.endsWith('.png'));
+
+  // populate-cache overwrites matching destinations; reserve it for an empty
+  // artifact cache so a later retrieval failure cannot destroy accepted files.
+  const cachedArtifacts = readdirSync(recheck()).filter(f => f.endsWith('.png') || f.endsWith('.html'));
+  for (const file of cachedArtifacts) designArtifactFilePathV1(recheck(), file);
+  if (cachedArtifacts.length === 0) {
+    const sourceDir = resolveRunStitchDirs(run, projectId).find(dir => dir !== cacheDir && existsSync(dir));
+    if (sourceDir) {
+      const files = readdirSync(sourceDir).filter(f => f.endsWith('.png') || f.endsWith('.html'));
+      for (const file of files) {
+        designArtifactFilePathV1(sourceDir, file);
+        designArtifactFilePathV1(recheck(), file);
+      }
+      const populated = JSON.parse(execFileSync('node', [script, 'populate-cache', sourceDir, recheck()],
+        { timeout: 15_000, stdio: 'pipe' }).toString().trim());
+      recheck();
+      if (populated?.success !== true || !Number.isInteger(populated.copied) || populated.copied < 0) throw Error('Invalid population result');
+      for (const file of files) {
+        designArtifactFilePathV1(sourceDir, file);
+        if (!existsSync(designArtifactFilePathV1(recheck(), file))) throw Error('Incomplete population');
+      }
+    }
+  }
+
+  if (pngs().length === 0 || screenMap.length === 0) {
+    const remoteScreens = JSON.parse(execFileSync('node', [script, 'list-screens', projectId],
+      { timeout: 60_000, stdio: 'pipe' }).toString().trim());
+    recheck();
+    if (!Array.isArray(remoteScreens)) throw Error('Invalid screen list');
+    const screens = remoteScreens.map((screen: any) => {
+      if (!screen || typeof screen !== 'object' || Array.isArray(screen)) throw Error('Invalid screen');
+      if (screen.name != null && typeof screen.name !== 'string') throw Error('Invalid screen name');
+      const id = ((screen.name || '').replace(/^projects\/\d+\/screens\//, '') || screen.id || screen.screenId || '');
+      if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) throw Error('Invalid screen ID');
+      assertSelectedDesignIdsV1(projectId, [id]);
+      const screenshot = screen.screenshotUrl || screen.screenshot?.downloadUrl || screen.screenshot?.download_url || null;
+      const html = screen.htmlUrl || screen.htmlCode?.downloadUrl || screen.html_code?.download_url || null;
+      for (const url of [screenshot, html]) {
+        if (url !== null && (typeof url !== 'string' || !/^https?:\/\//i.test(url))) throw Error('Invalid artifact URL');
+      }
+      return { screen, id, screenshot, html };
+    });
+    for (const { id, screenshot, html } of screens) {
+      for (const [url, extension] of [[screenshot, '.png'], [html, '.html']]) {
+        if (!url) continue;
+        const destination = designArtifactFilePathV1(recheck(), id + extension);
+        // The provider download command removes its destination before trying;
+        // keep already accepted artifacts when any later retrieval fails.
+        if (existsSync(destination)) continue;
+        const downloaded = JSON.parse(execFileSync('node', [script, 'download', url, destination],
+          { timeout: 60_000, stdio: 'pipe' }).toString().trim());
+        const accepted = designArtifactFilePathV1(recheck(), id + extension);
+        if (downloaded?.success === false || downloaded?.path !== destination || !Number.isFinite(downloaded.size) || downloaded.size <= 0
+          || !existsSync(accepted)) throw Error('Invalid download result');
+      }
+    }
+    if (screenMap.length === 0) {
+      screenMap = screens.map(({ screen, id }) => ({ screenId: id, name: screen.name || 'Screen',
+        description: screen.description || '', type: screen.type || 'page' }));
+    }
+  }
+  return screenMap;
+}
+
+async function respondRunDesign(req: any, res: any, retrieve: boolean): Promise<void> {
   noStore(res);
   try {
     const allRuns = (await getRuns()) as any[];
@@ -1189,10 +1269,12 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
     const notesMatch = output.match(/DESIGN_NOTES:\s*(.+)/);
     const designNotes = notesMatch ? notesMatch[1] : '';
 
+    // Path refusals must propagate even when optional manifest JSON is absent or malformed.
+    const manifestCandidates = resolveRunStitchDirs(run, projectId).map((dir) => designArtifactFilePathV1(dir, 'DESIGN_MANIFEST.json'));
+
     // ENRICH: If screenMap exists but lacks htmlFile/screenshot, merge from DESIGN_MANIFEST.json
-    if (screenMap.length > 0 && projectId) {
+    if (screenMap.length > 0) {
       try {
-        const manifestCandidates = resolveRunStitchDirs(run, projectId).map((dir) => designArtifactFilePathV1(dir, 'DESIGN_MANIFEST.json'));
         const mp = manifestCandidates.find(p => existsSync(p));
         if (mp) {
           const mfRaw = JSON.parse(readFileSync(mp, 'utf-8'));
@@ -1209,10 +1291,9 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
     }
 
     // FALLBACK 1: Read from DESIGN_MANIFEST.json (design step writes this to repo)
-    if (screenMap.length === 0 && projectId) {
+    if (screenMap.length === 0) {
       try {
-        const candidatePaths = resolveRunStitchDirs(run, projectId).map((dir) => designArtifactFilePathV1(dir, 'DESIGN_MANIFEST.json'));
-        const manifestPath = candidatePaths.find(p => existsSync(p)) || '';
+        const manifestPath = manifestCandidates.find(p => existsSync(p)) || '';
         if (manifestPath) {
           const manifestRaw = JSON.parse(readFileSync(manifestPath, 'utf-8'));
           const manifestScreens: any[] = Array.isArray(manifestRaw) ? manifestRaw : (manifestRaw.screens || []);
@@ -1230,106 +1311,42 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
       } catch { /* manifest read failed */ }
     }
 
-    const STITCH_SCRIPT_EARLY = join(PATHS.setfarmRepoDir, 'scripts/stitch-api.mjs');
-
-    // FALLBACK 2: list-screens from Stitch API
-    if (screenMap.length === 0 && projectId) {
-      try {
-        const listResult = execFileSync('node', [STITCH_SCRIPT_EARLY, 'list-screens', projectId],
-          { timeout: 15_000, stdio: 'pipe' }).toString().trim();
-        const screens = JSON.parse(listResult);
-        if (Array.isArray(screens)) {
-          screenMap = screens.map((s: any) => ({
-            screenId: ((s.name || '').replace(/^projects\/\d+\/screens\//, '') || s.id || s.screenId || ''),
-            name: s.name || 'Screen',
-            description: s.description || '',
-            type: s.type || 'page'
-          }));
-        }
-      } catch { /* list-screens failed */ }
+    // Retrieval decisions use recorded/manifest metadata; filename discovery
+    // below may represent only files accepted before an earlier partial failure.
+    if (retrieve) {
+      if (!projectId) {
+        res.status(409).json({ error: 'Design retrieval requires a project ID', code: 'DESIGN_RETRIEVAL_PREREQUISITE_MISSING' });
+        return;
+      }
+      screenMap = await retrieveRunDesignArtifacts(run, projectId, screenMap);
     }
 
-    // FALLBACK 3: Scan repo stitch/ dir for .html+.png files directly
+    // Discover saved HTML and screenshots across every guarded local candidate.
+    // Matching stems describe one screen even when the pair spans repo/cache.
     if (screenMap.length === 0) {
-      try {
-        const stitchDir3Candidates = resolveRunStitchDirs(run, projectId);
-        const stitchDir3 = stitchDir3Candidates.find(d => existsSync(d));
-        if (stitchDir3) {
-          const htmlFiles = readdirSync(stitchDir3).filter((f: string) => f.endsWith('.html') && f !== 'DESIGN_MANIFEST.json');
-          screenMap = htmlFiles.map((f: string) => {
-            const screenId = f.replace('.html', '');
-            return { screenId, name: 'Screen', description: '', type: 'page', htmlFile: f };
-          });
+      const discovered = new Map<string, any>();
+      for (const dir of resolveRunStitchDirs(run, projectId)) {
+        if (!existsSync(dir)) continue;
+        let files: string[];
+        try { files = readdirSync(dir); } catch { continue; }
+        for (const file of files) {
+          if (!/\.(html|png)$/.test(file)) continue;
+          const artifactPath = designArtifactFilePathV1(dir, file);
+          if (!existsSync(artifactPath)) continue;
+          const screenId = file.replace(/\.(html|png)$/, '');
+          const screen = discovered.get(screenId) || { screenId, name: 'Screen', description: '', type: 'page' };
+          if (file.endsWith('.html')) screen.htmlFile = file;
+          else screen.screenshotFile = file;
+          discovered.set(screenId, screen);
         }
-      } catch { /* stitch dir scan failed */ }
+      }
+      screenMap = [...discovered.values()];
     }
 
 
-    // Only return empty if we truly have no data
-    if (!projectId || screenMap.length === 0) {
+    if (screenMap.length === 0) {
       res.json({ screens: screenMap, projectId, designSystem, designNotes });
       return;
-    }
-
-    // Cache dir for this project's screenshots
-
-    const cacheDir = stitchCacheDir(projectId);
-    if (freshMissionControlPathsV1()) mkdirSync(cacheDir, { recursive: true, mode: 0o700 });
-    else mkdirSync(cacheDir, { recursive: true });
-
-    const STITCH_SCRIPT = join(PATHS.setfarmRepoDir, 'scripts/stitch-api.mjs');
-
-    // Fix C: skip populate-cache if PNGs already exist in cacheDir
-    const { readdirSync: _rds } = await import('fs');
-    const existingPngs: string[] = (() => { try { return (_rds(cacheDir) as string[]).filter((f: string) => f.endsWith('.png')); } catch { return []; } })();
-
-    if (existingPngs.length === 0) {
-      // Populate cache from repo's stitch/ dir (eager-downloaded during design step)
-      // Stitch API deletes screens after hours, so repo-local files are the only reliable source
-      try {
-        const ctx = parseRunContext(run);
-        const selected = freshMissionControlPathsV1();
-        const repo = selected ? (selectedDesignRepositoryV1(ctx.repo) ?? '') : ctx.repo || '';
-        const repoStitchDir = selected ? (repo ? selectedDesignRepositoryPathV1(repo, 'stitch')! : '') : repo ? join(repo, 'stitch') : '';
-        let populated = false;
-        if (repoStitchDir) {
-          if (existsSync(repoStitchDir)) {
-            execFileSync('node', [STITCH_SCRIPT, 'populate-cache', repoStitchDir, cacheDir], { timeout: 15_000, stdio: 'pipe' });
-            populated = true;
-          }
-        }
-        // Fallback: worktree deleted — try projects/ dir with basename
-        if (!populated && repo) {
-          for (const altRepoStitch of resolveRunStitchDirs(run, projectId)) {
-            if (altRepoStitch === repoStitchDir || !existsSync(altRepoStitch)) continue;
-            execFileSync('node', [STITCH_SCRIPT, 'populate-cache', altRepoStitch, cacheDir], { timeout: 15_000, stdio: 'pipe' });
-            populated = true;
-            break;
-          }
-        }
-      } catch { /* best effort */ }
-
-      // Fix B: if cacheDir still has no PNGs (completed run, worktree deleted), fallback to Stitch API
-      const pngsAfterCopy: string[] = (() => { try { return (_rds(cacheDir) as string[]).filter((f: string) => f.endsWith('.png')); } catch { return []; } })();
-      if (pngsAfterCopy.length === 0 && projectId) {
-        try {
-          const listOut = execFileSync('node', [STITCH_SCRIPT, 'list-screens', projectId], { timeout: 60_000, stdio: 'pipe' }).toString().trim();
-          const remoteScreens: any[] = JSON.parse(listOut);
-          for (const rs of remoteScreens) {
-            const sid: string = ((rs.name || '').replace(/^projects\/\d+\/screens\//, '') || rs.id || rs.screenId || '');
-            if (!sid) continue;
-            assertSelectedDesignIdsV1(projectId, [sid]);
-            const screenshotUrl: string | null = rs.screenshotUrl || rs.screenshot?.downloadUrl || rs.screenshot?.download_url || null;
-            const htmlDownloadUrl: string | null = rs.htmlUrl || rs.htmlCode?.downloadUrl || rs.html_code?.download_url || null;
-            if (screenshotUrl) {
-              try { execFileSync('node', [STITCH_SCRIPT, 'download', screenshotUrl, designArtifactFilePathV1(cacheDir, sid + '.png')], { timeout: 60_000, stdio: 'pipe' }); } catch { /* best effort */ }
-            }
-            if (htmlDownloadUrl) {
-              try { execFileSync('node', [STITCH_SCRIPT, 'download', htmlDownloadUrl, designArtifactFilePathV1(cacheDir, sid + '.html')], { timeout: 60_000, stdio: 'pipe' }); } catch { /* best effort */ }
-            }
-          }
-        } catch { /* list-screens failed or Stitch API unavailable */ }
-      }
     }
 
     const screens = screenMap.map((screen: any) => {
@@ -1364,8 +1381,18 @@ router.get('/setfarm/runs/:id/design', async (req, res) => {
 
     res.json({ screens, projectId, designSystem, designNotes });
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'Design fetch failed' });
+    if (retrieve) res.status(502).json({ error: 'Design retrieval failed', code: 'DESIGN_RETRIEVAL_FAILED' });
+    else res.status(500).json({ error: err.message || 'Design fetch failed' });
   }
+}
+
+// Local projection only; retrieval is an explicit operator action.
+router.get('/setfarm/runs/:id/design', async (req, res) => {
+  await respondRunDesign(req, res, false);
+});
+
+router.post('/setfarm/runs/:id/design/retrieve', async (req, res) => {
+  await respondRunDesign(req, res, true);
 });
 
 
