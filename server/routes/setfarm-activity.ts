@@ -1165,7 +1165,6 @@ async function retrieveRunDesignArtifacts(run: any, projectId: string, screenMap
   const cacheDir = recheck();
   if (freshMissionControlPathsV1()) mkdirSync(cacheDir, { recursive: true, mode: 0o700 });
   else mkdirSync(cacheDir, { recursive: true });
-  const pngs = () => (readdirSync(recheck()) as string[]).filter(f => f.endsWith('.png'));
 
   // populate-cache overwrites matching destinations; reserve it for an empty
   // artifact cache so a later retrieval failure cannot destroy accepted files.
@@ -1190,42 +1189,42 @@ async function retrieveRunDesignArtifacts(run: any, projectId: string, screenMap
     }
   }
 
-  if (pngs().length === 0 || screenMap.length === 0) {
-    const remoteScreens = JSON.parse(execFileSync('node', [script, 'list-screens', projectId],
-      { timeout: 60_000, stdio: 'pipe' }).toString().trim());
-    recheck();
-    if (!Array.isArray(remoteScreens)) throw Error('Invalid screen list');
-    const screens = remoteScreens.map((screen: any) => {
-      if (!screen || typeof screen !== 'object' || Array.isArray(screen)) throw Error('Invalid screen');
-      if (screen.name != null && typeof screen.name !== 'string') throw Error('Invalid screen name');
-      const id = ((screen.name || '').replace(/^projects\/\d+\/screens\//, '') || screen.id || screen.screenId || '');
-      if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) throw Error('Invalid screen ID');
-      assertSelectedDesignIdsV1(projectId, [id]);
-      const screenshot = screen.screenshotUrl || screen.screenshot?.downloadUrl || screen.screenshot?.download_url || null;
-      const html = screen.htmlUrl || screen.htmlCode?.downloadUrl || screen.html_code?.download_url || null;
-      for (const url of [screenshot, html]) {
-        if (url !== null && (typeof url !== 'string' || !/^https?:\/\//i.test(url))) throw Error('Invalid artifact URL');
-      }
-      return { screen, id, screenshot, html };
-    });
-    for (const { id, screenshot, html } of screens) {
-      for (const [url, extension] of [[screenshot, '.png'], [html, '.html']]) {
-        if (!url) continue;
-        const destination = designArtifactFilePathV1(recheck(), id + extension);
-        // The provider download command removes its destination before trying;
-        // keep already accepted artifacts when any later retrieval fails.
-        if (existsSync(destination)) continue;
-        const downloaded = JSON.parse(execFileSync('node', [script, 'download', url, destination],
-          { timeout: 60_000, stdio: 'pipe' }).toString().trim());
-        const accepted = designArtifactFilePathV1(recheck(), id + extension);
-        if (downloaded?.success === false || downloaded?.path !== destination || !Number.isFinite(downloaded.size) || downloaded.size <= 0
-          || !existsSync(accepted)) throw Error('Invalid download result');
-      }
+  // Every explicit retrieval lists once: an existing PNG and recorded metadata
+  // do not prove all remote artifacts were accepted by a previous attempt.
+  const remoteScreens = JSON.parse(execFileSync('node', [script, 'list-screens', projectId],
+    { timeout: 60_000, stdio: 'pipe' }).toString().trim());
+  recheck();
+  if (!Array.isArray(remoteScreens)) throw Error('Invalid screen list');
+  const screens = remoteScreens.map((screen: any) => {
+    if (!screen || typeof screen !== 'object' || Array.isArray(screen)) throw Error('Invalid screen');
+    if (screen.name != null && typeof screen.name !== 'string') throw Error('Invalid screen name');
+    const id = ((screen.name || '').replace(/^projects\/\d+\/screens\//, '') || screen.id || screen.screenId || '');
+    if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) throw Error('Invalid screen ID');
+    assertSelectedDesignIdsV1(projectId, [id]);
+    const screenshot = screen.screenshotUrl || screen.screenshot?.downloadUrl || screen.screenshot?.download_url || null;
+    const html = screen.htmlUrl || screen.htmlCode?.downloadUrl || screen.html_code?.download_url || null;
+    for (const url of [screenshot, html]) {
+      if (url !== null && (typeof url !== 'string' || !/^https?:\/\//i.test(url))) throw Error('Invalid artifact URL');
     }
-    if (screenMap.length === 0) {
-      screenMap = screens.map(({ screen, id }) => ({ screenId: id, name: screen.name || 'Screen',
-        description: screen.description || '', type: screen.type || 'page' }));
+    return { screen, id, screenshot, html };
+  });
+  for (const { id, screenshot, html } of screens) {
+    for (const [url, extension] of [[screenshot, '.png'], [html, '.html']]) {
+      if (!url) continue;
+      const destination = designArtifactFilePathV1(recheck(), id + extension);
+      // The provider download command removes its destination before trying;
+      // keep already accepted artifacts when any later retrieval fails.
+      if (existsSync(destination)) continue;
+      const downloaded = JSON.parse(execFileSync('node', [script, 'download', url, destination],
+        { timeout: 60_000, stdio: 'pipe' }).toString().trim());
+      const accepted = designArtifactFilePathV1(recheck(), id + extension);
+      if (downloaded?.success === false || downloaded?.path !== destination || !Number.isFinite(downloaded.size) || downloaded.size <= 0
+        || !existsSync(accepted)) throw Error('Invalid download result');
     }
+  }
+  if (screenMap.length === 0) {
+    screenMap = screens.map(({ screen, id }) => ({ screenId: id, name: screen.name || 'Screen',
+      description: screen.description || '', type: screen.type || 'page' }));
   }
   return screenMap;
 }

@@ -98,12 +98,13 @@ test('POST populates from guarded repo files and returns the compatible local re
   try {
     const dir = localRepo(f); fs.writeFileSync(path.join(dir, 'def456.png'), 'repo', { mode: 0o600 });
     const c = activity(f.base, { runs: [run(f.repo)], command(args) {
+      if (args[1] === 'list-screens') return '[]';
       assert.equal(args[1], 'populate-cache'); assert.equal(args[2], dir);
       fs.copyFileSync(path.join(args[2]!, 'def456.png'), path.join(args[3]!, 'def456.png')); return JSON.stringify({ success: true, copied: 1 });
     } }), res = response();
     assert.equal(typeof c.designRetrieve, 'function'); await c.designRetrieve(request('abc123'), res);
     assert.equal(res.statusCode, 200); assertLocal(res.bodies[0].screens[0], 'def456.png', '');
-    assert.deepEqual(c.calls, ['populate-cache']);
+    assert.deepEqual(c.calls, ['populate-cache', 'list-screens']);
   } finally { f.dispose(); }
 });
 
@@ -346,6 +347,63 @@ for (const withRepo of [false, true]) {
       const commands = c.commands.length, writes = c.cacheWrites.length, finalRead = response();
       await c.design(request('abc123'), finalRead); assert.equal(finalRead.bodies[0].screens.length, 2);
       assert.equal(c.commands.length, commands); assert.equal(c.cacheWrites.length, writes);
+    } finally { f.dispose(); }
+  });
+}
+
+for (const provenance of ['recorded map', 'manifest'] as const) {
+  test(`explicit POST retries missing artifacts with ${provenance} after a partial failure`, async () => {
+    const f = fixture();
+    try {
+      const screenEntries = [
+        { screenId: 'def456', name: 'Home', htmlFile: 'def456.html', screenshot: 'def456.png' },
+        { screenId: 'ghi789', name: 'Details', htmlFile: 'ghi789.html', screenshot: 'ghi789.png' },
+      ];
+      if (provenance === 'manifest') {
+        const dir = localRepo(f);
+        fs.writeFileSync(path.join(dir, 'DESIGN_MANIFEST.json'), JSON.stringify(screenEntries), { mode: 0o600 });
+      }
+      const text = 'STITCH_PROJECT_ID: abc123\n' + (provenance === 'recorded map'
+        ? 'SCREEN_MAP:\n' + JSON.stringify(screenEntries, null, 2) + '\n' : 'DESIGN_NOTES: Saved design\n');
+      let failLater = true, emptyProvider = false;
+      const c = activity(f.base, { runs: [run(provenance === 'manifest' ? f.repo : undefined, text)], command(args) {
+        if (args[1] === 'populate-cache') return JSON.stringify({ success: true, copied: 0 });
+        if (args[1] === 'list-screens') return JSON.stringify(emptyProvider ? [] : [
+          { id: 'def456', screenshotUrl: 'https://component.invalid/accepted' },
+          { id: 'ghi789', htmlUrl: 'https://component.invalid/later' },
+        ]);
+        assert.equal(args[1], 'download');
+        if (args[3]!.endsWith('ghi789.html') && failLater) throw Error('later download failed');
+        fs.writeFileSync(args[3]!, 'accepted', { mode: 0o600 }); return JSON.stringify({ path: args[3], size: 8 });
+      } });
+      const first = response(); await c.designRetrieve(request('abc123'), first);
+      assert.equal(first.statusCode, 502);
+      const commandsAfterFailure = c.commands.length, writesAfterFailure = c.cacheWrites.length, partial = response();
+      await c.design(request('abc123'), partial);
+      assert.equal(partial.statusCode, 200); assert.equal(partial.bodies[0].screens.length, 2);
+      assertLocal(partial.bodies[0].screens.find((screen: any) => screen.screenId === 'def456'), 'def456.png', '');
+      assertLocal(partial.bodies[0].screens.find((screen: any) => screen.screenId === 'ghi789'), '', '');
+      assert.equal(c.commands.length, commandsAfterFailure); assert.equal(c.cacheWrites.length, writesAfterFailure);
+      const retry = response(); await c.designRetrieve(request('abc123'), retry);
+      assert.equal(retry.statusCode, 502, 'recorded metadata plus one PNG must not skip the still-failing later download');
+      assert.equal(c.commands.filter((args: string[]) => args[1] === 'list-screens').length, 2);
+      failLater = false;
+      const completed = response(); await c.designRetrieve(request('abc123'), completed);
+      assert.equal(completed.statusCode, 200); assert.equal(completed.bodies[0].screens.length, 2);
+      assertLocal(completed.bodies[0].screens.find((screen: any) => screen.screenId === 'def456'), 'def456.png', '');
+      assertLocal(completed.bodies[0].screens.find((screen: any) => screen.screenId === 'ghi789'), '', 'ghi789.html');
+      assert.equal(c.commands.filter((args: string[]) => args[1] === 'list-screens').length, 3);
+      assert.equal(c.commands.filter((args: string[]) => args[1] === 'download' && args[3]!.endsWith('def456.png')).length, 1);
+      emptyProvider = true;
+      const empty = response(); await c.designRetrieve(request('abc123'), empty);
+      assert.equal(empty.statusCode, 200); assert.equal(empty.bodies[0].screens.length, 2);
+      assertLocal(empty.bodies[0].screens.find((screen: any) => screen.screenId === 'def456'), 'def456.png', '');
+      assertLocal(empty.bodies[0].screens.find((screen: any) => screen.screenId === 'ghi789'), '', 'ghi789.html');
+      assert.equal(c.commands.filter((args: string[]) => args[1] === 'list-screens').length, 4);
+      const commandsAfterEmpty = c.commands.length, writesAfterEmpty = c.cacheWrites.length, finalRead = response();
+      await c.design(request('abc123'), finalRead); assert.equal(finalRead.bodies[0].screens.length, 2);
+      assert.equal(c.commands.length, commandsAfterEmpty); assert.equal(c.cacheWrites.length, writesAfterEmpty);
+      assert.equal(fs.readFileSync(path.join(f.paths.setfarmDir, 'stitch-cache/abc123/def456.png'), 'utf8'), 'accepted');
     } finally { f.dispose(); }
   });
 }
