@@ -16,15 +16,10 @@ function CronStatus({ crons }: { crons: CronStatusItem[] }) {
 
       {/* System Health */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: "8px", marginBottom: "12px" }}>
-        {[
-          { label: "Gateway", color: "var(--neon-green)" },
-          { label: "Database", color: "var(--neon-cyan)" },
-          { label: "Disk", color: "var(--neon-green)" },
-          { label: "Memory", color: "var(--neon-cyan)" },
-        ].map(h => (
-          <div key={h.label} style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "4px", padding: "8px 12px", display: "flex", alignItems: "center", gap: "8px" }}>
-            <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: h.color, display: "inline-block" }} />
-            <span style={{ fontSize: "14px", color: "var(--text-primary)", fontFamily: "var(--font)" }}>{h.label}</span>
+        {["Gateway", "Database", "Disk", "Memory"].map(label => (
+          <div key={label} style={{ background: "var(--bg-card)", border: "1px solid var(--border)", borderRadius: "4px", padding: "8px 12px", display: "flex", alignItems: "center", gap: "8px" }}>
+            <span aria-hidden="true" style={{ width: "8px", height: "8px", borderRadius: "50%", background: "var(--text-dim)", display: "inline-block" }} />
+            <span style={{ fontSize: "14px", color: "var(--text-primary)", fontFamily: "var(--font)" }}>{label}: Unverified</span>
           </div>
         ))}
       </div>

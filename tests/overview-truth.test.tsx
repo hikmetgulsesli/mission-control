@@ -42,6 +42,84 @@ test('Overview truth at the render boundary', async (context) => {
       });
     }
 
+    const cronSystem = (html) => {
+      const start = html.indexOf('>CRON STATUS</h3>');
+      const end = html.indexOf('<div class="cron-list">', start);
+      assert.ok(start >= 0 && end > start, 'nonempty cron panel must keep its system grid and cron list');
+      return html.slice(start, end);
+    };
+    const oneCron = [{ id: 'fixture-cron', name: 'Fixture schedule', status: 'ok' }];
+
+    await context.test('nonempty cron panel labels unmeasured systems as Unverified', () => {
+      overview = { ...empty(), crons: oneCron };
+      const grid = cronSystem(render());
+      for (const label of ['Gateway', 'Database', 'Disk', 'Memory']) {
+        assert.ok(grid.includes(label + ': Unverified'), label + ' must not imply verified health');
+      }
+    });
+    await context.test('unverified system dots stay neutral and decorative', () => {
+      overview = { ...empty(), crons: oneCron };
+      const grid = cronSystem(render());
+      assert.equal((grid.match(/background:var\(--text-dim\)/g) || []).length, 4);
+      assert.equal((grid.match(/aria-hidden="true"/g) || []).length, 4);
+      assert.doesNotMatch(grid, /var\(--neon-(?:green|cyan|red)\)/);
+    });
+
+    const observation = { source: 'inert-fixture', observedAt: '2026-10-28T00:00:00.000Z', status: 'available' };
+    const measuredSystem = {
+      ram: { ...observation, total: 16, used: 8, percent: 50, semantics: 'total-os.freemem' },
+      cpu: { ...observation, percent: 12 },
+      disk: { ...observation, total: 100, used: 25, percent: 25, path: '/fixture', mount: '/fixture', totalBytes: 100, usedBytes: 25, freeBytes: 75 },
+      load: 0.2, loadObservation: observation,
+    };
+    for (const [name, fields] of [
+      ['online gateway', { gateway: { status: 'online', pid: 1234, uptime: '1h', memory: '1MiB' } }],
+      ['offline gateway', { gateway: { status: 'offline', pid: 0, uptime: '0', memory: '0' } }],
+      ['available system measurements', { system: measuredSystem }],
+    ]) {
+      await context.test(name + ' cannot turn cron-panel decoration into verified health', () => {
+        overview = { ...empty(), ...fields, crons: oneCron };
+        const grid = cronSystem(render());
+        for (const label of ['Gateway', 'Database', 'Disk', 'Memory']) {
+          assert.ok(grid.includes(label + ': Unverified'), label + ' needs its own health assessment');
+        }
+      });
+    }
+
+    await context.test('cron rows retain supplied statuses, names, last-run formatting and durations', () => {
+      overview = { ...empty(), crons: [
+        { id: 'cron-ok', name: 'Successful schedule', status: 'ok', lastDuration: 250 },
+        { id: 'cron-error', name: 'Failed schedule', status: 'error', lastRunAt: 946684800000, lastDuration: 1500 },
+        { id: 'cron-idle', name: 'Idle schedule', status: 'idle' },
+        { id: 'cron-running', name: 'Running schedule', status: 'running' },
+      ] };
+      const rows = [...render().matchAll(/<div class="cron-item">([\s\S]*?)<\/div>/g)].map(match => match[1]);
+      assert.equal(rows.length, 4);
+      for (const [index, status, name] of [
+        [0, 'ok', 'Successful schedule'], [1, 'error', 'Failed schedule'],
+        [2, 'idle', 'Idle schedule'], [3, 'running', 'Running schedule'],
+      ]) {
+        assert.ok(rows[index].includes('cron-item__dot--' + status));
+        assert.ok(rows[index].includes('cron-item__name">' + name + '</span>'));
+      }
+      assert.match(rows[0], /cron-item__last">never<\/span>/);
+      assert.match(rows[1], /cron-item__last">[^<]+ ago<\/span>/);
+      assert.match(rows[0], /cron-item__duration">250ms<\/span>/);
+      assert.match(rows[1], /cron-item__duration">1\.5s<\/span>/);
+      assert.doesNotMatch(rows.join(''), /Unverified/);
+    });
+
+    for (const name of ['omitted', 'empty']) {
+      await context.test(name + ' crons keep the panel hidden despite enabled configured schedules', () => {
+        overview = { ...empty(), cronCount: 5 };
+        if (name === 'omitted') delete overview.crons;
+        const html = render();
+        assert.doesNotMatch(html, /CRON STATUS|cron-list|Unverified/);
+        assert.ok(cronCard(html).includes('stat-card__value">5</div>'));
+        assert.match(cronCard(html), /enabled schedules/);
+      });
+    }
+
     await context.test('observed Rune replaces static main identity and uses the observed denominator', () => {
       overview = { ...empty(), agentCount: 1, agents: [{ id: 'main', name: 'Fallback', identityName: 'Rune' }],
         agentSummary: [{ id: 'main', name: 'Fallback', identityName: 'Rune', status: 'unmapped', currentTask: '', lastActivity: null }] };
