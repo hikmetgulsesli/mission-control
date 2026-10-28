@@ -586,7 +586,9 @@ router.get('/setfarm/pipeline', async (_req, res) => {
         .slice(0, 20);
       // Auto-sync: check for newly finished runs (completed, failed, cancelled)
       const finishedIds = new Set(allRuns.filter((r: any) => r.status !== 'running' && r.status !== 'pending').map((r: any) => r.id));
-      const newlyFinished = [...finishedIds].filter(id => !lastSeenFinishedIds.has(id));
+      const newlyFinished = allRuns
+        .filter((r: any) => finishedIds.has(r.id) && !isV3RunProtocol(r) && !lastSeenFinishedIds.has(r.id))
+        .map((r: any) => r.id);
       if (newlyFinished.length > 0 && lastSeenFinishedIds.size > 0) {
         if (!syncInProgress) {
           syncInProgress = true;
@@ -597,7 +599,7 @@ router.get('/setfarm/pipeline', async (_req, res) => {
 
       // Auto-create: detect newly started runs and create 'building' project cards
       const runningIds = new Set(running.map((r: any) => r.id));
-      const newlyStarted = running.filter((r: any) => !lastSeenRunningIds.has(r.id));
+      const newlyStarted = running.filter((r: any) => !isV3RunProtocol(r) && !lastSeenRunningIds.has(r.id));
       if (newlyStarted.length > 0 && lastSeenRunningIds.size > 0) {
         for (const run of newlyStarted) {
           createBuildingProject(run).catch(() => {});
