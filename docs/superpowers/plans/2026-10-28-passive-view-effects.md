@@ -88,7 +88,9 @@ const newlyStarted = running.filter((r: any) => !isV3RunProtocol(r) && !lastSeen
 **Interfaces:** Keep GET /api/setfarm/runs/:id/design response compatibility for recorded design/local screens/tokens/URLs. Add POST /api/setfarm/runs/:id/design/retrieve returning that same response shape after existing guarded retrieval. Extend existing test activity fixture with designRetrieve while preserving design/create/sync and other existing fields. Task4 consumes these two endpoints.
 
 - [ ] Actual route tests: GET for completed Design output with missing local cache invokes zero provider commands and creates/copies/writes no files; existing saved artifacts still resolve with guarded URLs. Test unusable/incomplete Design output without provider work.
+- [ ] Add completed-run/no-project-ID cases with repo-local screen map/manifest plus saved screenshot/HTML, and HTML-only discovery where supported. GET must return guarded local URLs without provider/cache work; remove premature project-ID-based returns only where existing guarded local resolution supports it. Keep incomplete/no-output behavior and selected-path/traversal refusal.
 - [ ] Test explicit POST performs existing population/list/download work at modeled provider/owned FS ports and returns local artifacts. Retain traversal, selected-root replacement/refusal and source/repository/metadata rechecks. Move the old GET-population expectation to POST; do not delete the safety cases.
+- [ ] Causal POST failure tests: provider list, population and download throw/fail or return malformed data; return a non-success safe error rather than200 empty/success. Preserve accepted local files on partial failure, including successful earlier writes, with no destructive rollback. A subsequent GET still projects valid saved artifacts. Distinguish valid empty provider data from failure and expose missing retrieval prerequisites without calling an invalid provider target.
 
 ```ts
 await invoke(getDesign, completedRunWithMissingCache);
@@ -122,6 +124,7 @@ replaceRun('run-b'); resolveOldRunRequests(); assert.ok(!renderedText().includes
 ```
 
 - [ ] Verify saved screens/tokens/HTML links, local empty, loading, read error, pending/retrieval error and recovery. Preserve technical tabs/Overview. Use existing button/layout styles; no new dependency or visual redesign. Fake API/timers/owned fixture files only, no provider or operational browser invocation.
+- [ ] In the retrieval-error case retain previously accepted local screens/links while showing the error. Do not convert them into a successful empty result or discard them because a partial retrieval failed.
 - [ ] Run `node --import tsx --test tests/inline-plan-design-lifecycle.test.ts` and record causal REDs before implementing the action/lifecycle split.
 - [ ] Remove Design from shared Promise.all; add its separately owned selected-tab read lifecycle, explicit busy/deduplicated retrieve handler and always reachable view. Keep accepted data truthfully scoped to the run; clear errors on valid recovery.
 - [ ] Update api method and UI fixture to the actual local Design response shape. Re-run focused lifecycle plus related existing polling/component/path suites selected by changed imports. Report exact test scope/limits and file hashes for review; Root commits after independent review.

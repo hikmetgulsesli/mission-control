@@ -24,7 +24,11 @@ Newly finished/started V3 runs must not trigger the legacy auto-sync/create path
 
 Existing GET /api/setfarm/runs/:id/design reads recorded metadata and already available local artifacts only. It must not invoke provider commands or create/copy/download cache artifacts. Existing guarded artifact URLs and tokens remain usable for saved files; missing files are represented as local absence, not proof that the provider has no design.
 
+Local discovery and guarded URL projection must also work without a provider project ID when a completed usable Design record and repo-local manifest, screen map or HTML artifacts identify saved files. Retain the incomplete/no-output short circuit and every selected-path guard; a missing project ID must not prematurely return raw metadata when local files can be resolved safely.
+
 Add POST /api/setfarm/runs/:id/design/retrieve for the existing retrieval work. It returns the same Design response shape after retrieval. Keep selected-installation, project/screen ID, path, symlink, source/repository and metadata rechecks at their existing sensitive boundaries. No new credentials, provider permissions, generation, run control or relaxed path fallback. Preserve the existing no-design/incomplete-run short circuit; errors must be visible to the caller rather than an invented successful empty result. Retrieval remains an explicit user action, never polling, mount or retry of a local read.
+
+Provider listing/population/download failures return a non-success response with a safe visible error; do not swallow them into200 empty or successful retrieval. Missing retrieval prerequisites must also be explicit. On partial failure keep existing and successfully retrieved local artifacts, perform no destructive rollback, and let subsequent local GET show what is available. A valid empty provider response is distinct from an exception or malformed response. The client retains accepted local screens while showing retrieval failure.
 
 ### Client behavior
 
