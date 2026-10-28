@@ -1322,8 +1322,17 @@ async function respondRunDesign(req: any, res: any, retrieve: boolean): Promise<
 
     // Discover saved HTML and screenshots across every guarded local candidate.
     // Matching stems describe one screen even when the pair spans repo/cache.
-    if (screenMap.length === 0) {
+    {
       const discovered = new Map<string, any>();
+      // Recorded IDs and explicit filenames already belong to a card. Reserve
+      // their stems so a manifest alias and its paired artifact cannot create
+      // a second card while leaving the recorded metadata authoritative.
+      const recordedStems = new Set<string>();
+      for (const screen of screenMap) {
+        for (const value of [screen.screenId, screen.screen_id, screen.id, screen.htmlFile, screen.screenshotFile]) {
+          if (typeof value === 'string' && value) recordedStems.add(value.replace(/\.(html|png)$/, ''));
+        }
+      }
       for (const dir of resolveRunStitchDirs(run, projectId)) {
         if (!existsSync(dir)) continue;
         let files: string[];
@@ -1333,13 +1342,14 @@ async function respondRunDesign(req: any, res: any, retrieve: boolean): Promise<
           const artifactPath = designArtifactFilePathV1(dir, file);
           if (!existsSync(artifactPath)) continue;
           const screenId = file.replace(/\.(html|png)$/, '');
+          if (recordedStems.has(screenId)) continue;
           const screen = discovered.get(screenId) || { screenId, name: 'Screen', description: '', type: 'page' };
           if (file.endsWith('.html')) screen.htmlFile = file;
           else screen.screenshotFile = file;
           discovered.set(screenId, screen);
         }
       }
-      screenMap = [...discovered.values()];
+      screenMap = [...screenMap, ...discovered.values()];
     }
 
 

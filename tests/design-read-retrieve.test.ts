@@ -407,3 +407,58 @@ for (const provenance of ['recorded map', 'manifest'] as const) {
     } finally { f.dispose(); }
   });
 }
+
+for (const provenance of ['recorded map', 'manifest'] as const) {
+  test(`partial retrieval exposes unrecorded saved screens with ${provenance}, including after retry and empty listing`, async () => {
+    const f = fixture();
+    try {
+      const dir = localRepo(f), cache = path.join(f.paths.setfarmDir, 'stitch-cache/abc123');
+      const entry = { screenId: 'def456', name: 'Recorded home', description: 'Keep this metadata',
+        htmlFile: 'home-alias.html', screenshot: 'home-alias.png' };
+      fs.writeFileSync(path.join(dir, 'home-alias.png'), 'recorded image', { mode: 0o600 });
+      fs.writeFileSync(path.join(dir, 'home-alias.html'), 'recorded html', { mode: 0o600 });
+      if (provenance === 'manifest') fs.writeFileSync(path.join(dir, 'DESIGN_MANIFEST.json'), JSON.stringify([entry]), { mode: 0o600 });
+      const text = 'STITCH_PROJECT_ID: abc123\n' + (provenance === 'recorded map'
+        ? 'SCREEN_MAP:\n' + JSON.stringify([entry], null, 2) + '\n' : 'DESIGN_NOTES: Saved design\n');
+      // SCREEN_MAP enrichment supplies the explicit alias through the manifest.
+      if (provenance === 'recorded map') fs.writeFileSync(path.join(dir, 'DESIGN_MANIFEST.json'), JSON.stringify([entry]), { mode: 0o600 });
+      let failLater = true, emptyProvider = false;
+      const c = activity(f.base, { runs: [run(f.repo, text)], command(args) {
+        if (args[1] === 'populate-cache') {
+          for (const file of ['home-alias.png', 'home-alias.html']) fs.copyFileSync(path.join(dir, file), path.join(args[3]!, file));
+          return JSON.stringify({ success: true, copied: 2 });
+        }
+        if (args[1] === 'list-screens') return JSON.stringify(emptyProvider ? [] : [
+          { id: 'def456' }, { id: 'ghi789', screenshotUrl: 'https://component.invalid/b' },
+          { id: 'jkl012', htmlUrl: 'https://component.invalid/c' },
+        ]);
+        assert.equal(args[1], 'download');
+        if (args[3]!.endsWith('jkl012.html') && failLater) throw Error('later download failed');
+        fs.writeFileSync(args[3]!, 'accepted', { mode: 0o600 }); return JSON.stringify({ path: args[3], size: 8 });
+      } });
+      const first = response(); await c.designRetrieve(request('abc123'), first);
+      assert.equal(first.statusCode, 502);
+      assert.equal(fs.readFileSync(path.join(cache, 'ghi789.png'), 'utf8'), 'accepted');
+      const commands = c.commands.length, writes = c.cacheWrites.length, partial = response();
+      await c.design(request('abc123'), partial);
+      assert.equal(partial.statusCode, 200); assert.equal(partial.bodies[0].screens.length, 2);
+      const recorded = partial.bodies[0].screens.find((s: any) => s.screenId === 'def456');
+      assert.equal(recorded.name, 'Recorded home'); assert.equal(recorded.description, 'Keep this metadata');
+      assertLocal(recorded, 'home-alias.png', 'home-alias.html');
+      assertLocal(partial.bodies[0].screens.find((s: any) => s.screenId === 'ghi789'), 'ghi789.png', '');
+      assert.equal(c.commands.length, commands); assert.equal(c.cacheWrites.length, writes);
+      failLater = false;
+      const completed = response(); await c.designRetrieve(request('abc123'), completed);
+      assert.equal(completed.statusCode, 200); assert.equal(completed.bodies[0].screens.length, 3);
+      assertLocal(completed.bodies[0].screens.find((s: any) => s.screenId === 'jkl012'), '', 'jkl012.html');
+      const read = response(); await c.design(request('abc123'), read);
+      assert.deepEqual(read.bodies[0].screens, completed.bodies[0].screens);
+      emptyProvider = true;
+      const empty = response(); await c.designRetrieve(request('abc123'), empty);
+      assert.equal(empty.statusCode, 200); assert.deepEqual(empty.bodies[0].screens, read.bodies[0].screens);
+      assert.equal(c.commands.filter((args: string[]) => args[1] === 'list-screens').length, 3);
+      assert.equal(c.commands.filter((args: string[]) => args[1] === 'download' && args[3]!.endsWith('ghi789.png')).length, 1);
+      assert.equal(fs.readFileSync(path.join(cache, 'ghi789.png'), 'utf8'), 'accepted');
+    } finally { f.dispose(); }
+  });
+}
