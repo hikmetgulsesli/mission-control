@@ -110,3 +110,158 @@ test("shared source-map version validation rejects a native field in standalone 
   assert.equal(isRenderableProductBuildAuthorityV3(wire, wire.runId), false);
   assert.equal(parseProductBuildAuthorityResponse(200, wire, wire.runId).status, "upstream_error");
 });
+
+// Final I1 regression stays outside server/ so the server project never imports
+// browser src/. These are existing pure boundaries, not configured services.
+import { hashCanonicalJson } from "../server/services/setfarm-canonical-json-v1.js";
+import { parseProductBuildAuthorityV3 } from "../server/services/product-build-authority-v3-parser.js";
+import { parseProductBuildAuthorityV1, parseProductBuildRefusalV2 } from "../server/services/setfarm-product-build-authority-core.js";
+
+type OutcomeSide = "success" | "failure";
+type OptionalOutcomeField = "persistenceRefs" | "userVisible";
+const outcomeOmissions: Array<{ name: string; sides: OutcomeSide[]; fields: OptionalOutcomeField[] }> = [
+  { name: "success persistenceRefs", sides: ["success"], fields: ["persistenceRefs"] },
+  { name: "success userVisible", sides: ["success"], fields: ["userVisible"] },
+  { name: "success both optional fields", sides: ["success"], fields: ["persistenceRefs", "userVisible"] },
+  { name: "failure persistenceRefs", sides: ["failure"], fields: ["persistenceRefs"] },
+  { name: "failure userVisible", sides: ["failure"], fields: ["userVisible"] },
+  { name: "failure both optional fields", sides: ["failure"], fields: ["persistenceRefs", "userVisible"] },
+  { name: "both outcomes both optional fields", sides: ["success", "failure"], fields: ["persistenceRefs", "userVisible"] },
+];
+function nativeOutcomeWire(): Record<string, unknown> {
+  const entry = corpus.cases.find((item) => item.name === "native_none");
+  assert.ok(entry);
+  const wire = structuredClone(entry.wire);
+  const native = record(wire.packetAuthority);
+  assert.equal(native.designGraph, null);
+  assert.equal(record(native.refs).designGraph, null);
+  assert.deepEqual(record(native.productSpec).persistencePolicies, []);
+  assert.deepEqual(record(native.implementationSourceMap).screens, []);
+  assert.deepEqual(record(native.compilationReport).inputHashes, [hashCanonicalJson(native.productSpec)], "Confirm authored report input identity before rebinding");
+  return wire;
+}
+function firstOutcome(wire: Record<string, unknown>, side: OutcomeSide): Record<string, unknown> {
+  const actions = record(record(wire.packetAuthority).productSpec).actions;
+  assert.ok(Array.isArray(actions));
+  return record(record(actions[0])[side]);
+}
+function hashOutcomeIdentity(value: Record<string, unknown>): void {
+  const { authorityHash: _hash, ...identity } = value;
+  value.authorityHash = hashCanonicalJson(identity);
+}
+// Matching the SF native_none positive-control construction: rebind semantic
+// dependencies first, then every top-level envelope/ref and containing hash.
+// No graph, closure, producer or deterministic story partition is regenerated.
+function rebindOutcomeWire(wire: Record<string, unknown>): void {
+  const native = record(wire.packetAuthority);
+  const story = record(native.storyPlan);
+  const sourceMap = record(native.implementationSourceMap);
+  const report = record(native.compilationReport);
+  const refs = record(native.refs);
+  const packet = record(native.packet);
+  const reportRefs = record(report.artifactHashes);
+  const specHash = hashCanonicalJson(native.productSpec);
+  story.productSpecHash = specHash;
+  sourceMap.productSpecV2PayloadHash = specHash;
+  sourceMap.storyPlanV2PayloadHash = hashCanonicalJson(story);
+  report.inputHashes = [specHash];
+  const envelopeHash = (payload: unknown) => payload === null ? null : hashCanonicalJson({
+    schema: "setfarm.semantic-artifact-envelope.v1", artifactType: record(payload).schema,
+    producer: native.producer, payload,
+  });
+  for (const [field, packetField, reportField] of [
+    ["productSpec", "productSpecV2Hash", "productSpecV2"],
+    ["designGraph", "designGraphV2Hash", "designGraphV2"],
+    ["buildTopology", "buildTopologyV1Hash", "buildTopologyV1"],
+    ["storyPlan", "storyPlanV2Hash", "storyPlanV2"],
+    ["designSourceClosure", "designSourceClosureV2Hash", "designSourceClosureV2"],
+    ["implementationSourceMap", "implementationSourceMapV1Hash", "implementationSourceMapV1"],
+  ] as const) {
+    refs[field] = envelopeHash(native[field]);
+    packet[packetField] = refs[field];
+    reportRefs[reportField] = refs[field];
+  }
+  native.packetHash = refs.packet = envelopeHash(packet);
+  report.packetHash = native.packetHash;
+  refs.compilationReport = envelopeHash(report);
+  hashOutcomeIdentity(native);
+  hashOutcomeIdentity(wire);
+}
+const outcomeLegacyParsers = { packet: parseProductBuildAuthorityV1, refusal: parseProductBuildRefusalV2 };
+const outcomeConsumers = [
+  {
+    name: "server parser",
+    accept(wire: Record<string, unknown>): void {
+      assert.equal(parseProductBuildAuthorityV3(wire, String(wire.runId), outcomeLegacyParsers), wire, "Server preserves the received authority object");
+    },
+    reject(wire: Record<string, unknown>): void {
+      assert.throws(() => parseProductBuildAuthorityV3(wire, String(wire.runId), outcomeLegacyParsers), /native:invalid_structure/);
+    },
+  },
+  {
+    name: "direct browser predicate",
+    accept(wire: Record<string, unknown>): void {
+      assert.equal(isRenderableProductBuildAuthorityV3(wire, String(wire.runId)), true);
+    },
+    reject(wire: Record<string, unknown>): void {
+      assert.equal(isRenderableProductBuildAuthorityV3(wire, String(wire.runId)), false);
+    },
+  },
+  {
+    name: "browser response dispatch",
+    accept(wire: Record<string, unknown>): void {
+      const result = parseProductBuildAuthorityResponse(200, wire, String(wire.runId));
+      assert.equal(result.status, "ok");
+      if (result.status !== "ok") throw new Error("Expected valid native outcome authority");
+      assert.equal(result.authority, wire, "Browser dispatch preserves the received authority object");
+    },
+    reject(wire: Record<string, unknown>): void {
+      assert.deepEqual(parseProductBuildAuthorityResponse(200, wire, String(wire.runId)), {
+        status: "upstream_error", code: "SETFARM_PRODUCT_BUILD_AUTHORITY_UPSTREAM_ERROR", reason: "invalid_payload", upstreamStatus: 200,
+      });
+    },
+  },
+];
+for (const consumer of outcomeConsumers) {
+  test(`Final I1 MC ${consumer.name} accepts unchanged fully rebound native baseline`, () => {
+    const wire = nativeOutcomeWire();
+    const original = structuredClone(wire);
+    rebindOutcomeWire(wire);
+    assert.deepEqual(wire, original, "No-op rebinding reproduces the paired native baseline byte identity");
+    consumer.accept(wire);
+  });
+  for (const omission of outcomeOmissions) {
+    test(`Final I1 MC ${consumer.name} accepts omitted ${omission.name}`, () => {
+      const wire = nativeOutcomeWire();
+      for (const side of omission.sides) {
+        const outcome = firstOutcome(wire, side);
+        assert.deepEqual(outcome.persistenceRefs, [], "Only empty, unused persistence refs may be omitted");
+        for (const field of omission.fields) delete outcome[field];
+      }
+      rebindOutcomeWire(wire);
+      const before = structuredClone(wire);
+      consumer.accept(wire);
+      assert.deepEqual(wire, before, "Validation must not normalize any field or hash");
+      for (const side of omission.sides) for (const field of omission.fields) {
+        assert.equal(Object.hasOwn(firstOutcome(wire, side), field), false, "Omitted optional fields stay absent");
+      }
+    });
+  }
+  for (const side of ["success", "failure"] as const) {
+    for (const control of [
+      { name: "wrong persistenceRefs type", change: (outcome: Record<string, unknown>) => { outcome.persistenceRefs = "invalid-list"; } },
+      { name: "wrong userVisible type", change: (outcome: Record<string, unknown>) => { outcome.userVisible = "true"; } },
+      { name: "missing required stateRefs", change: (outcome: Record<string, unknown>) => { delete outcome.stateRefs; } },
+      { name: "missing required evidenceRefs", change: (outcome: Record<string, unknown>) => { delete outcome.evidenceRefs; } },
+      { name: "unknown outcome key", change: (outcome: Record<string, unknown>) => { outcome.futureOutcome = true; } },
+    ]) {
+      test(`Final I1 MC ${consumer.name} rejects ${side} ${control.name} with all hashes rebound`, () => {
+        const wire = nativeOutcomeWire();
+        consumer.accept(wire);
+        control.change(firstOutcome(wire, side));
+        rebindOutcomeWire(wire);
+        consumer.reject(wire);
+      });
+    }
+  }
+}

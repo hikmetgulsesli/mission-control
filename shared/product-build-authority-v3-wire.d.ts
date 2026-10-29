@@ -19,7 +19,7 @@ export type NativeInvocation = { schema: "setfarm.action-invocation-interface-in
   | { kind: "cli_command"; subcommandTokens: string[]; fieldBindings: NativeJsonObject[]; result: NativeJsonObject }
   | { kind: "http_request"; method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"; routeRef: string; fieldBindings: NativeJsonObject[]; result: NativeJsonObject });
 export interface NativeProductSurface { id: string; name: string; kind: "page" | "panel" | "dialog" | "overlay" | "canvas" | "terminal" | "api"; routeRef: string; required: boolean; composition: NativeComposition }
-export interface NativeActionOutcome { stateRefs: string[]; persistenceRefs: string[]; evidenceRefs: string[]; userVisible: boolean }
+export interface NativeActionOutcome { stateRefs: string[]; persistenceRefs?: string[]; evidenceRefs: string[]; userVisible?: boolean }
 export type NativeProductSelector = NativeRenderedSelector | { kind: "invocation_output"; coordinate: "result_value"; pointer: string; valueContract: NativeJsonObject };
 export interface NativeProductAction {
   id: string; name: string; invocationInterface: NativeInvocation; controlPlacements: NativePlacement[]; affectedSurfaceRefs: string[];

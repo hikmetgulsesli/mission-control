@@ -116,7 +116,7 @@ const nSources = nObject({
   candidateSelection: nObject({ schema: nLiteral(nSourceLabels.candidateSelection), policy: nString, generationTargetsHash: nSha, directResponseEvidenceHash: nSha, renderedSemanticsHash: nSha, candidates: nObjects, selections: nObjects }),
   responseBindings: nObject({ schema: nLiteral(nSourceLabels.responseBindings), generationTargetsHash: nSha, directResponseEvidenceHash: nSha, candidateSelectionHash: nSha, renderedSemanticsHash: nSha, bindings: nArray(nResponseBinding) }),
 });
-const nOutcome = nObject({ stateRefs: nStrings, persistenceRefs: nStrings, evidenceRefs: nStrings, userVisible: nBool });
+const nOutcome = nObject({ stateRefs: nStrings, evidenceRefs: nStrings }, { persistenceRefs: nStrings, userVisible: nBool });
 const nProductSurface = nObject({ id: nString, name: nString, kind: nLiteral("page", "panel", "dialog", "overlay", "canvas", "terminal", "api"), routeRef: nString, required: nBool, composition: nComposition });
 const nInvocation: NativeCheck = (value) => nObject({ schema: nLiteral("setfarm.action-invocation-interface-intent.v1"), kind: nLiteral("rendered_control") })(value)
   || nObject({ schema: nLiteral("setfarm.action-invocation-interface-intent.v1"), kind: nLiteral("route_entry"), routeRef: nString })(value)
