@@ -1,3 +1,4 @@
+import { NativeProductBuildAuthority } from "./NativeProductBuildAuthority";
 import {
   productBuildAuthorityReason,
   type ProductBuildAuthorityState,
@@ -34,7 +35,7 @@ export function ProductBuildAuthority({ state }: { state: ProductBuildAuthorityS
   }
 
   const versionedAuthority = state.authority;
-  if (versionedAuthority.schema === "setfarm.product-build-authority.v2"
+  if (versionedAuthority.schema !== "setfarm.product-build-authority.v1"
     && versionedAuthority.disposition === "refused_before_packet") {
     const refusal = versionedAuthority.refusal;
     const cause = refusal.failureIdentity.operationalCause;
@@ -66,9 +67,12 @@ export function ProductBuildAuthority({ state }: { state: ProductBuildAuthorityS
     );
   }
 
-  const authority = versionedAuthority.schema === "setfarm.product-build-authority.v2"
+  const authority = versionedAuthority.schema !== "setfarm.product-build-authority.v1"
     ? versionedAuthority.packetAuthority
     : versionedAuthority;
+  if (authority.schema === "setfarm.product-build-packet-authority.v3") {
+    return <NativeProductBuildAuthority authority={authority} outerAuthorityHash={versionedAuthority.authorityHash} outerSchema="setfarm.product-build-authority.v3" />;
+  }
   const controls = authority.designGraph.controls;
   const controlsById = new Map(controls.map((control) => [control.id, control]));
   const designBindings = authority.designGraph.bindings;
@@ -84,7 +88,7 @@ export function ProductBuildAuthority({ state }: { state: ProductBuildAuthorityS
         <div><span>PRODUCT</span><h3>Product Build Authority</h3></div>
         <strong>
           {versionedAuthority.schema}
-          {versionedAuthority.schema === "setfarm.product-build-authority.v2" ? " · SEALED" : ""}
+          {versionedAuthority.schema !== "setfarm.product-build-authority.v1" ? " · SEALED" : ""}
         </strong>
       </div>
       <div className="oe-body">
@@ -98,7 +102,7 @@ export function ProductBuildAuthority({ state }: { state: ProductBuildAuthorityS
         <div className="oe-contract-grid">
           <div><span>Packet hash</span><code title={authority.packetHash}>{shortHash(authority.packetHash)}</code></div>
           <div><span>Authority hash</span><code title={versionedAuthority.authorityHash}>{shortHash(versionedAuthority.authorityHash)}</code></div>
-          {versionedAuthority.schema === "setfarm.product-build-authority.v2" && (
+          {versionedAuthority.schema !== "setfarm.product-build-authority.v1" && (
             <div><span>Packet authority</span><code title={authority.authorityHash}>{shortHash(authority.authorityHash)}</code></div>
           )}
           <div><span>Compiler</span><code>{authority.packet.compiler.version} · {shortHash(authority.packet.compiler.codeSha)}</code></div>

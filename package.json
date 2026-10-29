@@ -8,7 +8,9 @@
   },
   "scripts": {
     "dev": "concurrently \"tsx watch server/index.ts\" \"vite\"",
-    "test": "node --import tsx --test server/routes/*.test.ts server/services/*.test.ts server/utils/*.test.ts tests/*.test.ts",
+    "test": "npm run test:pba-runner && node scripts/run-product-authority-test-groups.mjs",
+    "test:pba-runner": "node --test scripts/__tests__/product-authority-test-runner.test.mjs",
+    "test:pba": "node scripts/run-product-authority-test-groups.mjs --group=pba",
     "test:ui:responsive": "MC_RESPONSIVE_TOOLS_QUALIFICATION=1 node --import tsx --test --test-reporter=tap --test-name-pattern='^responsive tools readability$' tests/data-sync-browser.test.ts",
     "test:task6a-mc-restricted-pg:isolated": "node -e \"if (!process.env.SETFARM_TASK6A_TEST_PG_DATA_DIRECTORY || !process.env.SETFARM_TEST_PG_ADMIN_URL) throw new Error('TASK6A_PRIVATE_CLUSTER_REQUIRED')\" && env -u SETFARM_PG_URL node --import tsx --test server/routes/task6a-private-live-feed-restricted.integration.test.ts",
     "test:task6a-mc-tasks-pg:isolated": "node -e \"if (!process.env.SETFARM_TASK6A_TEST_PG_DATA_DIRECTORY || !process.env.SETFARM_TEST_PG_ADMIN_URL) throw new Error('TASK6A_PRIVATE_CLUSTER_REQUIRED')\" && env -u SETFARM_PG_URL node --import tsx --test server/routes/task6a-private-tasks-restricted.integration.test.ts",

@@ -3,10 +3,7 @@ import {
   parseOperationalSnapshotResponse,
   type OperationalSnapshotFetchResult,
 } from './operational-snapshot';
-import {
-  parseProductBuildAuthorityResponse,
-  type ProductBuildAuthorityState,
-} from './product-build-authority';
+import { fetchProductBuildAuthority } from './product-build-authority-request';
 import { parseControlEvidenceEnvelopeV1, parseControlJobReceiptV1, parsePendingControlLaunchV1 } from './control-evidence';
 import type { ControlEvidenceEnvelopeV1, ControlJobReceiptV1, PendingControlLaunchV1 } from './control-evidence';
 
@@ -257,34 +254,6 @@ async function fetchOperationalSnapshot(runId: string): Promise<OperationalSnaps
   }
 }
 
-async function fetchProductBuildAuthority(runId: string): Promise<Exclude<ProductBuildAuthorityState, { status: 'loading' }>> {
-  try {
-    const res = await fetch(`${BASE}/api/setfarm/runs/${encodeURIComponent(runId)}/product-build-authority`, {
-      headers: AUTH_TOKEN ? { 'X-MC-Token': AUTH_TOKEN } : {},
-      cache: 'no-store',
-    });
-    const text = await res.text();
-    let body: unknown;
-    try {
-      body = JSON.parse(text);
-    } catch {
-      return {
-        status: 'upstream_error',
-        code: 'SETFARM_PRODUCT_BUILD_AUTHORITY_UPSTREAM_ERROR',
-        reason: 'invalid_json',
-        upstreamStatus: res.status,
-      };
-    }
-    return parseProductBuildAuthorityResponse(res.status, body, runId);
-  } catch {
-    return {
-      status: 'unavailable',
-      code: 'SETFARM_PRODUCT_BUILD_AUTHORITY_UNAVAILABLE',
-      reason: 'network',
-    };
-  }
-}
-
 const CT_JSON = { 'Content-Type': 'application/json' };
 
 export class PrdWorkflowStartError extends Error {
@@ -347,7 +316,7 @@ export const api = {
   runDetail: (id: string) => fetchApi<any>(`/api/runs/${id}/detail`),
   runSupervisor: (id: string) => fetchApi<any>(`/api/runs/${id}/supervisor`),
   runEvents: (id: string) => fetchApi<any[]>(`/api/runs/${id}/events`),
-  runProductBuildAuthority: (id: string) => fetchProductBuildAuthority(id),
+  runProductBuildAuthority: (id: string) => fetchProductBuildAuthority(id, fetch, BASE, AUTH_TOKEN ? { 'X-MC-Token': AUTH_TOKEN } : {}),
   startRun: (workflow: string, task: string) =>
     fetchApi<any>('/api/runs', {
       method: 'POST',
