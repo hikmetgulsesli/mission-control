@@ -6,9 +6,8 @@ import {
 } from "../services/setfarm-operational-snapshot.js";
 import {
   setfarmProductBuildAuthorityClient,
-  type ProductBuildAuthority,
-  type ProductBuildAuthorityFetchResult,
 } from "../services/setfarm-product-build-authority.js";
+import { resolveProductBuildAuthorityHttpRequest } from "../services/product-build-authority-http.js";
 import {
   ProductBuildAuthorityV2DeliveryEvidenceError,
   currentProductBuildAuthorityV2DeliveryEvidenceResponseV1,
@@ -64,73 +63,9 @@ export function toOperationalSnapshotHttpResult(result: OperationalSnapshotFetch
   }
 }
 
-export type ProductBuildAuthorityHttpResult =
-  | { statusCode: 200; body: ProductBuildAuthority }
-  | {
-      statusCode: 404 | 409 | 501 | 502 | 503;
-      body: {
-        status: "unavailable" | "upstream_error" | "unsupported_schema";
-        code: string;
-        reason?: string;
-        upstreamStatus?: number;
-        upstreamCode?: string;
-        schema?: string | null;
-      };
-    };
-
-export function toProductBuildAuthorityHttpResult(result: ProductBuildAuthorityFetchResult): ProductBuildAuthorityHttpResult {
-  switch (result.status) {
-    case "ok":
-      return { statusCode: 200, body: result.authority };
-    case "unavailable": {
-      let statusCode: 404 | 409 | 503;
-      let code: string;
-      switch (result.reason) {
-        case "not_found":
-          statusCode = 404;
-          code = "SETFARM_PRODUCT_BUILD_AUTHORITY_NOT_FOUND";
-          break;
-        case "not_ready":
-          statusCode = 409;
-          code = "SETFARM_PRODUCT_BUILD_AUTHORITY_NOT_READY";
-          break;
-        default:
-          statusCode = 503;
-          code = "SETFARM_PRODUCT_BUILD_AUTHORITY_UNAVAILABLE";
-      }
-      return {
-        statusCode,
-        body: {
-          status: "unavailable",
-          code,
-          reason: result.reason,
-          ...(result.upstreamStatus === undefined ? {} : { upstreamStatus: result.upstreamStatus }),
-          ...(result.upstreamCode === undefined ? {} : { upstreamCode: result.upstreamCode }),
-        },
-      };
-    }
-    case "upstream_error":
-      return {
-        statusCode: 502,
-        body: {
-          status: "upstream_error",
-          code: "SETFARM_PRODUCT_BUILD_AUTHORITY_UPSTREAM_ERROR",
-          reason: result.reason,
-          ...(result.upstreamStatus === undefined ? {} : { upstreamStatus: result.upstreamStatus }),
-          ...(result.upstreamCode === undefined ? {} : { upstreamCode: result.upstreamCode }),
-        },
-      };
-    case "unsupported_schema":
-      return {
-        statusCode: 501,
-        body: {
-          status: "unsupported_schema",
-          code: "SETFARM_PRODUCT_BUILD_AUTHORITY_UNSUPPORTED_SCHEMA",
-          schema: result.schema,
-        },
-      };
-  }
-}
+// Compatibility exports retain the previous route-module import surface.
+export { toProductBuildAuthorityHttpResult } from "../services/product-build-authority-http.js";
+export type { ProductBuildAuthorityHttpResult } from "../services/product-build-authority-http.js";
 
 const router = Router();
 const PRODUCT_BUILD_AUTHORITY_V2_DELIVERY_EVIDENCE_PATH =
@@ -166,7 +101,7 @@ router.get("/setfarm/runs/:id/product-build-authority", async (req, res) => {
   res.set("Expires", "0");
 
   try {
-    const response = toProductBuildAuthorityHttpResult(await setfarmProductBuildAuthorityClient.get(req.params.id));
+    const response = await resolveProductBuildAuthorityHttpRequest(req.params.id, req.query.schema, setfarmProductBuildAuthorityClient);
     res.status(response.statusCode).json(response.body);
   } catch (error) {
     console.error("[setfarm-product-build-authority] unexpected route failure:", error instanceof Error ? error.message : error);

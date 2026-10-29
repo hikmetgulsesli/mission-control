@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import corpus from "../../tests/fixtures/product-build-authority-v3-wire.json" with { type: "json" };
 
 import {
   SetfarmProductBuildAuthorityClient,
   parseProductBuildAuthority,
   parseProductBuildAuthorityV1,
   parseProductBuildAuthorityV2,
-} from "./setfarm-product-build-authority.js";
-import { hashCanonicalJson } from "./setfarm-operational-snapshot.js";
+} from "./setfarm-product-build-authority-core.js";
+import { hashCanonicalJson } from "./setfarm-canonical-json-v1.js";
 
 const HASHES = Array.from({ length: 10 }, (_, index) => index.toString(16).padStart(64, "0"));
 
@@ -318,18 +319,113 @@ test("client distinguishes not-ready authority from transport and schema failure
 
   const unsupported = new SetfarmProductBuildAuthorityClient({
     baseUrl: "http://setfarm.invalid",
-    fetchImpl: (async () => new Response(JSON.stringify({ schema: "setfarm.product-build-authority.v3" }), {
+    fetchImpl: (async () => new Response(JSON.stringify({ schema: "setfarm.product-build-authority.v99" }), {
       status: 200,
       headers: { "content-type": "application/json" },
     })) as typeof fetch,
   });
   assert.deepEqual(await unsupported.get(value.runId), {
     status: "unsupported_schema",
-    schema: "setfarm.product-build-authority.v3",
+    schema: "setfarm.product-build-authority.v99",
   });
 });
 
 test("keeps hash-bound Product Build Packet v1 authority readable during migration", () => {
   const value = legacyFixture();
   assert.equal(parseProductBuildAuthorityV1(value, value.runId), value);
+});
+
+test("explicit v3 request preserves paired native authority and makes one request", async () => {
+  const nativeCase = corpus.cases.find((entry) => entry.name === "native_none");
+  assert.ok(nativeCase);
+  const nativeWire = nativeCase.wire;
+  let requests = 0;
+  const client = new SetfarmProductBuildAuthorityClient({
+    baseUrl: "http://synthetic.invalid/",
+    fetchImpl: async (url) => {
+      requests += 1;
+      assert.equal(String(url), "http://synthetic.invalid/api/runs/synthetic-native-authority-none-stage-a/product-build-authority?schema=v3");
+      return new Response(JSON.stringify(nativeWire), { status: 200 });
+    },
+  });
+  const result = await client.get(nativeWire.runId, "v3");
+  assert.equal(result.status, "ok");
+  if (result.status !== "ok") throw new Error("expected native response");
+  assert.deepEqual(result.authority, nativeWire);
+  assert.equal(requests, 1);
+});
+
+for (const entry of corpus.cases) {
+  test(`injected v3 client preserves paired ${entry.name} wire without fallback`, async () => {
+    let requests = 0;
+    const client = new SetfarmProductBuildAuthorityClient({
+      baseUrl: "http://synthetic.invalid",
+      fetchImpl: async (url) => {
+        requests += 1;
+        assert.equal(String(url), `http://synthetic.invalid/api/runs/${entry.wire.runId}/product-build-authority?schema=v3`);
+        return new Response(JSON.stringify(entry.wire), { status: 200 });
+      },
+    });
+    assert.deepEqual(await client.get(entry.wire.runId, "v3"), { status: "ok", authority: entry.wire });
+    assert.equal(requests, 1);
+  });
+}
+
+for (const schema of ["v1", "v2", "v3"] as const) {
+  test(`client requests explicit ${schema} once and defaults missing selector to v2`, async () => {
+    const value = legacyFixture();
+    const urls: string[] = [];
+    const client = new SetfarmProductBuildAuthorityClient({ baseUrl: "http://synthetic.invalid", fetchImpl: async (url) => {
+      urls.push(String(url)); return new Response(JSON.stringify(value), { status: 200 });
+    } });
+    const result = await client.get(value.runId, schema);
+    assert.deepEqual(result, { status: "ok", authority: value });
+    assert.deepEqual(urls, [`http://synthetic.invalid/api/runs/${value.runId}/product-build-authority?schema=${schema}`]);
+    urls.length = 0;
+    await client.get(value.runId);
+    assert.deepEqual(urls, [`http://synthetic.invalid/api/runs/${value.runId}/product-build-authority?schema=v2`]);
+  });
+}
+
+for (const value of [fixture(), sealedV2Fixture(), refusedV2Fixture()]) {
+  test(`old backend ${value.schema}/${value.runId} after requested v3 remains literal legacy success`, async () => {
+    const client = new SetfarmProductBuildAuthorityClient({ baseUrl: "http://synthetic.invalid", fetchImpl: async () => new Response(JSON.stringify(value), { status: 200 }) });
+    assert.deepEqual(await client.get(value.runId, "v3"), { status: "ok", authority: value });
+  });
+}
+
+for (const [status, code, expected] of [
+  [503, "RUNTIME_PACKET_AUTHORITY_SCHEMA_MISMATCH", { status: "upstream_error", reason: "http_error", upstreamStatus: 503, upstreamCode: "RUNTIME_PACKET_AUTHORITY_SCHEMA_MISMATCH" }],
+  [404, "RUN_NOT_FOUND", { status: "unavailable", reason: "not_found", upstreamStatus: 404, upstreamCode: "RUN_NOT_FOUND" }],
+  [409, "RUNTIME_PACKET_NOT_SEALED", { status: "unavailable", reason: "not_ready", upstreamStatus: 409, upstreamCode: "RUNTIME_PACKET_NOT_SEALED" }],
+] as const) {
+  test(`client preserves exact ${status} ${code} without retry`, async () => {
+    let requests = 0;
+    const client = new SetfarmProductBuildAuthorityClient({ baseUrl: "http://synthetic.invalid", fetchImpl: async () => { requests += 1; return new Response(JSON.stringify({ code }), { status }); } });
+    assert.deepEqual(await client.get("synthetic", "v3"), expected);
+    assert.equal(requests, 1);
+  });
+}
+
+for (const [name, body, expected] of [
+  ["invalid JSON", "{", { status: "upstream_error", reason: "invalid_json", upstreamStatus: 200 }],
+  ["malformed known native", JSON.stringify({ schema: "setfarm.product-build-authority.v3" }), { status: "upstream_error", reason: "invalid_payload", upstreamStatus: 200 }],
+  ["unknown schema", JSON.stringify({ schema: "setfarm.product-build-authority.v99" }), { status: "unsupported_schema", schema: "setfarm.product-build-authority.v99" }],
+] as const) {
+  test(`client classifies ${name}`, async () => {
+    const client = new SetfarmProductBuildAuthorityClient({ baseUrl: "http://synthetic.invalid", fetchImpl: async () => new Response(body, { status: 200 }) });
+    assert.deepEqual(await client.get("synthetic", "v3"), expected);
+  });
+}
+
+test("client preserves network, AbortError and timer-driven timeout classification with injected fakes", async () => {
+  for (const [error, reason] of [[new Error("synthetic network"), "network"], [Object.assign(new Error("synthetic abort"), { name: "AbortError" }), "timeout"]] as const) {
+    const client = new SetfarmProductBuildAuthorityClient({ baseUrl: "http://synthetic.invalid", fetchImpl: async () => { throw error; } });
+    assert.deepEqual(await client.get("synthetic", "v3"), { status: "unavailable", reason });
+  }
+  const client = new SetfarmProductBuildAuthorityClient({ baseUrl: "http://synthetic.invalid", timeoutMs: 1, fetchImpl: async (_url, options) => new Promise<Response>((_resolve, reject) => {
+    assert.ok(options?.signal);
+    options.signal.addEventListener("abort", () => reject(new Error("synthetic timer abort")), { once: true });
+  }) });
+  assert.deepEqual(await client.get("synthetic", "v3"), { status: "unavailable", reason: "timeout" });
 });
