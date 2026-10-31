@@ -3303,7 +3303,8 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 .af-page__header {
   margin-bottom: 16px;
@@ -3489,8 +3490,8 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
   display: grid;
   grid-template-columns: 1.5fr 0.8fr 0.7fr;
   gap: 12px;
-  flex: 1;
-  min-height: 0;
+  flex: 1 0 auto;
+  min-height: 20rem;
   overflow: hidden;
 }
 .af-bottom__col {
@@ -3503,7 +3504,7 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  min-height: 16rem;
 }
 
 /* Pipeline View */
