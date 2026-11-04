@@ -15,6 +15,16 @@ const sf = new URL('../../../setfarm-dashboard-cutover-controller-20261007-v1/sr
 const schemas = await import(new URL('execution/schemas/manual-control-job-v1.ts', sf).href);
 const channel = await import(new URL('execution/schemas/manual-control-worker-channel-v1.ts', sf).href);
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
+const codexSuite = 'evals/suites/product-convergence-codex-v1.json' as const;
+const subscriptionSuite = 'evals/suites/product-convergence-minimax-m31-flash-v1.json' as const;
+function convergenceRecipe(runtime: 'codex' | 'subscription' = 'codex', assertUnchanged = () => {}) {
+    return Object.freeze({ fixedSuiteRelativePath: runtime === 'subscription' ? subscriptionSuite : codexSuite,
+        executionProfile: Object.freeze({ schema: 'setfarm.model-execution-profile.v1' as const,
+            providerId: runtime === 'subscription' ? 'minimax' as const : 'codex' as const,
+            modelId: runtime === 'subscription' ? 'minimax/MiniMax-M3.1-Flash' : 'codex/gpt-6.1-sol', selection: 'primary' as const }),
+        workerEnv: Object.freeze(runtime === 'subscription' ? { SETFARM_AGENT_RUNTIME: 'subscription' as const }
+            : { SETFARM_AGENT_RUNTIME: 'codex' as const, SETFARM_CODEX_MODEL: 'gpt-6.1-sol' }), assertUnchanged });
+}
 function fixture(options: {
     ui?: boolean;
     failStart?: boolean;
@@ -30,7 +40,7 @@ function fixture(options: {
     const outgoing: any[] = [];
     let starts = 0;
     const owner = { pid: 12345, processStartedAt: '2026-10-19T10:00:00.000Z', processGroupId: 12345, source: 'observed_os' as const, executable: '/node', script: options.ui ? '/mc/dist-server/scripts/ui-regression.mjs' : '/release/dist/cli/control-test-worker-v1.js', commandHash: sha('node worker') };
-    const selected: SelectedControlRuntimeV1 = { installationDir, releaseDir: '/release', selectionHash: 'a'.repeat(64), sourceSha: 'b'.repeat(40), releaseSha: 'b'.repeat(40), suiteHash: 'c'.repeat(64), caseIds: ['utility-status-baseline', 'utility-preference-compositional', 'operations-work-baseline', 'operations-queue-paraphrase', 'game-start-baseline', 'game-restart-compositional', 'negative-ambiguous-product', 'negative-unsupported-kernel'], mcSourceSha: 'd'.repeat(40), mcBuildHash: 'e'.repeat(64), workerPath: owner.script, controlsRoot: root, schemas, channel,
+    const selected: SelectedControlRuntimeV1 = { installationDir, releaseDir: '/release', selectionHash: 'a'.repeat(64), sourceSha: 'b'.repeat(40), releaseSha: 'b'.repeat(40), suiteHash: 'c'.repeat(64), caseIds: ['utility-status-baseline', 'utility-preference-compositional', 'operations-work-baseline', 'operations-queue-paraphrase', 'game-start-baseline', 'game-restart-compositional', 'negative-ambiguous-product', 'negative-unsupported-kernel'], mcSourceSha: 'd'.repeat(40), mcBuildHash: 'e'.repeat(64), workerPath: owner.script, controlsRoot: root, schemas, channel, convergenceRecipe: convergenceRecipe(),
         ...(options.ui ? { ui: { workerPath: owner.script, fixtureVersion: 'v1', fixtureHash: '6'.repeat(64), assertionIds: ['home.loaded', 'controls.replay'] } } : {}),
         assertUnchanged() { if (drift)
             throw new Error('drift'); }, readEvidence: async () => ({ activation: { availability: { state: 'unconfigured', code: null }, report: null }, evaluation: { availability: { state: 'unconfigured', code: null }, report: null } }) };
@@ -245,12 +255,15 @@ async function probeWorkerEnvironment(options: {
     env?: Record<string, string | undefined>;
     token?: string;
     duringFinalSelection?: () => void;
+    runtime?: 'codex' | 'subscription';
+    crossedRecipe?: boolean;
 } = {}) {
     const kind = options.kind ?? 'activation_preflight', f = fixture({ ui: kind === 'ui_regression' });
     const release = path.join(f.selected.installationDir, 'release');
     const workerPath = path.join(release, 'dist', 'cli', 'control-test-worker-v1.js');
     mkdirSync(path.dirname(workerPath), { recursive: true, mode: 0o700 });
-    const forbidden = ['AUTH_TOKEN', 'SETFARM_PG_URL', 'DATABASE_URL', 'PGPASSWORD', 'SETFARM_TEST_PG_ADMIN_URL', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'STITCH_API_KEY', 'SETFARM_OPERATIONAL_WRITE_TOKEN', 'NODE_OPTIONS', 'NODE_PATH', 'LD_PRELOAD', 'DYLD_INSERT_LIBRARIES', 'SETFARM_INTERNAL_PRODUCTION_CONTEXT', 'SETFARM_TASK6A_TEST_PG_DATA_DIRECTORY', 'ARBITRARY_SECRET', 'CODEX_CLI', 'SETFARM_PROTOCOL'];
+    const expectedRuntime = options.runtime ?? 'codex';
+    const forbidden = ['MINIMAX_API_KEY', 'KIMI_API_KEY', 'AUTH_TOKEN', 'SETFARM_PG_URL', 'DATABASE_URL', 'PGPASSWORD', 'SETFARM_TEST_PG_ADMIN_URL', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'STITCH_API_KEY', 'SETFARM_OPERATIONAL_WRITE_TOKEN', 'NODE_OPTIONS', 'NODE_PATH', 'LD_PRELOAD', 'DYLD_INSERT_LIBRARIES', 'SETFARM_INTERNAL_PRODUCTION_CONTEXT', 'SETFARM_TASK6A_TEST_PG_DATA_DIRECTORY', 'ARBITRARY_SECRET', 'CODEX_CLI', 'SETFARM_PROTOCOL'];
     const added = ['SETFARM_INSTALLATION_DIR', 'SETFARM_REPO_DIR', 'SETFARM_ENV_DIR', 'SETFARM_V3_ACTIVATION', 'SETFARM_AGENT_RUNTIME', 'SETFARM_CODEX_MODEL', 'MC_INTERNAL_URL', 'SETFARM_DASHBOARD_URL', 'MC_AUTH_TOKEN'];
     // The probe emits predicates only, never values or token hashes.
     writeFileSync(workerPath, `
@@ -263,8 +276,9 @@ process.send({ probe: {
     installationMatches: env.SETFARM_INSTALLATION_DIR === ${JSON.stringify(f.selected.installationDir)},
     releaseMatches: env.SETFARM_REPO_DIR === ${JSON.stringify(release)},
     runtimeDirectoryMatches: env.SETFARM_ENV_DIR === ${JSON.stringify(path.join(f.selected.installationDir, 'runtime'))},
-    runtimeMatches: env.SETFARM_AGENT_RUNTIME === 'codex',
-    modelMatches: env.SETFARM_CODEX_MODEL === 'gpt-6.1-sol',
+    runtimeMatches: env.SETFARM_AGENT_RUNTIME === ${JSON.stringify(options.runtime ?? 'codex')},
+    modelMatches: env.SETFARM_CODEX_MODEL === ${options.runtime === 'subscription' ? 'undefined' : JSON.stringify('gpt-6.1-sol')},
+    codexModelAbsent: env.SETFARM_CODEX_MODEL === undefined,
     mcEndpointMatches: env.MC_INTERNAL_URL === 'http://127.0.0.1:3080',
     sfEndpointMatches: env.SETFARM_DASHBOARD_URL === 'http://127.0.0.1:3333',
     tokenMatches: env.MC_AUTH_TOKEN === ${JSON.stringify(options.token)},
@@ -281,7 +295,7 @@ process.once('message', () => { clearTimeout(deadline); setTimeout(() => process
     const environment: Record<string, string | undefined> = {
         SETFARM_INSTALLATION_DIR: '/dummy/foreign-installation', SETFARM_REPO_DIR: '/dummy/foreign-release',
         SETFARM_ENV_DIR: undefined, SETFARM_V3_ACTIVATION: 'enabled',
-        SETFARM_AGENT_RUNTIME: 'codex', SETFARM_CODEX_MODEL: 'gpt-6.1-sol',
+        SETFARM_AGENT_RUNTIME: expectedRuntime, SETFARM_CODEX_MODEL: expectedRuntime === 'subscription' ? undefined : 'gpt-6.1-sol',
         MC_INTERNAL_URL: undefined, SETFARM_DASHBOARD_URL: undefined, MC_AUTH_TOKEN: 'dummy-ambient-token',
         ...Object.fromEntries(forbidden.map(key => [key, 'dummy-excluded-value'])),
         // Presence (even an empty value) must be excluded. Keep loader sentinels
@@ -317,7 +331,12 @@ process.once('message', () => { clearTimeout(deadline); setTimeout(() => process
     });
     syncBuiltinESMExports();
     let transportChecks = 0, inTransport = false, finalSelectionRan = false, session: any;
-    const selected = { ...f.selected, releaseDir: release, workerPath,
+    const recipe = convergenceRecipe(expectedRuntime, () => {
+        if (process.env.SETFARM_AGENT_RUNTIME !== expectedRuntime
+            || process.env.SETFARM_CODEX_MODEL !== (expectedRuntime === 'subscription' ? undefined : 'gpt-6.1-sol'))
+            throw new Error('CONTROL_WORKER_UNAVAILABLE');
+    });
+    const selected = { ...f.selected, releaseDir: release, workerPath, convergenceRecipe: recipe,
         ...(kind === 'ui_regression' ? { ui: { ...f.selected.ui!, workerPath } } : {}),
         async assertUnchanged() {
             // Exercise the transport's real second await, immediately before
@@ -328,7 +347,9 @@ process.once('message', () => { clearTimeout(deadline); setTimeout(() => process
         },
     };
     const frames: any[] = [], startErrors: string[] = [];
-    const port = createFixedManualWorkerPortV1(selected);
+    const port = createFixedManualWorkerPortV1(options.crossedRecipe
+        ? { ...selected, convergenceRecipe: Object.freeze({ ...recipe, fixedSuiteRelativePath: expectedRuntime === 'subscription' ? codexSuite : subscriptionSuite }) }
+        : selected);
     const worker: ManualWorkerPortV1 = { async startFixed(input) {
         try {
             inTransport = true;
@@ -345,6 +366,13 @@ process.once('message', () => { clearTimeout(deadline); setTimeout(() => process
             if (value === undefined) delete process.env[key]; else process.env[key] = value;
         }
         result = await jobs.create({ ...f.request, kind });
+    } catch (error) {
+        assert.equal(children.length, 0, 'early create refusal must retain zero original children');
+        assert.equal(spawnObserver.mock.callCount(), 0, 'early create refusal must precede every original spawn attempt');
+        assert.deepEqual(startErrors, [], 'early profile refusal must precede the fixed transport');
+        assert.equal(existsSync(f.root), false, 'early profile refusal must not create the control store');
+        assert.ok(error instanceof Error);
+        throw error;
     } finally {
         // Settle the actual originals before restoring environment or mocks.
         try { await Promise.all(children.flatMap(child => [child.exit, child.close,
@@ -375,7 +403,8 @@ process.once('message', () => { clearTimeout(deadline); setTimeout(() => process
     assert.equal(JSON.stringify(frames).includes('dummy-'), false);
     const settlementContext = { ...session?.binding, selectionHash: selected.selectionHash, sourceSha: selected.sourceSha,
         mcSourceSha: selected.mcSourceSha, mcBuildHash: selected.mcBuildHash, executableHash: session?.executableHash, brokerPid: process.pid };
-    return { probe: frames.find(frame => frame.probe)?.probe, settlement, startErrors, owner: session?.originalChild, receipt, finalSelectionRan,
+    const intent = JSON.parse(readFileSync(path.join(dir, 'intent.json'), 'utf8'));
+    return { intent, probe: frames.find(frame => frame.probe)?.probe, settlement, startErrors, owner: session?.originalChild, receipt, finalSelectionRan,
         settlementFile, originalWorkerSettlement, settlementContext };
 }
 function assertProbeSettled(result: Awaited<ReturnType<typeof probeWorkerEnvironment>>) {
@@ -769,6 +798,27 @@ test('full8 fixed real child environment boundaries', async t => {
             for (const key of ['runtimeMatches', 'modelMatches', 'runtimeDirectoryMatches', 'activationEnabled', 'installationMatches', 'releaseMatches', 'mcEndpointMatches', 'sfEndpointMatches', 'tokenMatches', 'forbiddenAbsent', 'commonMatches'])
                 assert.equal(result.probe[key], true, key);
         });
+        await t.test('selected annual recipe chooses the fixed MiniMax suite and subscription-only worker profile', async () => {
+            const result = await probeWorkerEnvironment({ kind: 'convergence_full8', runtime: 'subscription', token: config.authToken });
+            assert.equal(result.intent.fixedSuiteRelativePath, subscriptionSuite);
+            assertProbeSettled(result); assertRecordedOriginalProbe(result);
+            for (const key of ['runtimeMatches', 'modelMatches', 'codexModelAbsent', 'forbiddenAbsent', 'tokenMatches',
+                'runtimeDirectoryMatches', 'installationMatches', 'releaseMatches', 'mcEndpointMatches', 'sfEndpointMatches', 'commonMatches'])
+                assert.equal(result.probe[key], true, key);
+        });
+        await t.test('crossed captured recipe and durable intent refuse before an original worker is spawned', async () => {
+            const result = await probeWorkerEnvironment({ kind: 'convergence_full8', runtime: 'subscription', crossedRecipe: true, token: config.authToken });
+            assert.equal(result.intent.fixedSuiteRelativePath, subscriptionSuite);
+            assert.deepEqual(result.settlement, []); assert.equal(result.startErrors.length, 1);
+            assert.match(result.startErrors[0], /^CONTROL_(?:CUSTODY_UNCERTAIN|WORKER_UNAVAILABLE)$/);
+            assert.equal(result.probe, undefined);
+        });
+        await t.test('annual selected profile drift during the final await refuses original spawn', async () => {
+            const result = await probeWorkerEnvironment({ kind: 'convergence_full8', runtime: 'subscription', token: config.authToken,
+                duringFinalSelection() { process.env.SETFARM_AGENT_RUNTIME = 'codex'; } });
+            assert.equal(result.finalSelectionRan, true); assert.deepEqual(result.settlement, []);
+            assert.deepEqual(result.startErrors, ['CONTROL_WORKER_UNAVAILABLE']); assert.equal(result.probe, undefined);
+        });
         await t.test('empty loaded auth does not borrow ambient AUTH_TOKEN or MC_AUTH_TOKEN', async () => {
             config.authToken = '';
             try {
@@ -814,6 +864,13 @@ test('full8 fixed real child environment boundaries', async t => {
             ['empty model', { SETFARM_CODEX_MODEL: '' }],
             ['invalid model', { SETFARM_CODEX_MODEL: 'model with spaces' }],
             ['overlong model', { SETFARM_CODEX_MODEL: 'a'.repeat(195) }],
+        ] as const) {
+            await t.test(name, async () => {
+                await assert.rejects(() => probeWorkerEnvironment({ kind: 'convergence_full8', env, token: config.authToken }),
+                    { name: 'Error', message: 'CONTROL_WORKER_UNAVAILABLE' });
+            });
+        }
+        for (const [name, env] of [
             ['foreign runtime directory', { SETFARM_ENV_DIR: '/dummy/foreign-runtime' }],
             ['foreign MC host', { MC_INTERNAL_URL: 'https://foreign.invalid' }],
             ['foreign MC port', { MC_INTERNAL_URL: 'http://127.0.0.1:3081' }],

@@ -2,6 +2,7 @@ import { constants, openSync, closeSync, fsyncSync, writeFileSync, renameSync, u
 import path from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
+import { types } from 'node:util';
 import { controlHashV1, controlBytesV1, controlCanonicalV1, parseControlEvidenceEnvelopeV1, pinControlDirectoryV1, readControlPrivateFileV1, readUiControlEvidenceV1, readUiControlScreenshotV1 } from './control-evidence.js';
 import { UiRegressionCleanupProofV1Schema, type UiObservedOwnerV1 } from './control-ui-worker-protocol.js';
 import { createControlWorkerSettlementV1 } from './control-worker-settlement.js';
@@ -43,7 +44,7 @@ export type ControlPrivateIntentV1 = Readonly<{
     installationDir: string;
     releaseDir: string;
     nonceDigest: string;
-    fixedSuiteRelativePath: 'evals/suites/product-convergence-codex-v1.json' | null;
+    fixedSuiteRelativePath: ControlConvergenceRecipeV1['fixedSuiteRelativePath'] | null;
 }>;
 export type ControlWorkerCustodyV1 = Readonly<{
     schema: 'mission-control.control-custody.v1';
@@ -122,6 +123,47 @@ export type ControlChannelV1 = {
     hashObservedControlWorkerOwnerV1(owner: UiObservedOwnerV1): string;
     ObservedControlWorkerOwnerV1Schema: ControlParserV1<UiObservedOwnerV1>;
 };
+/** Structural view of the selected Setfarm-owned, nonsecret recipe facade. */
+export type ControlConvergenceRecipeV1 = Readonly<{
+    fixedSuiteRelativePath: 'evals/suites/product-convergence-codex-v1.json' | 'evals/suites/product-convergence-minimax-m31-flash-v1.json';
+    executionProfile: Readonly<{ schema: 'setfarm.model-execution-profile.v1'; providerId: 'codex' | 'minimax'; modelId: string; selection: 'primary' }>;
+    workerEnv: Readonly<{ SETFARM_AGENT_RUNTIME: 'codex' | 'subscription'; SETFARM_CODEX_MODEL?: string }>;
+    assertUnchanged(): void;
+}>;
+/** Validate and detach fixed recipe DATA; selection remains the SF facade's job. */
+export function validateControlConvergenceRecipeV1(input: unknown): ControlConvergenceRecipeV1 {
+    const own = (value: unknown, keys: readonly string[]): Record<string, unknown> => {
+        if (!value || typeof value !== 'object' || types.isProxy(value)
+            || ![Object.prototype, null].includes(Object.getPrototypeOf(value))) fail('CONTROL_WORKER_UNAVAILABLE');
+        const descriptors = Object.getOwnPropertyDescriptors(value), actual = Reflect.ownKeys(descriptors);
+        if (actual.length !== keys.length || actual.some(key => typeof key !== 'string' || !keys.includes(key))) fail('CONTROL_WORKER_UNAVAILABLE');
+        const out: Record<string, unknown> = Object.create(null);
+        for (const key of keys) {
+            const descriptor = descriptors[key];
+            if (!descriptor || !Object.hasOwn(descriptor, 'value')) fail('CONTROL_WORKER_UNAVAILABLE');
+            out[key] = descriptor.value;
+        }
+        return out;
+    };
+    const value = own(input, ['fixedSuiteRelativePath', 'executionProfile', 'workerEnv', 'assertUnchanged']);
+    const profile = own(value.executionProfile, ['schema', 'providerId', 'modelId', 'selection']);
+    if (typeof value.assertUnchanged !== 'function' || types.isProxy(value.assertUnchanged)
+        || profile.schema !== 'setfarm.model-execution-profile.v1' || profile.selection !== 'primary') fail('CONTROL_WORKER_UNAVAILABLE');
+    const subscription = profile.providerId === 'minimax';
+    const env = own(value.workerEnv, subscription ? ['SETFARM_AGENT_RUNTIME'] : ['SETFARM_AGENT_RUNTIME', 'SETFARM_CODEX_MODEL']);
+    if (subscription) {
+        if (value.fixedSuiteRelativePath !== 'evals/suites/product-convergence-minimax-m31-flash-v1.json'
+            || profile.modelId !== 'minimax/MiniMax-M3.1-Flash' || env.SETFARM_AGENT_RUNTIME !== 'subscription') fail('CONTROL_WORKER_UNAVAILABLE');
+    } else if (profile.providerId !== 'codex' || value.fixedSuiteRelativePath !== 'evals/suites/product-convergence-codex-v1.json'
+        || env.SETFARM_AGENT_RUNTIME !== 'codex' || typeof env.SETFARM_CODEX_MODEL !== 'string'
+        || !/^[A-Za-z0-9][A-Za-z0-9._/-]{0,193}$/.test(env.SETFARM_CODEX_MODEL)
+        || profile.modelId !== 'codex/' + env.SETFARM_CODEX_MODEL) fail('CONTROL_WORKER_UNAVAILABLE');
+    const unchanged = value.assertUnchanged as () => void;
+    return Object.freeze({ fixedSuiteRelativePath: value.fixedSuiteRelativePath as ControlConvergenceRecipeV1['fixedSuiteRelativePath'],
+        executionProfile: Object.freeze({ ...profile }) as ControlConvergenceRecipeV1['executionProfile'],
+        workerEnv: Object.freeze({ ...env }) as ControlConvergenceRecipeV1['workerEnv'],
+        assertUnchanged() { try { if (unchanged.call(input) !== undefined) fail('CONTROL_WORKER_UNAVAILABLE'); } catch { fail('CONTROL_WORKER_UNAVAILABLE'); } } });
+}
 export type SelectedControlRuntimeV1 = Readonly<{
     installationDir: string;
     releaseDir: string;
@@ -129,6 +171,7 @@ export type SelectedControlRuntimeV1 = Readonly<{
     sourceSha: string;
     releaseSha: string;
     suiteHash: string;
+    convergenceRecipe?: ControlConvergenceRecipeV1;
     caseIds: readonly string[];
     mcSourceSha: string;
     mcBuildHash: string;
@@ -278,6 +321,12 @@ export function createControlJobsV1({ root, selected, worker }: {
 }): ControlJobsV1 {
     if (root !== selected.controlsRoot || root !== path.join(selected.installationDir, 'runtime', 'mission-control', 'controls'))
         fail('CONTROL_SELECTION_UNAVAILABLE');
+    const convergenceRecipe = selected.convergenceRecipe === undefined ? undefined : validateControlConvergenceRecipeV1(selected.convergenceRecipe);
+    function requireConvergenceRecipe(): ControlConvergenceRecipeV1 {
+        if (!convergenceRecipe) fail('CONTROL_WORKER_UNAVAILABLE');
+        convergenceRecipe.assertUnchanged();
+        return convergenceRecipe;
+    }
     let queue: Promise<unknown> = Promise.resolve();
     let poisoned = false;
     let ownsMutation = false;
@@ -356,9 +405,10 @@ export function createControlJobsV1({ root, selected, worker }: {
             fail('CONTROL_STORE_UNCERTAIN');
     }
     function serialize<T>(operation: () => Promise<T>): Promise<T> { const result = queue.then(operation); queue = result.catch(() => { }); return result; }
-    function mutation<T>(operation: () => Promise<T>, afterCommit?: (result: T) => Promise<void>): Promise<T> {
+    function mutation<T>(operation: () => Promise<T>, afterCommit?: (result: T) => Promise<void>, kind?: ControlJobKindV1): Promise<T> {
         return serialize(async () => {
             await guard();
+            if (kind === 'convergence_full8') requireConvergenceRecipe();
             initialize();
             const lock = path.join(root, 'mutation.lock');
             let acquired = false;
@@ -558,7 +608,9 @@ export function createControlJobsV1({ root, selected, worker }: {
                     fail('CONTROL_IDEMPOTENCY_CONFLICT');
                 return { receipt: projection(replay), replay: true };
             }
+            if (input.kind === 'convergence_full8') requireConvergenceRecipe();
             return mutation(async () => {
+                if (input.kind === 'convergence_full8') requireConvergenceRecipe();
                 let { index, hash: oldHash } = read();
                 const existing = index.jobs.find(e => e.keyHash === digest);
                 if (existing) {
@@ -574,7 +626,7 @@ export function createControlJobsV1({ root, selected, worker }: {
                 const receipt = selected.schemas.ControlJobReceiptV1Schema.parse({ schema: 'mission-control.control-job.v1', jobId, kind: input.kind, revision: 1,
                     selectionHash: selected.selectionHash, sourceSha: selected.sourceSha, mcSourceSha: selected.mcSourceSha, mcBuildHash: selected.mcBuildHash, suiteHash: input.kind === 'convergence_full8' ? selected.suiteHash : null,
                     state: 'accepted', requestedAt: now, startedAt: null, updatedAt: now, finishedAt: null, phase: 'starting', code: null, currentCaseId: null, ownedRunId: null, completedCases: 0, plannedCases: input.kind === 'convergence_full8' ? 8 : input.kind === 'ui_regression' ? selected.ui!.assertionIds.length : 0, reportRefs: {}, cancelRequested: false });
-                const intent = selected.schemas.ControlPrivateIntentV1Schema.parse({ schema: 'mission-control.control-intent.v1', receipt, installationDir: selected.installationDir, releaseDir: selected.releaseDir, nonceDigest: controlHashV1(nonce), fixedSuiteRelativePath: input.kind === 'convergence_full8' ? 'evals/suites/product-convergence-codex-v1.json' : null });
+                const intent = selected.schemas.ControlPrivateIntentV1Schema.parse({ schema: 'mission-control.control-intent.v1', receipt, installationDir: selected.installationDir, releaseDir: selected.releaseDir, nonceDigest: controlHashV1(nonce), fixedSuiteRelativePath: input.kind === 'convergence_full8' ? requireConvergenceRecipe().fixedSuiteRelativePath : null });
                 const entry: Entry = { keyHash: digest, intentHash: controlHashV1(controlBytesV1(intent)), published: false, receipt, frames: [], cancel: null };
                 index.jobs.push(entry);
                 commit(index, oldHash);
@@ -587,6 +639,7 @@ export function createControlJobsV1({ root, selected, worker }: {
                     e.published = true;
                     commit(index, oldHash);
                     await guard();
+                    if (input.kind === 'convergence_full8') requireConvergenceRecipe();
                     const custody = selected.schemas.ControlWorkerCustodyV1Schema.parse({ schema: 'mission-control.control-custody.v1', jobId, selectionHash: selected.selectionHash, sourceSha: selected.sourceSha, mcBuildHash: selected.mcBuildHash, nonce });
                     const binding = { jobId, channelId: randomUUID(), intentHash: entry.intentHash, kind: input.kind };
                     const spawnRequestedAt = Date.now();
@@ -608,7 +661,7 @@ export function createControlJobsV1({ root, selected, worker }: {
                     await unavailable(jobId);
                     return { receipt: { ...receipt, state: 'ownership_unknown', phase: 'ownership_unknown', code: 'CONTROL_CUSTODY_UNCERTAIN' }, replay: false };
                 }
-            });
+            }, undefined, input.kind);
         },
         async cancel(jobId, input) {
             if (!uuid(jobId))
@@ -741,6 +794,10 @@ export function createFixedManualWorkerPortV1(selected: SelectedControlRuntimeV1
     return Object.freeze({ async startFixed({ intent, custody, binding }: Parameters<ManualWorkerPortV1['startFixed']>[0]) {
             const deadline = Date.now() + 10_000;
             await selected.assertUnchanged();
+            const convergenceRecipe = intent.receipt.kind === 'convergence_full8'
+                ? validateControlConvergenceRecipeV1(selected.convergenceRecipe) : undefined;
+            convergenceRecipe?.assertUnchanged();
+            if (convergenceRecipe && intent.fixedSuiteRelativePath !== convergenceRecipe.fixedSuiteRelativePath) fail('CONTROL_CUSTODY_UNCERTAIN');
             selected.schemas.ControlPrivateIntentV1Schema.parse(intent);
             selected.schemas.ControlWorkerCustodyV1Schema.parse(custody);
             const jobId = intent.receipt.jobId, ui = intent.receipt.kind === 'ui_regression';
@@ -765,6 +822,7 @@ export function createFixedManualWorkerPortV1(selected: SelectedControlRuntimeV1
             let childProcess: ReturnType<typeof spawn>;
             try {
                 await selected.assertUnchanged();
+                convergenceRecipe?.assertUnchanged();
                 // Read current inputs and spawn synchronously after the final
                 // await; never inherit ambient loader, database or provider keys.
                 const env: NodeJS.ProcessEnv = { PATH: '/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin', LANG: 'C', LC_ALL: 'C', TZ: 'UTC' };
@@ -783,14 +841,11 @@ export function createFixedManualWorkerPortV1(selected: SelectedControlRuntimeV1
                     if (activation !== undefined)
                         env.SETFARM_V3_ACTIVATION = activation;
                     if (mcConfig) {
-                        const runtime = process.env.SETFARM_AGENT_RUNTIME, model = process.env.SETFARM_CODEX_MODEL;
                         const mcUrl = process.env.MC_INTERNAL_URL ?? 'http://127.0.0.1:3080';
                         const dashboardUrl = process.env.SETFARM_DASHBOARD_URL ?? 'http://127.0.0.1:3333';
-                        if (runtime !== 'codex' || typeof model !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._/-]{0,193}$/.test(model)
-                            || mcUrl !== 'http://127.0.0.1:3080' || dashboardUrl !== 'http://127.0.0.1:3333')
+                        if (!convergenceRecipe || mcUrl !== 'http://127.0.0.1:3080' || dashboardUrl !== 'http://127.0.0.1:3333')
                             fail('CONTROL_WORKER_UNAVAILABLE');
-                        env.SETFARM_AGENT_RUNTIME = runtime;
-                        env.SETFARM_CODEX_MODEL = model;
+                        Object.assign(env, convergenceRecipe.workerEnv);
                         env.MC_INTERNAL_URL = mcUrl;
                         env.SETFARM_DASHBOARD_URL = dashboardUrl;
                         const token = mcConfig.authToken;

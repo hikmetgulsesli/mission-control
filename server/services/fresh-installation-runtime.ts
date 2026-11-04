@@ -252,7 +252,7 @@ export async function assertFreshMissionControlWorkflowAssetsV1(workflowId:strin
 // Unsupported selections refuse this surface without changing the global runtime.
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { createControlJobsV1, createFixedManualWorkerPortV1, type ControlJobsV1, type SelectedControlRuntimeV1, type ControlSchemasV1, type ControlChannelV1, type ControlEvidenceExpectedV1, type ControlEvidenceProjectionV1 } from './control-jobs.js';
+import { createControlJobsV1, createFixedManualWorkerPortV1, validateControlConvergenceRecipeV1, type ControlJobsV1, type SelectedControlRuntimeV1, type ControlSchemasV1, type ControlChannelV1, type ControlEvidenceExpectedV1, type ControlEvidenceProjectionV1 } from './control-jobs.js';
 let controls: ControlJobsV1 | null = null;
 let controlsPreparation: Promise<void> | undefined;
 function captureControlModuleFileV1(file: string): () => void {
@@ -278,7 +278,7 @@ export function prepareFreshMissionControlControlsV1(): Promise<void> {
             const captured = context;
             assertFreshMissionControlRuntimeV1();
             const sfRoot = captured.paths.setfarmRepoDir;
-            const fixed = ['execution/schemas/manual-control-job-v1.js', 'execution/schemas/manual-control-worker-channel-v1.js', 'evals/control-evidence-reader-v1.js', 'evals/suite-schema-v2.js', 'cli/control-test-worker-v1.js', 'evals/control-evidence-admission-reader-v1.js'];
+            const fixed = ['execution/schemas/manual-control-job-v1.js', 'execution/schemas/manual-control-worker-channel-v1.js', 'evals/control-evidence-reader-v1.js', 'evals/suite-schema-v2.js', 'cli/control-test-worker-v1.js', 'evals/control-evidence-admission-reader-v1.js', 'installation/selected-convergence-recipe-v1.js'];
             const checks = fixed.map(name => captureControlModuleFileV1(path.join(sfRoot, 'dist', name)));
             const module = (name: string) => import(pathToFileURL(path.join(sfRoot, 'dist', name)).href);
             const schemas = await module(fixed[0]) as ControlSchemasV1, channel = await module(fixed[1]) as ControlChannelV1;
@@ -298,6 +298,12 @@ export function prepareFreshMissionControlControlsV1(): Promise<void> {
                     };
                 }>;
             };
+            const recipeModule = await module(fixed[6]) as { captureSelectedConvergenceRecipeV1(): Promise<unknown> };
+            if (typeof recipeModule.captureSelectedConvergenceRecipeV1 !== 'function') throw new Error('CONTROL_MODULE_UNAVAILABLE');
+            // Model availability governs full8 admission; independent controls retain their selected runtime.
+            let convergenceRecipe: SelectedControlRuntimeV1['convergenceRecipe'];
+            try { convergenceRecipe = validateControlConvergenceRecipeV1(await recipeModule.captureSelectedConvergenceRecipeV1()); }
+            catch { /* Unconfigured model profiles leave full8 unavailable. */ }
             for (const name of ['ControlJobReceiptV1Schema', 'ControlPrivateIntentV1Schema', 'ControlWorkerCustodyV1Schema', 'ControlEvidenceProjectionV1Schema', 'ControlReportRefsV1Schema', 'ControlSelectionIdentityV1Schema'] as const)
                 if (typeof schemas[name]?.parse !== 'function')
                     throw new Error('CONTROL_MODULE_UNAVAILABLE');
@@ -332,7 +338,7 @@ export function prepareFreshMissionControlControlsV1(): Promise<void> {
                 sourceSha: selected.state.origin.sourceSha, installationDir: selected.directory, releaseDir: sfRoot, catalogHash: selected.catalogHash,
                 activationPreparedHash: selected.activation.preparedPin.sha256, activationAcknowledgedHash: selected.activation.activatedPin.sha256 });
             const selectionHash = schemas.hashControlSelectionIdentityV1(identity);
-            const suiteFile = path.join(sfRoot, 'evals', 'suites', 'product-convergence-codex-v1.json');
+            const suiteFile = path.join(sfRoot, convergenceRecipe?.fixedSuiteRelativePath ?? 'evals/suites/product-convergence-codex-v1.json');
             checks.push(captureControlModuleFileV1(suiteFile));
             const suite = await suiteModule.loadConvergenceSuiteVersioned(suiteFile);
             if (!/^[a-f0-9]{64}$/.test(suite.suiteHash) || suite.suite.cases.length !== 8 || new Set(suite.suite.cases.map(c => c.caseId)).size !== 8 || suite.suite.cases.some(c => typeof c.caseId !== 'string' || !/^[a-z0-9-]{1,160}$/.test(c.caseId)))
@@ -349,7 +355,7 @@ export function prepareFreshMissionControlControlsV1(): Promise<void> {
                     fixtureHash: string;
                     assertionIds: readonly string[];
                 };
-                if (!fixture || Object.keys(fixture).sort().join(',') !== 'assertionIds,fixtureHash,fixtureVersion' || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$/.test(fixture.fixtureVersion)
+                    if (!fixture || Object.keys(fixture).sort().join(',') !== 'assertionIds,fixtureHash,fixtureVersion' || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$/.test(fixture.fixtureVersion)
                     || !/^[a-f0-9]{64}$/.test(fixture.fixtureHash) || !Array.isArray(fixture.assertionIds) || fixture.assertionIds.length < 1 || fixture.assertionIds.length > 2048
                     || new Set(fixture.assertionIds).size !== fixture.assertionIds.length || fixture.assertionIds.some(id => typeof id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$/.test(id)))
                     throw new Error('CONTROL_UI_UNAVAILABLE');
@@ -362,7 +368,7 @@ export function prepareFreshMissionControlControlsV1(): Promise<void> {
                 check(); };
             assertUnchanged();
             const runtime: SelectedControlRuntimeV1 = Object.freeze({ installationDir: selected.directory, releaseDir: sfRoot, selectionHash, sourceSha: selected.state.origin.sourceSha,
-                releaseSha: selected.state.origin.sourceSha, suiteHash: suite.suiteHash, caseIds: Object.freeze(suite.suite.cases.map(c => c.caseId)), mcSourceSha: buildIdentity.sourceSha, mcBuildHash: buildIdentity.buildHash,
+                releaseSha: selected.state.origin.sourceSha, suiteHash: suite.suiteHash, convergenceRecipe, caseIds: Object.freeze(suite.suite.cases.map(c => c.caseId)), mcSourceSha: buildIdentity.sourceSha, mcBuildHash: buildIdentity.buildHash,
                 workerPath: path.join(sfRoot, 'dist', fixed[4]), controlsRoot: path.join(selected.paths.root, 'mission-control', 'controls'), schemas, channel, assertUnchanged,
                 readEvidence: async (input: ControlEvidenceExpectedV1) => { assertUnchanged(); const result = await admissionReader.readSelectedControlEvidenceWithAdmissionV1(input, captured.owner); assertUnchanged(); return result; }, ...(ui ? { ui } : {}) });
             controls = createControlJobsV1({ root: runtime.controlsRoot, selected: runtime, worker: createFixedManualWorkerPortV1(runtime) });
