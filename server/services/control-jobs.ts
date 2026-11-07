@@ -125,9 +125,9 @@ export type ControlChannelV1 = {
 };
 /** Structural view of the selected Setfarm-owned, nonsecret recipe facade. */
 export type ControlConvergenceRecipeV1 = Readonly<{
-    fixedSuiteRelativePath: 'evals/suites/product-convergence-codex-v1.json' | 'evals/suites/product-convergence-minimax-m31-flash-v1.json';
-    executionProfile: Readonly<{ schema: 'setfarm.model-execution-profile.v1'; providerId: 'codex' | 'minimax'; modelId: string; selection: 'primary' }>;
-    workerEnv: Readonly<{ SETFARM_AGENT_RUNTIME: 'codex' | 'subscription'; SETFARM_CODEX_MODEL?: string }>;
+    fixedSuiteRelativePath: 'evals/suites/product-convergence-codex-v1.json' | 'evals/suites/product-convergence-minimax-m31-flash-v1.json' | 'evals/suites/product-convergence-kimi-k31-pro-v1.json';
+    executionProfile: Readonly<{ schema: 'setfarm.model-execution-profile.v1'; providerId: 'codex' | 'minimax' | 'kimi'; modelId: string; selection: 'primary' }>;
+    workerEnv: Readonly<{ SETFARM_AGENT_RUNTIME: 'codex' | 'subscription'; SETFARM_CODEX_MODEL?: string; SETFARM_SUBSCRIPTION_PRIMARY_MODEL?: 'kimi/k3.1-pro' }>;
     assertUnchanged(): void;
 }>;
 /** Validate and detach fixed recipe DATA; selection remains the SF facade's job. */
@@ -149,11 +149,14 @@ export function validateControlConvergenceRecipeV1(input: unknown): ControlConve
     const profile = own(value.executionProfile, ['schema', 'providerId', 'modelId', 'selection']);
     if (typeof value.assertUnchanged !== 'function' || types.isProxy(value.assertUnchanged)
         || profile.schema !== 'setfarm.model-execution-profile.v1' || profile.selection !== 'primary') fail('CONTROL_WORKER_UNAVAILABLE');
-    const subscription = profile.providerId === 'minimax';
-    const env = own(value.workerEnv, subscription ? ['SETFARM_AGENT_RUNTIME'] : ['SETFARM_AGENT_RUNTIME', 'SETFARM_CODEX_MODEL']);
+    const kimi = profile.providerId === 'kimi';
+    const subscription = profile.providerId === 'minimax' || kimi;
+    const env = own(value.workerEnv, kimi ? ['SETFARM_AGENT_RUNTIME', 'SETFARM_SUBSCRIPTION_PRIMARY_MODEL']
+        : subscription ? ['SETFARM_AGENT_RUNTIME'] : ['SETFARM_AGENT_RUNTIME', 'SETFARM_CODEX_MODEL']);
     if (subscription) {
-        if (value.fixedSuiteRelativePath !== 'evals/suites/product-convergence-minimax-m31-flash-v1.json'
-            || profile.modelId !== 'minimax/MiniMax-M3.1-Flash' || env.SETFARM_AGENT_RUNTIME !== 'subscription') fail('CONTROL_WORKER_UNAVAILABLE');
+        if (value.fixedSuiteRelativePath !== (kimi ? 'evals/suites/product-convergence-kimi-k31-pro-v1.json' : 'evals/suites/product-convergence-minimax-m31-flash-v1.json')
+            || profile.modelId !== (kimi ? 'kimi/k3.1-pro' : 'minimax/MiniMax-M3.1-Flash') || env.SETFARM_AGENT_RUNTIME !== 'subscription'
+            || (kimi && env.SETFARM_SUBSCRIPTION_PRIMARY_MODEL !== 'kimi/k3.1-pro')) fail('CONTROL_WORKER_UNAVAILABLE');
     } else if (profile.providerId !== 'codex' || value.fixedSuiteRelativePath !== 'evals/suites/product-convergence-codex-v1.json'
         || env.SETFARM_AGENT_RUNTIME !== 'codex' || typeof env.SETFARM_CODEX_MODEL !== 'string'
         || !/^[A-Za-z0-9][A-Za-z0-9._/-]{0,193}$/.test(env.SETFARM_CODEX_MODEL)
