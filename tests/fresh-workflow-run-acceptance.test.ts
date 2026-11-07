@@ -73,13 +73,15 @@ test('browser transport JSON and invalid success losses remain unknown without r
   assert.equal(calls,1,'no automatic HTTP retry');
  }
 });
-test('actual CLI body uses fixed selected workflow budget, preserves default commands and refuses saturated launch',async()=>{
+test('actual CLI body bounds selected workflow run and stop, preserves default commands and refuses saturated launch',async()=>{
  const cliText=source('server/utils/cli.ts'),cliTree=ts.createSourceFile('cli.ts',cliText,ts.ScriptTarget.Latest,true);
  const fn=(name:string)=>{const rows=cliTree.statements.filter((n):n is ts.FunctionDeclaration=>ts.isFunctionDeclaration(n)&&n.name?.text===name);assert.equal(rows.length,1);return rows[0]!.getText(cliTree);};
  const classes=cliTree.statements.filter((n):n is ts.ClassDeclaration=>ts.isClassDeclaration(n)&&n.name?.text==='FreshWorkflowCliBusyErrorV1');assert.equal(classes.length,1);
- const budgetDeclarations=cliTree.statements.filter(n=>ts.isVariableStatement(n)&&n.declarationList.declarations.some(d=>ts.isIdentifier(d.name)&&['CLI_TIMEOUT_MS','FRESH_WORKFLOW_RUN_TIMEOUT_MS'].includes(d.name.text))).map(n=>n.getText(cliTree)).join('\n');
+ const budgetDeclarations=cliTree.statements.filter(n=>ts.isVariableStatement(n)&&n.declarationList.declarations.some(d=>ts.isIdentifier(d.name)&&['CLI_TIMEOUT_MS','FRESH_WORKFLOW_TIMEOUT_MS'].includes(d.name.text))).map(n=>n.getText(cliTree)).join('\n');
  for(const [selected,command,args,capacity,expected] of [[true,'setfarm',['workflow','run','feature-dev'],0,120000],
-   [false,'setfarm',['workflow','run','feature-dev'],0,25000],[true,'setfarm',['workflow','status'],0,25000],
+   [true,'setfarm',['workflow','stop',uuid],0,120000],
+   [false,'setfarm',['workflow','run','feature-dev'],0,25000],[false,'setfarm',['workflow','stop',uuid],0,25000],
+   [true,'setfarm',['workflow','status'],0,25000],[true,'setfarm',['workflow','resume',uuid],0,25000],
    [true,'openclaw',['workflow','run'],0,25000],[true,'setfarm',['workflow','run','feature-dev'],3,0]] as const){
   let acquired=0,spawned=0,released=0,timeout=0;
   const ports={task6aSelectedCliNoSpawn:false,TASK6A_SELECTED_CLI_NO_SPAWN:'component',inflight:new Map(),active:capacity,MAX_CONCURRENT:3,

@@ -28,11 +28,11 @@ const env = {
 
 const CLI_TIMEOUT_MS = 25_000;
 const MAX_CONCURRENT = 3;
-const FRESH_WORKFLOW_RUN_TIMEOUT_MS = 120_000;
+const FRESH_WORKFLOW_TIMEOUT_MS = 120_000;
 export class FreshWorkflowCliBusyErrorV1 extends Error { constructor(){super('MC_FRESH_WORKFLOW_CLI_BUSY');} }
 function commandTimeoutMsV1(selected:boolean,command:string,args:readonly string[]):number {
-  return selected&&command==='setfarm'&&args[0]==='workflow'&&args[1]==='run'
-    ? FRESH_WORKFLOW_RUN_TIMEOUT_MS : CLI_TIMEOUT_MS;
+  return selected&&command==='setfarm'&&args[0]==='workflow'&&(args[1]==='run'||args[1]==='stop')
+    ? FRESH_WORKFLOW_TIMEOUT_MS : CLI_TIMEOUT_MS;
 }
 
 
