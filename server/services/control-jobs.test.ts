@@ -8,7 +8,7 @@ import { mkdtempSync, realpathSync, mkdirSync, readFileSync, readdirSync, writeF
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createHash, createHmac } from 'node:crypto';
-import { createControlJobsV1, createFixedManualWorkerPortV1, type SelectedControlRuntimeV1, type ManualWorkerEventsV1, type ManualWorkerPortV1 } from './control-jobs.js';
+import { createControlJobsV1, createFixedManualWorkerPortV1, validateControlConvergenceRecipeV1, type SelectedControlRuntimeV1, type ManualWorkerEventsV1, type ManualWorkerPortV1 } from './control-jobs.js';
 import { controlBytesV1, controlHashV1, controlCanonicalV1 } from './control-evidence.js';
 // Explicit paired source-only schema fixture. Production has no source fallback.
 const sf = new URL('../../../setfarm-dashboard-cutover-controller-20261007-v1/src/', import.meta.url);
@@ -17,6 +17,7 @@ const channel = await import(new URL('execution/schemas/manual-control-worker-ch
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
 const codexSuite = 'evals/suites/product-convergence-codex-v1.json' as const;
 const subscriptionSuite = 'evals/suites/product-convergence-minimax-m31-flash-v1.json' as const;
+const kimiSuite = 'evals/suites/product-convergence-kimi-k31-pro-v1.json' as const;
 function convergenceRecipe(runtime: 'codex' | 'subscription' = 'codex', assertUnchanged = () => {}) {
     return Object.freeze({ fixedSuiteRelativePath: runtime === 'subscription' ? subscriptionSuite : codexSuite,
         executionProfile: Object.freeze({ schema: 'setfarm.model-execution-profile.v1' as const,
@@ -25,6 +26,46 @@ function convergenceRecipe(runtime: 'codex' | 'subscription' = 'codex', assertUn
         workerEnv: Object.freeze(runtime === 'subscription' ? { SETFARM_AGENT_RUNTIME: 'subscription' as const }
             : { SETFARM_AGENT_RUNTIME: 'codex' as const, SETFARM_CODEX_MODEL: 'gpt-6.1-sol' }), assertUnchanged });
 }
+function kimiConvergenceRecipe(assertUnchanged = () => {}) {
+    return Object.freeze({ fixedSuiteRelativePath: kimiSuite,
+        executionProfile: Object.freeze({ schema: 'setfarm.model-execution-profile.v1' as const,
+            providerId: 'kimi' as const, modelId: 'kimi/k3.1-pro', selection: 'primary' as const }),
+        workerEnv: Object.freeze({ SETFARM_AGENT_RUNTIME: 'subscription' as const,
+            SETFARM_SUBSCRIPTION_PRIMARY_MODEL: 'kimi/k3.1-pro' as const }), assertUnchanged });
+}
+test('fixed Kimi primary recipe validates exact identity and detached worker environment', () => {
+    let checks = 0;
+    const source = kimiConvergenceRecipe(() => { checks++; });
+    const actual = validateControlConvergenceRecipeV1(source);
+    assert.equal(actual.fixedSuiteRelativePath, kimiSuite);
+    assert.deepEqual(actual.executionProfile, source.executionProfile);
+    assert.deepEqual(actual.workerEnv, source.workerEnv);
+    assert.notEqual(actual.executionProfile, source.executionProfile);
+    assert.notEqual(actual.workerEnv, source.workerEnv);
+    assert.ok(Object.isFrozen(actual.workerEnv));
+    actual.assertUnchanged(); assert.equal(checks, 1);
+});
+test('fixed Kimi recipe rejects crossed models, suites and mixed or unknown environment keys', () => {
+    const recipe = kimiConvergenceRecipe();
+    for (const invalid of [
+        { ...recipe, fixedSuiteRelativePath: subscriptionSuite },
+        { ...recipe, executionProfile: { ...recipe.executionProfile, providerId: 'minimax' } },
+        { ...recipe, executionProfile: { ...recipe.executionProfile, modelId: 'kimi/other' } },
+        { ...recipe, executionProfile: { ...recipe.executionProfile, selection: 'fallback' } },
+        { ...recipe, workerEnv: { SETFARM_AGENT_RUNTIME: 'subscription' } },
+        { ...recipe, workerEnv: { ...recipe.workerEnv, SETFARM_SUBSCRIPTION_PRIMARY_MODEL: 'minimax/MiniMax-M3.1-Flash' } },
+        { ...recipe, workerEnv: { ...recipe.workerEnv, SETFARM_CODEX_MODEL: 'gpt-6.1-sol' } },
+        { ...recipe, workerEnv: { ...recipe.workerEnv, EXTRA: 'unrecognized' } },
+        { ...convergenceRecipe('subscription'), workerEnv: recipe.workerEnv },
+        { ...convergenceRecipe(), workerEnv: { ...convergenceRecipe().workerEnv,
+            SETFARM_SUBSCRIPTION_PRIMARY_MODEL: 'kimi/k3.1-pro' } },
+    ]) assert.throws(() => validateControlConvergenceRecipeV1(invalid), /CONTROL_WORKER_UNAVAILABLE/);
+    for (const runtime of ['codex', 'subscription'] as const) {
+        const prior = convergenceRecipe(runtime), actual = validateControlConvergenceRecipeV1(prior);
+        assert.deepEqual(actual.workerEnv, prior.workerEnv);
+        assert.deepEqual(actual.executionProfile, prior.executionProfile);
+    }
+});
 function fixture(options: {
     ui?: boolean;
     failStart?: boolean;
@@ -257,6 +298,7 @@ async function probeWorkerEnvironment(options: {
     duringFinalSelection?: () => void;
     runtime?: 'codex' | 'subscription';
     crossedRecipe?: boolean;
+    subscriptionPrimary?: 'kimi/k3.1-pro';
 } = {}) {
     const kind = options.kind ?? 'activation_preflight', f = fixture({ ui: kind === 'ui_regression' });
     const release = path.join(f.selected.installationDir, 'release');
@@ -264,7 +306,7 @@ async function probeWorkerEnvironment(options: {
     mkdirSync(path.dirname(workerPath), { recursive: true, mode: 0o700 });
     const expectedRuntime = options.runtime ?? 'codex';
     const forbidden = ['MINIMAX_API_KEY', 'KIMI_API_KEY', 'AUTH_TOKEN', 'SETFARM_PG_URL', 'DATABASE_URL', 'PGPASSWORD', 'SETFARM_TEST_PG_ADMIN_URL', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'STITCH_API_KEY', 'SETFARM_OPERATIONAL_WRITE_TOKEN', 'NODE_OPTIONS', 'NODE_PATH', 'LD_PRELOAD', 'DYLD_INSERT_LIBRARIES', 'SETFARM_INTERNAL_PRODUCTION_CONTEXT', 'SETFARM_TASK6A_TEST_PG_DATA_DIRECTORY', 'ARBITRARY_SECRET', 'CODEX_CLI', 'SETFARM_PROTOCOL'];
-    const added = ['SETFARM_INSTALLATION_DIR', 'SETFARM_REPO_DIR', 'SETFARM_ENV_DIR', 'SETFARM_V3_ACTIVATION', 'SETFARM_AGENT_RUNTIME', 'SETFARM_CODEX_MODEL', 'MC_INTERNAL_URL', 'SETFARM_DASHBOARD_URL', 'MC_AUTH_TOKEN'];
+    const added = ['SETFARM_INSTALLATION_DIR', 'SETFARM_REPO_DIR', 'SETFARM_ENV_DIR', 'SETFARM_V3_ACTIVATION', 'SETFARM_AGENT_RUNTIME', 'SETFARM_CODEX_MODEL', 'SETFARM_SUBSCRIPTION_PRIMARY_MODEL', 'MC_INTERNAL_URL', 'SETFARM_DASHBOARD_URL', 'MC_AUTH_TOKEN'];
     // The probe emits predicates only, never values or token hashes.
     writeFileSync(workerPath, `
 const env = process.env;
@@ -279,12 +321,13 @@ process.send({ probe: {
     runtimeMatches: env.SETFARM_AGENT_RUNTIME === ${JSON.stringify(options.runtime ?? 'codex')},
     modelMatches: env.SETFARM_CODEX_MODEL === ${options.runtime === 'subscription' ? 'undefined' : JSON.stringify('gpt-6.1-sol')},
     codexModelAbsent: env.SETFARM_CODEX_MODEL === undefined,
+    subscriptionPrimaryMatches: env.SETFARM_SUBSCRIPTION_PRIMARY_MODEL === ${options.subscriptionPrimary === undefined ? 'undefined' : JSON.stringify(options.subscriptionPrimary)},
     mcEndpointMatches: env.MC_INTERNAL_URL === 'http://127.0.0.1:3080',
     sfEndpointMatches: env.SETFARM_DASHBOARD_URL === 'http://127.0.0.1:3333',
     tokenMatches: env.MC_AUTH_TOKEN === ${JSON.stringify(options.token)},
     forbiddenAbsent: absent(${JSON.stringify(forbidden)}),
     uiStripped: absent(${JSON.stringify(added)}),
-    full8OnlyAbsent: absent(['SETFARM_AGENT_RUNTIME','SETFARM_CODEX_MODEL','MC_INTERNAL_URL','SETFARM_DASHBOARD_URL','MC_AUTH_TOKEN']),
+    full8OnlyAbsent: absent(['SETFARM_AGENT_RUNTIME','SETFARM_CODEX_MODEL','SETFARM_SUBSCRIPTION_PRIMARY_MODEL','MC_INTERNAL_URL','SETFARM_DASHBOARD_URL','MC_AUTH_TOKEN']),
     commonMatches: env.PATH === '/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin' && env.LANG === 'C' && env.LC_ALL === 'C' && env.TZ === 'UTC'
 } });
 // Wait for broker custody before natural exit; retain a natural timeout for
@@ -296,6 +339,7 @@ process.once('message', () => { clearTimeout(deadline); setTimeout(() => process
         SETFARM_INSTALLATION_DIR: '/dummy/foreign-installation', SETFARM_REPO_DIR: '/dummy/foreign-release',
         SETFARM_ENV_DIR: undefined, SETFARM_V3_ACTIVATION: 'enabled',
         SETFARM_AGENT_RUNTIME: expectedRuntime, SETFARM_CODEX_MODEL: expectedRuntime === 'subscription' ? undefined : 'gpt-6.1-sol',
+        SETFARM_SUBSCRIPTION_PRIMARY_MODEL: options.subscriptionPrimary,
         MC_INTERNAL_URL: undefined, SETFARM_DASHBOARD_URL: undefined, MC_AUTH_TOKEN: 'dummy-ambient-token',
         ...Object.fromEntries(forbidden.map(key => [key, 'dummy-excluded-value'])),
         // Presence (even an empty value) must be excluded. Keep loader sentinels
@@ -331,11 +375,14 @@ process.once('message', () => { clearTimeout(deadline); setTimeout(() => process
     });
     syncBuiltinESMExports();
     let transportChecks = 0, inTransport = false, finalSelectionRan = false, session: any;
-    const recipe = convergenceRecipe(expectedRuntime, () => {
+    const assertProfileUnchanged = () => {
         if (process.env.SETFARM_AGENT_RUNTIME !== expectedRuntime
-            || process.env.SETFARM_CODEX_MODEL !== (expectedRuntime === 'subscription' ? undefined : 'gpt-6.1-sol'))
+            || process.env.SETFARM_CODEX_MODEL !== (expectedRuntime === 'subscription' ? undefined : 'gpt-6.1-sol')
+            || process.env.SETFARM_SUBSCRIPTION_PRIMARY_MODEL !== options.subscriptionPrimary)
             throw new Error('CONTROL_WORKER_UNAVAILABLE');
-    });
+    };
+    const recipe = options.subscriptionPrimary ? kimiConvergenceRecipe(assertProfileUnchanged)
+        : convergenceRecipe(expectedRuntime, assertProfileUnchanged);
     const selected = { ...f.selected, releaseDir: release, workerPath, convergenceRecipe: recipe,
         ...(kind === 'ui_regression' ? { ui: { ...f.selected.ui!, workerPath } } : {}),
         async assertUnchanged() {
@@ -804,6 +851,15 @@ test('full8 fixed real child environment boundaries', async t => {
             assertProbeSettled(result); assertRecordedOriginalProbe(result);
             for (const key of ['runtimeMatches', 'modelMatches', 'codexModelAbsent', 'forbiddenAbsent', 'tokenMatches',
                 'runtimeDirectoryMatches', 'installationMatches', 'releaseMatches', 'mcEndpointMatches', 'sfEndpointMatches', 'commonMatches'])
+                assert.equal(result.probe[key], true, key);
+        });
+        await t.test('selected Kimi recipe propagates its exact primary selector to the original full8 child', async () => {
+            const result = await probeWorkerEnvironment({ kind: 'convergence_full8', runtime: 'subscription',
+                subscriptionPrimary: 'kimi/k3.1-pro', token: config.authToken });
+            assert.equal(result.intent.fixedSuiteRelativePath, kimiSuite);
+            assertProbeSettled(result); assertRecordedOriginalProbe(result);
+            for (const key of ['runtimeMatches', 'codexModelAbsent', 'subscriptionPrimaryMatches', 'forbiddenAbsent',
+                'tokenMatches', 'runtimeDirectoryMatches', 'installationMatches', 'releaseMatches'])
                 assert.equal(result.probe[key], true, key);
         });
         await t.test('crossed captured recipe and durable intent refuse before an original worker is spawned', async () => {
