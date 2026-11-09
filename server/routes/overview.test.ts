@@ -205,6 +205,52 @@ test('actual overview boundary', async (context) => {
       ]);
       writeFileSync(process.env.MC_DATA_PATH, '{}');
     });
+    for (const unavailable of [false, true]) {
+      await context.test('native active run counts without ' + (unavailable ? 'available' : 'admitted') + ' Projects', async () => {
+        runs = [{ id: 'native-untransferred', protocol: 'v3', status: 'running', steps: [] }];
+        projected = [];
+        projectsUnavailable = unavailable;
+        const body = await read();
+        assert.equal(body.activeRunCount, 1);
+        assert.deepEqual(body.activeRuns.map((run) => run.id), ['native-untransferred']);
+      });
+    }
+    await context.test('native runs retain operational status, nonempty identity and distinct-run guards', async () => {
+      projected = [project('native-running', 'failing')];
+      runs = [
+        { id: 'run-native-running', protocol: 'v3', status: 'running' },
+        { id: 'run-native-running', protocol: 'v3', status: 'running' },
+        { id: 'native-resuming', protocol: 'v3', status: 'resuming' },
+        { id: 'native-cancelling', protocol: 'v3', status: 'cancelling' },
+        { id: 'native-failing', protocol: 'v3', status: 'failing' },
+        { id: 'native-completed', protocol: 'v3', status: 'completed' },
+        { id: 'native-failed', protocol: 'v3', status: 'failed' },
+        { id: 'native-cancelled', protocol: 'v3', status: 'cancelled' },
+        { id: 'native-pending', protocol: 'v3', status: 'pending' },
+        { id: 'native-unknown', protocol: 'v3', status: 'unknown' },
+        { protocol: 'v3', status: 'running' },
+        { id: '', protocol: 'v3', status: 'running' },
+        { id: 123, protocol: 'v3', status: 'running' },
+      ];
+      const body = await read();
+      assert.equal(body.activeRunCount, 4);
+      assert.deepEqual(body.activeRuns.map((run) => run.id), [
+        'run-native-running', 'native-resuming', 'native-cancelling', 'native-failing',
+      ]);
+    });
+    await context.test('explicit legacy protocols still require matching Project status and distinct IDs', async () => {
+      projected = [project('legacy'), project('legacy-mismatch', 'failing')];
+      runs = [
+        { id: 'run-legacy', protocol: 'v1', status: 'running' },
+        { id: 'run-legacy', protocol: 'v1', status: 'running' },
+        { id: 'run-legacy-mismatch', protocol: 'v1', status: 'running' },
+        { id: 'legacy-unbound', protocol: 'v1', status: 'running' },
+        { id: 'future-unbound', protocol: 'v4', status: 'running' },
+      ];
+      const body = await read();
+      assert.equal(body.activeRunCount, 1);
+      assert.deepEqual(body.activeRuns.map((run) => run.id), ['run-legacy']);
+    });
     await context.test('only canonically active matching running steps produce an explicit mapping', async () => {
       roster = [{ id: 'main', identityName: 'Rune' }, { id: 'atlas' }];
       projected = [project('accepted', 'resuming'), project('raw-pending', 'resuming'), project('terminal', 'terminal'), project('mismatch', 'failing')];
