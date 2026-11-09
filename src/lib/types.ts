@@ -128,8 +128,8 @@ export interface OverviewData {
   activeRuns: Run[];
   activeRunCount: number;
   cronCount: number | null;
-  costToday: number;
-  costAllTime: number;
+  costToday: number | null;
+  costAllTime: number | null;
   system: SystemMetrics | null;
   gateway: { status: string; pid: number; uptime: string; memory: string } | null;
   sessions: Session[];

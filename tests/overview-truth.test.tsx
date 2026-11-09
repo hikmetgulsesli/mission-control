@@ -32,6 +32,29 @@ test('Overview truth at the render boundary', async (context) => {
     const hub = (html) => html.slice(html.indexOf('class="command-center"'), html.indexOf('class="agent-grid"'));
     const cronCard = (html) => html.slice(html.indexOf('class="stat-card stat-card--orange"'), html.indexOf('class="stat-card stat-card--green"'));
 
+    for (const [name, today, allTime, displayedToday, displayedTotal] of [
+      ['missing totals', undefined, undefined, 'Unavailable', 'Total unavailable'],
+      ['null totals', null, null, 'Unavailable', 'Total unavailable'],
+      ['measured zero totals', 0, 0, '$0.00', '$0 total'],
+      ['positive totals', 1.25, 47.6, '$1.25', '$48 total'],
+      ['today unavailable independently', null, 47.6, 'Unavailable', '$48 total'],
+      ['all-time unavailable independently', 0, null, '$0.00', 'Total unavailable'],
+    ]) {
+      await context.test(name + ' remain distinct in the cost card', () => {
+        overview = { ...empty(), costToday: today, costAllTime: allTime };
+        if (today === undefined) delete overview.costToday;
+        if (allTime === undefined) delete overview.costAllTime;
+        const html = render();
+        const start = html.indexOf('class="stat-card stat-card--green"');
+        const end = html.indexOf('class="command-center"');
+        assert.ok(start >= 0 && end > start, 'cost card remains before the command center');
+        const card = html.slice(start, end);
+        assert.ok(card.includes('class="stat-card__value">' + displayedToday + '</div>'), card);
+        assert.ok(card.includes('class="stat-card__sub">' + displayedTotal + '</div>'), card);
+        assert.match(card, /class="stat-card__label">TODAY<\/div>/);
+      });
+    }
+
     for (const [count, displayed] of [[5, '5'], [0, '0'], [null, 'Unknown']]) {
       await context.test('configured cron count ' + count + ' renders as ' + displayed + ' enabled schedules', () => {
         overview = { ...empty(), cronCount: count };
@@ -195,7 +218,7 @@ test('Overview truth at the render boundary', async (context) => {
   }
 });
 `;
-  const result = await new Promise<{ exitCode: number | null; closeCode: number | null; signal: string | null; stdout: string; stderr: string }>((resolve, reject) => {
+  const result = await new Promise<{ pid: number | undefined; exitCode: number | null; closeCode: number | null; signal: string | null; stdout: string; stderr: string }>((resolve, reject) => {
     const child = spawn(process.execPath, ['--experimental-test-module-mocks', '--import', 'tsx', '--input-type=module', '--eval', fixture], {
       env: {
         PATH: process.env.PATH,
@@ -213,7 +236,7 @@ test('Overview truth at the render boundary', async (context) => {
     child.stderr.on('data', (chunk) => { stderr += chunk; });
     child.once('error', reject);
     child.once('exit', (code) => { exitCode = code; });
-    child.once('close', (closeCode, signal) => resolve({ exitCode, closeCode, signal, stdout, stderr }));
+    child.once('close', (closeCode, signal) => resolve({ pid: child.pid, exitCode, closeCode, signal, stdout, stderr }));
   });
   t.diagnostic(JSON.stringify(result));
   assert.equal(result.signal, null);

@@ -259,9 +259,9 @@ export function Overview() {
           <div className="stat-card__sub">enabled schedules</div>
         </div>
         <div className="stat-card stat-card--green">
-          <div className="stat-card__value">${(data.costToday ?? 0).toFixed(2)}</div>
+          <div className="stat-card__value">{data.costToday == null ? 'Unavailable' : `$${data.costToday.toFixed(2)}`}</div>
           <div className="stat-card__label">TODAY</div>
-          <div className="stat-card__sub">${(data.costAllTime ?? 0).toFixed(0)} total</div>
+          <div className="stat-card__sub">{data.costAllTime == null ? 'Total unavailable' : `$${data.costAllTime.toFixed(0)} total`}</div>
         </div>
       </div>
 

@@ -114,6 +114,26 @@ test('actual overview boundary', async (context) => {
       { id: 'configured-8', name: 'eight', enabled: true },
     ];
 
+    for (const [name, raw, expected] of [
+      ['missing totals', '{}', [null, null]],
+      ['null totals', '{"totalCostToday":null,"totalCostAllTime":null}', [null, null]],
+      ['string totals', '{"totalCostToday":"0","totalCostAllTime":"12.5"}', [null, null]],
+      ['boolean totals', '{"totalCostToday":false,"totalCostAllTime":true}', [null, null]],
+      ['structured totals', '{"totalCostToday":[],"totalCostAllTime":{}}', [null, null]],
+      ['nonfinite totals', '{"totalCostToday":1e400,"totalCostAllTime":-1e400}', [null, null]],
+      ['measured zero totals', '{"totalCostToday":0,"totalCostAllTime":0}', [0, 0]],
+      ['positive totals', '{"totalCostToday":1.25,"totalCostAllTime":47.6}', [1.25, 47.6]],
+      ['today unavailable independently', '{"totalCostAllTime":47.6}', [null, 47.6]],
+      ['all-time unavailable independently', '{"totalCostToday":0,"totalCostAllTime":null}', [0, null]],
+    ]) {
+      await context.test(name + ' preserve observed cost availability', async () => {
+        writeFileSync(process.env.MC_DATA_PATH, raw);
+        const body = await read();
+        assert.deepEqual([body.costToday, body.costAllTime], expected);
+        assert.equal(body.agentCount, 1, 'cost availability does not suppress other observations');
+      });
+    }
+
     for (const dashboard of [{ crons: [{ enabled: true }] }, {}]) {
       await context.test('five enabled configured schedules win over ' + (dashboard.crons ? 'conflicting' : 'absent') + ' dashboard crons', async () => {
         writeFileSync(process.env.MC_DATA_PATH, JSON.stringify(dashboard));
@@ -311,7 +331,7 @@ test('actual overview boundary', async (context) => {
   }
 });
 `;
-  const result = await new Promise<{ exitCode: number | null; closeCode: number | null; signal: string | null; stdout: string; stderr: string }>((resolve, reject) => {
+  const result = await new Promise<{ pid: number | undefined; exitCode: number | null; closeCode: number | null; signal: string | null; stdout: string; stderr: string }>((resolve, reject) => {
     const child = spawn(process.execPath, ['--experimental-test-module-mocks', '--import', 'tsx', '--input-type=module', '--eval', fixture], {
       env: {
         PATH: process.env.PATH,
@@ -335,7 +355,7 @@ test('actual overview boundary', async (context) => {
     child.stderr.on('data', (chunk) => { stderr += chunk; });
     child.once('error', reject);
     child.once('exit', (code) => { exitCode = code; });
-    child.once('close', (closeCode, signal) => resolve({ exitCode, closeCode, signal, stdout, stderr }));
+    child.once('close', (closeCode, signal) => resolve({ pid: child.pid, exitCode, closeCode, signal, stdout, stderr }));
   });
   t.diagnostic(JSON.stringify(result));
   assert.equal(result.signal, null);

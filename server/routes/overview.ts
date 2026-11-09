@@ -227,8 +227,10 @@ router.get('/overview', async (_req, res) => {
       activeRuns,
       activeRunCount: activeRuns.length,
       cronCount,
-      costToday: data.totalCostToday || 0,
-      costAllTime: data.totalCostAllTime || 0,
+      costToday: typeof data.totalCostToday === 'number' && Number.isFinite(data.totalCostToday)
+        ? data.totalCostToday : null,
+      costAllTime: typeof data.totalCostAllTime === 'number' && Number.isFinite(data.totalCostAllTime)
+        ? data.totalCostAllTime : null,
       system: system.status === 'fulfilled' ? system.value : null,
       gateway: data.gateway || null,
       sessions: activeSessions.slice(0, 20),
