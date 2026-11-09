@@ -178,10 +178,10 @@ router.get('/overview', async (_req, res) => {
     const activeRuns = runList.filter((run: any) => {
       const runId = typeof run.id === 'string' ? run.id : '';
       const expectedStatus = activeRunStatusById.get(runId);
-      if (expectedStatus === undefined
+      if (!runId
         || !isSetfarmOperationalActiveRunStatusV1(run.status)
-        || run.status !== expectedStatus
-        || returnedRunIds.has(runId)) {
+        || returnedRunIds.has(runId)
+        || (run.protocol !== 'v3' && (expectedStatus === undefined || run.status !== expectedStatus))) {
         return false;
       }
       returnedRunIds.add(runId);

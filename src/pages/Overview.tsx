@@ -250,7 +250,7 @@ export function Overview() {
         </div>
         <div className="stat-card stat-card--cyan">
           <div className="stat-card__value">{data.activeRunCount}</div>
-          <div className="stat-card__label">RUNNING</div>
+          <div className="stat-card__label">ACTIVE</div>
           <div className="stat-card__sub">workflows</div>
         </div>
         <div className="stat-card stat-card--orange">

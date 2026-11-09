@@ -140,7 +140,9 @@ export function KimiQuotaBanner() {
   if (rate) {
     parts.push(`5sa pencere ${rate.used}/${rate.limit} (${formatDuration(rate.resetInMs)} sonra reset)`);
   }
-  const detail = parts.length ? parts.join(' · ') : reason;
+  const detail = snapshot.error?.code === 'NO_TOKEN'
+    ? 'Quota monitor credentials are unavailable. Subscription workflow authentication is shown in Work.'
+    : parts.length ? parts.join(' · ') : reason;
 
   return (
     <div
@@ -162,10 +164,10 @@ export function KimiQuotaBanner() {
         borderBottom: '1px solid rgba(255,255,255,0.08)',
         userSelect: 'none',
       }}
-      title={`Kimi Code quota - click to refresh. ${snapshot.staleSince ? `(stale snapshot, last fresh data ${snapshot.fetchedAt})` : ''}`}
+      title={`Kimi quota monitor data - click to refresh. ${snapshot.staleSince ? `(stale snapshot, last fresh data ${snapshot.fetchedAt})` : ''}`}
     >
       <span style={{ fontSize: '14px' }}>{style.icon}</span>
-      <strong>KIMI</strong>
+      <strong>KIMI QUOTA MONITOR</strong>
       <span>{detail}</span>
       {snapshot.staleSince && <span style={{ opacity: 0.7 }}>(stale)</span>}
       {refreshing && <span style={{ opacity: 0.7 }}>… refreshing</span>}
