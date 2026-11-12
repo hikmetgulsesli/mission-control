@@ -146,6 +146,75 @@ function makeV3Snapshot(): RunOperationalSnapshotV3 {
   };
 }
 
+function makeQuarantineSnapshot(): RunOperationalSnapshotV3 {
+  const snapshot = makeV3Snapshot();
+  snapshot.summary.lifecycleState = "inconsistent";
+  snapshot.summary.health = "blocked";
+  snapshot.summary.invariantViolations = 2;
+  snapshot.summary.operatorActions.stop = {
+    allowed: true,
+    reasonCode: "RUN_CAN_BE_STOPPED_WITH_QUARANTINE_RECOVERY",
+    stateHash: "c".repeat(64),
+  };
+  snapshot.invariants = ["COMPLETION_REQUEST_QUARANTINED", "RUNTIME_SESSION_QUARANTINED"].map((code) => ({
+    code, severity: "error", refs: [snapshot.run.ref], observedAt: "2026-07-13T09:59:59.000Z",
+  }));
+  return snapshot;
+}
+
+test("enables canonical quarantine-recovery stop and retains its snapshot hash", () => {
+  const decision = evaluateOperationalAction({ status: "ok", snapshot: makeQuarantineSnapshot() }, "stop", NOW);
+  assert.deepEqual(decision, {
+    allowed: true,
+    reasonCode: "RUN_CAN_BE_STOPPED_WITH_QUARANTINE_RECOVERY",
+    snapshotHash: HASH,
+  });
+});
+
+test("quarantine-recovery stop keeps UI resume blocked", () => {
+  const snapshot = makeQuarantineSnapshot();
+  // Even a projected resume allowance cannot recover quarantine.
+  snapshot.summary.operatorActions.resume.allowed = true;
+  assert.deepEqual(evaluateOperationalAction({ status: "ok", snapshot }, "resume", NOW), {
+    allowed: false, reasonCode: "OPERATIONAL_INVARIANT_VIOLATION", snapshotHash: HASH,
+  });
+});
+
+for (const scenario of ["unrelated invariant", "ordinary stop reason", "denied stop", "empty invariants"] as const) {
+  test(`quarantine-recovery UI stop fails closed for ${scenario}`, () => {
+    const snapshot = makeQuarantineSnapshot();
+    if (scenario === "unrelated invariant") {
+      snapshot.invariants.push({
+        code: "TERMINAL_RUN_HAS_ACTIVE_ATTEMPT", severity: "error", refs: [snapshot.run.ref],
+        observedAt: "2026-07-13T09:59:59.000Z",
+      });
+      snapshot.summary.invariantViolations = 3;
+    }
+    if (scenario === "ordinary stop reason") snapshot.summary.operatorActions.stop.reasonCode = "RUN_CAN_BE_STOPPED";
+    if (scenario === "denied stop") snapshot.summary.operatorActions.stop.allowed = false;
+    if (scenario === "empty invariants") snapshot.invariants = [];
+    assert.deepEqual(evaluateOperationalAction({ status: "ok", snapshot }, "stop", NOW), {
+      allowed: false, reasonCode: "OPERATIONAL_INVARIANT_VIOLATION", snapshotHash: HASH,
+    });
+  });
+}
+
+for (const [scenario, reasonCode] of [
+  ["stale", "OPERATIONAL_EVIDENCE_STALE"],
+  ["partial", "OPERATIONAL_PROJECTION_INCOMPLETE"],
+  ["capability incomplete", "OPERATIONAL_CAPABILITY_INCOMPLETE"],
+] as const) {
+  test(`quarantine-recovery UI stop retains the ${scenario} evidence guard`, () => {
+    const snapshot = makeQuarantineSnapshot();
+    if (scenario === "stale") snapshot.generatedAt = "2026-07-13T09:59:00.000Z";
+    if (scenario === "partial") snapshot.source.projection = "partial";
+    if (scenario === "capability incomplete") snapshot.source.capabilities.effectLedger = false;
+    assert.deepEqual(evaluateOperationalAction({ status: "ok", snapshot }, "stop", NOW), {
+      allowed: false, reasonCode, snapshotHash: HASH,
+    });
+  });
+}
+
 test("accepts a fresh complete invariant-free snapshot as stop authority", () => {
   const decision = evaluateOperationalAction({ status: "ok", snapshot: makeSnapshot() }, "stop", NOW);
   assert.deepEqual(decision, { allowed: true, reasonCode: "STOP_ALLOWED", snapshotHash: HASH });

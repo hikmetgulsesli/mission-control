@@ -3,6 +3,7 @@ import {
   type OperationalSnapshotFetchResult,
   type RunOperationalSnapshot,
 } from "./setfarm-operational-snapshot.js";
+import { allowsCanonicalQuarantineStop } from "../shared/canonical-quarantine-stop.js";
 
 export const OPERATIONAL_ACTION_SNAPSHOT_MAX_AGE_MS = 15_000;
 
@@ -59,6 +60,7 @@ function unavailableResult(result: Exclude<OperationalSnapshotFetchResult, { sta
 }
 
 function validateFreshCanonicalSnapshot(input: {
+  action: RunOperationalAction;
   runId: string;
   expectedSnapshotHash?: string;
   snapshotResult: OperationalSnapshotFetchResult;
@@ -107,9 +109,10 @@ function validateFreshCanonicalSnapshot(input: {
       code: "OPERATIONAL_PROJECTION_INCOMPLETE",
     };
   }
-  if (snapshot.invariants.length > 0
+  if ((snapshot.invariants.length > 0
     || snapshot.summary.invariantViolations !== 0
-    || snapshot.summary.lifecycleState === "inconsistent") {
+    || snapshot.summary.lifecycleState === "inconsistent")
+    && !allowsCanonicalQuarantineStop(input.action, snapshot)) {
     return {
       status: "blocked",
       statusCode: 409,
@@ -127,6 +130,7 @@ export function evaluateOperationalActionAuthority(input: {
   nowMs?: number;
 }): OperationalActionAuthorityResult {
   const snapshot = validateFreshCanonicalSnapshot({
+    action: input.action,
     runId: input.runId,
     ...(input.expectedSnapshotHash === undefined ? {} : { expectedSnapshotHash: input.expectedSnapshotHash }),
     snapshotResult: input.snapshotResult,

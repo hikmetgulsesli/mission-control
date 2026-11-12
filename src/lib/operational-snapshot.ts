@@ -1,3 +1,5 @@
+import { allowsCanonicalQuarantineStop } from "../../server/shared/canonical-quarantine-stop.js";
+
 export const RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA = "setfarm.run-operational-snapshot.v1" as const;
 export const RUN_OPERATIONAL_SNAPSHOT_V2_SCHEMA = "setfarm.run-operational-snapshot.v2" as const;
 export const RUN_OPERATIONAL_SNAPSHOT_V3_SCHEMA = "setfarm.run-operational-snapshot.v3" as const;
@@ -940,7 +942,8 @@ export function evaluateOperationalAction(
   if (!Number.isFinite(generatedAt) || generatedAt - now > 5_000 || now - generatedAt > OPERATIONAL_SNAPSHOT_MAX_AGE_MS) {
     return { allowed: false, reasonCode: "OPERATIONAL_EVIDENCE_STALE", snapshotHash: snapshot.snapshotHash };
   }
-  if (snapshot.summary.lifecycleState === "inconsistent" || snapshot.summary.invariantViolations > 0 || snapshot.invariants.length > 0) {
+  if ((snapshot.summary.lifecycleState === "inconsistent" || snapshot.summary.invariantViolations > 0 || snapshot.invariants.length > 0)
+    && !allowsCanonicalQuarantineStop(action, snapshot)) {
     return { allowed: false, reasonCode: "OPERATIONAL_INVARIANT_VIOLATION", snapshotHash: snapshot.snapshotHash };
   }
 
