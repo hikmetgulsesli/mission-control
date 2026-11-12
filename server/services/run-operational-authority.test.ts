@@ -155,6 +155,7 @@ function quarantineSnapshotFixture(): RunOperationalSnapshotV3 {
       refs: [snapshot.run.ref],
       observedAt: "2026-07-13T12:00:00.000Z",
     })),
+    completionRequests: [],
     operationalFailure: null,
   };
 }
