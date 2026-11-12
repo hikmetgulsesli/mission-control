@@ -8,6 +8,7 @@ import type {
   OperationalSnapshotFetchResult,
   RunOperationalSnapshotV1,
   RunOperationalSnapshotV2,
+  RunOperationalSnapshotV3,
 } from "./setfarm-operational-snapshot.js";
 
 const NOW = Date.parse("2026-07-13T12:00:10.000Z");
@@ -92,7 +93,7 @@ function snapshotFixture(overrides: {
 }
 
 function ok(
-  snapshot: RunOperationalSnapshotV1 | RunOperationalSnapshotV2 = snapshotFixture(),
+  snapshot: RunOperationalSnapshotV1 | RunOperationalSnapshotV2 | RunOperationalSnapshotV3 = snapshotFixture(),
 ): OperationalSnapshotFetchResult {
   return { status: "ok", snapshot };
 }
@@ -118,6 +119,107 @@ function blockedCode(result: ReturnType<typeof evaluateOperationalActionAuthorit
   assert.equal(result.status, "blocked");
   if (result.status !== "blocked") throw new Error("expected blocked authority");
   return result.code;
+}
+
+function quarantineSnapshotFixture(): RunOperationalSnapshotV3 {
+  const snapshot = snapshotFixture({ protocol: "v3" });
+  return {
+    ...snapshot,
+    schema: "setfarm.run-operational-snapshot.v3",
+    source: {
+      ...snapshot.source,
+      migrationVersions: [14, 19, 22],
+      capabilities: {
+        ...snapshot.source.capabilities,
+        implementationSubmissionEvidence: true,
+        operationalFailureAuthority: true,
+      },
+    },
+    summary: {
+      ...snapshot.summary,
+      lifecycleState: "inconsistent",
+      health: "blocked",
+      invariantViolations: 2,
+      operatorActions: {
+        ...snapshot.summary.operatorActions,
+        stop: {
+          allowed: true,
+          reasonCode: "RUN_CAN_BE_STOPPED_WITH_QUARANTINE_RECOVERY",
+          stateHash: "c".repeat(64),
+        },
+      },
+    },
+    invariants: ["COMPLETION_REQUEST_QUARANTINED", "RUNTIME_SESSION_QUARANTINED"].map((code) => ({
+      code,
+      severity: "error",
+      refs: [snapshot.run.ref],
+      observedAt: "2026-07-13T12:00:00.000Z",
+    })),
+    operationalFailure: null,
+  };
+}
+
+test("allows canonical quarantine-recovery stop", () => {
+  assert.deepEqual(evaluateOperationalActionAuthority({
+    action: "stop",
+    runId: "run-1",
+    expectedSnapshotHash: "a".repeat(64),
+    snapshotResult: ok(quarantineSnapshotFixture()),
+    nowMs: NOW,
+  }), {
+    status: "authorized",
+    action: "stop",
+    runId: "run-1",
+    snapshotHash: "a".repeat(64),
+    protocol: "v3",
+  });
+});
+
+test("quarantine-recovery stop never authorizes resume", () => {
+  const snapshot = quarantineSnapshotFixture();
+  assert.equal(blockedCode(evaluateOperationalActionAuthority({
+    action: "resume", runId: "run-1", expectedSnapshotHash: snapshot.snapshotHash,
+    snapshotResult: ok(snapshot), nowMs: NOW,
+  })), "OPERATIONAL_INVARIANT_VIOLATION");
+});
+
+for (const scenario of ["unrelated invariant", "ordinary stop reason", "denied stop", "empty invariants"] as const) {
+  test(`quarantine-recovery stop fails closed for ${scenario}`, () => {
+    const snapshot = quarantineSnapshotFixture();
+    if (scenario === "unrelated invariant") {
+      snapshot.invariants.push({
+        code: "OPEN_CLAIM_ON_IDLE_RUN", severity: "error", refs: [snapshot.run.ref],
+        observedAt: "2026-07-13T12:00:00.000Z",
+      });
+      snapshot.summary.invariantViolations = 3;
+    }
+    if (scenario === "ordinary stop reason") snapshot.summary.operatorActions.stop.reasonCode = "RUN_CAN_BE_STOPPED";
+    if (scenario === "denied stop") snapshot.summary.operatorActions.stop.allowed = false;
+    if (scenario === "empty invariants") snapshot.invariants = [];
+    assert.equal(blockedCode(evaluateOperationalActionAuthority({
+      action: "stop", runId: "run-1", expectedSnapshotHash: snapshot.snapshotHash,
+      snapshotResult: ok(snapshot), nowMs: NOW,
+    })), "OPERATIONAL_INVARIANT_VIOLATION");
+  });
+}
+
+for (const [scenario, expectedCode] of [
+  ["stale", "OPERATIONAL_SNAPSHOT_STALE"],
+  ["hash changed", "OPERATIONAL_SNAPSHOT_CHANGED"],
+  ["partial", "OPERATIONAL_PROJECTION_INCOMPLETE"],
+  ["capability incomplete", "OPERATIONAL_PROJECTION_INCOMPLETE"],
+] as const) {
+  test(`quarantine-recovery stop retains the ${scenario} evidence guard`, () => {
+    const snapshot = quarantineSnapshotFixture();
+    if (scenario === "stale") snapshot.generatedAt = "2026-07-13T11:59:00.000Z";
+    if (scenario === "hash changed") snapshot.snapshotHash = "e".repeat(64);
+    if (scenario === "partial") snapshot.source.projection = "partial";
+    if (scenario === "capability incomplete") snapshot.source.capabilities.effectLedger = false;
+    assert.equal(blockedCode(evaluateOperationalActionAuthority({
+      action: "stop", runId: "run-1", expectedSnapshotHash: "a".repeat(64),
+      snapshotResult: ok(snapshot), nowMs: NOW,
+    })), expectedCode);
+  });
 }
 
 test("requires the UI-observed snapshot hash before any stop or resume mutation", () => {
