@@ -31,3 +31,9 @@ Run focused tests and one clean npm run build after Root commits. Do not reinsta
 ## Non-goals
 
 No backend, database, provider, model, permission, workflow recovery, runtime guard, generated project or tool removal changes. Current Setfarm sourcee3cc remains frozen; its real fb2b3ae2 case is observed in parallel.
+
+## Task2 review refinement: preserve long preview access
+
+The finite panel must retain access to every file line via its existing scroll container. Source review found that `.file-viewer__content` still has flex-shrink:0 while the containing viewer clips overflow. Confirm with an actual-component long-file fixture before changing source; then make the existing content area flex/shrink (flex:1; min-height:0) if clipping is reproduced. Preserve header/edit/download controls and current overflow:auto, line numbering and code content. This is a causal preservation requirement for the original flex change, not a new viewer feature. Recheck the original three widths and add last-line reachability in the same fixture. No unrelated header or editor redesign.
+
+Ruling: measured tightened RED11707 proved nested pre clipping after content flex/min-height alone. Author scope explicitly refined to add only `align-items:flex-start` in `.file-viewer__content`; this retains intrinsic code/gutter heights under one shared scroll area. Final12485 check66/66 includes original24+long geometry24+scroll/header18 across1440/768/390, actual final text and line200 jointly visible. Root inspected before1440 and after1440/390 screenshots. Cost if wrong: reversible one-declaration alignment adjustment; no source/handler/editor/header rewrite. Initial inadequate geometry GREEN is preserved and explicitly unqualified.
