@@ -32,6 +32,13 @@ function sameValues(left: unknown, right: unknown): boolean {
 function requireUnique(values: readonly string[], path: string): void {
   requireRelation(new Set(values).size === values.length, path);
 }
+function canonicalAssertions<T extends { phase: string; property: string }>(values: readonly T[]): T[] {
+  return [...values].sort((left, right) => {
+    const a = `${left.phase}\0${left.property}`;
+    const b = `${right.phase}\0${right.property}`;
+    return a < b ? -1 : a > b ? 1 : 0;
+  });
+}
 
 function validateNativeRefs(value: ProductBuildPacketAuthorityV3): void {
   const { refs, packet, compilationReport: report, producer } = value;
@@ -135,8 +142,10 @@ function validateNativeGraph(value: ProductBuildPacketAuthorityV3): void {
     validateSource(observable.source);
     const productAction = value.productSpec.actions.find((item) => item.id === observable.actionRef);
     const productObservable = productAction?.observableEffects.find((item) => item.id === observable.observableRef);
+    requireUnique(observable.assertions.map((item) => `${item.phase}\0${item.property}`), "native.designGraph.productObservable.assertions");
+    if (productObservable) requireUnique(productObservable.assertions.map((item) => `${item.phase}\0${item.property}`), "native.productSpec.productObservable.assertions");
     requireRelation(productObservable !== undefined && observable.productObservableHash === hashCanonicalJson(productObservable)
-      && sameValues(observable.selector, productObservable.selector) && sameValues(observable.assertions, productObservable.assertions)
+      && sameValues(observable.selector, productObservable.selector) && sameValues(observable.assertions, canonicalAssertions(productObservable.assertions))
       && observable.evidenceRef === productObservable.evidenceRef, "native.designGraph.productObservable");
     requireRelation(actions.has(observable.actionRef) && observable.selectorHash === hashCanonicalJson(observable.selector)
       && observable.assertionsHash === hashCanonicalJson(observable.assertions) && observable.assertions.length > 0

@@ -4,6 +4,7 @@ import corpus from "../../tests/fixtures/product-build-authority-v3-wire.json" w
 import { hashCanonicalJson } from "./setfarm-canonical-json-v1.js";
 import { parseProductBuildAuthority, parseProductBuildAuthorityV1, parseProductBuildRefusalV2 } from "./setfarm-product-build-authority-core.js";
 import { parseProductBuildAuthorityV3 } from "./product-build-authority-v3-parser.js";
+import { resealSyntheticStitchAssertions, stitchAssertionParts } from "./product-build-authority-v3-assertion-fixture.test-support.js";
 
 type RecordValue = Record<string, unknown>;
 function record(value: unknown): RecordValue {
@@ -63,6 +64,98 @@ test("rehashed native control remains accepted before tampering", () => {
   rehashNative(wire);
   assert.equal(parseProductBuildAuthority(wire, String(wire.runId)), wire);
 });
+
+function multiAssertionWire(): RecordValue {
+  const wire = fixture("native_stitch");
+  const { productObservable, graphObservable } = stitchAssertionParts(wire);
+  productObservable.assertions = [
+    { phase: "after", property: "visibility", operator: "equals", expected: true },
+    { phase: "after", property: "enabled", operator: "equals", expected: true },
+  ];
+  graphObservable.assertions = [
+    { phase: "after", property: "enabled", operator: "equals", expected: true },
+    { phase: "after", property: "visibility", operator: "equals", expected: true },
+  ];
+  resealSyntheticStitchAssertions(wire);
+  return wire;
+}
+
+test("native parser accepts canonical graph assertions with reverse ProductSpec order unchanged", () => {
+  const wire = multiAssertionWire();
+  const { productObservable, graphObservable } = stitchAssertionParts(wire);
+  const before = structuredClone(wire);
+  const productHash = graphObservable.productObservableHash;
+  const assertionsHash = graphObservable.assertionsHash;
+  assert.notDeepEqual(productObservable.assertions, graphObservable.assertions);
+  assert.equal(parseProductBuildAuthorityV3(wire, String(wire.runId), legacy), wire);
+  assert.equal(parseProductBuildAuthority(wire, String(wire.runId)), wire);
+  assert.deepEqual(wire, before, "Parsing preserves both assertion orders and every received member/hash");
+  assert.equal(graphObservable.productObservableHash, productHash);
+  assert.equal(graphObservable.assertionsHash, assertionsHash);
+});
+
+test("native assertion ordering is lexical by phase then property on the ProductSpec copy", () => {
+  const wire = multiAssertionWire();
+  const { productObservable, graphObservable } = stitchAssertionParts(wire);
+  productObservable.assertions = [
+    { phase: "reload", property: "enabled", operator: "equals", expected: true },
+    { phase: "before", property: "visibility", operator: "equals", expected: false },
+    { phase: "after", property: "visibility", operator: "equals", expected: true },
+    { phase: "after", property: "enabled", operator: "equals", expected: true },
+  ];
+  graphObservable.assertions = [
+    { phase: "after", property: "enabled", operator: "equals", expected: true },
+    { phase: "after", property: "visibility", operator: "equals", expected: true },
+    { phase: "before", property: "visibility", operator: "equals", expected: false },
+    { phase: "reload", property: "enabled", operator: "equals", expected: true },
+  ];
+  resealSyntheticStitchAssertions(wire);
+  const before = structuredClone(wire);
+  assert.equal(parseProductBuildAuthority(wire, String(wire.runId)), wire);
+  assert.deepEqual(wire, before);
+});
+
+type AssertionParts = ReturnType<typeof stitchAssertionParts>;
+const assertionTamperCases: Array<{
+  name: string;
+  change(parts: AssertionParts): void;
+  path: string;
+  preserveHash?: "productObservableHash" | "assertionsHash";
+}> = [
+  { name: "changed graph expected value", change: ({ graphObservable }) => { graphObservable.assertions[0]!.expected = false; }, path: "native.designGraph.productObservable" },
+  { name: "changed graph operator", change: ({ graphObservable }) => { graphObservable.assertions[0]!.operator = "contains"; }, path: "native.designGraph.productObservable" },
+  { name: "changed product expected value", change: ({ productObservable }) => { productObservable.assertions[0]!.expected = false; }, path: "native.designGraph.productObservable" },
+  { name: "changed product operator", change: ({ productObservable }) => { productObservable.assertions[0]!.operator = "contains"; }, path: "native.designGraph.productObservable" },
+  { name: "missing graph assertion", change: ({ graphObservable }) => { graphObservable.assertions.pop(); }, path: "native.designGraph.productObservable" },
+  { name: "extra graph assertion", change: ({ graphObservable }) => { graphObservable.assertions.push({ phase: "reload", property: "enabled", operator: "equals", expected: true }); }, path: "native.designGraph.productObservable" },
+  { name: "missing product assertion", change: ({ productObservable }) => { productObservable.assertions.pop(); }, path: "native.designGraph.productObservable" },
+  { name: "extra product assertion", change: ({ productObservable }) => { productObservable.assertions.push({ phase: "reload", property: "enabled", operator: "equals", expected: true }); }, path: "native.designGraph.productObservable" },
+  { name: "duplicate graph phase/property identity", change: ({ graphObservable }) => { graphObservable.assertions.push(structuredClone(graphObservable.assertions[0]!)); }, path: "native.designGraph.productObservable.assertions" },
+  { name: "duplicate product phase/property identity", change: ({ productObservable }) => { productObservable.assertions.push(structuredClone(productObservable.assertions[0]!)); }, path: "native.productSpec.productObservable.assertions" },
+  { name: "identical duplicate phase/property identities on both sides", change: ({ graphObservable, productObservable }) => {
+    graphObservable.assertions.push(structuredClone(graphObservable.assertions[1]!));
+    productObservable.assertions = structuredClone(graphObservable.assertions);
+  }, path: "native.designGraph.productObservable.assertions" },
+  { name: "duplicate identities with different values on both sides", change: ({ graphObservable, productObservable }) => {
+    graphObservable.assertions.push({ ...graphObservable.assertions[1]!, expected: false });
+    productObservable.assertions = structuredClone(graphObservable.assertions);
+  }, path: "native.designGraph.productObservable.assertions" },
+  { name: "noncanonical graph order even when it equals raw ProductSpec order", change: ({ graphObservable }) => { graphObservable.assertions.reverse(); }, path: "native.designGraph.productObservable" },
+  { name: "corrupt raw product observable hash", change: ({ graphObservable }) => { graphObservable.productObservableHash = "0".repeat(64); }, preserveHash: "productObservableHash", path: "native.designGraph.productObservable" },
+  { name: "product observable hash computed from canonical rather than raw assertions", change: ({ graphObservable, productObservable }) => {
+    graphObservable.productObservableHash = hashCanonicalJson({ ...productObservable, assertions: graphObservable.assertions });
+  }, preserveHash: "productObservableHash", path: "native.designGraph.productObservable" },
+  { name: "corrupt stored graph assertions hash", change: ({ graphObservable }) => { graphObservable.assertionsHash = "0".repeat(64); }, preserveHash: "assertionsHash", path: "native.designGraph.observables" },
+];
+for (const { name, change, path, preserveHash } of assertionTamperCases) {
+  test(`native assertion relationship rejects ${name} with dependent hashes resealed`, () => {
+    const wire = multiAssertionWire();
+    assert.equal(parseProductBuildAuthority(wire, String(wire.runId)), wire);
+    change(stitchAssertionParts(wire));
+    resealSyntheticStitchAssertions(wire, preserveHash);
+    assert.throws(() => parseProductBuildAuthority(wire, String(wire.runId)), { message: `${path}:relationship_mismatch` });
+  });
+}
 
 const tamperCases: Array<[string, string, (native: RecordValue) => void]> = [
   ["source-map version shared with browser predicate", "native_none", (native) => { record(native.implementationSourceMap).sourceMapVersion = 99; }],
