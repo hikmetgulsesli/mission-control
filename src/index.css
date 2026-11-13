@@ -5935,7 +5935,8 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
 .files-page__panels {
   display: flex;
   gap: 8px;
-  flex-shrink: 0;
+  flex: 1;
+  min-width: 0;
   min-height: 0;
 }
 .files-page__tree {
@@ -5947,7 +5948,7 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
   overflow-y: auto;
 }
 .files-page__viewer {
-  flex-shrink: 0;
+  flex: 1 1 0;
   min-width: 0;
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -5999,7 +6000,8 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
   flex-shrink: 0;
 }
 .file-tree__name {
-  flex-shrink: 0;
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
