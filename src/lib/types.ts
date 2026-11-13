@@ -52,6 +52,8 @@ export interface Workflow {
 
 export interface RunStep {
   id: string;
+  step_id?: string;
+  stepId?: string;
   agent: string;
   status: string;
   output?: string;

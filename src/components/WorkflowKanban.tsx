@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Workflow, Run } from '../lib/types';
+import type { Workflow, Run, RunStep } from '../lib/types';
 
 const STEP_LABELS: Record<string, string> = {
   plan: 'PLAN', design: 'DESIGN', stories: 'STORIES', 'setup-repo': 'SETUP', 'setup-build': 'BUILD', implement: 'IMPL',
@@ -29,6 +29,10 @@ function stepStatusClass(status: string): string {
   if (status === 'running') return 'af-step--running';
   if (status === 'failed') return 'af-step--failed';
   return 'af-step--pending';
+}
+
+function stepIdentifier(step: RunStep): string {
+  return step.step_id || step.stepId || step.id;
 }
 
 export function WorkflowKanban({ workflows, runs }: Props) {
@@ -73,7 +77,7 @@ export function WorkflowKanban({ workflows, runs }: Props) {
 
             <div className="af-pipeline__steps">
               {steps.map((step: any, i: number) => {
-                const runStep = runSteps.find((rs: any) => (rs.id || rs.step_id || rs.stepId) === step.id);
+                const runStep = runSteps.find(rs => stepIdentifier(rs) === step.id);
                 const status = runStep?.status || 'waiting';
                 const isClickable = runStep && (status === 'done' || status === 'failed');
 
@@ -113,7 +117,7 @@ export function WorkflowKanban({ workflows, runs }: Props) {
         <div className="step-detail-backdrop" onClick={() => setSelectedStep(null)}>
           <div className="step-detail" role="dialog" aria-modal="true" onClick={e => e.stopPropagation()}>
             <div className="step-detail__header">
-              <h4>{selectedStep.id?.toUpperCase()}</h4>
+              <h4>{stepIdentifier(selectedStep)?.toUpperCase()}</h4>
               <span className={`step-detail__status step-detail__status--${selectedStep.status}`}>{selectedStep.status}</span>
               <button className="step-detail__close" onClick={() => setSelectedStep(null)}>&#x2715;</button>
             </div>
