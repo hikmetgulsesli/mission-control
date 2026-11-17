@@ -14,7 +14,15 @@ const validationStageLabels = new Map([
 
 function validationStageStatus(step: ValidationPipelineStep, snapshot: RunOperationalSnapshot, failureStepId?: string): string {
   const runtimes = snapshot.runtimeSessions.filter(runtime => runtime.workflowStepId === step.id);
-  if (failureStepId === step.id || runtimes.some(runtime => runtime.state === "quarantined")) return "Blocked";
+  const completions = snapshot.completionRequests.filter(request => request.workflowStepId === step.id);
+  const completionBlocked = completions.some(request =>
+    request.state === "quarantined"
+    || request.effects.some(effect => effect.mandatory && effect.state === "quarantined"));
+  if (failureStepId === step.id || completionBlocked || runtimes.some(runtime => runtime.state === "quarantined")) return "Blocked";
+  if (completions.some(request =>
+    request.state === "requested" || request.state === "draining" || request.state === "processing"
+    || request.effects.some(effect => effect.mandatory && (effect.state === "pending" || effect.state === "leased"))
+  )) return "Finalizing";
   if (runtimes.some(runtime => runtime.state === "running")) return "Running";
   if (runtimes.some(runtime => runtime.state === "starting" || runtime.state === "reserved")) return "Starting";
   if (runtimes.some(runtime => runtime.state === "drain_requested")) return "Closing";

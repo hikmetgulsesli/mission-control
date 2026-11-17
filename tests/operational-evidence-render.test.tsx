@@ -502,6 +502,42 @@ test("lists only validation stages from the actual pipeline and shows observed r
   assert.doesNotMatch(panel, /Security gate|Deployment/);
 });
 
+test("prioritizes canonical completion and mandatory effects over a completed step row", () => {
+  const snapshot = readV3SnapshotFixture();
+  snapshot.operationalFailure = null;
+  snapshot.claims = [];
+  snapshot.runtimeSessions = [];
+  const at = snapshot.generatedAt;
+  const base: RunOperationalSnapshotV3["completionRequests"][number] = {
+    ref: "setfarm://runtime-completion/request-1", requestId: "request-1",
+    runRef: snapshot.run.ref, runtimeSessionRef: "setfarm://runtime-session/setup-1", claimRef: "setfarm://claim-log/5",
+    attemptRef: null, stepRef: `${snapshot.run.ref}/step/setup-build`, storyRef: null,
+    workflowStepId: "setup-build", storyId: null, outputHash: "b".repeat(64),
+    applyPhase: "owner_committed", claimOutcome: "completed", completionPlanHash: "c".repeat(64),
+    state: "quarantined", requestedAt: at, drainedAt: at, processingAt: at,
+    acceptedAt: null, rejectedAt: null, createdAt: at, updatedAt: at, effects: [],
+  };
+  const effect: typeof base.effects[number] = {
+    ref: "setfarm://runtime-completion-effect/effect-1", effectKey: "effect-1", ordinal: 1,
+    effectType: "publish", mandatory: true, state: "quarantined", inputHash: "d".repeat(64),
+    attemptCount: 1, appliedAt: null, reconciledAt: null, createdAt: at, updatedAt: at,
+  };
+  const scenarios: [typeof base, RegExp][] = [
+    [base, /Build setup<\/b><span>Blocked<\/span>/],
+    [{ ...base, state: "processing", effects: [effect] }, /Build setup<\/b><span>Blocked<\/span>/],
+    [{ ...base, state: "processing", effects: [{ ...effect, state: "pending" }] }, /Build setup<\/b><span>Finalizing<\/span>/],
+  ];
+  for (const [request, expected] of scenarios) {
+    snapshot.completionRequests = [request];
+    const panel = validationAndRepairPanel(renderToStaticMarkup(<OperationalEvidence
+      state={{ status: "ok", snapshot }}
+      pipelineSteps={[{ id: "setup-build", status: "done" }, { id: "verify", status: "waiting" }]}
+    />));
+    assert.match(panel, expected);
+    assert.match(panel, /Verification<\/b><span>Pending<\/span>/);
+  }
+});
+
 test("renders canonical typed termination authority without classifying diagnostic prose", () => {
   const html = renderSnapshot("complete", false, true);
   assert.match(html, /setfarm\.product-compiler\.deploy-refusal/);
