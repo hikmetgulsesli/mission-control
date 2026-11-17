@@ -9930,6 +9930,17 @@ button, input, select, textarea { font-family: var(--font-body); font-size: 15px
   background: rgba(255, 255, 255, 0.018);
 }
 
+.oe-validation-repair { margin-bottom: 10px; }
+.oe-validation-repair h4 { margin: 0; padding: 8px 10px; font-size: 14px; }
+.oe-validation-repair .oe-contract-grid { margin: 0; border: 0; border-radius: 0; }
+.oe-validation-repair code { white-space: normal; overflow-wrap: anywhere; }
+.oe-validation-stages { padding: 8px 10px; color: var(--text-dim); font-size: 13px; }
+.oe-validation-stages h5 { margin: 0 0 6px; font-size: inherit; }
+.oe-validation-stages ul { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+.oe-validation-stages li { display: flex; flex-wrap: wrap; gap: 6px; padding: 3px 6px; border: 1px solid var(--border); border-radius: 4px; }
+.oe-validation-stages li b { color: var(--text-primary); }
+.oe-validation-stages p { margin: 0; }
+
 .oe-section > summary {
   display: flex;
   align-items: center;

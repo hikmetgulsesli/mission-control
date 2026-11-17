@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useOperationalSnapshot } from "../../hooks/useOperationalSnapshot";
+import { ValidationAndRepair, type ValidationPipelineStep } from "./ValidationAndRepair";
 import {
   collectOperationalEvidenceRefs,
   evaluateOperationalAction,
@@ -175,7 +176,11 @@ function TerminationEvidenceDetails({ request }: { request: OperationalTerminati
   return <code title="Canonical termination evidence">{JSON.stringify(evidence)}</code>;
 }
 
-function OperationalEvidenceBody({ snapshot, now }: { snapshot: RunOperationalSnapshot; now: number }) {
+function OperationalEvidenceBody({ snapshot, now, pipelineSteps }: {
+  snapshot: RunOperationalSnapshot;
+  now: number;
+  pipelineSteps?: readonly ValidationPipelineStep[];
+}) {
   const refs = collectOperationalEvidenceRefs(snapshot);
   const fresh = freshness(snapshot.generatedAt, now);
   const stop = evaluateOperationalAction({ status: "ok", snapshot }, "stop", now);
@@ -236,6 +241,8 @@ function OperationalEvidenceBody({ snapshot, now }: { snapshot: RunOperationalSn
           CONSISTENCY LOCK — canonical evidence reports {snapshot.invariants.length || snapshot.summary.invariantViolations} invariant violation(s).
         </div>
       )}
+
+      <ValidationAndRepair snapshot={snapshot} pipelineSteps={pipelineSteps} />
 
       <div className="oe-metrics">
         <div><span>Lifecycle</span><strong>{snapshot.summary.lifecycleState}</strong></div>
@@ -547,7 +554,11 @@ function OperationalEvidenceBody({ snapshot, now }: { snapshot: RunOperationalSn
   );
 }
 
-export function OperationalEvidence({ state, now = Date.now() }: { state: OperationalSnapshotState; now?: number }) {
+export function OperationalEvidence({ state, now = Date.now(), pipelineSteps }: {
+  state: OperationalSnapshotState;
+  now?: number;
+  pipelineSteps?: readonly ValidationPipelineStep[];
+}) {
   if (state.status !== "ok") {
     return (
       <section className={`oe-panel oe-panel--${state.status}`} aria-label="Canonical operational evidence">
@@ -571,7 +582,7 @@ export function OperationalEvidence({ state, now = Date.now() }: { state: Operat
         <div><span>EXECUTION</span><h3>Operational Evidence</h3></div>
         <strong>{state.snapshot.schema}</strong>
       </div>
-      <OperationalEvidenceBody snapshot={state.snapshot} now={now} />
+      <OperationalEvidenceBody snapshot={state.snapshot} now={now} pipelineSteps={pipelineSteps} />
     </section>
   );
 }

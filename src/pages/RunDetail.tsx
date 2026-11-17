@@ -141,7 +141,7 @@ function normalizeRunDetail(raw: any): RunDetailData {
     fullSteps: rawSteps.map((step: any) => ({
       id: String(step.stepId || step.step_id || step.id || ""),
       agent: String(step.agent || step.agent_id || step.step_id || ""),
-      status: String(step.status || "pending"),
+      status: String(step.status || "unknown"),
       output: step.output ?? null,
       retryCount: Number(step.retryCount ?? step.retry_count ?? 0),
       updatedAt: step.updatedAt || step.updated_at,
@@ -207,6 +207,8 @@ export function RunDetail({ runId, onBack, initialTab = "execution" }: { runId: 
 
   const canonicalSnapshot = operationalSnapshot.status === "ok" ? operationalSnapshot.snapshot : null;
   const canonicalStatus = canonicalSnapshot?.run.status || "unknown";
+  const validationSteps = data.id === runId && canonicalSnapshot?.run.id === data.id
+    ? data.fullSteps : undefined;
   const tabs: { id: Tab; label: string; count?: number }[] = [
     {
       id: "execution",
@@ -274,7 +276,7 @@ export function RunDetail({ runId, onBack, initialTab = "execution" }: { runId: 
       <div className="rd-content">
         {tab === "execution" && (
           <div className="rd-execution-evidence">
-            <OperationalEvidence state={operationalSnapshot} />
+            <OperationalEvidence state={operationalSnapshot} pipelineSteps={validationSteps} />
             <ProductBuildAuthority state={productBuildAuthority} />
           </div>
         )}

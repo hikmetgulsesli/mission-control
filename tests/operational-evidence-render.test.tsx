@@ -7,6 +7,7 @@ import {
   RUN_OPERATIONAL_SNAPSHOT_V1_SCHEMA,
   type RunOperationalSnapshotV1,
   type RunOperationalSnapshotV2,
+  type RunOperationalSnapshotV3,
 } from "../src/lib/operational-snapshot.ts";
 
 (globalThis as { document?: unknown }).document = { querySelector: () => null };
@@ -375,6 +376,130 @@ test("renders typed finding, evidence, and bounded recovery identity without pro
   assert.match(html, new RegExp(`source ${"1".repeat(40)}`));
   assert.match(html, /fail/);
   assert.doesNotMatch(html, /agent says|review comment says|probably fixed/i);
+});
+
+function validationAndRepairPanel(html: string): string {
+  const panel = html.match(/<section[^>]+aria-label="Validation and repair"[^>]*>(.*?)<\/section>/s);
+  assert.ok(panel, "the Execution tab exposes validation and repair at a glance");
+  return panel[1];
+}
+
+function readV3SnapshotFixture(): RunOperationalSnapshotV3 {
+  return JSON.parse(readFileSync(
+    new URL("../contracts/vendor/setfarm/run-operational-snapshot.v3.compatibility.json", import.meta.url),
+    "utf8",
+  )).fixture as RunOperationalSnapshotV3;
+}
+
+test("shows a quarantine without implying validation evidence or dispatched repair", () => {
+  const snapshot = readV3SnapshotFixture();
+  snapshot.run.status = "running";
+  snapshot.run.terminal = false;
+  snapshot.summary.lifecycleState = "inconsistent";
+  snapshot.summary.invariantViolations = 1;
+  snapshot.operationalFailure = null;
+  snapshot.invariants = [{
+    code: "RUNTIME_SESSION_QUARANTINED",
+    severity: "error",
+    refs: ["setfarm://runtime-session/quarantined"],
+    observedAt: snapshot.generatedAt,
+  }];
+  snapshot.terminationRequests = [];
+  snapshot.evidenceBundles = [];
+  snapshot.findingSets = [];
+  snapshot.recoveryCases = [];
+  snapshot.recoveryDispatches = [];
+  const stepRef = `${snapshot.run.ref}/step/setup-build`;
+  snapshot.runtimeSessions = [{
+    ref: "setfarm://runtime-session/quarantined", sessionId: "quarantined", runRef: snapshot.run.ref,
+    claimRef: "setfarm://claim-log/5", attemptRef: null, stepRef, storyRef: null,
+    workflowStepId: "setup-build", storyId: null, runtimeKind: "local_process", state: "quarantined", stateVersion: 2,
+    startedAt: null, heartbeatAt: null, drainRequestedAt: null, drainedAt: null, releasedAt: null,
+    createdAt: snapshot.generatedAt, updatedAt: snapshot.generatedAt,
+  }];
+
+  const html = renderToStaticMarkup(<OperationalEvidence state={{ status: "ok", snapshot }} pipelineSteps={[
+    { id: "design", status: "done" }, { id: "setup-build", status: "running" }, { id: "verify", status: "waiting" },
+  ]} />);
+  const panel = validationAndRepairPanel(html);
+  assert.match(panel, /Design validation<\/b><span>Completed<\/span>/);
+  assert.match(panel, /Build setup<\/b><span>Blocked<\/span>/);
+  assert.match(panel, /Verification<\/b><span>Pending<\/span>/);
+  assert.match(panel, /RUNTIME_SESSION_QUARANTINED/);
+  assert.match(panel, /No validation evidence recorded yet/);
+  assert.match(panel, /No repair dispatch recorded yet/);
+});
+
+test("shows canonical validation and repair outcomes in the summary", () => {
+  const recovery = validationAndRepairPanel(renderSnapshot("complete", true));
+  assert.match(recovery, /US-001.*fail/);
+  assert.match(recovery, /supervisor.*repairing/);
+  assert.match(recovery, /supervisor 0\/1/);
+  assert.match(recovery, /supervisor_repair.*failed/);
+
+  const snapshot = readV3SnapshotFixture();
+  const html = renderToStaticMarkup(<OperationalEvidence state={{ status: "ok", snapshot }} />);
+  const failure = validationAndRepairPanel(html);
+  assert.match(failure, /product_compiler\.design_candidate_authority/);
+  assert.match(failure, /V3_DESIGN_CANDIDATE_AUTHORITY_UNRESOLVED/);
+});
+
+test("distinguishes unavailable projection from validation and repair with no records", () => {
+  const panel = validationAndRepairPanel(renderSnapshot("partial"));
+  assert.match(panel, /Validation evidence unavailable/);
+  assert.match(panel, /Repair state unavailable/);
+  assert.match(panel, /Validation stage list unavailable/);
+  assert.doesNotMatch(panel, /No (validation evidence|repair dispatch) recorded/);
+
+  const warning = readV3SnapshotFixture();
+  warning.source.projection = "partial";
+  warning.operationalFailure = null;
+  warning.invariants = [{
+    code: "OPERATIONAL_PROJECTION_PARTIAL", severity: "warning", refs: [], observedAt: warning.generatedAt,
+  }];
+  const warningPanel = validationAndRepairPanel(renderToStaticMarkup(<OperationalEvidence state={{ status: "ok", snapshot: warning }} />));
+  assert.match(warningPanel, /Blocker state unavailable/);
+  assert.doesNotMatch(warningPanel, /OPERATIONAL_PROJECTION_PARTIAL/);
+});
+
+test("lists only validation stages from the actual pipeline and shows observed runtime activity", () => {
+  const snapshot = readV3SnapshotFixture();
+  snapshot.operationalFailure = null;
+  snapshot.run.status = "running";
+  snapshot.run.terminal = false;
+  snapshot.summary.lifecycleState = "runtime_active";
+  snapshot.summary.health = "ok";
+  snapshot.summary.activeRuntimes = 1;
+  snapshot.summary.activeClaims = 1;
+  snapshot.terminationRequests = [];
+  const claimRef = "setfarm://claim-log/42";
+  const stepRef = `${snapshot.run.ref}/step/verify`;
+  snapshot.claims = [{
+    ref: claimRef, id: "42", runRef: snapshot.run.ref, stepRef,
+    storyRef: null, workflowStepId: "verify", storyId: null,
+    agentId: "verifier", state: "open", outcome: null, claimedAt: snapshot.generatedAt, abandonedAt: null,
+  }];
+  snapshot.runtimeSessions = [{
+    ref: "setfarm://runtime-session/verify-1", sessionId: "verify-1", runRef: snapshot.run.ref,
+    claimRef, attemptRef: null, stepRef, storyRef: null, workflowStepId: "verify", storyId: null,
+    runtimeKind: "local_process", state: "running", stateVersion: 2,
+    startedAt: snapshot.generatedAt, heartbeatAt: snapshot.generatedAt,
+    drainRequestedAt: null, drainedAt: null, releasedAt: null,
+    createdAt: snapshot.generatedAt, updatedAt: snapshot.generatedAt,
+  }];
+  const panel = validationAndRepairPanel(renderToStaticMarkup(<OperationalEvidence
+    state={{ status: "ok", snapshot }}
+    pipelineSteps={[
+      { id: "setup-build", status: "done" },
+      { id: "verify", status: "pending" },
+      { id: "qa-test", status: "waiting" },
+      { id: "deploy", status: "waiting" },
+    ]}
+  />));
+  assert.match(panel, /Build setup<\/b><span>Completed<\/span>/);
+  assert.match(panel, /Verification<\/b><span>Running<\/span>/);
+  assert.match(panel, /QA testing<\/b><span>Pending<\/span>/);
+  assert.doesNotMatch(panel, /Security gate|Deployment/);
 });
 
 test("renders canonical typed termination authority without classifying diagnostic prose", () => {
